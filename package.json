@@ -1,0 +1,40 @@
+{
+	"name": "xmux",
+	"version": "0.0.1",
+	"description": "Local control plane for coding-agent harnesses like Codex Claude Code, OpenCode and PI, accessible from chat platforms such as Telegram, Discord, and Slack.",
+	"main": "index.js",
+	"files": [
+		"index.js"
+	],
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"keywords": [
+		"agents",
+		"codex",
+		"claude-code",
+		"opencode",
+		"telegram",
+		"discord",
+		"slack",
+		"control-plane",
+		"automation"
+	],
+	"homepage": "https://github.com/ishaksebsib/xmux",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ishaksebsib/xmux.git"
+	},
+	"bugs": {
+		"url": "https://github.com/ishaksebsib/xmux/issues"
+	},
+	"license": "MIT",
+	"author": {
+		"name": "ishak",
+		"url": "https://github.com/ishaksebsib"
+	},
+	"engines": {
+		"node": ">=18"
+	},
+	"packageManager": "pnpm@10.33.0"
+}
