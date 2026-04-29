@@ -2,11 +2,16 @@
 	"name": "xmux",
 	"version": "0.0.1",
 	"description": "Local control plane for coding-agent harnesses like Codex Claude Code, OpenCode and PI, accessible from chat platforms such as Telegram, Discord, and Slack.",
-	"main": "index.js",
+	"type": "module",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
 	"files": [
-		"index.js"
+		"dist"
 	],
 	"scripts": {
+		"build": "tsc",
+		"dev": "tsx src/index.ts",
+		"start": "node dist/index.js",
 		"test": "echo \"Error: no test specified\" && exit 1"
 	},
 	"keywords": [
@@ -36,5 +41,17 @@
 	"engines": {
 		"node": ">=18"
 	},
-	"packageManager": "pnpm@10.33.0"
+	"packageManager": "pnpm@10.33.0",
+	"devDependencies": {
+		"@types/node": "^25.6.0",
+		"tsx": "^4.21.0",
+		"typescript": "^6.0.3"
+	},
+	"dependencies": {
+		"@chat-adapter/state-memory": "^4.26.0",
+		"@chat-adapter/telegram": "^4.26.0",
+		"@opencode-ai/sdk": "^1.14.29",
+		"chat": "^4.26.0",
+		"dotenv": "^17.4.2"
+	}
 }
