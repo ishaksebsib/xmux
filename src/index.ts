@@ -20,6 +20,7 @@ if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required");
 if (allowedUserIds.size === 0) throw new Error("XMUX_ALLOWED_TELEGRAM_USER_IDS is required");
 
 let opencode: Awaited<ReturnType<typeof createOpencode>> | undefined;
+const sessions = new Map<string, string>();
 
 const telegram = createTelegramAdapter({
 	botToken: token,
@@ -46,7 +47,41 @@ bot.onDirectMessage(async (thread, message) => {
 
 	const text = message.text.trim().replace(/\s+/g, " ").toLowerCase();
 	if (text !== "create session opencode" && text !== "/create_session opencode") {
-		await thread.post("Unknown command. Try: create session opencode");
+		const sessionId = sessions.get(message.author.userId);
+		if (!sessionId) {
+			await thread.post("Unknown command. Try: create session opencode");
+			return;
+		}
+
+		await thread.post(
+			(async function* () {
+				try {
+					opencode ??= await createOpencode({ port: 0, timeout: 15_000 });
+					const result = await opencode.client.session.prompt({
+						body: { parts: [{ type: "text", text: message.text }] },
+						path: { id: sessionId },
+						query: { directory: workdir },
+					});
+
+					if (result.error || !result.data) {
+						throw new Error(result.error ? JSON.stringify(result.error) : "OpenCode did not return a response");
+					}
+
+					const reply = result.data.parts
+						.filter((part) => part.type === "text")
+						.map((part) => part.text)
+						.join("\n")
+						.trim();
+
+					for (const chunk of (reply || "OpenCode finished with no text response.").match(/[\s\S]{1,600}/g) ?? []) {
+						yield chunk;
+						await new Promise((resolve) => setTimeout(resolve, 25));
+					}
+				} catch (error) {
+					yield `OpenCode prompt failed.\n${error instanceof Error ? error.message : String(error)}`;
+				}
+			})(),
+		);
 		return;
 	}
 
@@ -62,6 +97,8 @@ bot.onDirectMessage(async (thread, message) => {
 		if (result.error || !result.data) {
 			throw new Error(result.error ? JSON.stringify(result.error) : "OpenCode did not return a session");
 		}
+
+		sessions.set(message.author.userId, result.data.id);
 
 		await thread.post(
 			`Created OpenCode session xmux_${randomUUID().slice(0, 8)}.\nOpenCode session: ${result.data.id}\nDirectory: ${workdir}`,
