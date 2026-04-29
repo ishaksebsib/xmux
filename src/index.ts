@@ -4,6 +4,13 @@ import "dotenv/config";
 
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { createTelegramAdapter } from "@chat-adapter/telegram";
+import {
+	AuthStorage,
+	createAgentSession,
+	type AgentSession,
+	ModelRegistry,
+	SessionManager,
+} from "@mariozechner/pi-coding-agent";
 import { createOpencode } from "@opencode-ai/sdk";
 import { Chat } from "chat";
 
@@ -20,7 +27,9 @@ if (!token) throw new Error("TELEGRAM_BOT_TOKEN is required");
 if (allowedUserIds.size === 0) throw new Error("XMUX_ALLOWED_TELEGRAM_USER_IDS is required");
 
 let opencode: Awaited<ReturnType<typeof createOpencode>> | undefined;
-const sessions = new Map<string, string>();
+const activeSessions = new Map<string, "opencode" | "pi">();
+const opencodeSessions = new Map<string, string>();
+const piSessions = new Map<string, AgentSession>();
 
 const telegram = createTelegramAdapter({
 	botToken: token,
@@ -46,10 +55,53 @@ bot.onDirectMessage(async (thread, message) => {
 	}
 
 	const text = message.text.trim().replace(/\s+/g, " ").toLowerCase();
-	if (text !== "create session opencode" && text !== "/create_session opencode") {
-		const sessionId = sessions.get(message.author.userId);
+	if (
+		text !== "create session opencode" &&
+		text !== "/create_session opencode" &&
+		text !== "create session pi" &&
+		text !== "/create_session pi"
+	) {
+		const activeSession = activeSessions.get(message.author.userId);
+		if (!activeSession) {
+			await thread.post("Unknown command. Try: create session opencode or create session pi");
+			return;
+		}
+
+		if (activeSession === "pi") {
+			const session = piSessions.get(message.author.userId);
+			if (!session) {
+				await thread.post("No PI session found. Try: create session pi");
+				return;
+			}
+
+			const sent = await thread.post("PI is thinking...");
+			let reply = "";
+			let lastEdit = 0;
+			const unsubscribe = session.subscribe((event) => {
+				if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {
+					reply += event.assistantMessageEvent.delta;
+					const now = Date.now();
+					if (now - lastEdit > 750) {
+						lastEdit = now;
+						void sent.edit(reply.slice(-3800));
+					}
+				}
+			});
+
+			try {
+				await session.prompt(message.text);
+				await sent.edit(reply.slice(-3800) || "PI finished with no text response.");
+			} catch (error) {
+				await sent.edit(`PI prompt failed.\n${error instanceof Error ? error.message : String(error)}`);
+			} finally {
+				unsubscribe();
+			}
+			return;
+		}
+
+		const sessionId = opencodeSessions.get(message.author.userId);
 		if (!sessionId) {
-			await thread.post("Unknown command. Try: create session opencode");
+			await thread.post("No OpenCode session found. Try: create session opencode");
 			return;
 		}
 
@@ -85,6 +137,31 @@ bot.onDirectMessage(async (thread, message) => {
 		return;
 	}
 
+	if (text === "create session pi" || text === "/create_session pi") {
+		await thread.post("Creating PI session...");
+
+		try {
+			const authStorage = AuthStorage.create();
+			const modelRegistry = ModelRegistry.create(authStorage);
+			const { session } = await createAgentSession({
+				authStorage,
+				cwd: workdir,
+				modelRegistry,
+				sessionManager: SessionManager.create(workdir),
+			});
+
+			piSessions.get(message.author.userId)?.dispose();
+			piSessions.set(message.author.userId, session);
+			activeSessions.set(message.author.userId, "pi");
+
+			await thread.post(`Created PI session ${session.sessionId}.\nDirectory: ${workdir}`);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			await thread.post(`Could not create PI session.\n${message}`);
+		}
+		return;
+	}
+
 	await thread.post("Creating OpenCode session...");
 
 	try {
@@ -98,7 +175,8 @@ bot.onDirectMessage(async (thread, message) => {
 			throw new Error(result.error ? JSON.stringify(result.error) : "OpenCode did not return a session");
 		}
 
-		sessions.set(message.author.userId, result.data.id);
+		opencodeSessions.set(message.author.userId, result.data.id);
+		activeSessions.set(message.author.userId, "opencode");
 
 		await thread.post(
 			`Created OpenCode session xmux_${randomUUID().slice(0, 8)}.\nOpenCode session: ${result.data.id}\nDirectory: ${workdir}`,
@@ -115,10 +193,12 @@ console.log(`xmux Telegram MVP is running. Workdir: ${workdir}`);
 
 process.once("SIGINT", () => {
 	opencode?.server.close();
+	for (const session of piSessions.values()) session.dispose();
 	process.exit(0);
 });
 
 process.once("SIGTERM", () => {
 	opencode?.server.close();
+	for (const session of piSessions.values()) session.dispose();
 	process.exit(0);
 });
