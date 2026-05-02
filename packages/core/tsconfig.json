@@ -1,8 +1,8 @@
 {
-  "extends": "@repo/ts-config",
+  "extends": "@xmux/ts-config",
   "compilerOptions": {
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"],
+  "include": ["src/**/*.ts", "tests/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
