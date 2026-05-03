@@ -41,5 +41,12 @@
     "tsdown": "^0.21.7",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "@chat-adapter/state-memory": "^4.27.0",
+    "@chat-adapter/telegram": "^4.27.0",
+    "@opencode-ai/sdk": "^1.14.31",
+    "chat": "^4.27.0",
+    "emittery": "^2.0.0"
   }
 }
