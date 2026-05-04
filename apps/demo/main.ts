@@ -7,11 +7,11 @@ import {
 } from "@xmux/core";
 import { config } from "dotenv";
 
-config({ path: ["app/demo/.env", ".env"], quiet: true });
+config({ path: ["apps/demo/.env", ".env"], quiet: true });
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token)
-  throw new Error("TELEGRAM_BOT_TOKEN is required in app/demo/.env, root .env, or process env");
+  throw new Error("TELEGRAM_BOT_TOKEN is required in apps/demo/.env, root .env, or process env");
 
 const bus = createBus();
 const registry = new AdapterRegistry(bus);

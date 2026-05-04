@@ -33,6 +33,9 @@ importers:
       '@types/node':
         specifier: ^25.5.0
         version: 25.6.0
+      '@xmux/ts-config':
+        specifier: workspace:^
+        version: link:../../packages/ts-config
       tsx:
         specifier: ^4.21.0
         version: 4.21.0

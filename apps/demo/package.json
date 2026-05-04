@@ -9,7 +9,7 @@
   "main": "main.ts",
   "scripts": {
     "start": "pnpm --filter @xmux/core build && tsx main.ts",
-    "typecheck": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --types node main.ts"
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@xmux/core": "workspace:^",
@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
+    "@xmux/ts-config": "workspace:^",
     "tsx": "^4.21.0"
   }
 }

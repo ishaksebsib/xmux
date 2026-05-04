@@ -1,0 +1,8 @@
+{
+  "extends": "@xmux/ts-config",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["main.ts"]
+}
