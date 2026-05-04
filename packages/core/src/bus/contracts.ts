@@ -19,10 +19,10 @@ export type MessageBus<Catalog extends MessageCatalog> = {
 /** Declares a message contract once so publishers and subscribers stay type-safe from the same source. */
 export type MessageDefinition<TKind extends MessageKind = MessageKind, TData = unknown> = {
   readonly kind: TKind;
-  readonly data?: TData;
+  readonly data: TData;
 };
 
-export type MessageCatalog = Record<string, MessageDefinition>;
+export type MessageCatalog = Record<string, MessageDefinition<MessageKind, unknown>>;
 
 /** Runtime shape for a catalog value, where payload types stay in TypeScript and runtime code only provides metadata. */
 export type MessageCatalogDefinition<Catalog extends MessageCatalog> = {

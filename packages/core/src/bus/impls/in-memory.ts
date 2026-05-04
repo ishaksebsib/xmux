@@ -30,6 +30,10 @@ import { createQueue, type Queue } from "./queue";
 export type CreateMemoryBusInput<Catalog extends MessageCatalog> = {
   readonly catalog: MessageCatalogDefinition<Catalog>;
   readonly onDeadLetter?: (deadLetter: DeadLetter<Catalog>) => Promise<void> | void;
+  readonly onDeadLetterError?: (input: {
+    readonly deadLetter: DeadLetter<Catalog>;
+    readonly error: unknown;
+  }) => Promise<void> | void;
 };
 
 type SubscriptionRecord<Catalog extends MessageCatalog> = {
@@ -181,7 +185,7 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
       id,
       name: input.name,
       unsubscribe: () => {
-        record.closed = true;
+        this.closeSubscription(record);
         this.deleteSubscription(record);
       },
     });
@@ -264,6 +268,7 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
   }) {
     let lastError: unknown;
 
+    // TODO: support configurable retry backoff before durable transports rely on this policy.
     for (let attempt = 1; attempt <= input.subscription.maxRetries + 1; attempt += 1) {
       if (input.controller.signal.aborted) return;
 
@@ -278,7 +283,7 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
       }
     }
 
-    await this.input.onDeadLetter?.({
+    const deadLetter = {
       message: input.message,
       error: lastError,
       attempts: input.subscription.maxRetries + 1,
@@ -287,7 +292,17 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
         name: input.subscription.name,
         consumerGroup: input.subscription.consumerGroup,
       },
-    });
+    } satisfies DeadLetter<Catalog>;
+
+    try {
+      await this.input.onDeadLetter?.(deadLetter);
+    } catch (error) {
+      try {
+        await this.input.onDeadLetterError?.({ deadLetter, error });
+      } catch {
+        // Contain dead-letter reporting failures so delivery tasks never reject from diagnostics.
+      }
+    }
   }
 
   private async abortAfter(timeoutMs: number) {
@@ -316,13 +331,21 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
 
   private closeSubscriptions() {
     for (const subscription of this.subscriptions.values()) {
-      subscription.closed = true;
-      subscription.queue.clear();
+      this.closeSubscription(subscription);
     }
 
     this.subscriptions.clear();
     this.subscriptionsByType.clear();
     this.groupCursors.clear();
+  }
+
+  private closeSubscription(subscription: SubscriptionRecord<Catalog>) {
+    subscription.closed = true;
+    subscription.queue.clear();
+
+    for (const controller of subscription.controllers) {
+      controller.abort();
+    }
   }
 
   private indexSubscription(subscription: SubscriptionRecord<Catalog>) {

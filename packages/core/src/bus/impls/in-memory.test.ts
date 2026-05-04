@@ -136,6 +136,40 @@ describe("memory message bus", () => {
     expect(deadLetters).toHaveLength(1);
   });
 
+  test("contains dead-letter handler failures", async () => {
+    const deadLetterErrors: unknown[] = [];
+    const bus = createMemoryBus<TestCatalog>({
+      catalog,
+      onDeadLetter: () => {
+        throw new Error("dead-letter sink failed");
+      },
+      onDeadLetterError: ({ error }) => {
+        deadLetterErrors.push(error);
+      },
+    });
+
+    const subscribed = await bus.subscribe({
+      type: "xmux.test.happened",
+      name: "failing-worker",
+      handler: () => {
+        throw new Error("boom");
+      },
+    });
+    subscribed.unwrap("failing-worker subscription failed");
+
+    const started = await bus.start();
+    started.unwrap("test bus start failed");
+    const published = await bus.publish({
+      type: "xmux.test.happened",
+      data: { value: "hello" },
+      source,
+    });
+    published.unwrap("test publish failed");
+    await waitFor(() => deadLetterErrors.length === 1);
+
+    expect(deadLetterErrors).toHaveLength(1);
+  });
+
   test("stop waits for queued deliveries to drain", async () => {
     const bus = createMemoryBus<TestCatalog>({ catalog });
     const deliveries: string[] = [];
@@ -168,6 +202,48 @@ describe("memory message bus", () => {
     stopped.unwrap("test bus stop failed");
 
     expect(deliveries).toEqual(["start:one", "end:one", "start:two", "end:two"]);
+  });
+
+  test("unsubscribe aborts active handlers and drops queued deliveries", async () => {
+    const bus = createMemoryBus<TestCatalog>({ catalog });
+    const deliveries: string[] = [];
+    let releaseAbort!: () => void;
+    const aborted = new Promise<void>((resolve) => {
+      releaseAbort = resolve;
+    });
+
+    const subscribed = await bus.subscribe({
+      type: "xmux.test.happened",
+      name: "abort-worker",
+      concurrency: 1,
+      handler: async (message, context) => {
+        deliveries.push(`start:${message.data.value}`);
+        await new Promise<void>((resolve) => {
+          context.signal.addEventListener(
+            "abort",
+            () => {
+              deliveries.push(`aborted:${message.data.value}`);
+              releaseAbort();
+              resolve();
+            },
+            { once: true },
+          );
+        });
+      },
+    });
+    const subscription = subscribed.unwrap("abort-worker subscription failed");
+
+    const started = await bus.start();
+    started.unwrap("test bus start failed");
+    await bus.publish({ type: "xmux.test.happened", data: { value: "one" }, source });
+    await bus.publish({ type: "xmux.test.happened", data: { value: "two" }, source });
+    await waitFor(() => deliveries.includes("start:one"));
+
+    subscription.unsubscribe();
+    await aborted;
+    await waitFor(() => deliveries.includes("aborted:one"));
+
+    expect(deliveries).toEqual(["start:one", "aborted:one"]);
   });
 
   test("rejects invalid subscription options", async () => {
