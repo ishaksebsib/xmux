@@ -2,21 +2,21 @@
   "name": "@xmux/demo",
   "version": "1.0.0",
   "description": "",
+  "keywords": [],
+  "license": "MIT",
+  "author": "",
   "type": "module",
   "main": "main.ts",
   "scripts": {
     "start": "pnpm --filter @xmux/core build && tsx main.ts",
     "typecheck": "tsc --noEmit --target ES2022 --module ESNext --moduleResolution bundler --types node main.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "MIT",
-  "devDependencies": {
-    "@types/node": "^25.5.0",
-    "tsx": "^4.21.0"
-  },
   "dependencies": {
     "@xmux/core": "workspace:^",
     "dotenv": "^17.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0"
   }
 }
