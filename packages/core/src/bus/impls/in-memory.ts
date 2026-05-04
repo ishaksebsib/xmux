@@ -25,6 +25,7 @@ import type {
   SubscribeInput,
   Subscription,
 } from "../contracts";
+import { createQueue, type Queue } from "./queue";
 
 export type CreateMemoryBusInput<Catalog extends MessageCatalog> = {
   readonly catalog: MessageCatalogDefinition<Catalog>;
@@ -39,10 +40,15 @@ type SubscriptionRecord<Catalog extends MessageCatalog> = {
   readonly concurrency: number;
   readonly maxRetries: number;
   readonly handler: MessageHandler<AnyMessage<Catalog>>;
-  readonly queue: AnyMessage<Catalog>[];
+  readonly queue: Queue<AnyMessage<Catalog>>;
   readonly controllers: Set<AbortController>;
   active: number;
   closed: boolean;
+};
+
+type MessageTypeSubscriptions<Catalog extends MessageCatalog> = {
+  readonly direct: SubscriptionRecord<Catalog>[];
+  readonly groups: Map<string, SubscriptionRecord<Catalog>[]>;
 };
 
 /** Provides local async delivery. */
@@ -55,7 +61,11 @@ export function createMemoryBus<Catalog extends MessageCatalog>(
 class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Catalog> {
   private state: BusLifecycleState = { status: "created" };
   private readonly subscriptions = new Map<string, SubscriptionRecord<Catalog>>();
-  private readonly groupCursors = new Map<string, number>();
+  private readonly subscriptionsByType = new Map<
+    MessageType<Catalog>,
+    MessageTypeSubscriptions<Catalog>
+  >();
+  private readonly groupCursors = new Map<MessageType<Catalog>, Map<string, number>>();
   private readonly inFlight = new Set<Promise<void>>();
 
   constructor(private readonly input: CreateMemoryBusInput<Catalog>) {}
@@ -158,20 +168,21 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
       concurrency,
       maxRetries,
       handler: input.handler as MessageHandler<AnyMessage<Catalog>>,
-      queue: [],
+      queue: createQueue(),
       controllers: new Set(),
       active: 0,
       closed: false,
     };
 
     this.subscriptions.set(id, record);
+    this.indexSubscription(record);
 
     return Result.ok({
       id,
       name: input.name,
       unsubscribe: () => {
         record.closed = true;
-        this.subscriptions.delete(id);
+        this.deleteSubscription(record);
       },
     });
   }
@@ -198,42 +209,37 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
   }
 
   private dispatch(message: AnyMessage<Catalog>) {
-    for (const subscription of this.resolveSubscriptions(message)) {
-      subscription.queue.push(message);
+    const subscriptions = this.subscriptionsByType.get(message.type);
+    if (!subscriptions) return;
+
+    for (const subscription of subscriptions.direct) {
+      this.enqueueDelivery(subscription, message);
+    }
+
+    const cursors = this.getGroupCursors(message.type);
+    for (const [groupName, groupSubscriptions] of subscriptions.groups) {
+      if (groupSubscriptions.length === 0) continue;
+
+      const cursor = cursors.get(groupName) ?? 0;
+      const subscription = groupSubscriptions[cursor % groupSubscriptions.length];
+      if (!subscription) continue;
+
+      cursors.set(groupName, cursor + 1);
+
+      this.enqueueDelivery(subscription, message);
+    }
+  }
+
+  private enqueueDelivery(subscription: SubscriptionRecord<Catalog>, message: AnyMessage<Catalog>) {
+    subscription.queue.enqueue(message);
+    if (subscription.active < subscription.concurrency) {
       this.drainSubscription(subscription);
     }
   }
 
-  private resolveSubscriptions(message: AnyMessage<Catalog>) {
-    const matching = [...this.subscriptions.values()].filter(
-      (subscription) => !subscription.closed && subscription.type === message.type,
-    );
-    const direct = matching.filter((subscription) => !subscription.consumerGroup);
-    const groups = new Map<string, SubscriptionRecord<Catalog>[]>();
-
-    for (const subscription of matching) {
-      if (!subscription.consumerGroup) continue;
-      const group = groups.get(subscription.consumerGroup) ?? [];
-      group.push(subscription);
-      groups.set(subscription.consumerGroup, group);
-    }
-
-    const grouped = [...groups.entries()].map(([groupName, subscriptions]) => {
-      const cursorKey = `${message.type}:${groupName}`;
-      const cursor = this.groupCursors.get(cursorKey) ?? 0;
-      const subscription = subscriptions[cursor % subscriptions.length];
-      this.groupCursors.set(cursorKey, cursor + 1);
-      return subscription;
-    });
-
-    return [...direct, ...grouped].filter(
-      (subscription): subscription is SubscriptionRecord<Catalog> => Boolean(subscription),
-    );
-  }
-
   private drainSubscription(subscription: SubscriptionRecord<Catalog>) {
     while (!subscription.closed && subscription.active < subscription.concurrency) {
-      const message = subscription.queue.shift();
+      const message = subscription.queue.dequeue();
       if (!message) return;
 
       subscription.active += 1;
@@ -302,7 +308,7 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
 
   private hasPendingWork() {
     for (const subscription of this.subscriptions.values()) {
-      if (subscription.active > 0 || subscription.queue.length > 0) return true;
+      if (subscription.active > 0 || subscription.queue.size > 0) return true;
     }
 
     return false;
@@ -311,9 +317,89 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
   private closeSubscriptions() {
     for (const subscription of this.subscriptions.values()) {
       subscription.closed = true;
-      subscription.queue.length = 0;
+      subscription.queue.clear();
     }
 
     this.subscriptions.clear();
+    this.subscriptionsByType.clear();
+    this.groupCursors.clear();
+  }
+
+  private indexSubscription(subscription: SubscriptionRecord<Catalog>) {
+    const indexed = this.getIndexedSubscriptions(subscription.type);
+    if (!subscription.consumerGroup) {
+      indexed.direct.push(subscription);
+      return;
+    }
+
+    const group = indexed.groups.get(subscription.consumerGroup);
+    if (group) {
+      group.push(subscription);
+      return;
+    }
+
+    indexed.groups.set(subscription.consumerGroup, [subscription]);
+  }
+
+  private deleteSubscription(subscription: SubscriptionRecord<Catalog>) {
+    if (!this.subscriptions.delete(subscription.id)) return;
+
+    subscription.queue.clear();
+
+    const indexed = this.subscriptionsByType.get(subscription.type);
+    if (!indexed) return;
+
+    if (!subscription.consumerGroup) {
+      this.removeSubscription(indexed.direct, subscription.id);
+      if (indexed.direct.length === 0 && indexed.groups.size === 0) {
+        this.subscriptionsByType.delete(subscription.type);
+        this.groupCursors.delete(subscription.type);
+      }
+      return;
+    }
+
+    const group = indexed.groups.get(subscription.consumerGroup);
+    if (!group) return;
+
+    this.removeSubscription(group, subscription.id);
+    if (group.length === 0) {
+      indexed.groups.delete(subscription.consumerGroup);
+      this.groupCursors.get(subscription.type)?.delete(subscription.consumerGroup);
+      if (this.groupCursors.get(subscription.type)?.size === 0) {
+        this.groupCursors.delete(subscription.type);
+      }
+    }
+
+    if (indexed.direct.length === 0 && indexed.groups.size === 0) {
+      this.subscriptionsByType.delete(subscription.type);
+      this.groupCursors.delete(subscription.type);
+    }
+  }
+
+  private getIndexedSubscriptions(type: MessageType<Catalog>) {
+    const existing = this.subscriptionsByType.get(type);
+    if (existing) return existing;
+
+    const created: MessageTypeSubscriptions<Catalog> = {
+      direct: [],
+      groups: new Map(),
+    };
+    this.subscriptionsByType.set(type, created);
+    return created;
+  }
+
+  private getGroupCursors(type: MessageType<Catalog>) {
+    const existing = this.groupCursors.get(type);
+    if (existing) return existing;
+
+    const created = new Map<string, number>();
+    this.groupCursors.set(type, created);
+    return created;
+  }
+
+  private removeSubscription(subscriptions: SubscriptionRecord<Catalog>[], id: string) {
+    const index = subscriptions.findIndex((subscription) => subscription.id === id);
+    if (index === -1) return;
+    subscriptions.splice(index, 1);
   }
 }
