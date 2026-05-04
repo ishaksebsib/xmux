@@ -1,4 +1,10 @@
-export { createBus, type ChannelHandle, type XmuxBus, type XmuxEventMap } from "./bus";
+export {
+  BusNotRunningError,
+  createMessageSource,
+  UnknownMessageTypeError,
+  type MessageSource,
+} from "./bus";
+export { createBus, type ChannelHandle, type XmuxBus } from "./messages/xmux-catalog";
 export {
   AdapterRegistry,
   type AdapterType,
@@ -9,7 +15,3 @@ export {
 export { OpenCodeHarnessAdapter } from "./adapters/opencode";
 export { TelegramMediaAdapter } from "./adapters/telegram";
 export { Router } from "./router";
-
-export function fn() {
-  return "Hello, tsdown!";
-}
