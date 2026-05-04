@@ -29,7 +29,9 @@ export class BusNotRunningError extends TaggedError("BusNotRunningError")<{
   }
 }
 
-export class InvalidSubscriptionOptionsError extends TaggedError("InvalidSubscriptionOptionsError")<{
+export class InvalidSubscriptionOptionsError extends TaggedError(
+  "InvalidSubscriptionOptionsError",
+)<{
   readonly option: "concurrency" | "maxRetries";
   readonly value: number;
   readonly message: string;
