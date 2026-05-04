@@ -1,7 +1,8 @@
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { createTelegramAdapter, type TelegramAdapterConfig } from "@chat-adapter/telegram";
 import { Chat, type Message, type Thread } from "chat";
-import type { XmuxBus } from "../bus";
+import { createMessageSource } from "../bus";
+import type { XmuxBus } from "../messages/xmux-catalog";
 
 type TelegramChat = Chat<{ telegram: ReturnType<typeof createTelegramAdapter> }>;
 
@@ -45,10 +46,18 @@ export class TelegramMediaAdapter {
 
     if (message.text.trim().toLowerCase() !== "new opencode") return;
 
-    await this.bus.emit("command:received", {
-      source: { adapterId: this.id, channelId: thread.id },
-      command: "new",
-      args: ["opencode"],
+    const published = await this.bus.publish({
+      type: "xmux.command.received",
+      data: {
+        source: { adapterId: this.id, channelId: thread.id },
+        command: "new",
+        args: ["opencode"],
+      },
+      source: createMessageSource(this.id),
+      subject: thread.id,
     });
+    if (published.isErr()) {
+      await thread.post(`Failed to route command: ${published.error.message}`);
+    }
   }
 }

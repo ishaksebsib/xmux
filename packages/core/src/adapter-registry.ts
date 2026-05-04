@@ -1,4 +1,7 @@
-import type { XmuxBus } from "./bus";
+import { Result, type Result as ResultType } from "better-result";
+import { createMessageSource } from "./bus";
+import type { BusPublishError } from "./bus";
+import type { XmuxBus } from "./messages/xmux-catalog";
 
 export type AdapterType = "chat" | "harness";
 
@@ -42,16 +45,28 @@ export class AdapterRegistry {
     return this.harness.get(id);
   }
 
-  async startAll() {
+  async startAll(): Promise<ResultType<void, BusPublishError>> {
     for (const adapter of this.harness.values()) {
       await adapter.start();
-      await this.bus.emit("adapter:ready", { adapterId: adapter.id });
+      const ready = await this.bus.publish({
+        type: "xmux.adapter.ready",
+        data: { adapterId: adapter.id },
+        source: createMessageSource(adapter.id),
+      });
+      if (ready.isErr()) return Result.err(ready.error);
     }
 
     for (const adapter of this.chat.values()) {
       await adapter.start();
-      await this.bus.emit("adapter:ready", { adapterId: adapter.id });
+      const ready = await this.bus.publish({
+        type: "xmux.adapter.ready",
+        data: { adapterId: adapter.id },
+        source: createMessageSource(adapter.id),
+      });
+      if (ready.isErr()) return Result.err(ready.error);
     }
+
+    return Result.ok();
   }
 
   async stopAll() {

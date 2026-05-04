@@ -48,12 +48,12 @@ importers:
       '@opencode-ai/sdk':
         specifier: ^1.14.31
         version: 1.14.31
+      better-result:
+        specifier: ^2.9.1
+        version: 2.9.1
       chat:
         specifier: ^4.27.0
         version: 4.27.0
-      emittery:
-        specifier: ^2.0.0
-        version: 2.0.0
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -770,6 +770,9 @@ packages:
   bail@2.0.2:
     resolution: {integrity: sha512-0xO6mYd7JB2YesxDKplafRpsiOzPt9V02ddPCLbY1xYGPOX24NTyN50qnUxgCPcSoYMhKpAuBTjQoRZCAkUDRw==}
 
+  better-result@2.9.1:
+    resolution: {integrity: sha512-tPWnUPD8oLESRXMykkuTvi9tJVwaFSVfdhp1/WRd1q04SqengKdYt27avogObRC/BgH+zDqSo713dUEKkXbG5w==}
+
   birpc@4.0.0:
     resolution: {integrity: sha512-LShSxJP0KTmd101b6DRyGBj57LZxSDYWKitQNW/mi8GRMvZb078Uf9+pveax1DrVL89vm7mWe+TovdI/UDOuPw==}
 
@@ -835,10 +838,6 @@ packages:
     peerDependenciesMeta:
       oxc-resolver:
         optional: true
-
-  emittery@2.0.0:
-    resolution: {integrity: sha512-FLtgn/CGBXiX3ZtPAm5q4LWWepHChOt55J9u01WFu3dyap2U7IwptlrqoE1COR/kxwdy/DOxIBALSxIW449I1g==}
-    engines: {node: '>=22'}
 
   empathic@2.0.0:
     resolution: {integrity: sha512-i6UzDscO/XfAcNYD75CfICkmfLedpyPDdozrLMmQc5ORaQcdMoc21OnlEylMIqI7U8eniKrPMxxtj8k0vhmJhA==}
@@ -1891,6 +1890,8 @@ snapshots:
 
   bail@2.0.2: {}
 
+  better-result@2.9.1: {}
+
   birpc@4.0.0: {}
 
   cac@7.0.0: {}
@@ -1942,8 +1943,6 @@ snapshots:
   dotenv@17.4.2: {}
 
   dts-resolver@2.1.3: {}
-
-  emittery@2.0.0: {}
 
   empathic@2.0.0: {}
 

@@ -19,7 +19,10 @@ export class OpenCodeHarnessAdapter {
     const result = await this.runtime!.client.session.create({
       body: { title: input.name ?? "xmux opencode" },
       // TODO: make this dynamic later
-      query: { directory: input.cwd ?? this.options.cwd ?? "/home/pro/Development/Projects/OpenSource/xmux/" },
+      query: {
+        directory:
+          input.cwd ?? this.options.cwd ?? "/home/pro/Development/Projects/OpenSource/xmux/",
+      },
     });
 
     if (result.error || !result.data) {
