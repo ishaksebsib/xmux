@@ -302,7 +302,7 @@ class MemoryMessageBus<Catalog extends MessageCatalog> implements MessageBus<Cat
   private async waitForDrain() {
     while (this.hasPendingWork()) {
       if (this.inFlight.size === 0) return;
-      await Promise.allSettled([...this.inFlight]);
+      await Promise.allSettled(this.inFlight);
     }
   }
 
