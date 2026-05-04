@@ -21,7 +21,7 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
-  app/demo:
+  apps/demo:
     dependencies:
       '@xmux/core':
         specifier: workspace:^
