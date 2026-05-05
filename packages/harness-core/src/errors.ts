@@ -8,7 +8,7 @@ export class UnknownHarnessError extends TaggedError("UnknownHarnessError")<{
   constructor(args: { harnessId: string; availableHarnessIds: readonly string[] }) {
     super({
       ...args,
-      message: `Unknown harness \"${args.harnessId}\". Available harnesses: ${args.availableHarnessIds.join(", ") || "(none)"}`,
+      message: `Unknown harness "${args.harnessId}". Available harnesses: ${args.availableHarnessIds.join(", ") || "(none)"}`,
     });
   }
 }
@@ -36,7 +36,7 @@ export class HarnessAdapterOpenError extends TaggedError("HarnessAdapterOpenErro
     const detail = args.cause instanceof Error ? args.cause.message : String(args.cause);
     super({
       ...args,
-      message: `Failed to open harness \"${args.harnessId}\": ${detail}`,
+      message: `Failed to open harness "${args.harnessId}": ${detail}`,
     });
   }
 }
@@ -52,7 +52,7 @@ export class HarnessAdapterCreateSessionError extends TaggedError(
     const detail = args.cause instanceof Error ? args.cause.message : String(args.cause);
     super({
       ...args,
-      message: `Failed to create session with harness \"${args.harnessId}\": ${detail}`,
+      message: `Failed to create session with harness "${args.harnessId}": ${detail}`,
     });
   }
 }
