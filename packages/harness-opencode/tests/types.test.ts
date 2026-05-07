@@ -40,7 +40,7 @@ test("adapter options stay optional and session metadata narrows", () => {
     "opencode"
   >;
 
-  expectTypeOf({} as OpenCodeSession["adapter"]).toEqualTypeOf<OpenCodeSessionInfo>();
+  expectTypeOf({} as OpenCodeSession["adapterData"]).toEqualTypeOf<OpenCodeSessionInfo>();
 
   if (shouldRunTypeErrorChecks) {
     void harness.createSession({

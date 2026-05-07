@@ -93,7 +93,7 @@ export async function createSession(
 
     return Result.ok({
       sessionId: response.data.id,
-      adapter: toSessionInfo(response.data),
+      adapterData: toSessionInfo(response.data),
     });
   });
 }

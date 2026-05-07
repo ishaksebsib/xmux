@@ -23,10 +23,10 @@ describe("createOpenCodeAdapter", () => {
       const session = created.unwrap("expected embedded OpenCode session to be created");
       expect(session.ref.harnessId).toBe("opencode");
       expect(session.title).toBe("xmux embedded session");
-      expect(session.adapter.directory).toBe(process.cwd());
-      expect(session.adapter.projectId.length).toBeGreaterThan(0);
-      expect(session.adapter.slug.length).toBeGreaterThan(0);
-      expect(session.adapter.version.length).toBeGreaterThan(0);
+      expect(session.adapterData.directory).toBe(process.cwd());
+      expect(session.adapterData.projectId.length).toBeGreaterThan(0);
+      expect(session.adapterData.slug.length).toBeGreaterThan(0);
+      expect(session.adapterData.version.length).toBeGreaterThan(0);
     } finally {
       //TODO: delete the sessions after the test
       await harness.close();
@@ -56,9 +56,9 @@ describe("createOpenCodeAdapter", () => {
       const session = created.unwrap("expected external OpenCode session to be created");
       expect(session.ref.harnessId).toBe("opencode");
       expect(session.title).toBe("xmux external session");
-      expect(session.adapter.directory).toBe(process.cwd());
-      expect(session.adapter.projectId.length).toBeGreaterThan(0);
-      expect(session.adapter.slug.length).toBeGreaterThan(0);
+      expect(session.adapterData.directory).toBe(process.cwd());
+      expect(session.adapterData.projectId.length).toBeGreaterThan(0);
+      expect(session.adapterData.slug.length).toBeGreaterThan(0);
     } finally {
       await harness.close();
       runtime.server.close();
