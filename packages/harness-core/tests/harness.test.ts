@@ -72,7 +72,7 @@ describe("createHarness", () => {
 
             return Result.ok({
               sessionId: "pi-session-1",
-              adapter: { sessionFile: `${input.cwd}/.pi/session.jsonl` },
+              adapterData: { sessionFile: `${input.cwd}/.pi/session.jsonl` },
             });
           },
         }),
@@ -90,7 +90,7 @@ describe("createHarness", () => {
     const session = created.unwrap("expected session to be created");
     expect(session.ref).toEqual({ harnessId: "pi", sessionId: "pi-session-1" });
     expect(session.createdAt).toBe("2026-05-05T10:00:00.000Z");
-    expect(session.adapter.sessionFile).toContain(".pi/session.jsonl");
+    expect(session.adapterData.sessionFile).toContain(".pi/session.jsonl");
     expect(handles.opens).toEqual(["pi"]);
   });
 
@@ -102,7 +102,7 @@ describe("createHarness", () => {
           id: "opencode",
           handles,
           createSession: async () => {
-            return Result.ok({ sessionId: crypto.randomUUID(), adapter: {} });
+            return Result.ok({ sessionId: crypto.randomUUID(), adapterData: {} });
           },
         }),
       },
@@ -129,7 +129,7 @@ describe("createHarness", () => {
         opencode: createTestAdapter<"opencode", Record<never, never>, Record<never, never>>({
           id: "opencode",
           handles,
-          createSession: async () => Result.ok({ sessionId: "unused", adapter: {} }),
+          createSession: async () => Result.ok({ sessionId: "unused", adapterData: {} }),
         }),
       },
     });
@@ -183,7 +183,7 @@ describe("createHarness", () => {
           createSession: async () => {
             return Result.ok({
               sessionId: "unused",
-              adapter: { sessionFile: "unused" },
+              adapterData: { sessionFile: "unused" },
             });
           },
         }),
@@ -211,12 +211,12 @@ describe("createHarness", () => {
           id: "pi",
           handles,
           createSession: async () =>
-            Result.ok({ sessionId: "pi-1", adapter: { sessionFile: "a" } }),
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "a" } }),
         }),
         opencode: createTestAdapter<"opencode", Record<never, never>, Record<never, never>>({
           id: "opencode",
           handles,
-          createSession: async () => Result.ok({ sessionId: "oc-1", adapter: {} }),
+          createSession: async () => Result.ok({ sessionId: "oc-1", adapterData: {} }),
         }),
       },
     });

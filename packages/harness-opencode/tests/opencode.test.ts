@@ -28,7 +28,7 @@ describe("createOpenCodeAdapter", () => {
       expect(session.adapter.slug.length).toBeGreaterThan(0);
       expect(session.adapter.version.length).toBeGreaterThan(0);
     } finally {
-			//TODO: delete the sessions after the test
+      //TODO: delete the sessions after the test
       await harness.close();
     }
   });

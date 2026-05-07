@@ -229,7 +229,7 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
           cwd,
           title: input.title,
           createdAt: now().toISOString(),
-          adapter: created.adapter,
+          adapterData: created.adapterData,
         } as CreatedSessionFromInput<TAdapters, TInput>);
       });
     },

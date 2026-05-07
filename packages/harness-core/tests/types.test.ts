@@ -15,7 +15,7 @@ test("createSession narrows adapter options and results by harness id", () => {
             async createSession(input: { adapterOptions: { workspaceId: string } }) {
               return Result.ok({
                 sessionId: "ses_123",
-                adapter: { workspaceId: input.adapterOptions.workspaceId },
+                adapterData: { workspaceId: input.adapterOptions.workspaceId },
               });
             },
             async close() {
@@ -38,7 +38,7 @@ test("createSession narrows adapter options and results by harness id", () => {
             }) {
               return Result.ok({
                 sessionId: "pi_123",
-                adapter: {
+                adapterData: {
                   sessionFile: `/tmp/${input.adapterOptions.sessionMode}.jsonl`,
                 },
               });
@@ -61,7 +61,7 @@ test("createSession narrows adapter options and results by harness id", () => {
             async createSession(input: { adapterOptions: { mode?: "safe" | "fast" } }) {
               return Result.ok({
                 sessionId: "defaults-only-123",
-                adapter: { mode: input.adapterOptions.mode ?? "safe" },
+                adapterData: { mode: input.adapterOptions.mode ?? "safe" },
               });
             },
             async close() {
@@ -110,7 +110,7 @@ test("createSession narrows adapter options and results by harness id", () => {
     },
     "pi"
   >;
-  expectTypeOf({} as PiSession["adapter"]).toEqualTypeOf({ sessionFile: "" });
+  expectTypeOf({} as PiSession["adapterData"]).toEqualTypeOf({ sessionFile: "" });
 
   const opencodePromise = harness.createSession({
     harnessId: "opencode",
@@ -143,7 +143,7 @@ test("createSession narrows adapter options and results by harness id", () => {
             return Result.ok({
               id: "opencode" as const,
               async createSession() {
-                return Result.ok({ sessionId: "bad", adapter: {} });
+                return Result.ok({ sessionId: "bad", adapterData: {} });
               },
               async close() {
                 return undefined;

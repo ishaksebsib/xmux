@@ -77,7 +77,7 @@ export type CreatedSessionFor<
   readonly cwd: WorkingDirectoryPath;
   readonly title?: string;
   readonly createdAt: string;
-  readonly adapter: AdapterSessionFor<TAdapters, THarnessId>;
+  readonly adapterData: AdapterSessionFor<TAdapters, THarnessId>;
 };
 
 export type CreatedSession<TAdapters extends Record<string, AnyHarnessAdapterDefinition>> = {

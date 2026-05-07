@@ -38,7 +38,7 @@ export interface HarnessAdapterCreateSessionInput<TAdapterOptions extends Harnes
 /** Adapter-native session metadata returned to the unified harness facade. */
 export interface HarnessAdapterCreateSessionResult<TAdapterSession extends HarnessAdapterObject> {
   readonly sessionId: string;
-  readonly adapter: TAdapterSession;
+  readonly adapterData: TAdapterSession;
 }
 
 /**
