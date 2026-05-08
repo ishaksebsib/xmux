@@ -1,6 +1,6 @@
 import { TaggedError } from "better-result";
-import type { XmuxCloseCause } from "./contracts";
 import type { StoreOperation } from "./store";
+import type { XmuxCloseCause } from "./xmux";
 
 function describeCause(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
