@@ -1,8 +1,8 @@
+//TODO: move this to xmux.ts or other file
 import type { Result } from "better-result";
 import type { HarnessAdapterDefinitions, HarnessCloseError } from "@xmux/harness-core";
 import type { Adapter, Chat } from "chat";
 import type { XmuxCloseError, XmuxInitializeError } from "./errors";
-import type { XmuxThreadState } from "./thread-state";
 import type { XmuxConfig } from "./config";
 
 /**
@@ -16,7 +16,7 @@ export interface Xmux<
   readonly harnessIds: readonly Extract<keyof TAdapters, string>[];
   readonly chatIds: readonly Extract<keyof TChats, string>[];
   readonly config: XmuxConfig;
-  readonly webhooks: Chat<TChats, XmuxThreadState>["webhooks"];
+  readonly webhooks: Chat["webhooks"]; // TODO: change the type to our own xmux core
   initialize(): Promise<Result<void, XmuxInitializeError>>;
   shutdown(): Promise<Result<void, XmuxCloseError>>;
 }
