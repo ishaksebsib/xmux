@@ -23,9 +23,15 @@ importers:
 
   apps/demo:
     dependencies:
+      '@chat-adapter/telegram':
+        specifier: ^4.27.0
+        version: 4.27.0
       '@xmux/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@xmux/harness-opencode':
+        specifier: workspace:^
+        version: link:../../packages/harness-opencode
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -45,12 +51,9 @@ importers:
       '@chat-adapter/state-memory':
         specifier: ^4.27.0
         version: 4.27.0
-      '@chat-adapter/telegram':
-        specifier: ^4.27.0
-        version: 4.27.0
-      '@opencode-ai/sdk':
-        specifier: ^1.14.31
-        version: 1.14.31
+      '@xmux/harness-core':
+        specifier: workspace:*
+        version: link:../harness-core
       better-result:
         specifier: ^2.9.1
         version: 2.9.1
