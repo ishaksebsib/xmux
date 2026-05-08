@@ -1,6 +1,7 @@
 import type { Harness, HarnessAdapterDefinitions, SessionRef } from "@xmux/harness-core";
 import type { Adapter, Chat } from "chat";
 import type { XmuxConfig } from "./config";
+import type { XmuxStore } from "./store";
 
 /**
  * Long-lived xmux application context.
@@ -18,6 +19,8 @@ export interface XmuxContext<
   readonly chatIds: readonly Extract<keyof TChats, string>[];
   readonly harness: Harness<TAdapters>;
   readonly webhooks: XmuxWebhooks<TChats>;
+  /** Store for xmux-owned routing and session metadata. */
+  readonly store: XmuxStore;
   readonly services: XmuxServices;
 }
 

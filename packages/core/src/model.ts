@@ -1,0 +1,59 @@
+import type { SessionRef } from "@xmux/harness-core";
+import type { XmuxDeliveryMode } from "./config";
+
+/**
+ * Durable xmux session metadata.
+ *
+ * This record is owned by xmux, not by the underlying harness adapter. Adapter
+ * specific session data should stay in harness-core results unless xmux needs it
+ * for routing or lifecycle decisions.
+ */
+export interface SessionRecord<
+  THarnessId extends string = string,
+  TChatId extends string = string,
+> {
+  readonly ref: SessionRef<THarnessId>;
+  readonly origin: ChatThreadRef<TChatId>;
+  readonly requester: ActorRef;
+  readonly cwd: string;
+  readonly title?: string;
+  readonly deliveryMode: XmuxDeliveryMode;
+  readonly status: SessionStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly closedAt?: string;
+}
+
+/** Fields callers may change after a session has been created. */
+export interface SessionRecordPatch {
+  readonly title?: string;
+  readonly deliveryMode?: XmuxDeliveryMode;
+  readonly status?: SessionStatus;
+  readonly updatedAt: string;
+  readonly closedAt?: string;
+}
+
+/** Associates a chat thread with the active xmux session serving it. */
+export interface ThreadBinding<
+  THarnessId extends string = string,
+  TChatId extends string = string,
+> {
+  readonly thread: ChatThreadRef<TChatId>;
+  readonly sessionRef: SessionRef<THarnessId>;
+  readonly createdAt: string;
+}
+
+/** Chat thread identity normalized across supported chat adapters. */
+export interface ChatThreadRef<TChatId extends string = string> {
+  readonly chatId: TChatId;
+  readonly threadId: string;
+}
+
+/** User that caused xmux to create or route work. */
+export interface ActorRef {
+  readonly userId: string;
+  readonly displayName?: string;
+}
+
+/** Lifecycle state of an xmux-managed harness session. */
+export type SessionStatus = "open" | "closed";

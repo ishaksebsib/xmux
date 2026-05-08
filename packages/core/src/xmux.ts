@@ -1,11 +1,44 @@
 import { createMemoryState } from "@chat-adapter/state-memory";
-import { createHarness, type HarnessAdapterDefinitions } from "@xmux/harness-core";
+import {
+  createHarness,
+  HarnessCloseError,
+  type HarnessAdapterDefinitions,
+} from "@xmux/harness-core";
 import { Result } from "better-result";
 import { Chat, type Adapter } from "chat";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
-import type { CreateXmuxOptions, Xmux } from "./contracts";
-import { normalizeConfig } from "./config";
+import { normalizeConfig, type XmuxConfig } from "./config";
 import type { XmuxContext } from "./ctx";
+import { createInMemoryStore } from "./in-memory-store";
+import type { XmuxStore } from "./store";
+
+/**
+ * Main xmux instance - manages harnesses and chats together.
+ * Provides lifecycle control and webhook access.
+ */
+export interface Xmux<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends Record<string, Adapter>,
+> {
+  readonly ctx: XmuxContext<TAdapters, TChats>;
+  initialize(): Promise<Result<void, XmuxInitializeError>>;
+  shutdown(): Promise<Result<void, XmuxCloseError>>;
+}
+
+export interface CreateXmuxOptions<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends Record<string, Adapter>,
+> {
+  readonly harnesses: TAdapters;
+  readonly chats: TChats;
+  readonly config: XmuxConfig;
+  readonly store?: XmuxStore;
+}
+
+export type XmuxCloseCause = {
+  readonly harness?: HarnessCloseError;
+  readonly chat?: unknown;
+};
 
 export function createXmux<
   const TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -15,13 +48,14 @@ export function createXmux<
   const harness = createHarness({ adapters: options.harnesses });
   const chatIds = Object.freeze(Object.keys(options.chats) as Extract<keyof TChats, string>[]);
   const shutdownController = new AbortController();
+  const store = options.store ?? createInMemoryStore();
 
-	// TODO: make chat typed
-	// Chat<TChats, >
+  // TODO: make chat typed
+  // Chat<TChats, >
   const chat = new Chat({
     userName: config.userName,
     adapters: options.chats,
-		// TODO: change this later
+    // TODO: change this later
     state: createMemoryState(),
   });
 
@@ -32,6 +66,7 @@ export function createXmux<
     chatIds,
     harness,
     webhooks: chat.webhooks,
+    store,
     services: Object.freeze({
       now: () => new Date(),
       shutdownSignal: shutdownController.signal,

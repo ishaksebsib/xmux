@@ -20,4 +20,3 @@ export function normalizeConfig(config: XmuxConfig): XmuxConfig {
     deliveryMode: config.deliveryMode,
   });
 }
-
