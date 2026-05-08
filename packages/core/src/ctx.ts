@@ -1,0 +1,62 @@
+import type { Harness, HarnessAdapterDefinitions, SessionRef } from "@xmux/harness-core";
+import type { Adapter, Chat } from "chat";
+import type { XmuxConfig } from "./config";
+
+/**
+ * Long-lived xmux application context.
+ *
+ * This should be created once by `createXmux()` and passed to higher-level app
+ * code instead of leaking raw runtime objects everywhere.
+ */
+export interface XmuxContext<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends Record<string, Adapter>,
+> {
+  readonly kind: "xmux";
+  readonly config: XmuxConfig;
+  readonly harnessIds: readonly Extract<keyof TAdapters, string>[];
+  readonly chatIds: readonly Extract<keyof TChats, string>[];
+  readonly harness: Harness<TAdapters>;
+  readonly webhooks: XmuxWebhooks<TChats>;
+  readonly services: XmuxServices;
+}
+
+/**
+ * Short-lived request-scoped context for internal handlers and app code.
+ */
+export interface XmuxHandlerContext<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends Record<string, Adapter>,
+  TChatId extends Extract<keyof TChats, string> = Extract<keyof TChats, string>,
+  THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
+> {
+  readonly xmux: XmuxContext<TAdapters, TChats>;
+  readonly chatId: TChatId;
+  readonly requestId: string;
+  readonly signal: AbortSignal;
+  readonly actor?: XmuxActor;
+  readonly session?: XmuxHandlerSession<THarnessId>;
+}
+
+/** Stable app-scoped services shared across xmux handlers. */
+export interface XmuxServices {
+  readonly now: () => Date;
+  readonly shutdownSignal: AbortSignal;
+}
+
+/** User identity associated with a handler invocation. */
+export interface XmuxActor {
+  readonly userId: string;
+  readonly displayName?: string;
+}
+
+/** Active harness session already associated with the current handler. */
+export type XmuxHandlerSession<THarnessId extends string = string> = SessionRef<THarnessId>;
+
+/** Webhook handler for a single chat. */
+export type XmuxWebhookHandler = Chat<Record<string, Adapter>>["webhooks"][string];
+
+/** Webhook handlers for each chat. */
+export type XmuxWebhooks<TChats extends Record<string, Adapter>> = {
+  readonly [K in Extract<keyof TChats, string>]: XmuxWebhookHandler;
+};

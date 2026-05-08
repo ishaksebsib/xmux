@@ -5,6 +5,7 @@ import { Chat, type Adapter } from "chat";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import type { CreateXmuxOptions, Xmux } from "./contracts";
 import { normalizeConfig } from "./config";
+import type { XmuxContext } from "./ctx";
 
 export function createXmux<
   const TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -13,6 +14,7 @@ export function createXmux<
   const config = normalizeConfig(options.config);
   const harness = createHarness({ adapters: options.harnesses });
   const chatIds = Object.freeze(Object.keys(options.chats) as Extract<keyof TChats, string>[]);
+  const shutdownController = new AbortController();
 
 	// TODO: make chat typed
 	// Chat<TChats, >
@@ -23,11 +25,21 @@ export function createXmux<
     state: createMemoryState(),
   });
 
-  return {
+  const ctx: XmuxContext<TAdapters, TChats> = Object.freeze({
+    kind: "xmux",
+    config,
     harnessIds: harness.harnessIds,
     chatIds,
-    config,
+    harness,
     webhooks: chat.webhooks,
+    services: Object.freeze({
+      now: () => new Date(),
+      shutdownSignal: shutdownController.signal,
+    }),
+  });
+
+  return {
+    ctx,
 
     async initialize() {
       return Result.tryPromise({
@@ -39,6 +51,8 @@ export function createXmux<
     },
 
     async shutdown() {
+      shutdownController.abort();
+
       const chatClose = await Result.tryPromise({
         try: async () => {
           await chat.shutdown();
