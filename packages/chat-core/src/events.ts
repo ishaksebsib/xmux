@@ -157,6 +157,33 @@ export type ChatEvent<
   | ChatErrorEvent<TChatId>
   | ChatClosedEvent<TChatId>;
 
+/** Message event shape adapters emit before chat-core binds reply(). */
+export type ChatAdapterMessageEvent<
+  TChatId extends string = string,
+  TAdapterData extends ChatAdapterObject = Record<never, never>,
+> = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply">;
+
+/** Command event shape adapters emit before chat-core binds reply(). */
+export type ChatAdapterCommandEvent<
+  TCommands extends ChatCommandRegistry = ChatCommandRegistry,
+  TName extends keyof TCommands = keyof TCommands,
+  TChatId extends string = string,
+> = Omit<ChatCommandEvent<TCommands, TName, TChatId>, "reply">;
+
+/** Event shape accepted from adapters during runtime. */
+export type ChatAdapterEvent<
+  TCommands extends ChatCommandRegistry = ChatCommandRegistry,
+  TChatId extends string = string,
+> =
+  | ChatReadyEvent<TChatId>
+  | ChatAdapterMessageEvent<TChatId, ChatAdapterObject>
+  | ChatAdapterCommandEvent<TCommands, keyof TCommands, TChatId>
+  | ChatReactionAddedEvent<TChatId>
+  | ChatReactionRemovedEvent<TChatId>
+  | ChatDiagnosticEvent<TChatId>
+  | ChatErrorEvent<TChatId>
+  | ChatClosedEvent<TChatId>;
+
 export type ChatEventByType<
   TType extends ChatEventType,
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,

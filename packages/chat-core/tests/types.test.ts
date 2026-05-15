@@ -1,10 +1,15 @@
+import { Result } from "better-result";
 import { expectTypeOf, test } from "vitest";
 import {
   booleanOption,
+  defineChatAdapter,
   defineChatCommand,
   defineChatCommands,
   numberOption,
   stringOption,
+  type AdapterDataFor,
+  type AdapterOptionsFor,
+  type ChatAdapterDefinitions,
   type ChatOn,
 } from "../src";
 import type { ChatCommandValues } from "../src/commands";
@@ -37,6 +42,48 @@ test("command options infer required, optional, and choice values", () => {
   expectTypeOf({} as StartCommand["options"]["retries"]).toEqualTypeOf<1 | 2 | undefined>();
   expectTypeOf({} as StartCommand["options"]["dryRun"]).toEqualTypeOf<boolean>();
   expectTypeOf<keyof CloseCommand["options"]>().toEqualTypeOf<never>();
+});
+
+test("adapter helper preserves id, option, and data types", () => {
+  const discord = defineChatAdapter<
+    "discord",
+    { readonly allowedMentions: boolean },
+    { readonly nativeMessageId: string }
+  >({
+    id: "discord",
+    async open() {
+      return Result.ok({
+        id: "discord" as const,
+        async start() {
+          return Result.ok();
+        },
+        async sendMessage(input) {
+          return Result.ok({
+            chatId: "discord" as const,
+            conversationId: input.conversationId,
+            messageId: "message-1",
+            text: input.text,
+            format: input.format,
+            adapterData: { nativeMessageId: "native-1" },
+          });
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  type Adapters = { readonly discord: typeof discord };
+  const adapters = { discord } satisfies ChatAdapterDefinitions<Adapters>;
+
+  expectTypeOf(adapters.discord.id).toEqualTypeOf<"discord">();
+  expectTypeOf({} as AdapterOptionsFor<Adapters, "discord">).toEqualTypeOf<{
+    readonly allowedMentions: boolean;
+  }>();
+  expectTypeOf({} as AdapterDataFor<Adapters, "discord">).toEqualTypeOf<{
+    readonly nativeMessageId: string;
+  }>();
 });
 
 test("command event handlers narrow by command name", () => {

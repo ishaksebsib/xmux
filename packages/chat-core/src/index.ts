@@ -5,8 +5,21 @@ export {
   numberOption,
   stringOption,
 } from "./commands";
+export { defineChatAdapter } from "./adapter";
+export type {
+  ChatAdapterCapabilities,
+  ChatAdapterDefinition,
+  ChatAdapterDiagnosticInput,
+  ChatAdapterEmit,
+  ChatAdapterReplyInput,
+  ChatAdapterSendMessageInput,
+  ChatAdapterStartContext,
+  OpenChatAdapterContext,
+  OpenedChatAdapter,
+} from "./adapter";
 export type {
   ChatActor,
+  ChatAdapterObject,
   ChatConversationRef,
   ChatMessage,
   ChatMessageFormat,
@@ -23,8 +36,12 @@ export type {
   ChatCommandRegistry,
   ChatNumberOption,
   ChatStringOption,
-} from "./commands/types";
+} from "./commands";
+export type { AdapterDataFor, AdapterOptionsFor, ChatAdapterDefinitions } from "./types";
 export type {
+  ChatAdapterCommandEvent,
+  ChatAdapterEvent,
+  ChatAdapterMessageEvent,
   ChatClosedEvent,
   ChatCommandEvent,
   ChatDiagnosticEvent,
