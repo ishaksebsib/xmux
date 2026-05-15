@@ -24,3 +24,22 @@ export type {
   ChatNumberOption,
   ChatStringOption,
 } from "./commands/types";
+export type {
+  ChatClosedEvent,
+  ChatCommandEvent,
+  ChatDiagnosticEvent,
+  ChatDiagnosticLevel,
+  ChatErrorEvent,
+  ChatEvent,
+  ChatEventHandler,
+  ChatEventReply,
+  ChatEventReplyOptions,
+  ChatEventType,
+  ChatMessageEvent,
+  ChatOn,
+  ChatReactionAddedEvent,
+  ChatReactionRemovedEvent,
+  ChatReadyEvent,
+  ChatReplyMode,
+  Unsubscribe,
+} from "./events";
