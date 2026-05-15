@@ -5,6 +5,7 @@ import {
   defineChatCommands,
   numberOption,
   stringOption,
+  type ChatOn,
 } from "../src";
 import type { ChatCommandValues } from "../src/commands";
 
@@ -36,4 +37,31 @@ test("command options infer required, optional, and choice values", () => {
   expectTypeOf({} as StartCommand["options"]["retries"]).toEqualTypeOf<1 | 2 | undefined>();
   expectTypeOf({} as StartCommand["options"]["dryRun"]).toEqualTypeOf<boolean>();
   expectTypeOf<keyof CloseCommand["options"]>().toEqualTypeOf<never>();
+});
+
+test("command event handlers narrow by command name", () => {
+  const commands = defineChatCommands({
+    start: defineChatCommand({
+      description: "Start a session",
+      options: {
+        cwd: stringOption({ required: false }),
+      },
+    }),
+    close: defineChatCommand({
+      description: "Close the current session",
+    }),
+  });
+
+  function assertHandlers(on: ChatOn<typeof commands>) {
+    on("command", "start", (event) => {
+      expectTypeOf(event.command.name).toEqualTypeOf<"start">();
+      expectTypeOf(event.command.options.cwd).toEqualTypeOf<string | undefined>();
+    });
+
+    on("command", (event) => {
+      expectTypeOf(event.command.name).toEqualTypeOf<"start" | "close">();
+    });
+  }
+
+  void assertHandlers;
 });
