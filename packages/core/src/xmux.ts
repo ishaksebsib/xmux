@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import {
   createHarness,
@@ -10,6 +11,7 @@ import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type XmuxConfig } from "./config";
 import type { XmuxContext } from "./ctx";
 import { createInMemoryStore } from "./in-memory-store";
+import { registerRoutes } from "./route";
 import type { XmuxStore } from "./store";
 
 /**
@@ -50,9 +52,7 @@ export function createXmux<
   const shutdownController = new AbortController();
   const store = options.store ?? createInMemoryStore();
 
-  // TODO: make chat typed
-  // Chat<TChats, >
-  const chat = new Chat({
+  const chat = new Chat<TChats>({
     userName: config.userName,
     adapters: options.chats,
     // TODO: change this later
@@ -68,6 +68,7 @@ export function createXmux<
     webhooks: chat.webhooks,
     store,
     services: Object.freeze({
+      createRequestId: randomUUID,
       now: () => new Date(),
       shutdownSignal: shutdownController.signal,
     }),

@@ -43,6 +43,7 @@ export interface XmuxHandlerContext<
 
 /** Stable app-scoped services shared across xmux handlers. */
 export interface XmuxServices {
+  readonly createRequestId: () => string;
   readonly now: () => Date;
   readonly shutdownSignal: AbortSignal;
 }
