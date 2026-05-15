@@ -12,5 +12,4 @@ export type ChatIdFromMessageRef<TMessageRef extends ChatMessageRef> = TMessageR
 
 export type AdapterDataFromMessage<TMessage extends ChatMessage> = TMessage["adapterData"];
 
-export type AdapterDataFromSentMessage<TMessage extends ChatSentMessage> =
-  TMessage["adapterData"];
+export type AdapterDataFromSentMessage<TMessage extends ChatSentMessage> = TMessage["adapterData"];

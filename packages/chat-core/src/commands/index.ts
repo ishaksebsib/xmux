@@ -10,6 +10,19 @@ import type {
   ChatStringOptionInput,
 } from "./types";
 
+export type {
+  ChatBooleanOption,
+  ChatCommandDefinition,
+  ChatCommandOption,
+  ChatCommandOptionDefinition,
+  ChatCommandOptionValues,
+  ChatCommandRegistry,
+  ChatCommandValueFor,
+  ChatCommandValues,
+  ChatNumberOption,
+  ChatStringOption,
+} from "./types";
+
 /** Defines the command registry passed unchanged to adapters during startup. */
 export function defineChatCommands<const TCommands extends ChatCommandRegistry>(
   commands: TCommands,

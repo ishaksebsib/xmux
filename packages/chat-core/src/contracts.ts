@@ -8,12 +8,13 @@ export type ChatMessageFormat = "plain" | "markdown" | "html";
 export interface ChatConversationRef<TChatId extends string = string> {
   readonly chatId: TChatId;
   readonly conversationId: string;
-	// TODO: support threadId later
+  // TODO: support threadId later
 }
 
 /** Normalized message identity inside a conversation. */
-export interface ChatMessageRef<TChatId extends string = string>
-  extends ChatConversationRef<TChatId> {
+export interface ChatMessageRef<
+  TChatId extends string = string,
+> extends ChatConversationRef<TChatId> {
   readonly messageId: string;
 }
 
@@ -60,8 +61,8 @@ export type ChatTextInput = string | ChatTextContent;
 export interface ChatMessage<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
-> extends ChatMessageRef<TChatId>,
-    ChatTextContent {
+>
+  extends ChatMessageRef<TChatId>, ChatTextContent {
   readonly actor: ChatActor;
   readonly adapterData: TAdapterData;
 }
@@ -70,7 +71,7 @@ export interface ChatMessage<
 export interface ChatSentMessage<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
-> extends ChatMessageRef<TChatId>,
-    ChatTextContent {
+>
+  extends ChatMessageRef<TChatId>, ChatTextContent {
   readonly adapterData: TAdapterData;
 }

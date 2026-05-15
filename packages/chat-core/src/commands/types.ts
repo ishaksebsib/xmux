@@ -4,11 +4,10 @@ type StringChoice = string;
 type NumberChoice = number;
 type OptionChoices = readonly (StringChoice | NumberChoice)[];
 
-type ChoiceValue<TChoices extends OptionChoices | undefined, TFallback> = TChoices extends readonly (
-  infer TValue
-)[]
-  ? TValue
-  : TFallback;
+type ChoiceValue<
+  TChoices extends OptionChoices | undefined,
+  TFallback,
+> = TChoices extends readonly (infer TValue)[] ? TValue : TFallback;
 
 /** Shared metadata adapters use to register or describe command options. */
 export interface ChatCommandOptionDefinition<
@@ -78,12 +77,13 @@ export type ChatCommandOptionValues<TOptions extends ChatCommandOptionsDefinitio
 export type ChatCommandValueFor<
   TCommands extends ChatCommandRegistry,
   TName extends keyof TCommands,
-> = TCommands[TName] extends ChatCommandDefinition<infer TOptions>
-  ? {
-      readonly name: Extract<TName, string>;
-      readonly options: ChatCommandOptionValues<TOptions>;
-    }
-  : never;
+> =
+  TCommands[TName] extends ChatCommandDefinition<infer TOptions>
+    ? {
+        readonly name: Extract<TName, string>;
+        readonly options: ChatCommandOptionValues<TOptions>;
+      }
+    : never;
 
 export type ChatCommandValues<TCommands extends ChatCommandRegistry> = {
   readonly [TName in keyof TCommands]: ChatCommandValueFor<TCommands, TName>;
@@ -111,4 +111,3 @@ export interface ChatBooleanOptionInput<TRequired extends boolean = false> {
   readonly description?: string;
   readonly required?: TRequired;
 }
-
