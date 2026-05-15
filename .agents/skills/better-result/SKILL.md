@@ -1,3 +1,8 @@
+---
+name: better-result
+description: Better Result is a TypeScript library for handling errors and results in a functional way.
+---
+
 ## Defining Errors
 
 ### Simple Error (no computed message)

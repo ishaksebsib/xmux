@@ -11,7 +11,6 @@ import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type XmuxConfig } from "./config";
 import type { XmuxContext } from "./ctx";
 import { createInMemoryStore } from "./in-memory-store";
-import { registerRoutes } from "./route";
 import type { XmuxStore } from "./store";
 
 /**
