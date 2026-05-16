@@ -23,15 +23,9 @@ importers:
 
   apps/demo:
     dependencies:
-      '@chat-adapter/telegram':
-        specifier: ^4.27.0
-        version: 4.27.0
       '@xmux/core':
         specifier: workspace:^
         version: link:../../packages/core
-      '@xmux/harness-opencode':
-        specifier: workspace:^
-        version: link:../../packages/harness-opencode
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -45,6 +39,31 @@ importers:
       tsx:
         specifier: ^4.21.0
         version: 4.21.0
+
+  packages/chat-core:
+    dependencies:
+      better-result:
+        specifier: ^2.9.1
+        version: 2.9.1
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.6.0
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260328.1
+        version: 7.0.0-dev.20260328.1
+      '@xmux/ts-config':
+        specifier: workspace:*
+        version: link:../ts-config
+      tsdown:
+        specifier: ^0.21.7
+        version: 0.21.10(@typescript/native-preview@7.0.0-dev.20260328.1)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.5(@types/node@25.6.0)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(tsx@4.21.0))
 
   packages/core:
     dependencies:
@@ -161,14 +180,8 @@ packages:
     resolution: {integrity: sha512-mOm5ZrYmphGfqVWoH5YYMTITb3cDXsFgmvFlvkvWDMsR9X8RFnt7a0Wb6yNIdoFsiMO9WjYLq+U/FMtqIYAF8Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
 
-  '@chat-adapter/shared@4.27.0':
-    resolution: {integrity: sha512-Wz+YZ8Mp2/qcxxJ+rU0ofZQSEtOF/4toEh7wbA+q+uLlPrLue+7hImWluJpQUZqGjSwsUoXhjSNwgFv3hz20aQ==}
-
   '@chat-adapter/state-memory@4.27.0':
     resolution: {integrity: sha512-kl6LilKa6pBGQroIDQy79CPfgkVcUS2Qr13JGvunU/gA1gtLpleoxXHOye9PTRvpv6URCN54Yy5UmgAI9uzXKg==}
-
-  '@chat-adapter/telegram@4.27.0':
-    resolution: {integrity: sha512-taRZAPw5Sw7G4BtsGCIV5QqaXrKUlmLWoX04NZxGUC0Gn7MuYPwh7P7wMk04LvQ2lZfhjVCr22UlvayloUPSfg==}
 
   '@emnapi/core@1.10.0':
     resolution: {integrity: sha512-yq6OkJ4p82CAfPl0u9mQebQHKPJkY7WrIuk205cTYnYe+k2Z8YBh11FrbRG/H6ihirqcacOgl2BIO8oyMQLeXw==}
@@ -1505,21 +1518,8 @@ snapshots:
       '@babel/helper-string-parser': 8.0.0-rc.4
       '@babel/helper-validator-identifier': 8.0.0-rc.3
 
-  '@chat-adapter/shared@4.27.0':
-    dependencies:
-      chat: 4.27.0
-    transitivePeerDependencies:
-      - supports-color
-
   '@chat-adapter/state-memory@4.27.0':
     dependencies:
-      chat: 4.27.0
-    transitivePeerDependencies:
-      - supports-color
-
-  '@chat-adapter/telegram@4.27.0':
-    dependencies:
-      '@chat-adapter/shared': 4.27.0
       chat: 4.27.0
     transitivePeerDependencies:
       - supports-color
