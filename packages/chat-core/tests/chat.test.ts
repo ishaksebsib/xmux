@@ -1,6 +1,8 @@
 import { Result } from "better-result";
 import { describe, expect, test } from "vitest";
 import {
+  ChatAdapterOpenError,
+  ChatAdapterStartError,
   ChatCloseError,
   ChatLifecycleError,
   ChatSendMessageError,
@@ -27,7 +29,11 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly id: TId;
   readonly handles: Handles;
   readonly closeError?: unknown;
+  readonly openError?: unknown;
+  readonly throwOnOpen?: unknown;
   readonly sendError?: unknown;
+  readonly startError?: unknown;
+  readonly throwOnStart?: unknown;
   readonly throwOnSend?: unknown;
   readonly nativeReply?: boolean;
   readonly replyError?: unknown;
@@ -48,11 +54,23 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
     id: args.id,
     async open() {
       args.handles.opens.push(args.id);
+      if (args.throwOnOpen !== undefined) {
+        throw args.throwOnOpen;
+      }
+      if (args.openError !== undefined) {
+        return Result.err(args.openError);
+      }
 
       return Result.ok({
         id: args.id,
         async start(context) {
           args.handles.starts.push(args.id);
+          if (args.throwOnStart !== undefined) {
+            throw args.throwOnStart;
+          }
+          if (args.startError !== undefined) {
+            return Result.err(args.startError);
+          }
           args.onStart?.(context as unknown as ChatAdapterStartContext<typeof commands, TId>);
           return Result.ok();
         },
@@ -241,6 +259,91 @@ describe("createChat lifecycle", () => {
     });
 
     expect(messages).toEqual([]);
+  });
+
+  test("wraps thrown adapter open failures", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", handles, throwOnOpen: new Error("boom") }),
+      },
+      commands,
+    });
+
+    const started = await chat.start();
+
+    expect(started.isErr()).toBe(true);
+    if (started.isErr()) {
+      expect(started.error).toBeInstanceOf(ChatAdapterOpenError);
+      if (ChatAdapterOpenError.is(started.error)) {
+        expect(started.error.message).toContain("boom");
+      }
+    }
+  });
+
+  test("wraps thrown adapter start failures and cleans opened runtimes", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", handles }),
+        beta: createRuntimeAdapter({ id: "beta", handles, throwOnStart: new Error("boom") }),
+      },
+      commands,
+    });
+
+    const started = await chat.start();
+
+    expect(started.isErr()).toBe(true);
+    expect(handles.closes).toEqual(["alpha", "beta"]);
+    if (started.isErr()) {
+      expect(started.error).toBeInstanceOf(ChatAdapterStartError);
+      if (ChatAdapterStartError.is(started.error)) {
+        expect(started.error.message).toContain("boom");
+      }
+    }
+  });
+
+  test("routes synchronous handler throws to error events", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    const errors: unknown[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onStart: (context) => {
+            startContext = context;
+          },
+        }),
+      },
+      commands,
+    });
+
+    chat.on("message", () => {
+      throw new Error("handler failed");
+    });
+    chat.on("error", (event) => {
+      errors.push(event.error);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    startContext?.emit({
+      type: "message",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: {
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "message",
+        actor: { kind: "user", actorId: "user", adapterData: {} },
+        text: "hello",
+        adapterData: {},
+      },
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
   });
 
   test("returns lifecycle errors for invalid transitions", async () => {
