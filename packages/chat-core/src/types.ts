@@ -1,4 +1,5 @@
 import type { ChatAdapterDefinition } from "./adapter";
+import type { ChatReplyMode } from "./events";
 import type {
   ChatAdapterObject,
   ChatConversationRef,
@@ -90,3 +91,20 @@ export type ChatSentMessageFromInput<
 > = TInput extends { readonly chatId: infer TChatId extends keyof TAdapters }
   ? ChatSentMessageFor<TAdapters, TChatId>
   : never;
+
+export type ChatReplyInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly messageId?: string;
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly mode?: ChatReplyMode;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
+
+export type ChatReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
+  readonly [TChatId in keyof TAdapters]: ChatReplyInputFor<TAdapters, TChatId>;
+}[keyof TAdapters];

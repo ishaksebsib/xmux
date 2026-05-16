@@ -52,6 +52,8 @@ export type {
   AdapterDataFor,
   AdapterOptionsFor,
   ChatAdapterDefinitions,
+  ChatReplyInput,
+  ChatReplyInputFor,
   ChatSendMessageInput,
   ChatSendMessageInputFor,
   ChatSentMessageFor,
