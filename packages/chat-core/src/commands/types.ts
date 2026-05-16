@@ -40,7 +40,7 @@ export type ChatBooleanOption<TRequired extends boolean = boolean> = ChatCommand
   TRequired
 >;
 
-/** supported command metadata. */
+/** Any supported command option metadata. */
 export type ChatCommandOption = ChatStringOption | ChatNumberOption | ChatBooleanOption;
 
 /** Option map for a single command, keyed by stable option name. */
@@ -62,6 +62,7 @@ export type ChatCommandRegistry = Record<
   ChatCommandDefinition<ChatCommandOptionsDefinition | undefined>
 >;
 
+/** Runtime value type inferred from one command option. */
 export type ChatCommandOptionValue<TOption extends ChatCommandOption> =
   TOption extends ChatCommandOptionDefinition<ChatCommandOptionKind, infer TValue, infer TRequired>
     ? TRequired extends true
@@ -69,11 +70,13 @@ export type ChatCommandOptionValue<TOption extends ChatCommandOption> =
       : TValue | undefined
     : never;
 
+/** Runtime option values inferred from a command option map. */
 export type ChatCommandOptionValues<TOptions extends ChatCommandOptionsDefinition | undefined> =
   TOptions extends ChatCommandOptionsDefinition
     ? { readonly [TName in keyof TOptions]: ChatCommandOptionValue<TOptions[TName]> }
     : Record<never, never>;
 
+/** Command invocation shape inferred for one command name. */
 export type ChatCommandValueFor<
   TCommands extends ChatCommandRegistry,
   TName extends keyof TCommands,
@@ -85,10 +88,12 @@ export type ChatCommandValueFor<
       }
     : never;
 
+/** Command invocation union inferred from a command registry. */
 export type ChatCommandValues<TCommands extends ChatCommandRegistry> = {
   readonly [TName in keyof TCommands]: ChatCommandValueFor<TCommands, TName>;
 }[keyof TCommands];
 
+/** Input accepted by `stringOption()`. */
 export interface ChatStringOptionInput<
   TRequired extends boolean = false,
   TChoices extends readonly string[] | undefined = undefined,
@@ -98,6 +103,7 @@ export interface ChatStringOptionInput<
   readonly choices?: TChoices;
 }
 
+/** Input accepted by `numberOption()`. */
 export interface ChatNumberOptionInput<
   TRequired extends boolean = false,
   TChoices extends readonly number[] | undefined = undefined,
@@ -107,6 +113,7 @@ export interface ChatNumberOptionInput<
   readonly choices?: TChoices;
 }
 
+/** Input accepted by `booleanOption()`. */
 export interface ChatBooleanOptionInput<TRequired extends boolean = false> {
   readonly description?: string;
   readonly required?: TRequired;

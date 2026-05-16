@@ -21,13 +21,17 @@ type AdapterOptionsProp<TAdapterOptions extends ChatAdapterObject> = [
   ? { readonly adapterOptions?: TAdapterOptions }
   : { readonly adapterOptions: TAdapterOptions };
 
+/** Extracts the chat id from a normalized conversation reference. */
 export type ChatIdFromConversation<TConversation extends ChatConversationRef> =
   TConversation["chatId"];
 
+/** Extracts the chat id from a normalized message reference. */
 export type ChatIdFromMessageRef<TMessageRef extends ChatMessageRef> = TMessageRef["chatId"];
 
+/** Extracts adapter metadata from a received message. */
 export type AdapterDataFromMessage<TMessage extends ChatMessage> = TMessage["adapterData"];
 
+/** Extracts adapter metadata from a sent message. */
 export type AdapterDataFromSentMessage<TMessage extends ChatSentMessage> = TMessage["adapterData"];
 
 /** Adapter-specific send/reply options selected by registered chat id. */
@@ -65,6 +69,7 @@ export type ChatAdapterDefinitions<TAdapters extends Record<string, AnyChatAdapt
   >;
 };
 
+/** Send input narrowed to one registered chat adapter. */
 export type ChatSendMessageInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TChatId extends keyof TAdapters,
@@ -76,15 +81,18 @@ export type ChatSendMessageInputFor<
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
 
+/** Send input union for all registered chat adapters. */
 export type ChatSendMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
   readonly [TChatId in keyof TAdapters]: ChatSendMessageInputFor<TAdapters, TChatId>;
 }[keyof TAdapters];
 
+/** Sent message result narrowed to one registered chat adapter. */
 export type ChatSentMessageFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TChatId extends keyof TAdapters,
 > = ChatSentMessage<Extract<TChatId, string>, AdapterDataFor<TAdapters, TChatId>>;
 
+/** Sent message result selected from a send/reply input's chat id. */
 export type ChatSentMessageFromInput<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TInput,
@@ -92,6 +100,7 @@ export type ChatSentMessageFromInput<
   ? ChatSentMessageFor<TAdapters, TChatId>
   : never;
 
+/** Reply input narrowed to one registered chat adapter. */
 export type ChatReplyInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TChatId extends keyof TAdapters,
@@ -105,6 +114,7 @@ export type ChatReplyInputFor<
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
 
+/** Reply input union for all registered chat adapters. */
 export type ChatReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
   readonly [TChatId in keyof TAdapters]: ChatReplyInputFor<TAdapters, TChatId>;
 }[keyof TAdapters];

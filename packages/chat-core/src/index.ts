@@ -43,7 +43,6 @@ export type {
   ChatBooleanOption,
   ChatCommandDefinition,
   ChatCommandOption,
-  ChatCommandOptionDefinition,
   ChatCommandRegistry,
   ChatNumberOption,
   ChatStringOption,

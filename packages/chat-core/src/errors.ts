@@ -4,6 +4,7 @@ function describeCause(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
+/** Facade operation names used in lifecycle errors. */
 export type ChatLifecycleOperation = "start" | "close" | "sendMessage" | "reply";
 
 /** Returned when a caller targets an adapter id that was not registered. */
@@ -133,15 +134,19 @@ export class ChatCloseError extends TaggedError("ChatCloseError")<{
   }
 }
 
+/** Errors returned by `chat.start()`. */
 export type ChatStartError = ChatLifecycleError | ChatAdapterOpenError | ChatAdapterStartError;
 
+/** Errors returned by `chat.close()`. */
 export type ChatCloseFailure = ChatLifecycleError | ChatCloseError;
 
+/** Errors returned by `chat.sendMessage()`. */
 export type ChatSendMessageFailure =
   | UnknownChatAdapterError
   | ChatLifecycleError
   | ChatSendMessageError;
 
+/** Errors returned by `chat.reply()` and event reply helpers. */
 export type ChatReplyFailure =
   | UnknownChatAdapterError
   | ChatLifecycleError
