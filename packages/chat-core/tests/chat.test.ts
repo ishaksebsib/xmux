@@ -45,7 +45,7 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
     readonly text: string;
   }) => void;
   readonly onReply?: (input: {
-    readonly message: { readonly messageId: string };
+    readonly message?: { readonly messageId: string };
     readonly mode?: string;
     readonly text: string;
   }) => void;
@@ -452,7 +452,7 @@ describe("createChat lifecycle", () => {
             sends.push(input.text);
           },
           onReply: (input) => {
-            replies.push(`${input.message.messageId}:${input.mode}:${input.text}`);
+            replies.push(`${input.message?.messageId}:${input.mode}:${input.text}`);
           },
         }),
       },

@@ -16,6 +16,7 @@ export type {
   ChatCommandOption,
   ChatCommandOptionDefinition,
   ChatCommandOptionValues,
+  ChatCommandOptionsDefinition,
   ChatCommandRegistry,
   ChatCommandValueFor,
   ChatCommandValues,

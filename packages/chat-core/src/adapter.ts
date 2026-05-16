@@ -7,7 +7,8 @@ import type {
   ChatSentMessage,
   ChatTextContent,
 } from "./contracts";
-import type { ChatAdapterEvent, ChatDiagnosticEvent, ChatReplyMode } from "./events";
+import type { ChatAdapterEvent, ChatDiagnosticEvent } from "./events";
+import type { ChatReplyMode } from "./types";
 
 /** Defines a chat adapter while preserving its id, options, and data types. */
 export function defineChatAdapter<
@@ -29,7 +30,7 @@ export interface OpenedChatAdapter<
   readonly id: TChatId;
   readonly capabilities?: ChatAdapterCapabilities;
   start<TCommands extends ChatCommandRegistry>(
-    context: ChatAdapterStartContext<TCommands, TChatId>,
+    context: ChatAdapterStartContext<TCommands, TChatId, TAdapterData>,
   ): Promise<Result<void, unknown>>;
   sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TAdapterOptions>,
@@ -90,15 +91,19 @@ export type ChatAdapterDiagnosticInput<TChatId extends string = string> = Omit<
 export type ChatAdapterEmit<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
-> = (event: ChatAdapterEvent<TCommands, TChatId>) => void;
+  TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+> = (
+  event: ChatAdapterEvent<TCommands, TChatId, { readonly [TKey in TChatId]: TAdapterData }>,
+) => void;
 
 /** Context passed when an opened adapter connects to its platform. */
 export interface ChatAdapterStartContext<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
+  TAdapterData extends ChatAdapterObject = ChatAdapterObject,
 > {
   readonly commands: TCommands;
-  readonly emit: ChatAdapterEmit<TCommands, TChatId>;
+  readonly emit: ChatAdapterEmit<TCommands, TChatId, TAdapterData>;
   readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
   readonly signal?: AbortSignal;
 }
@@ -118,6 +123,6 @@ export interface ChatAdapterReplyInput<
   TChatId extends string = string,
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
 > extends ChatAdapterSendMessageInput<TChatId, TAdapterOptions> {
-  readonly message: ChatMessageRef<TChatId>;
+  readonly message?: ChatMessageRef<TChatId>;
   readonly mode?: ChatReplyMode;
 }

@@ -11,10 +11,10 @@ import {
   type AdapterDataFor,
   type AdapterOptionsFor,
   type ChatAdapterDefinitions,
+  type ChatCommandValues,
   type ChatOn,
   type ChatSentMessageFromInput,
 } from "../src";
-import type { ChatCommandValues } from "../src/commands";
 
 const shouldRunTypeErrorChecks = process.argv.length === 0;
 
@@ -224,6 +224,51 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
       commands: {},
     });
   }
+});
+
+test("message events preserve adapter data and event.reply adapter options", () => {
+  const discord = defineChatAdapter<
+    "discord",
+    { readonly allowedMentions: boolean },
+    { readonly nativeMessageId: string }
+  >({
+    id: "discord",
+    async open() {
+      return Result.ok({
+        id: "discord" as const,
+        async start() {
+          return Result.ok();
+        },
+        async sendMessage(input) {
+          return Result.ok({
+            chatId: "discord" as const,
+            conversationId: input.conversationId,
+            messageId: "message-1",
+            text: input.text,
+            adapterData: { nativeMessageId: "native-1" },
+          });
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  const chat = createChat({ adapters: { discord }, commands: {} });
+
+  chat.on("message", (event) => {
+    if (event.chatId === "discord") {
+      expectTypeOf(event.message.adapterData.nativeMessageId).toEqualTypeOf<string>();
+
+      void event.reply("ok", { adapterOptions: { allowedMentions: false } });
+
+      if (shouldRunTypeErrorChecks) {
+        // @ts-expect-error event.reply requires adapter options when the adapter requires them
+        void event.reply("ok");
+      }
+    }
+  });
 });
 
 test("command event handlers narrow by command name", () => {

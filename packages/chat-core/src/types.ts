@@ -1,5 +1,4 @@
 import type { ChatAdapterDefinition } from "./adapter";
-import type { ChatReplyMode } from "./events";
 import type {
   ChatAdapterObject,
   ChatConversationRef,
@@ -11,15 +10,36 @@ import type {
 
 type AnyChatAdapterDefinition = ChatAdapterDefinition<string, ChatAdapterObject, ChatAdapterObject>;
 
-type RequiredKeys<TValue extends ChatAdapterObject> = {
+export type RequiredKeys<TValue extends ChatAdapterObject> = {
   [TKey in keyof TValue]-?: {} extends Pick<TValue, TKey> ? never : TKey;
 }[keyof TValue];
 
-type AdapterOptionsProp<TAdapterOptions extends ChatAdapterObject> = [
+export type AdapterOptionsProp<TAdapterOptions extends ChatAdapterObject> = [
   RequiredKeys<TAdapterOptions>,
 ] extends [never]
   ? { readonly adapterOptions?: TAdapterOptions }
   : { readonly adapterOptions: TAdapterOptions };
+
+/** Reply intent used by event helpers and facade replies. */
+export type ChatReplyMode = "auto" | "thread" | "quote" | "conversation";
+
+/** Adapter data map keyed by registered chat id. */
+export type ChatEventAdapterData<TChatId extends string = string> = {
+  readonly [TCurrentChatId in TChatId]: ChatAdapterObject;
+};
+
+/** Adapter options map keyed by registered chat id. */
+export type ChatEventAdapterOptions<TChatId extends string = string> = {
+  readonly [TCurrentChatId in TChatId]: ChatAdapterObject;
+};
+
+export type AdapterDataByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
+  readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterDataFor<TAdapters, TChatId>;
+};
+
+export type AdapterOptionsByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
+  readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterOptionsFor<TAdapters, TChatId>;
+};
 
 /** Extracts the chat id from a normalized conversation reference. */
 export type ChatIdFromConversation<TConversation extends ChatConversationRef> =

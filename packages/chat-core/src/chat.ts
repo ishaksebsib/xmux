@@ -9,10 +9,15 @@ import type {
 import type { ChatAdapterObject, ChatTextInput, ChatTextContent } from "./contracts";
 import type { ChatCommandRegistry } from "./commands";
 import type {
+  AdapterDataByChatId,
   AdapterDataFor,
+  AdapterOptionsByChatId,
   AdapterOptionsFor,
   ChatAdapterDefinitions,
+  ChatEventAdapterData,
+  ChatEventAdapterOptions,
   ChatReplyInput,
+  ChatReplyMode,
   ChatSendMessageInput,
   ChatSentMessageFromInput,
 } from "./types";
@@ -53,29 +58,54 @@ export function createChat<
   const TCommands extends ChatCommandRegistry,
 >(options: CreateChatOptions<TAdapters, TCommands>): Chat<TAdapters, TCommands> {
   type TChatId = Extract<keyof TAdapters, string>;
+  type TAdapterDataByChatId = AdapterDataByChatId<TAdapters>;
+  type TAdapterOptionsByChatId = AdapterOptionsByChatId<TAdapters>;
   type TReplyResult = Result<
     ChatSentMessageFromInput<TAdapters, ChatReplyInput<TAdapters>>,
     ChatReplyFailure
   >;
 
   const chatIds = Object.freeze(Object.keys(options.adapters) as TChatId[]);
-  const handlers = new Set<StoredHandler<TCommands, TChatId>>();
+  const handlers = new Set<
+    StoredHandler<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+  >();
   const openedRuntimes = new Map<string, OpenedRuntime>();
+  const pendingStartupEvents: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>[] = [];
   let lifecycle: ChatLifecycleState = initialChatLifecycleState;
   let abortController: AbortController | undefined;
 
-  function reportHandlerError(event: ChatEvent<TCommands, TChatId>, cause: unknown) {
+  function reportHandlerError(
+    event: ChatEvent<
+      TCommands,
+      TChatId,
+      TReplyResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
+    >,
+    cause: unknown,
+  ) {
     if (event.type === "error") {
       return;
     }
 
     dispatch({ type: "error", chatId: event.chatId, error: cause } as ChatEvent<
       TCommands,
-      TChatId
+      TChatId,
+      TReplyResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
     >);
   }
 
-  function dispatch(event: ChatEvent<TCommands, TChatId>) {
+  function dispatch(
+    event: ChatEvent<
+      TCommands,
+      TChatId,
+      TReplyResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
+    >,
+  ) {
     const commandName = commandNameFor(event);
 
     for (const subscription of handlers) {
@@ -97,17 +127,32 @@ export function createChat<
     }
   }
 
-  function bindEvent(event: ChatAdapterEvent<TCommands, TChatId>): ChatEvent<TCommands, TChatId> {
+  function bindEvent(
+    event: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>,
+  ): ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId> {
     if (event.type !== "message" && event.type !== "command") {
-      return event as ChatEvent<TCommands, TChatId>;
+      return event as ChatEvent<
+        TCommands,
+        TChatId,
+        TReplyResult,
+        TAdapterDataByChatId,
+        TAdapterOptionsByChatId
+      >;
     }
 
     const messageId = event.type === "message" ? event.message.messageId : event.message?.messageId;
 
     return {
       ...event,
-      reply: async (message: ChatTextInput, replyOptions) => {
+      reply: async (
+        message: ChatTextInput,
+        replyOptions?: {
+          readonly mode?: ChatReplyMode;
+          readonly adapterOptions?: ChatAdapterObject;
+        },
+      ) => {
         const content = normalizeChatTextInput(message);
+        const adapterOptions = replyOptions?.adapterOptions;
         return reply({
           chatId: event.chatId,
           conversationId: event.conversation.conversationId,
@@ -115,12 +160,18 @@ export function createChat<
           text: content.text,
           format: content.format,
           mode: replyOptions?.mode,
+          ...(adapterOptions === undefined ? {} : { adapterOptions }),
         } as ChatReplyInput<TAdapters>);
       },
-    } as ChatEvent<TCommands, TChatId>;
+    } as ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>;
   }
 
-  function emit(event: ChatAdapterEvent<TCommands, TChatId>) {
+  function emit(event: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>) {
+    if (lifecycle.status === "starting" && event.type !== "diagnostic" && event.type !== "error") {
+      pendingStartupEvents.push(event);
+      return;
+    }
+
     dispatch(bindEvent(event));
   }
 
@@ -129,25 +180,35 @@ export function createChat<
     commandOrHandler:
       | string
       | ChatEventHandler<ChatCommandEvent<TCommands, keyof TCommands, TChatId>>
-      | ChatEventHandler<ChatEvent<TCommands, TChatId>>,
+      | ChatEventHandler<
+          ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+        >,
     maybeHandler?: ChatEventHandler<ChatCommandEvent<TCommands, keyof TCommands, TChatId>>,
   ): Unsubscribe => {
     const commandName = typeof commandOrHandler === "string" ? commandOrHandler : undefined;
     const handler = (typeof commandOrHandler === "string" ? maybeHandler : commandOrHandler) as
-      | ChatEventHandler<ChatEvent<TCommands, TChatId>>
+      | ChatEventHandler<
+          ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+        >
       | undefined;
 
     if (handler === undefined) {
       throw new TypeError("chat.on requires an event handler");
     }
 
-    const subscription = { type, commandName, handler } satisfies StoredHandler<TCommands, TChatId>;
+    const subscription = { type, commandName, handler } satisfies StoredHandler<
+      TCommands,
+      TChatId,
+      TReplyResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
+    >;
     handlers.add(subscription);
 
     return () => {
       handlers.delete(subscription);
     };
-  }) as ChatOn<TCommands, TChatId, TReplyResult>;
+  }) as ChatOn<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>;
 
   async function start() {
     const canStart = ensureCanStart(lifecycle);
@@ -178,6 +239,7 @@ export function createChat<
           });
 
       if (runtimeResult.isErr()) {
+        pendingStartupEvents.length = 0;
         await cleanupOpenedRuntimes({ reason: "start_failed" });
         lifecycle = { status: "created" };
         return Result.err(runtimeResult.error);
@@ -191,7 +253,7 @@ export function createChat<
         runtime,
         context: {
           commands: options.commands,
-          emit,
+          emit: emit as ChatAdapterStartContext<TCommands, TChatId, ChatAdapterObject>["emit"],
           diagnostic: (diagnostic) => {
             emit({
               ...diagnostic,
@@ -204,15 +266,25 @@ export function createChat<
       });
 
       if (started.isErr()) {
+        pendingStartupEvents.length = 0;
         await cleanupOpenedRuntimes({ reason: "start_failed" });
         lifecycle = { status: "created" };
         return Result.err(started.error);
       }
 
-      emit({ type: "ready", chatId });
+      dispatch({ type: "ready", chatId } as ChatEvent<
+        TCommands,
+        TChatId,
+        TReplyResult,
+        TAdapterDataByChatId,
+        TAdapterOptionsByChatId
+      >);
     }
 
     lifecycle = { status: "started" };
+    for (const event of pendingStartupEvents.splice(0)) {
+      dispatch(bindEvent(event));
+    }
     return Result.ok();
   }
 
@@ -258,7 +330,7 @@ export function createChat<
     >
   > {
     const key = args.chatId as string;
-    if (!(key in options.adapters)) {
+    if (!Object.hasOwn(options.adapters, key)) {
       return Result.err(new UnknownChatAdapterError({ chatId: key, availableChatIds: chatIds }));
     }
 
@@ -316,14 +388,18 @@ export function createChat<
       );
       const mode = input.mode ?? "auto";
 
-      if (runtime.reply && input.messageId !== undefined) {
+      if (runtime.reply) {
         const adapterReplyInput = {
           ...createAdapterSendMessageInput<TAdapters, TInput>(input),
-          message: {
-            chatId: input.chatId,
-            conversationId: input.conversationId,
-            messageId: input.messageId,
-          },
+          ...(input.messageId === undefined
+            ? {}
+            : {
+                message: {
+                  chatId: input.chatId,
+                  conversationId: input.conversationId,
+                  messageId: input.messageId,
+                },
+              }),
           mode,
         } as ChatAdapterReplyInput<
           TInput["chatId"],
@@ -441,7 +517,9 @@ export interface Chat<
   readonly on: ChatOn<
     TCommands,
     Extract<keyof TAdapters, string>,
-    Result<ChatSentMessageFromInput<TAdapters, ChatReplyInput<TAdapters>>, ChatReplyFailure>
+    Result<ChatSentMessageFromInput<TAdapters, ChatReplyInput<TAdapters>>, ChatReplyFailure>,
+    AdapterDataByChatId<TAdapters>,
+    AdapterOptionsByChatId<TAdapters>
   >;
   sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
     input: TInput,
@@ -453,10 +531,18 @@ export interface Chat<
 
 type OpenedRuntime = OpenedChatAdapter<string, ChatAdapterObject, ChatAdapterObject>;
 
-type StoredHandler<TCommands extends ChatCommandRegistry, TChatId extends string> = {
+type StoredHandler<
+  TCommands extends ChatCommandRegistry,
+  TChatId extends string,
+  TReplyResult,
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId>,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId>,
+> = {
   readonly type: ChatEventType;
   readonly commandName?: string;
-  readonly handler: ChatEventHandler<ChatEvent<TCommands, TChatId>>;
+  readonly handler: ChatEventHandler<
+    ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+  >;
 };
 
 async function openChatAdapter<
@@ -492,7 +578,7 @@ async function startChatAdapter<
 >(args: {
   readonly chatId: TChatId;
   readonly runtime: OpenedChatAdapter<TChatId, TAdapterOptions, TAdapterData>;
-  readonly context: ChatAdapterStartContext<TCommands, TChatId>;
+  readonly context: ChatAdapterStartContext<TCommands, TChatId, TAdapterData>;
 }): Promise<Result<void, ChatAdapterStartError>> {
   const started = await Result.tryPromise({
     try: async () => args.runtime.start(args.context),
@@ -508,10 +594,11 @@ async function startChatAdapter<
     : Result.ok();
 }
 
-function commandNameFor<TCommands extends ChatCommandRegistry>(
-  event: ChatEvent<TCommands>,
-): string | undefined {
-  return event.type === "command" ? event.command.name : undefined;
+function commandNameFor(event: {
+  readonly type: ChatEventType;
+  readonly command?: { readonly name: string };
+}): string | undefined {
+  return event.type === "command" ? event.command?.name : undefined;
 }
 
 function normalizeChatTextInput(message: ChatTextInput): ChatTextContent {

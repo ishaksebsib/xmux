@@ -7,27 +7,56 @@ import type {
   ChatMessageRef,
   ChatTextInput,
 } from "./contracts";
+import type {
+  AdapterOptionsProp,
+  ChatEventAdapterData,
+  ChatEventAdapterOptions,
+  ChatReplyMode,
+  RequiredKeys,
+} from "./types";
 
 /** Typed subscription API exposed by the chat facade. */
 export interface ChatOn<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
   TReplyResult = unknown,
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
 > {
   <TName extends Extract<keyof TCommands, string>>(
     type: "command",
     commandName: TName,
-    handler: ChatEventHandler<ChatCommandEvent<TCommands, TName, TChatId, TReplyResult>>,
+    handler: ChatEventHandler<
+      ChatCommandEventFor<TCommands, TName, TChatId, TReplyResult, TAdapterOptionsByChatId>
+    >,
   ): Unsubscribe;
 
   (
     type: "command",
-    handler: ChatEventHandler<ChatCommandEvent<TCommands, keyof TCommands, TChatId, TReplyResult>>,
+    handler: ChatEventHandler<
+      ChatCommandEventFor<
+        TCommands,
+        keyof TCommands,
+        TChatId,
+        TReplyResult,
+        TAdapterOptionsByChatId
+      >
+    >,
   ): Unsubscribe;
 
   <TType extends Exclude<ChatEventType, "command">>(
     type: TType,
-    handler: ChatEventHandler<ChatEventByType<TType, TCommands, TChatId, TReplyResult>>,
+    handler: ChatEventHandler<
+      ChatEventByType<
+        TType,
+        TCommands,
+        TChatId,
+        TReplyResult,
+        TAdapterDataByChatId,
+        TAdapterOptionsByChatId
+      >
+    >,
   ): Unsubscribe;
 }
 
@@ -42,19 +71,20 @@ export type ChatEventType =
   | "error"
   | "closed";
 
-/** Reply intent used by event helpers; adapters choose the native behavior. */
-export type ChatReplyMode = "auto" | "thread" | "quote" | "conversation";
-
 /** Optional reply behavior for message and command event helpers. */
-export interface ChatEventReplyOptions {
+export type ChatEventReplyOptions<
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> = {
   readonly mode?: ChatReplyMode;
-}
+} & AdapterOptionsProp<TAdapterOptions>;
 
 /** Bound reply helper attached to inbound events by the facade. */
-export type ChatEventReply<TResult = unknown> = (
-  message: ChatTextInput,
-  options?: ChatEventReplyOptions,
-) => Promise<TResult>;
+export type ChatEventReply<
+  TResult = unknown,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> = [RequiredKeys<TAdapterOptions>] extends [never]
+  ? (message: ChatTextInput, options?: ChatEventReplyOptions<TAdapterOptions>) => Promise<TResult>
+  : (message: ChatTextInput, options: ChatEventReplyOptions<TAdapterOptions>) => Promise<TResult>;
 
 /** Emitted when an adapter runtime is ready to receive traffic. */
 export interface ChatReadyEvent<TChatId extends string = string> {
@@ -67,13 +97,30 @@ export interface ChatMessageEvent<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
   TReplyResult = unknown,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
 > {
   readonly type: "message";
   readonly chatId: TChatId;
   readonly conversation: ChatConversationRef<TChatId>;
   readonly message: ChatMessage<TChatId, TAdapterData>;
-  readonly reply: ChatEventReply<TReplyResult>;
+  readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
 }
+
+/** Message event selected by registered chat id so adapter data/options stay typed. */
+export type ChatMessageEventFor<
+  TChatId extends string,
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId>,
+  TReplyResult = unknown,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
+> = {
+  readonly [TCurrentChatId in TChatId]: ChatMessageEvent<
+    TCurrentChatId,
+    TAdapterDataByChatId[TCurrentChatId],
+    TReplyResult,
+    TAdapterOptionsByChatId[TCurrentChatId]
+  >;
+}[TChatId];
 
 type ChatCommandInvocation<
   TCommands extends ChatCommandRegistry,
@@ -88,6 +135,7 @@ export interface ChatCommandEvent<
   TName extends keyof TCommands = keyof TCommands,
   TChatId extends string = string,
   TReplyResult = unknown,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
 > {
   readonly type: "command";
   readonly chatId: TChatId;
@@ -95,8 +143,26 @@ export interface ChatCommandEvent<
   readonly actor?: ChatActor;
   readonly message?: ChatMessageRef<TChatId>;
   readonly command: ChatCommandInvocation<TCommands, TName>;
-  readonly reply: ChatEventReply<TReplyResult>;
+  readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
 }
+
+/** Command event selected by registered chat id so reply options stay typed. */
+export type ChatCommandEventFor<
+  TCommands extends ChatCommandRegistry,
+  TName extends keyof TCommands,
+  TChatId extends string,
+  TReplyResult = unknown,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
+> = {
+  readonly [TCurrentChatId in TChatId]: ChatCommandEvent<
+    TCommands,
+    TName,
+    TCurrentChatId,
+    TReplyResult,
+    TAdapterOptionsByChatId[TCurrentChatId]
+  >;
+}[TChatId];
 
 /** Reaction added to a message the adapter can observe. */
 export interface ChatReactionAddedEvent<TChatId extends string = string> {
@@ -147,10 +213,13 @@ export type ChatEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
   TReplyResult = unknown,
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
 > =
   | ChatReadyEvent<TChatId>
-  | ChatMessageEvent<TChatId, ChatAdapterObject, TReplyResult>
-  | ChatCommandEvent<TCommands, keyof TCommands, TChatId, TReplyResult>
+  | ChatMessageEventFor<TChatId, TAdapterDataByChatId, TReplyResult, TAdapterOptionsByChatId>
+  | ChatCommandEventFor<TCommands, keyof TCommands, TChatId, TReplyResult, TAdapterOptionsByChatId>
   | ChatReactionAddedEvent<TChatId>
   | ChatReactionRemovedEvent<TChatId>
   | ChatDiagnosticEvent<TChatId>
@@ -163,6 +232,17 @@ export type ChatAdapterMessageEvent<
   TAdapterData extends ChatAdapterObject = Record<never, never>,
 > = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply">;
 
+/** Message adapter event selected by registered chat id. */
+export type ChatAdapterMessageEventFor<
+  TChatId extends string,
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId>,
+> = {
+  readonly [TCurrentChatId in TChatId]: ChatAdapterMessageEvent<
+    TCurrentChatId,
+    TAdapterDataByChatId[TCurrentChatId]
+  >;
+}[TChatId];
+
 /** Command event shape adapters emit before chat-core binds reply(). */
 export type ChatAdapterCommandEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
@@ -174,9 +254,9 @@ export type ChatAdapterCommandEvent<
 export type ChatAdapterEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
 > =
-  | ChatReadyEvent<TChatId>
-  | ChatAdapterMessageEvent<TChatId, ChatAdapterObject>
+  | ChatAdapterMessageEventFor<TChatId, TAdapterDataByChatId>
   | ChatAdapterCommandEvent<TCommands, keyof TCommands, TChatId>
   | ChatReactionAddedEvent<TChatId>
   | ChatReactionRemovedEvent<TChatId>
@@ -189,12 +269,16 @@ export type ChatEventByType<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
   TReplyResult = unknown,
-> = Extract<ChatEvent<TCommands, TChatId, TReplyResult>, { readonly type: TType }>;
+  TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
+> = Extract<
+  ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>,
+  { readonly type: TType }
+>;
 
 /** Removes a previously registered event handler. */
 export type Unsubscribe = () => void;
 
 /** Consumer callback for one normalized chat event. */
-export type ChatEventHandler<TEvent extends ChatEvent = ChatEvent> = (
-  event: TEvent,
-) => void | Promise<void>;
+export type ChatEventHandler<TEvent = ChatEvent> = (event: TEvent) => void | Promise<void>;
