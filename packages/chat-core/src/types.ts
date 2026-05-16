@@ -3,11 +3,22 @@ import type {
   ChatAdapterObject,
   ChatConversationRef,
   ChatMessage,
+  ChatMessageFormat,
   ChatMessageRef,
   ChatSentMessage,
 } from "./contracts";
 
 type AnyChatAdapterDefinition = ChatAdapterDefinition<string, ChatAdapterObject, ChatAdapterObject>;
+
+type RequiredKeys<TValue extends ChatAdapterObject> = {
+  [TKey in keyof TValue]-?: {} extends Pick<TValue, TKey> ? never : TKey;
+}[keyof TValue];
+
+type AdapterOptionsProp<TAdapterOptions extends ChatAdapterObject> = [
+  RequiredKeys<TAdapterOptions>,
+] extends [never]
+  ? { readonly adapterOptions?: TAdapterOptions }
+  : { readonly adapterOptions: TAdapterOptions };
 
 export type ChatIdFromConversation<TConversation extends ChatConversationRef> =
   TConversation["chatId"];
@@ -52,3 +63,30 @@ export type ChatAdapterDefinitions<TAdapters extends Record<string, AnyChatAdapt
     AdapterDataFor<TAdapters, TChatId>
   >;
 };
+
+export type ChatSendMessageInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
+
+export type ChatSendMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
+  readonly [TChatId in keyof TAdapters]: ChatSendMessageInputFor<TAdapters, TChatId>;
+}[keyof TAdapters];
+
+export type ChatSentMessageFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = ChatSentMessage<Extract<TChatId, string>, AdapterDataFor<TAdapters, TChatId>>;
+
+export type ChatSentMessageFromInput<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TInput,
+> = TInput extends { readonly chatId: infer TChatId extends keyof TAdapters }
+  ? ChatSentMessageFor<TAdapters, TChatId>
+  : never;

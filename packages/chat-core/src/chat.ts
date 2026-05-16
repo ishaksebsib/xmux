@@ -1,8 +1,18 @@
 import { Result } from "better-result";
-import type { ChatAdapterDefinition, OpenedChatAdapter } from "./adapter";
+import type {
+  ChatAdapterDefinition,
+  ChatAdapterSendMessageInput,
+  OpenedChatAdapter,
+} from "./adapter";
 import type { ChatAdapterObject } from "./contracts";
 import type { ChatCommandRegistry } from "./commands";
-import type { ChatAdapterDefinitions } from "./types";
+import type {
+  AdapterDataFor,
+  AdapterOptionsFor,
+  ChatAdapterDefinitions,
+  ChatSendMessageInput,
+  ChatSentMessageFromInput,
+} from "./types";
 import type {
   ChatAdapterEvent,
   ChatCommandEvent,
@@ -16,13 +26,18 @@ import {
   ChatAdapterOpenError,
   ChatAdapterStartError,
   ChatCloseError,
+  ChatSendMessageError,
+  UnknownChatAdapterError,
   UnsupportedChatOperationError,
   type ChatCloseFailure,
+  type ChatLifecycleError,
+  type ChatSendMessageFailure,
   type ChatStartError,
 } from "./errors";
 import {
   ensureCanClose,
   ensureCanStart,
+  ensureStarted,
   initialChatLifecycleState,
   type ChatLifecycleState,
 } from "./lifecycle";
@@ -177,6 +192,74 @@ export function createChat<
     return Result.ok();
   }
 
+  async function getRuntimeForSend<TChatId extends keyof TAdapters>(
+    chatId: TChatId,
+  ): Promise<
+    Result<
+      OpenedChatAdapter<
+        Extract<TChatId, string>,
+        AdapterOptionsFor<TAdapters, TChatId>,
+        AdapterDataFor<TAdapters, TChatId>
+      >,
+      UnknownChatAdapterError | ChatLifecycleError
+    >
+  > {
+    const key = chatId as string;
+    if (!(key in options.adapters)) {
+      return Result.err(new UnknownChatAdapterError({ chatId: key, availableChatIds: chatIds }));
+    }
+
+    const canSend = ensureStarted({ state: lifecycle, operation: "sendMessage" });
+    if (canSend.isErr()) {
+      return Result.err(canSend.error);
+    }
+
+    const runtime = openedRuntimes.get(key);
+    if (!runtime) {
+      return Result.err(new UnknownChatAdapterError({ chatId: key, availableChatIds: chatIds }));
+    }
+
+    return Result.ok(
+      runtime as OpenedChatAdapter<
+        Extract<TChatId, string>,
+        AdapterOptionsFor<TAdapters, TChatId>,
+        AdapterDataFor<TAdapters, TChatId>
+      >,
+    );
+  }
+
+  async function sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>> {
+    return Result.gen(async function* () {
+      const runtime = yield* Result.await(getRuntimeForSend(input.chatId));
+      const adapterInput = {
+        chatId: input.chatId,
+        conversationId: input.conversationId,
+        text: input.text,
+        format: input.format,
+        adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
+        signal: input.signal,
+      } as ChatAdapterSendMessageInput<
+        TInput["chatId"],
+        AdapterOptionsFor<TAdapters, TInput["chatId"]>
+      >;
+
+      const sentResult = yield* Result.await(
+        Result.tryPromise({
+          try: async () => runtime.sendMessage(adapterInput),
+          catch: (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
+        }),
+      );
+
+      if (sentResult.isErr()) {
+        return Result.err(new ChatSendMessageError({ chatId: input.chatId, cause: sentResult.error }));
+      }
+
+      return Result.ok(sentResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
+    });
+  }
+
   async function close() {
     const canClose = ensureCanClose(lifecycle);
     if (canClose.isErr()) {
@@ -211,6 +294,7 @@ export function createChat<
     start,
     close,
     on,
+    sendMessage,
   };
 }
 
@@ -232,6 +316,9 @@ export interface Chat<
   start(): Promise<Result<void, ChatStartError>>;
   close(): Promise<Result<void, ChatCloseFailure>>;
   readonly on: ChatOn<TCommands, Extract<keyof TAdapters, string>>;
+  sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>>;
 }
 
 type OpenedRuntime = OpenedChatAdapter<string, ChatAdapterObject, ChatAdapterObject>;

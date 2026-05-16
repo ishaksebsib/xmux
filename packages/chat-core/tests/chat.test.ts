@@ -3,6 +3,8 @@ import { describe, expect, test } from "vitest";
 import {
   ChatCloseError,
   ChatLifecycleError,
+  ChatSendMessageError,
+  UnknownChatAdapterError,
   createChat,
   defineChatAdapter,
   defineChatCommand,
@@ -24,7 +26,10 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly id: TId;
   readonly handles: Handles;
   readonly closeError?: unknown;
+  readonly sendError?: unknown;
+  readonly throwOnSend?: unknown;
   readonly onStart?: (context: ChatAdapterStartContext<typeof commands, TId>) => void;
+  readonly onSend?: (input: { readonly adapterOptions: Record<never, never> }) => void;
 }) {
   return defineChatAdapter<TId, Record<never, never>, Record<never, never>>({
     id: args.id,
@@ -39,6 +44,14 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
           return Result.ok();
         },
         async sendMessage(input) {
+          args.onSend?.(input);
+          if (args.throwOnSend !== undefined) {
+            throw args.throwOnSend;
+          }
+          if (args.sendError !== undefined) {
+            return Result.err(args.sendError);
+          }
+
           return Result.ok({
             chatId: args.id,
             conversationId: input.conversationId,
@@ -157,6 +170,79 @@ describe("createChat lifecycle", () => {
       if (ChatLifecycleError.is(secondStart.error)) {
         expect(secondStart.error.operation).toBe("start");
       }
+    }
+  });
+
+  test("sends messages through the selected started adapter", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const adapterOptions: unknown[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onSend: (input) => {
+            adapterOptions.push(input.adapterOptions);
+          },
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const sent = await chat.sendMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      text: "hello",
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(adapterOptions).toEqual([{}]);
+    if (sent.isOk()) {
+      expect(sent.value.messageId).toBe("alpha-message");
+      expect(sent.value.adapterData).toEqual({});
+    }
+  });
+
+  test("sendMessage returns typed errors for unknown ids, lifecycle, and adapter failures", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", handles, sendError: new Error("send failed") }),
+      },
+      commands,
+    });
+
+    const beforeStart = await chat.sendMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      text: "hello",
+    });
+    expect(beforeStart.isErr()).toBe(true);
+    if (beforeStart.isErr()) {
+      expect(beforeStart.error).toBeInstanceOf(ChatLifecycleError);
+    }
+
+    expect((await chat.start()).isOk()).toBe(true);
+
+    const unknown = await chat.sendMessage({
+      chatId: "missing",
+      conversationId: "conversation",
+      text: "hello",
+    } as never);
+    expect(unknown.isErr()).toBe(true);
+    if (unknown.isErr()) {
+      expect(unknown.error).toBeInstanceOf(UnknownChatAdapterError);
+    }
+
+    const failed = await chat.sendMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      text: "hello",
+    });
+    expect(failed.isErr()).toBe(true);
+    if (failed.isErr()) {
+      expect(failed.error).toBeInstanceOf(ChatSendMessageError);
     }
   });
 

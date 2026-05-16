@@ -48,7 +48,15 @@ export type {
   ChatNumberOption,
   ChatStringOption,
 } from "./commands";
-export type { AdapterDataFor, AdapterOptionsFor, ChatAdapterDefinitions } from "./types";
+export type {
+  AdapterDataFor,
+  AdapterOptionsFor,
+  ChatAdapterDefinitions,
+  ChatSendMessageInput,
+  ChatSendMessageInputFor,
+  ChatSentMessageFor,
+  ChatSentMessageFromInput,
+} from "./types";
 export type { Chat, CreateChatOptions } from "./chat";
 export type {
   ChatCloseFailure,

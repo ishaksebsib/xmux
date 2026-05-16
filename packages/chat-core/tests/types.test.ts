@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import { expectTypeOf, test } from "vitest";
 import {
   booleanOption,
+  createChat,
   defineChatAdapter,
   defineChatCommand,
   defineChatCommands,
@@ -11,6 +12,7 @@ import {
   type AdapterOptionsFor,
   type ChatAdapterDefinitions,
   type ChatOn,
+  type ChatSentMessageFromInput,
 } from "../src";
 import type { ChatCommandValues } from "../src/commands";
 
@@ -84,6 +86,101 @@ test("adapter helper preserves id, option, and data types", () => {
   expectTypeOf({} as AdapterDataFor<Adapters, "discord">).toEqualTypeOf<{
     readonly nativeMessageId: string;
   }>();
+});
+
+test("sendMessage narrows adapter options and returned adapter data", () => {
+  const discord = defineChatAdapter<
+    "discord",
+    { readonly allowedMentions: boolean },
+    { readonly nativeMessageId: string }
+  >({
+    id: "discord",
+    async open() {
+      return Result.ok({
+        id: "discord" as const,
+        async start() {
+          return Result.ok();
+        },
+        async sendMessage(input) {
+          return Result.ok({
+            chatId: "discord" as const,
+            conversationId: input.conversationId,
+            messageId: "message-1",
+            text: input.text,
+            adapterData: { nativeMessageId: "native-1" },
+          });
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  const defaultsOnly = defineChatAdapter<
+    "defaultsOnly",
+    { readonly mode?: "safe" | "fast" },
+    { readonly mode: "safe" | "fast" }
+  >({
+    id: "defaultsOnly",
+    async open() {
+      return Result.ok({
+        id: "defaultsOnly" as const,
+        async start() {
+          return Result.ok();
+        },
+        async sendMessage(input) {
+          return Result.ok({
+            chatId: "defaultsOnly" as const,
+            conversationId: input.conversationId,
+            messageId: "message-1",
+            text: input.text,
+            adapterData: { mode: input.adapterOptions.mode ?? "safe" },
+          });
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  const chat = createChat({ adapters: { discord, defaultsOnly }, commands: {} });
+
+  type DiscordInput = {
+    readonly chatId: "discord";
+    readonly conversationId: "conversation";
+    readonly text: "hello";
+    readonly adapterOptions: { readonly allowedMentions: false };
+  };
+  expectTypeOf({} as ChatSentMessageFromInput<{ readonly discord: typeof discord }, DiscordInput>["adapterData"]).toEqualTypeOf<{
+    readonly nativeMessageId: string;
+  }>();
+
+  function assertSendMessageTypes(runtime: typeof chat) {
+    void runtime.sendMessage({
+      chatId: "discord",
+      conversationId: "conversation",
+      text: "hello",
+      adapterOptions: { allowedMentions: false },
+    });
+
+    void runtime.sendMessage({
+      chatId: "defaultsOnly",
+      conversationId: "conversation",
+      text: "hello",
+    });
+
+    // @ts-expect-error discord requires its adapter options
+    void runtime.sendMessage({
+      chatId: "discord",
+      conversationId: "conversation",
+      text: "hello",
+      adapterOptions: undefined,
+    });
+  }
+
+  void assertSendMessageTypes;
 });
 
 test("command event handlers narrow by command name", () => {
