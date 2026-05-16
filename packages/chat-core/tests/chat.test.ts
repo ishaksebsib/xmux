@@ -5,6 +5,7 @@ import {
   ChatLifecycleError,
   ChatSendMessageError,
   UnknownChatAdapterError,
+  UnsupportedChatOperationError,
   createChat,
   defineChatAdapter,
   defineChatCommand,
@@ -28,8 +29,20 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly closeError?: unknown;
   readonly sendError?: unknown;
   readonly throwOnSend?: unknown;
+  readonly nativeReply?: boolean;
+  readonly replyError?: unknown;
+  readonly throwOnReply?: unknown;
   readonly onStart?: (context: ChatAdapterStartContext<typeof commands, TId>) => void;
-  readonly onSend?: (input: { readonly adapterOptions: Record<never, never> }) => void;
+  readonly onSend?: (input: {
+    readonly adapterOptions: Record<never, never>;
+    readonly conversationId: string;
+    readonly text: string;
+  }) => void;
+  readonly onReply?: (input: {
+    readonly message: { readonly messageId: string };
+    readonly mode?: string;
+    readonly text: string;
+  }) => void;
 }) {
   return defineChatAdapter<TId, Record<never, never>, Record<never, never>>({
     id: args.id,
@@ -61,6 +74,26 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
             adapterData: {},
           });
         },
+        reply: args.nativeReply
+          ? async (input) => {
+              args.onReply?.(input);
+              if (args.throwOnReply !== undefined) {
+                throw args.throwOnReply;
+              }
+              if (args.replyError !== undefined) {
+                return Result.err(args.replyError);
+              }
+
+              return Result.ok({
+                chatId: args.id,
+                conversationId: input.conversationId,
+                messageId: `${args.id}-reply`,
+                text: input.text,
+                format: input.format,
+                adapterData: {},
+              });
+            }
+          : undefined,
         async close() {
           args.handles.closes.push(args.id);
           if (args.closeError !== undefined) {
@@ -103,6 +136,62 @@ describe("createChat lifecycle", () => {
     expect(handles.starts).toEqual(["alpha", "beta"]);
     expect(seenCommands).toEqual(["Start"]);
     expect(ready).toEqual(["alpha", "beta"]);
+  });
+
+  test("delivers adapter-emitted message and command events", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    const messages: string[] = [];
+    const namedCommands: string[] = [];
+    const allCommands: string[] = [];
+
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onStart: (context) => {
+            startContext = context;
+          },
+        }),
+      },
+      commands,
+    });
+
+    chat.on("message", (event) => {
+      messages.push(event.message.text);
+    });
+    chat.on("command", "start", (event) => {
+      namedCommands.push(event.command.name);
+    });
+    chat.on("command", (event) => {
+      allCommands.push(event.command.name);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    startContext?.emit({
+      type: "message",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: {
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "message",
+        actor: { kind: "user", actorId: "user", adapterData: {} },
+        text: "hello",
+        adapterData: {},
+      },
+    });
+    startContext?.emit({
+      type: "command",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      command: { name: "start", options: {} },
+    });
+
+    expect(messages).toEqual(["hello"]);
+    expect(namedCommands).toEqual(["start"]);
+    expect(allCommands).toEqual(["start"]);
   });
 
   test("routes diagnostics and supports unsubscribe", async () => {
@@ -244,6 +333,150 @@ describe("createChat lifecycle", () => {
     if (failed.isErr()) {
       expect(failed.error).toBeInstanceOf(ChatSendMessageError);
     }
+  });
+
+  test("reply uses native adapter reply when available", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const sends: string[] = [];
+    const replies: string[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          nativeReply: true,
+          onSend: (input) => {
+            sends.push(input.text);
+          },
+          onReply: (input) => {
+            replies.push(`${input.message.messageId}:${input.mode}:${input.text}`);
+          },
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const replied = await chat.reply({
+      chatId: "alpha",
+      conversationId: "conversation",
+      messageId: "original",
+      text: "hello",
+      mode: "quote",
+    });
+
+    expect(replied.isOk()).toBe(true);
+    expect(sends).toEqual([]);
+    expect(replies).toEqual(["original:quote:hello"]);
+    if (replied.isOk()) {
+      expect(replied.value.messageId).toBe("alpha-reply");
+    }
+  });
+
+  test("reply falls back to sendMessage for auto and conversation modes", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const sends: string[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onSend: (input) => {
+            sends.push(`${input.conversationId}:${input.text}`);
+          },
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const auto = await chat.reply({
+      chatId: "alpha",
+      conversationId: "conversation",
+      messageId: "original",
+      text: "auto",
+    });
+    const conversation = await chat.reply({
+      chatId: "alpha",
+      conversationId: "conversation",
+      messageId: "original",
+      text: "conversation",
+      mode: "conversation",
+    });
+
+    expect(auto.isOk()).toBe(true);
+    expect(conversation.isOk()).toBe(true);
+    expect(sends).toEqual(["conversation:auto", "conversation:conversation"]);
+  });
+
+  test("reply returns unsupported errors for strict modes without native reply", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const chat = createChat({
+      adapters: { alpha: createRuntimeAdapter({ id: "alpha", handles }) },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const replied = await chat.reply({
+      chatId: "alpha",
+      conversationId: "conversation",
+      messageId: "original",
+      text: "hello",
+      mode: "thread",
+    });
+
+    expect(replied.isErr()).toBe(true);
+    if (replied.isErr()) {
+      expect(replied.error).toBeInstanceOf(UnsupportedChatOperationError);
+    }
+  });
+
+  test("event.reply targets the original message conversation", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    const sends: string[] = [];
+    let resolveReply!: (value: unknown) => void;
+    const replyHandled = new Promise((resolve) => {
+      resolveReply = resolve;
+    });
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onStart: (context) => {
+            startContext = context;
+          },
+          onSend: (input) => {
+            sends.push(`${input.conversationId}:${input.text}`);
+          },
+        }),
+      },
+      commands,
+    });
+
+    chat.on("message", async (event) => {
+      const result = await event.reply("handled", { mode: "conversation" });
+      resolveReply(result);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    startContext?.emit({
+      type: "message",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: {
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "original",
+        actor: { kind: "user", actorId: "user", adapterData: {} },
+        text: "incoming",
+        adapterData: {},
+      },
+    });
+
+    await replyHandled;
+    expect(sends).toEqual(["conversation:handled"]);
   });
 
   test("close attempts every opened runtime and aggregates failures", async () => {

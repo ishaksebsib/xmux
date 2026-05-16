@@ -16,6 +16,8 @@ import {
 } from "../src";
 import type { ChatCommandValues } from "../src/commands";
 
+const shouldRunTypeErrorChecks = process.argv.length === 0;
+
 test("command options infer required, optional, and choice values", () => {
   const commands = defineChatCommands({
     start: defineChatCommand({
@@ -147,13 +149,20 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
 
   const chat = createChat({ adapters: { discord, defaultsOnly }, commands: {} });
 
+  expectTypeOf(chat.chatIds).toEqualTypeOf<readonly ("defaultsOnly" | "discord")[]>();
+
   type DiscordInput = {
     readonly chatId: "discord";
     readonly conversationId: "conversation";
     readonly text: "hello";
     readonly adapterOptions: { readonly allowedMentions: false };
   };
-  expectTypeOf({} as ChatSentMessageFromInput<{ readonly discord: typeof discord }, DiscordInput>["adapterData"]).toEqualTypeOf<{
+  expectTypeOf(
+    {} as ChatSentMessageFromInput<
+      { readonly discord: typeof discord },
+      DiscordInput
+    >["adapterData"],
+  ).toEqualTypeOf<{
     readonly nativeMessageId: string;
   }>();
 
@@ -171,16 +180,50 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
       text: "hello",
     });
 
-    // @ts-expect-error discord requires its adapter options
-    void runtime.sendMessage({
-      chatId: "discord",
-      conversationId: "conversation",
-      text: "hello",
-      adapterOptions: undefined,
-    });
+    if (shouldRunTypeErrorChecks) {
+      // @ts-expect-error discord requires its adapter options
+      void runtime.sendMessage({
+        chatId: "discord",
+        conversationId: "conversation",
+        text: "hello",
+        adapterOptions: undefined,
+      });
+    }
   }
 
   void assertSendMessageTypes;
+
+  if (shouldRunTypeErrorChecks) {
+    createChat({
+      adapters: {
+        // @ts-expect-error adapter id must match its registration key
+        discord: defineChatAdapter<"telegram", Record<never, never>, Record<never, never>>({
+          id: "telegram",
+          async open() {
+            return Result.ok({
+              id: "telegram" as const,
+              async start() {
+                return Result.ok();
+              },
+              async sendMessage(input) {
+                return Result.ok({
+                  chatId: "telegram" as const,
+                  conversationId: input.conversationId,
+                  messageId: "message-1",
+                  text: input.text,
+                  adapterData: {},
+                });
+              },
+              async close() {
+                return undefined;
+              },
+            });
+          },
+        }),
+      },
+      commands: {},
+    });
+  }
 });
 
 test("command event handlers narrow by command name", () => {
@@ -205,6 +248,11 @@ test("command event handlers narrow by command name", () => {
     on("command", (event) => {
       expectTypeOf(event.command.name).toEqualTypeOf<"start" | "close">();
     });
+
+    if (shouldRunTypeErrorChecks) {
+      // @ts-expect-error unknown commands must not be accepted
+      on("command", "unknown", () => undefined);
+    }
   }
 
   void assertHandlers;
