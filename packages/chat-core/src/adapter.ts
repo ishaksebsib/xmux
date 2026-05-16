@@ -28,7 +28,9 @@ export interface OpenedChatAdapter<
 > {
   readonly id: TChatId;
   readonly capabilities?: ChatAdapterCapabilities;
-  start(context: ChatAdapterStartContext): Promise<Result<void, unknown>>;
+  start<TCommands extends ChatCommandRegistry>(
+    context: ChatAdapterStartContext<TCommands, TChatId>,
+  ): Promise<Result<void, unknown>>;
   sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, unknown>>;

@@ -6,6 +6,17 @@ export {
   stringOption,
 } from "./commands";
 export { defineChatAdapter } from "./adapter";
+export { createChat } from "./chat";
+export {
+  ChatAdapterOpenError,
+  ChatAdapterStartError,
+  ChatCloseError,
+  ChatLifecycleError,
+  ChatReplyError,
+  ChatSendMessageError,
+  UnknownChatAdapterError,
+  UnsupportedChatOperationError,
+} from "./errors";
 export type {
   ChatAdapterCapabilities,
   ChatAdapterDefinition,
@@ -38,6 +49,14 @@ export type {
   ChatStringOption,
 } from "./commands";
 export type { AdapterDataFor, AdapterOptionsFor, ChatAdapterDefinitions } from "./types";
+export type { Chat, CreateChatOptions } from "./chat";
+export type {
+  ChatCloseFailure,
+  ChatLifecycleOperation,
+  ChatReplyFailure,
+  ChatSendMessageFailure,
+  ChatStartError,
+} from "./errors";
 export type {
   ChatAdapterCommandEvent,
   ChatAdapterEvent,
