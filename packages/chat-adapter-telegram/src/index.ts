@@ -1,5 +1,9 @@
 export { createTelegramAdapter } from "./adapter";
-export { TelegramConfigurationError, TelegramWebhookModeUnsupportedError } from "./errors";
+export {
+  TelegramConfigurationError,
+  TelegramStartError,
+  TelegramWebhookModeUnsupportedError,
+} from "./errors";
 export type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,

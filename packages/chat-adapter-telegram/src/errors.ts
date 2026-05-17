@@ -10,13 +10,31 @@ export class TelegramConfigurationError extends TaggedError("TelegramConfigurati
   readonly message: string;
   readonly cause?: unknown;
 }>() {
-  constructor(args: { readonly field: string; readonly reason?: string; readonly cause?: unknown }) {
+  constructor(args: {
+    readonly field: string;
+    readonly reason?: string;
+    readonly cause?: unknown;
+  }) {
     super({
       field: args.field,
       cause: args.cause,
       message:
         args.reason ??
         `Invalid Telegram adapter configuration for ${args.field}: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Telegram runtime startup failed. */
+export class TelegramStartError extends TaggedError("TelegramStartError")<{
+  readonly operation: "init" | "polling";
+  readonly message: string;
+  readonly cause: unknown;
+}>() {
+  constructor(args: { readonly operation: "init" | "polling"; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Telegram ${args.operation} startup failed: ${describeCause(args.cause)}`,
     });
   }
 }

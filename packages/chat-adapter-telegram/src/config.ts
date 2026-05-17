@@ -6,9 +6,13 @@ declare const telegramBotTokenBrand: unique symbol;
 
 export type TelegramBotToken = string & { readonly [telegramBotTokenBrand]: true };
 
-export const defaultTelegramAdapterMode = { type: "polling" } as const satisfies TelegramAdapterMode;
+export const defaultTelegramAdapterMode = {
+  type: "polling",
+} as const satisfies TelegramAdapterMode;
 
-export function parseTelegramBotToken(token: string): Result<TelegramBotToken, TelegramConfigurationError> {
+export function parseTelegramBotToken(
+  token: string,
+): Result<TelegramBotToken, TelegramConfigurationError> {
   return token.trim().length === 0
     ? Result.err(
         new TelegramConfigurationError({
