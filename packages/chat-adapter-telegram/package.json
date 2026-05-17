@@ -35,7 +35,9 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "better-result": "^2.9.1"
+    "@xmux/chat-core": "workspace:*",
+    "better-result": "^2.9.1",
+    "grammy": "^1.43.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
