@@ -13,6 +13,7 @@ import {
 } from "./client";
 import { createTelegramCommandRegistration } from "./commands";
 import { parseTelegramBotToken } from "./config";
+import { createTelegramTextMessageEvent } from "./messages";
 import {
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
@@ -136,6 +137,17 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     if (registered.isErr()) {
       return Result.err(registered.error);
     }
+
+    this.bot.onTextMessage((telegramContext) => {
+      const event = createTelegramTextMessageEvent({
+        chatId: this.id,
+        context: telegramContext,
+      });
+
+      if (event !== undefined) {
+        context.emit(event);
+      }
+    });
 
     const polling = Result.try({
       try: () => this.bot.start(createPollingOptions(mode)),

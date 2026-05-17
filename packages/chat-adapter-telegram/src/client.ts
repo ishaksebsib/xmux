@@ -1,14 +1,20 @@
-import { Bot } from "grammy";
+import { Bot, type Context, type Filter } from "grammy";
 import type { TelegramBotToken } from "./config";
 import type { TelegramBotOptions } from "./types";
 
 type GrammyBotApi = Bot["api"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
 
+export type TelegramTextMessageContext = Filter<Context, "message:text">;
+export type TelegramTextMessageHandler = (
+  context: TelegramTextMessageContext,
+) => void | Promise<void>;
+
 export interface TelegramBotClient extends Pick<
   Bot,
   "catch" | "init" | "isRunning" | "start" | "stop"
 > {
+  onTextMessage(handler: TelegramTextMessageHandler): void;
   setMyCommands(
     commands: Parameters<SetMyCommands>[0],
     signal?: Parameters<SetMyCommands>[2],
@@ -32,6 +38,9 @@ export function createTelegramBotClient(args: {
     isRunning: bot.isRunning.bind(bot),
     start: bot.start.bind(bot),
     stop: bot.stop.bind(bot),
+    onTextMessage: (handler) => {
+      bot.on("message:text", (context) => handler(context));
+    },
     setMyCommands: (commands, signal) => bot.api.setMyCommands(commands, undefined, signal),
   };
 }

@@ -10,6 +10,7 @@ import {
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "../src/errors";
+import type { TelegramTextMessageContext } from "../src/client";
 import { openTelegramRuntime } from "../src/runtime";
 import {
   defineChatCommand,
@@ -29,10 +30,12 @@ function createStartContext<
   readonly signal?: AbortSignal;
   readonly diagnostics?: string[];
   readonly errors?: unknown[];
+  readonly events?: unknown[];
 }): ChatAdapterStartContext<TCommands, TChatId, TelegramAdapterData> {
   return {
     commands: (args.commands ?? {}) as TCommands,
     emit: (event) => {
+      args.events?.push(event);
       if (event.type === "error") {
         args.errors?.push(event.error);
       }
@@ -53,7 +56,9 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly startMock: ReturnType<typeof vi.fn>;
   readonly stopMock: ReturnType<typeof vi.fn>;
   readonly catchMock: ReturnType<typeof vi.fn>;
+  readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
+  readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
   readonly rejectPolling: (cause: unknown) => void;
 };
 
@@ -90,6 +95,12 @@ function createFakeTelegramBot(
     resolvePolling();
   });
   const catchMock = vi.fn();
+  const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> = [];
+  const onTextMessageMock = vi.fn(
+    (handler: (context: TelegramTextMessageContext) => void | Promise<void>) => {
+      textMessageHandlers.push(handler);
+    },
+  );
   const setMyCommandsMock = vi.fn(async () => {
     if (args.setMyCommandsError !== undefined) {
       throw args.setMyCommandsError;
@@ -103,12 +114,19 @@ function createFakeTelegramBot(
     isRunning: () => running,
     start: startMock,
     stop: stopMock,
+    onTextMessage: onTextMessageMock,
     setMyCommands: setMyCommandsMock,
     initMock,
     startMock,
     stopMock,
     catchMock,
+    onTextMessageMock,
     setMyCommandsMock,
+    emitTextMessage: async (context) => {
+      for (const handler of textMessageHandlers) {
+        await handler(context);
+      }
+    },
     rejectPolling,
   } as FakeTelegramBot;
 }
@@ -123,6 +141,49 @@ function createRuntimeWithFakeBot(args: {
     mode: args.mode ?? { type: "polling" },
     createBot: () => args.bot,
   });
+}
+
+function createTelegramTextContext(args: {
+  readonly text: string;
+  readonly from?: {
+    readonly id: number;
+    readonly is_bot: boolean;
+    readonly first_name: string;
+    readonly last_name?: string;
+    readonly username?: string;
+  };
+  readonly chatId?: number;
+  readonly messageId?: number;
+  readonly updateId?: number;
+  readonly botId?: number;
+}): TelegramTextMessageContext {
+  const chat = { id: args.chatId ?? -100, type: "private", first_name: "Alice" };
+  const message = {
+    message_id: args.messageId ?? 10,
+    date: 1,
+    chat,
+    from: args.from,
+    text: args.text,
+  };
+
+  return {
+    update: {
+      update_id: args.updateId ?? 20,
+      message,
+    },
+    message,
+    me: {
+      id: args.botId ?? 999,
+      is_bot: true,
+      first_name: "ThisBot",
+      username: "ThisBot",
+      can_join_groups: true,
+      can_read_all_group_messages: false,
+      supports_inline_queries: false,
+      can_connect_to_business: false,
+      has_main_web_app: false,
+    },
+  } as unknown as TelegramTextMessageContext;
 }
 
 describe("createTelegramAdapter", () => {
@@ -324,6 +385,136 @@ describe("createTelegramAdapter", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(errors).toEqual([cause]);
+  });
+
+  test("text updates emit normalized message events", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "hello telegram",
+        chatId: 12345,
+        messageId: 777,
+        updateId: 888,
+        from: {
+          id: 42,
+          is_bot: false,
+          first_name: "Alice",
+          last_name: "Example",
+          username: "alice",
+        },
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "message",
+      chatId: "telegram",
+      conversation: {
+        chatId: "telegram",
+        conversationId: "12345",
+      },
+      message: {
+        chatId: "telegram",
+        conversationId: "12345",
+        messageId: "777",
+        text: "hello telegram",
+        format: "plain",
+        actor: {
+          kind: "user",
+          actorId: "42",
+          displayName: "Alice Example",
+        },
+        adapterData: {
+          telegramChatId: "12345",
+          telegramMessageId: 777,
+          updateId: 888,
+        },
+      },
+    });
+  });
+
+  test("bot and system text authors are normalized", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "bot helper",
+        from: {
+          id: 321,
+          is_bot: true,
+          first_name: "HelperBot",
+          username: "HelperBot",
+        },
+      }),
+    );
+    await bot.emitTextMessage(createTelegramTextContext({ text: "system notice" }));
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      message: {
+        actor: {
+          kind: "bot",
+          actorId: "321",
+          displayName: "HelperBot",
+        },
+      },
+    });
+    expect(events[1]).toMatchObject({
+      message: {
+        actor: {
+          kind: "system",
+          actorId: "-100",
+          displayName: "Alice",
+        },
+      },
+    });
+  });
+
+  test("text updates from the current bot are ignored", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "echo",
+        botId: 999,
+        from: {
+          id: 999,
+          is_bot: true,
+          first_name: "ThisBot",
+          username: "ThisBot",
+        },
+      }),
+    );
+
+    expect(events).toEqual([]);
   });
 
   test("close is safe to call more than once", async () => {
