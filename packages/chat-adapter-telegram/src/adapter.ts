@@ -1,6 +1,6 @@
-import { Result } from "better-result";
 import { defineChatAdapter, type ChatAdapterDefinition } from "@xmux/chat-core";
-import { telegramAdapterCapabilities } from "./capabilities";
+import { defaultTelegramAdapterMode } from "./config";
+import { openTelegramRuntime } from "./runtime";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -12,26 +12,12 @@ export function createTelegramAdapter<const TChatId extends string = "telegram">
   options: CreateTelegramAdapterOptions<TChatId>,
 ): ChatAdapterDefinition<TChatId, TelegramAdapterOptions, TelegramAdapterData> {
   const chatId = (options.id ?? "telegram") as TChatId;
+  const mode = options.mode ?? defaultTelegramAdapterMode;
 
   return defineChatAdapter<TChatId, TelegramAdapterOptions, TelegramAdapterData>({
     id: chatId,
     async open() {
-      return Result.ok({
-        id: chatId,
-        capabilities: telegramAdapterCapabilities,
-        async start() {
-          return Result.ok();
-        },
-        async sendMessage() {
-          return Result.err(new Error("Telegram adapter sendMessage is not implemented yet"));
-        },
-        async reply() {
-          return Result.err(new Error("Telegram adapter reply is not implemented yet"));
-        },
-        async close() {
-          return undefined;
-        },
-      });
+      return openTelegramRuntime({ chatId, options, mode });
     },
   });
 }
