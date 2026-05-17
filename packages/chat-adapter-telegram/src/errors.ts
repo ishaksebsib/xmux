@@ -25,6 +25,21 @@ export class TelegramConfigurationError extends TaggedError("TelegramConfigurati
   }
 }
 
+/** Telegram command registration failed. */
+export class TelegramCommandRegistrationError extends TaggedError(
+  "TelegramCommandRegistrationError",
+)<{
+  readonly message: string;
+  readonly cause: unknown;
+}>() {
+  constructor(args: { readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Telegram command registration failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Telegram runtime startup failed. */
 export class TelegramStartError extends TaggedError("TelegramStartError")<{
   readonly operation: "init" | "polling";

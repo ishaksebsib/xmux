@@ -11,8 +11,10 @@ import {
   type CreateTelegramBotClient,
   type TelegramBotClient,
 } from "./client";
+import { createTelegramCommandRegistration } from "./commands";
 import { parseTelegramBotToken } from "./config";
 import {
+  TelegramCommandRegistrationError,
   TelegramConfigurationError,
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
@@ -88,7 +90,12 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
 
   async start<TCommands extends ChatCommandRegistry>(
     context: ChatAdapterStartContext<TCommands, TChatId, TelegramAdapterData>,
-  ): Promise<Result<void, TelegramStartError | TelegramWebhookModeUnsupportedError>> {
+  ): Promise<
+    Result<
+      void,
+      TelegramCommandRegistrationError | TelegramStartError | TelegramWebhookModeUnsupportedError
+    >
+  > {
     if (this.#state.status === "closed" || this.#state.status === "started") {
       return Result.ok();
     }
@@ -108,6 +115,26 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     });
     if (initialized.isErr()) {
       return Result.err(initialized.error);
+    }
+
+    const registered = await Result.tryPromise({
+      try: async () => {
+        const commands = createTelegramCommandRegistration({
+          commands: context.commands,
+          diagnostic: context.diagnostic,
+        });
+
+        if (commands.length > 0) {
+          await this.bot.setMyCommands(
+            commands,
+            context.signal as Parameters<TelegramBotClient["setMyCommands"]>[1],
+          );
+        }
+      },
+      catch: (cause) => new TelegramCommandRegistrationError({ cause }),
+    });
+    if (registered.isErr()) {
+      return Result.err(registered.error);
     }
 
     const polling = Result.try({
