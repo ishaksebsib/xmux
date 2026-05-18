@@ -22,6 +22,57 @@ export interface SessionRef<THarnessId extends string = string> {
   readonly sessionId: string;
 }
 
+/** Provider/model identity reported by a harness when available. */
+export interface HarnessModelRef {
+  readonly providerId?: string;
+  readonly modelId: string;
+  readonly variant?: string;
+}
+
+/** Token usage data normalized across harnesses. */
+export interface HarnessTokenUsage {
+  readonly input?: number;
+  readonly output?: number;
+  readonly reasoning?: number;
+  readonly cacheRead?: number;
+  readonly cacheWrite?: number;
+  readonly total?: number;
+}
+
+/** Tool output content that can be rendered by xmux consumers. */
+export type HarnessToolOutput =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "image"; readonly data: string; readonly mimeType: string }
+  | { readonly type: "json"; readonly value: unknown };
+
+/** User prompt content accepted by the unified harness facade. */
+export type HarnessPromptContent =
+  | { readonly type: "text"; readonly text: string }
+  | {
+      readonly type: "image";
+      readonly data: string;
+      readonly mimeType: string;
+      readonly name?: string;
+    }
+  | {
+      readonly type: "file";
+      readonly uri: string;
+      readonly mime: string;
+      readonly name?: string;
+      readonly description?: string;
+    };
+
+/** Session metadata for existing sessions known to a harness. */
+export interface HarnessSessionInfo<
+  THarnessId extends string = string,
+  TAdapterSession extends HarnessAdapterObject = HarnessAdapterObject,
+> {
+  readonly ref: SessionRef<THarnessId>;
+  readonly cwd?: WorkingDirectoryPath;
+  readonly title?: string;
+  readonly adapterData: TAdapterSession;
+}
+
 /** Shared runtime inputs passed to adapter startup. */
 export interface OpenHarnessAdapterContext {
   readonly signal?: AbortSignal;

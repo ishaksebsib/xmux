@@ -1,6 +1,17 @@
 import { Result } from "better-result";
 import { expectTypeOf, test } from "vitest";
-import { createHarness, defineHarnessAdapter, type CreatedSessionFor } from "../src";
+import {
+  createHarness,
+  defineHarnessAdapter,
+  type CreatedSessionFor,
+  type HarnessModelRef,
+  type HarnessPromptContent,
+  type HarnessSessionInfo,
+  type HarnessTokenUsage,
+  type HarnessToolOutput,
+  type SessionRef,
+  type WorkingDirectoryPath,
+} from "../src";
 
 const shouldRunTypeErrorChecks = process.argv.length === 0;
 
@@ -153,5 +164,80 @@ test("createSession narrows adapter options and results by harness id", () => {
         }),
       },
     });
+  }
+});
+
+test("shared harness operation data types are narrow and reusable", () => {
+  const textContent = { type: "text", text: "hello" } satisfies HarnessPromptContent;
+  const imageContent = {
+    type: "image",
+    data: "base64",
+    mimeType: "image/png",
+    name: "shot.png",
+  } satisfies HarnessPromptContent;
+  const fileContent = {
+    type: "file",
+    uri: "file:///tmp/example.txt",
+    mime: "text/plain",
+    description: "example",
+  } satisfies HarnessPromptContent;
+
+  expectTypeOf(textContent.type).toEqualTypeOf<"text">();
+  expectTypeOf(imageContent.type).toEqualTypeOf<"image">();
+  expectTypeOf(fileContent.type).toEqualTypeOf<"file">();
+
+  const ref = { harnessId: "pi", sessionId: "session-1" } satisfies SessionRef<"pi">;
+  const cwd = process.cwd() as WorkingDirectoryPath;
+  const session = {
+    ref,
+    cwd,
+    title: "Existing session",
+    adapterData: { sessionFile: "/tmp/session.jsonl" },
+  } satisfies HarnessSessionInfo<"pi", { readonly sessionFile: string }>;
+
+  expectTypeOf(session.ref.harnessId).toEqualTypeOf<"pi">();
+  expectTypeOf<HarnessSessionInfo<"pi", { readonly sessionFile: string }>["adapterData"]>().toEqualTypeOf<{
+    readonly sessionFile: string;
+  }>();
+
+  const model = {
+    providerId: "anthropic",
+    modelId: "claude-sonnet-4-5",
+    variant: "thinking",
+  } satisfies HarnessModelRef;
+  const usage = {
+    input: 10,
+    output: 20,
+    reasoning: 3,
+    cacheRead: 1,
+    cacheWrite: 2,
+    total: 36,
+  } satisfies HarnessTokenUsage;
+  const outputs = [
+    { type: "text", text: "done" },
+    { type: "image", data: "base64", mimeType: "image/png" },
+    { type: "json", value: { ok: true } },
+  ] satisfies readonly HarnessToolOutput[];
+
+  expectTypeOf(model.modelId).toEqualTypeOf<string>();
+  expectTypeOf(usage.total).toEqualTypeOf<number>();
+  expectTypeOf<(typeof outputs)[number]>().toExtend<HarnessToolOutput>();
+
+  if (shouldRunTypeErrorChecks) {
+    // @ts-expect-error text prompt content requires text
+    const invalidText = { type: "text" } satisfies HarnessPromptContent;
+    void invalidText;
+
+    // @ts-expect-error image prompt content requires mimeType
+    const invalidImage = { type: "image", data: "base64" } satisfies HarnessPromptContent;
+    void invalidImage;
+
+    const invalidFile = {
+      type: "file",
+      uri: "file:///tmp/a",
+      // @ts-expect-error file prompt content uses mime, not mimeType
+      mimeType: "text/plain",
+    } satisfies HarnessPromptContent;
+    void invalidFile;
   }
 });
