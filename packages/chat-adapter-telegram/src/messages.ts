@@ -1,6 +1,54 @@
-import type { ChatActor, ChatAdapterMessageEvent } from "@xmux/chat-core";
+import type {
+  ChatActor,
+  ChatAdapterEvent,
+  ChatAdapterMessageEvent,
+  ChatCommandRegistry,
+} from "@xmux/chat-core";
 import type { TelegramTextMessageContext } from "./client";
+import { createTelegramCommandEvent, parseTelegramCommand } from "./commands";
 import type { TelegramAdapterData } from "./types";
+
+export function createTelegramTextEvent<
+  TCommands extends ChatCommandRegistry,
+  TChatId extends string,
+>(args: {
+  readonly chatId: TChatId;
+  readonly commands: TCommands;
+  readonly context: TelegramTextMessageContext;
+  readonly botUserId: number;
+  readonly botUsername: string;
+  readonly diagnostic: Parameters<typeof parseTelegramCommand<TCommands, TChatId>>[0]["diagnostic"];
+}):
+  | ChatAdapterEvent<TCommands, TChatId, { readonly [TKey in TChatId]: TelegramAdapterData }>
+  | undefined {
+  const messageEvent = createTelegramTextMessageEvent({
+    chatId: args.chatId,
+    context: args.context,
+    botUserId: args.botUserId,
+  });
+  if (messageEvent === undefined) {
+    return undefined;
+  }
+
+  const command = parseTelegramCommand({
+    commands: args.commands,
+    context: args.context,
+    botUsername: args.botUsername,
+    diagnostic: args.diagnostic,
+  });
+
+  if (command.status !== "command") {
+    return messageEvent;
+  }
+
+  return createTelegramCommandEvent({
+    chatId: args.chatId,
+    conversationId: messageEvent.conversation.conversationId,
+    messageId: messageEvent.message.messageId,
+    actor: messageEvent.message.actor,
+    command: command.command,
+  });
+}
 
 export function createTelegramTextMessageEvent<TChatId extends string>(args: {
   readonly chatId: TChatId;
@@ -78,10 +126,14 @@ function createTelegramActor(args: {
 }
 
 function formatTelegramDisplayName(from: NonNullable<TelegramTextMessageContext["from"]>): string {
-  return [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || String(from.id);
+  return (
+    [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || String(from.id)
+  );
 }
 
-function formatTelegramChatName(chat: TelegramTextMessageContext["message"]["chat"]): string | undefined {
+function formatTelegramChatName(
+  chat: TelegramTextMessageContext["message"]["chat"],
+): string | undefined {
   return "title" in chat
     ? chat.title
     : "first_name" in chat

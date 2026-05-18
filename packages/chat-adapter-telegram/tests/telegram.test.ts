@@ -13,8 +13,10 @@ import {
 import type { TelegramTextMessageContext } from "../src/client";
 import { openTelegramRuntime } from "../src/runtime";
 import {
+  booleanOption,
   defineChatCommand,
   defineChatCommands,
+  numberOption,
   stringOption,
   type ChatAdapterDefinition,
   type ChatAdapterStartContext,
@@ -110,7 +112,8 @@ function createFakeTelegramBot(
     has_topics_enabled: false,
     allows_users_to_create_topics: false,
   }));
-  const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> = [];
+  const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> =
+    [];
   const onTextMessageMock = vi.fn(
     (handler: (context: TelegramTextMessageContext) => void | Promise<void>) => {
       textMessageHandlers.push(handler);
@@ -173,6 +176,11 @@ function createTelegramTextContext(args: {
   readonly messageId?: number;
   readonly updateId?: number;
   readonly botId?: number;
+  readonly entities?: readonly {
+    readonly type: "bot_command";
+    readonly offset: number;
+    readonly length: number;
+  }[];
 }): TelegramTextMessageContext {
   const chat = { id: args.chatId ?? -100, type: "private", first_name: "Alice" };
   const message = {
@@ -181,6 +189,7 @@ function createTelegramTextContext(args: {
     chat,
     from: args.from,
     text: args.text,
+    entities: args.entities,
   };
 
   return {
@@ -504,6 +513,124 @@ describe("createTelegramAdapter", () => {
         },
       },
     });
+  });
+
+  test("slash commands emit normalized command events", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const commands = defineChatCommands({
+      start: defineChatCommand({
+        description: "Start session",
+        options: {
+          cwd: stringOption({ required: true }),
+          harness: stringOption({ choices: ["opencode", "pi"] as const }),
+          retries: numberOption({ required: false }),
+          dryRun: booleanOption({ required: false }),
+        },
+      }),
+    });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(
+      createStartContext({ chatId: "telegram", commands, events }),
+    );
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "/start@xmux_bot --cwd '/tmp/my project' --harness pi --retries 2 --dryRun",
+        entities: [{ type: "bot_command", offset: 0, length: "/start@xmux_bot".length }],
+        from: {
+          id: 42,
+          is_bot: false,
+          first_name: "Alice",
+        },
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "command",
+      chatId: "telegram",
+      conversation: { conversationId: "-100" },
+      message: { messageId: "10" },
+      command: {
+        name: "start",
+        options: {
+          cwd: "/tmp/my project",
+          harness: "pi",
+          retries: 2,
+          dryRun: true,
+        },
+      },
+    });
+  });
+
+  test("slash commands for other bots stay normal messages", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const commands = defineChatCommands({
+      start: defineChatCommand({ description: "Start session" }),
+    });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(
+      createStartContext({ chatId: "telegram", commands, events }),
+    );
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "/start@other_bot",
+        entities: [{ type: "bot_command", offset: 0, length: "/start@other_bot".length }],
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "message", message: { text: "/start@other_bot" } });
+  });
+
+  test("invalid slash command options emit diagnostics without malformed command events", async () => {
+    const bot = createFakeTelegramBot();
+    const diagnostics: string[] = [];
+    const events: unknown[] = [];
+    const commands = defineChatCommands({
+      start: defineChatCommand({
+        description: "Start session",
+        options: {
+          harness: stringOption({ required: true, choices: ["opencode", "pi"] as const }),
+        },
+      }),
+    });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(
+      createStartContext({ chatId: "telegram", commands, diagnostics, events }),
+    );
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "/start --harness bad",
+        entities: [{ type: "bot_command", offset: 0, length: "/start".length }],
+      }),
+    );
+
+    expect(diagnostics).toContain("COMMAND_PARSE_FAILED");
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "message", message: { text: "/start --harness bad" } });
   });
 
   test("text updates from the current bot are ignored", async () => {

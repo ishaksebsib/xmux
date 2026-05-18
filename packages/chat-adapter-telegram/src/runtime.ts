@@ -19,7 +19,7 @@ import {
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
-import { createTelegramTextMessageEvent } from "./messages";
+import { createTelegramTextEvent } from "./messages";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -110,10 +110,14 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       context.emit({ type: "error", chatId: this.id, error });
     });
     this.bot.onTextMessage((telegramContext) => {
-      const event = createTelegramTextMessageEvent<TChatId>({
+      const botInfo = this.bot.getBotInfo();
+      const event = createTelegramTextEvent<TCommands, TChatId>({
         chatId: this.id,
+        commands: context.commands,
         context: telegramContext,
-        botUserId: this.bot.getBotInfo().id,
+        botUserId: botInfo.id,
+        botUsername: botInfo.username,
+        diagnostic: context.diagnostic,
       });
 
       if (event !== undefined) {

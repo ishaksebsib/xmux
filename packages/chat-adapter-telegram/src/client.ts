@@ -12,7 +12,10 @@ export type TelegramTextMessageHandler = (
   context: TelegramTextMessageContext,
 ) => void | Promise<void>;
 
-export interface TelegramBotClient extends Pick<Bot, "catch" | "init" | "isRunning" | "start" | "stop"> {
+export interface TelegramBotClient extends Pick<
+  Bot,
+  "catch" | "init" | "isRunning" | "start" | "stop"
+> {
   getBotInfo(): UserFromGetMe;
   onTextMessage(handler: TelegramTextMessageHandler): void;
   setMyCommands(
