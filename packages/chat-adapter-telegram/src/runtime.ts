@@ -13,13 +13,13 @@ import {
 } from "./client";
 import { createTelegramCommandRegistration } from "./commands";
 import { parseTelegramBotToken } from "./config";
-import { createTelegramTextMessageEvent } from "./messages";
 import {
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
+import { createTelegramTextMessageEvent } from "./messages";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -109,6 +109,17 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     this.bot.catch((error) => {
       context.emit({ type: "error", chatId: this.id, error });
     });
+    this.bot.onTextMessage((telegramContext) => {
+      const event = createTelegramTextMessageEvent<TChatId>({
+        chatId: this.id,
+        context: telegramContext,
+        botUserId: this.bot.getBotInfo().id,
+      });
+
+      if (event !== undefined) {
+        context.emit(event);
+      }
+    });
 
     const initialized = await Result.tryPromise({
       try: async () => this.bot.init(context.signal as Parameters<TelegramBotClient["init"]>[0]),
@@ -137,17 +148,6 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     if (registered.isErr()) {
       return Result.err(registered.error);
     }
-
-    this.bot.onTextMessage((telegramContext) => {
-      const event = createTelegramTextMessageEvent({
-        chatId: this.id,
-        context: telegramContext,
-      });
-
-      if (event !== undefined) {
-        context.emit(event);
-      }
-    });
 
     const polling = Result.try({
       try: () => this.bot.start(createPollingOptions(mode)),

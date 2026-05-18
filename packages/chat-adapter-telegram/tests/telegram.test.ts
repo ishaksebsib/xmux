@@ -56,6 +56,7 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly startMock: ReturnType<typeof vi.fn>;
   readonly stopMock: ReturnType<typeof vi.fn>;
   readonly catchMock: ReturnType<typeof vi.fn>;
+  readonly getBotInfoMock: ReturnType<typeof vi.fn>;
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
   readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
@@ -95,6 +96,20 @@ function createFakeTelegramBot(
     resolvePolling();
   });
   const catchMock = vi.fn();
+  const getBotInfoMock = vi.fn(() => ({
+    id: 999,
+    is_bot: true,
+    first_name: "Xmux",
+    username: "xmux_bot",
+    can_join_groups: true,
+    can_read_all_group_messages: false,
+    can_manage_bots: false,
+    supports_inline_queries: false,
+    can_connect_to_business: false,
+    has_main_web_app: false,
+    has_topics_enabled: false,
+    allows_users_to_create_topics: false,
+  }));
   const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> = [];
   const onTextMessageMock = vi.fn(
     (handler: (context: TelegramTextMessageContext) => void | Promise<void>) => {
@@ -110,6 +125,7 @@ function createFakeTelegramBot(
 
   return {
     catch: catchMock,
+    getBotInfo: getBotInfoMock,
     init: initMock,
     isRunning: () => running,
     start: startMock,
@@ -120,6 +136,7 @@ function createFakeTelegramBot(
     startMock,
     stopMock,
     catchMock,
+    getBotInfoMock,
     onTextMessageMock,
     setMyCommandsMock,
     emitTextMessage: async (context) => {
