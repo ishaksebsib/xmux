@@ -54,6 +54,19 @@ export class TelegramStartError extends TaggedError("TelegramStartError")<{
   }
 }
 
+/** Telegram sendMessage failed. */
+export class TelegramSendMessageError extends TaggedError("TelegramSendMessageError")<{
+  readonly message: string;
+  readonly cause: unknown;
+}>() {
+  constructor(args: { readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Telegram sendMessage failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Webhook delivery is reserved for the future webhook runtime path. */
 export class TelegramWebhookModeUnsupportedError extends TaggedError(
   "TelegramWebhookModeUnsupportedError",

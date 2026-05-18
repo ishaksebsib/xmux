@@ -1,8 +1,10 @@
 import { Result } from "better-result";
 import type { PollingOptions } from "grammy";
 import type {
+  ChatAdapterSendMessageInput,
   ChatAdapterStartContext,
   ChatCommandRegistry,
+  ChatSentMessage,
   OpenedChatAdapter,
 } from "@xmux/chat-core";
 import { telegramAdapterCapabilities } from "./capabilities";
@@ -16,10 +18,12 @@ import { parseTelegramBotToken } from "./config";
 import {
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
+  TelegramSendMessageError,
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
 import { createTelegramTextEvent } from "./messages";
+import { createTelegramSendMessageOptions, createTelegramSentMessage } from "./outbound";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -186,8 +190,32 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     return Result.ok();
   }
 
-  async sendMessage(): Promise<Result<never, Error>> {
-    return Result.err(new Error("Telegram adapter sendMessage is not implemented yet"));
+  async sendMessage(
+    input: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendMessageError>> {
+    const sent = await Result.tryPromise({
+      try: async () =>
+        this.bot.sendMessage({
+          chatId: input.conversationId,
+          text: input.text,
+          options: createTelegramSendMessageOptions(input),
+          signal: input.signal as Parameters<TelegramBotClient["sendMessage"]>[0]["signal"],
+        }),
+      catch: (cause) => new TelegramSendMessageError({ cause }),
+    });
+    if (sent.isErr()) {
+      return Result.err(sent.error);
+    }
+
+    return Result.ok(
+      createTelegramSentMessage({
+        chatId: this.id,
+        conversationId: input.conversationId,
+        text: input.text,
+        format: input.format,
+        telegramMessage: sent.value,
+      }),
+    );
   }
 
   async reply(): Promise<Result<never, Error>> {

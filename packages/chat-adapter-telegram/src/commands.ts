@@ -5,7 +5,6 @@ import type {
   ChatCommandValues,
 } from "@xmux/chat-core";
 import type { TelegramTextMessageContext } from "./client";
-import type { TelegramAdapterData } from "./types";
 
 export type TelegramCommandParseResult<TCommands extends ChatCommandRegistry> =
   | { readonly status: "not_command" }

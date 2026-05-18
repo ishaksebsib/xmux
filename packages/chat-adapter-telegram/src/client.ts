@@ -4,7 +4,10 @@ import type { TelegramBotToken } from "./config";
 import type { TelegramBotOptions } from "./types";
 
 type GrammyBotApi = Bot["api"];
+type SendMessage = GrammyBotApi["sendMessage"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
+
+export type TelegramSentTextMessage = Awaited<ReturnType<SendMessage>>;
 
 export type TelegramTextMessageContext = Filter<Context, "message:text">;
 
@@ -18,6 +21,12 @@ export interface TelegramBotClient extends Pick<
 > {
   getBotInfo(): UserFromGetMe;
   onTextMessage(handler: TelegramTextMessageHandler): void;
+  sendMessage(args: {
+    readonly chatId: Parameters<SendMessage>[0];
+    readonly text: Parameters<SendMessage>[1];
+    readonly options?: Parameters<SendMessage>[2];
+    readonly signal?: Parameters<SendMessage>[3];
+  }): ReturnType<SendMessage>;
   setMyCommands(
     commands: Parameters<SetMyCommands>[0],
     signal?: Parameters<SetMyCommands>[2],
@@ -43,6 +52,8 @@ export function createTelegramBotClient(args: {
     onTextMessage: (handler) => {
       bot.on("message:text", handler);
     },
+    sendMessage: (input) =>
+      bot.api.sendMessage(input.chatId, input.text, input.options, input.signal),
     start: bot.start.bind(bot),
     stop: bot.stop.bind(bot),
     setMyCommands: (commands, signal) => bot.api.setMyCommands(commands, undefined, signal),

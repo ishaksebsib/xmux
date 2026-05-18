@@ -7,6 +7,7 @@ import {
 import {
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
+  TelegramSendMessageError,
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "../src/errors";
@@ -60,6 +61,7 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly catchMock: ReturnType<typeof vi.fn>;
   readonly getBotInfoMock: ReturnType<typeof vi.fn>;
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
+  readonly sendMessageMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
   readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
   readonly rejectPolling: (cause: unknown) => void;
@@ -68,6 +70,7 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
 function createFakeTelegramBot(
   args: {
     readonly initError?: unknown;
+    readonly sendMessageError?: unknown;
     readonly setMyCommandsError?: unknown;
     readonly startError?: unknown;
   } = {},
@@ -119,6 +122,20 @@ function createFakeTelegramBot(
       textMessageHandlers.push(handler);
     },
   );
+  const sendMessageMock = vi.fn(
+    async (input: { readonly chatId: string | number; readonly text: string }) => {
+      if (args.sendMessageError !== undefined) {
+        throw args.sendMessageError;
+      }
+
+      return {
+        message_id: 123,
+        date: 1,
+        chat: { id: input.chatId, type: "private", first_name: "Alice" },
+        text: input.text,
+      };
+    },
+  );
   const setMyCommandsMock = vi.fn(async () => {
     if (args.setMyCommandsError !== undefined) {
       throw args.setMyCommandsError;
@@ -134,6 +151,7 @@ function createFakeTelegramBot(
     start: startMock,
     stop: stopMock,
     onTextMessage: onTextMessageMock,
+    sendMessage: sendMessageMock,
     setMyCommands: setMyCommandsMock,
     initMock,
     startMock,
@@ -141,6 +159,7 @@ function createFakeTelegramBot(
     catchMock,
     getBotInfoMock,
     onTextMessageMock,
+    sendMessageMock,
     setMyCommandsMock,
     emitTextMessage: async (context) => {
       for (const handler of textMessageHandlers) {
@@ -659,6 +678,96 @@ describe("createTelegramAdapter", () => {
     );
 
     expect(events).toEqual([]);
+  });
+
+  test("sendMessage sends text with format and adapter options", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "*hello*",
+      format: "markdown",
+      adapterOptions: { disable_notification: true },
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      text: "*hello*",
+      options: {
+        parse_mode: "MarkdownV2",
+        disable_notification: true,
+      },
+      signal: undefined,
+    });
+    if (sent.isOk()) {
+      expect(sent.value).toMatchObject({
+        chatId: "telegram",
+        conversationId: "12345",
+        messageId: "123",
+        text: "*hello*",
+        format: "markdown",
+        adapterData: {
+          telegramChatId: "12345",
+          telegramMessageId: 123,
+        },
+      });
+    }
+  });
+
+  test("sendMessage lets adapter options override default parse mode", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "<b>hello</b>",
+      format: "html",
+      adapterOptions: { parse_mode: "Markdown" },
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      text: "<b>hello</b>",
+      options: { parse_mode: "Markdown" },
+      signal: undefined,
+    });
+  });
+
+  test("sendMessage returns typed Telegram send failures", async () => {
+    const bot = createFakeTelegramBot({ sendMessageError: new Error("send failed") });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "hello",
+      adapterOptions: {},
+    });
+
+    expect(sent.isErr()).toBe(true);
+    if (sent.isErr()) {
+      expect(sent.error).toBeInstanceOf(TelegramSendMessageError);
+      if (TelegramSendMessageError.is(sent.error)) {
+        expect(sent.error.message).toContain("send failed");
+      }
+    }
   });
 
   test("close is safe to call more than once", async () => {
