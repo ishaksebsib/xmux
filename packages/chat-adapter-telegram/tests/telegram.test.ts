@@ -241,6 +241,24 @@ describe("createTelegramAdapter", () => {
     expect(customAdapter.id).toBe("support");
   });
 
+  test("mode allowedUpdates are typed from Telegram update names", () => {
+    createTelegramAdapter({
+      token: "123:test",
+      mode: { type: "polling", allowedUpdates: ["message", "callback_query"] },
+    });
+
+    createTelegramAdapter({
+      token: "123:test",
+      mode: { type: "webhook", allowedUpdates: ["message"] },
+    });
+
+    createTelegramAdapter({
+      token: "123:test",
+      // @ts-expect-error invalid Telegram update names should not compile
+      mode: { type: "polling", allowedUpdates: ["bad"] },
+    });
+  });
+
   test("returns typed adapter definitions", () => {
     const adapter = createTelegramAdapter({ id: "telegram", token: "123:test" });
 
@@ -342,10 +360,10 @@ describe("createTelegramAdapter", () => {
     );
 
     expect(started.isOk()).toBe(true);
-    expect(bot.setMyCommandsMock).toHaveBeenCalledWith(
-      [{ command: "start", description: "Start session" }],
-      undefined,
-    );
+    expect(bot.setMyCommandsMock).toHaveBeenCalledWith({
+      commands: [{ command: "start", description: "Start session" }],
+      signal: undefined,
+    });
     expect(diagnostics).toEqual([
       "COMMAND_NAME_INVALID",
       "COMMAND_OPTIONS_NOT_SUPPORTED",

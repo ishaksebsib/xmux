@@ -4,5 +4,6 @@ export type {
   TelegramAdapterData,
   TelegramAdapterMode,
   TelegramAdapterOptions,
+  TelegramAllowedUpdate,
   TelegramBotOptions,
 } from "./types";

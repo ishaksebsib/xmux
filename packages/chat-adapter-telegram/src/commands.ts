@@ -17,7 +17,7 @@ type ParsedTelegramCommand<TCommands extends ChatCommandRegistry> = ChatCommandV
 
 type TelegramCommandInput = Parameters<
   import("./client").TelegramBotClient["setMyCommands"]
->[0][number];
+>[0]["commands"][number];
 
 const telegramCommandNamePattern = /^[a-z0-9_]{1,32}$/;
 

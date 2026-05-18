@@ -1,16 +1,19 @@
-import { Bot } from "grammy";
+import type { Bot, PollingOptions } from "grammy";
+
+/** Telegram update type accepted by `allowedUpdates`. */
+export type TelegramAllowedUpdate = NonNullable<PollingOptions["allowed_updates"]>[number];
 
 /** Selects how Telegram updates are delivered. */
 export type TelegramAdapterMode =
   | {
       readonly type: "polling";
       readonly dropPendingUpdates?: boolean;
-      readonly allowedUpdates?: readonly string[];
+      readonly allowedUpdates?: readonly TelegramAllowedUpdate[];
     }
   | {
       readonly type: "webhook";
       readonly secretToken?: string;
-      readonly allowedUpdates?: readonly string[];
+      readonly allowedUpdates?: readonly TelegramAllowedUpdate[];
     };
 
 /** Options forwarded to grammY's `Bot` constructor. */

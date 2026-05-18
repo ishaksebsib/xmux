@@ -136,7 +136,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     });
 
     const initialized = await Result.tryPromise({
-      try: async () => this.bot.init(context.signal as Parameters<TelegramBotClient["init"]>[0]),
+      try: async () => this.bot.init(context.signal),
       catch: (cause) => new TelegramStartError({ operation: "init", cause }),
     });
     if (initialized.isErr()) {
@@ -151,10 +151,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
         });
 
         if (commands.length > 0) {
-          await this.bot.setMyCommands(
-            commands,
-            context.signal as Parameters<TelegramBotClient["setMyCommands"]>[1],
-          );
+          await this.bot.setMyCommands({ commands, signal: context.signal });
         }
       },
       catch: (cause) => new TelegramCommandRegistrationError({ cause }),
@@ -205,7 +202,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
           chatId: input.conversationId,
           text: input.text,
           options: createTelegramSendMessageOptions(input),
-          signal: input.signal as Parameters<TelegramBotClient["sendMessage"]>[0]["signal"],
+          signal: input.signal,
         }),
       catch: (cause) => new TelegramSendMessageError({ cause }),
     });
@@ -238,7 +235,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
           chatId: input.conversationId,
           text: input.text,
           options: options.value,
-          signal: input.signal as Parameters<TelegramBotClient["sendMessage"]>[0]["signal"],
+          signal: input.signal,
         }),
       catch: (cause) => new TelegramReplyError({ cause }),
     });
@@ -282,9 +279,7 @@ function createPollingOptions(
     ...(mode.dropPendingUpdates === undefined
       ? {}
       : { drop_pending_updates: mode.dropPendingUpdates }),
-    ...(mode.allowedUpdates === undefined
-      ? {}
-      : { allowed_updates: mode.allowedUpdates as PollingOptions["allowed_updates"] }),
+    ...(mode.allowedUpdates === undefined ? {} : { allowed_updates: mode.allowedUpdates }),
   };
 }
 
