@@ -4,8 +4,10 @@ import {
   createHarness,
   defineHarnessAdapter,
   type CreatedSessionFor,
+  type HarnessContentEvent,
   type HarnessModelRef,
   type HarnessPromptContent,
+  type HarnessPromptEvent,
   type HarnessSessionInfo,
   type HarnessTokenUsage,
   type HarnessToolOutput,
@@ -239,5 +241,98 @@ test("shared harness operation data types are narrow and reusable", () => {
       mimeType: "text/plain",
     } satisfies HarnessPromptContent;
     void invalidFile;
+  }
+});
+
+test("neutral prompt events require phase-specific fields", () => {
+  type PiEvent = HarnessPromptEvent<"pi", { readonly nativeId: string }>;
+  const ref = { harnessId: "pi", sessionId: "session-1" } satisfies SessionRef<"pi">;
+
+  const started = {
+    type: "run",
+    phase: "started",
+    ref,
+    adapterData: { nativeId: "run-1" },
+  } satisfies PiEvent;
+  const completed = {
+    type: "run",
+    phase: "completed",
+    ref,
+    reason: "stop",
+    usage: { input: 1, output: 2, total: 3 },
+  } satisfies PiEvent;
+  const textDelta = {
+    type: "content",
+    phase: "delta",
+    kind: "text",
+    ref,
+    messageId: "message-1",
+    delta: "hello",
+  } satisfies PiEvent;
+  const toolCompleted = {
+    type: "tool",
+    phase: "completed",
+    ref,
+    callId: "call-1",
+    output: [{ type: "text", text: "ok" }],
+  } satisfies PiEvent;
+  const native = {
+    type: "native",
+    ref,
+    adapterData: { nativeId: "event-1" },
+  } satisfies PiEvent;
+
+  expectTypeOf(started.adapterData).toEqualTypeOf<{ nativeId: string }>();
+  expectTypeOf(completed.reason).toEqualTypeOf<"stop">();
+  expectTypeOf(textDelta.delta).toEqualTypeOf<string>();
+  expectTypeOf(toolCompleted.output).toExtend<readonly HarnessToolOutput[]>();
+  expectTypeOf(native.adapterData.nativeId).toEqualTypeOf<string>();
+
+  type TextDelta = Extract<HarnessContentEvent<"pi">, { readonly phase: "delta" }>;
+  expectTypeOf(textDelta).toExtend<TextDelta>();
+
+  if (shouldRunTypeErrorChecks) {
+    const failedRun = {
+      type: "run",
+      phase: "failed",
+      ref,
+      reason: "error",
+      // @ts-expect-error failed run events require error
+    } satisfies PiEvent;
+    void failedRun;
+
+    const badContentDelta = {
+      type: "content",
+      phase: "delta",
+      kind: "text",
+      ref,
+      // @ts-expect-error content delta events require delta
+    } satisfies PiEvent;
+    void badContentDelta;
+
+    const badContentCompleted = {
+      type: "content",
+      phase: "completed",
+      kind: "text",
+      ref,
+      // @ts-expect-error completed content events require text
+    } satisfies PiEvent;
+    void badContentCompleted;
+
+    const badToolFailed = {
+      type: "tool",
+      phase: "failed",
+      ref,
+      callId: "call-1",
+      // @ts-expect-error failed tool events require error
+    } satisfies PiEvent;
+    void badToolFailed;
+
+    const badNative = {
+      type: "native",
+      ref,
+      // @ts-expect-error native events require adapterData
+    } satisfies PiEvent;
+    void badNative;
   }
 });

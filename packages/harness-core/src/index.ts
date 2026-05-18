@@ -23,6 +23,22 @@ export type {
   SessionRef,
   WorkingDirectoryPath,
 } from "./contracts";
+export type {
+  HarnessContentEvent,
+  HarnessContentKind,
+  HarnessInteractionEvent,
+  HarnessMessageEvent,
+  HarnessMessageRole,
+  HarnessNativeEvent,
+  HarnessPromptEvent,
+  HarnessQueueEvent,
+  HarnessRetryEvent,
+  HarnessRunEvent,
+  HarnessRunReason,
+  HarnessToolEvent,
+  HarnessTurnEvent,
+  HarnessWorkspaceEvent,
+} from "./events";
 export type { CreateSessionError } from "./errors";
 export type {
   CreateSessionInput,
