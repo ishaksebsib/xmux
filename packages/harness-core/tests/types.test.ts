@@ -3,7 +3,15 @@ import { expectTypeOf, test } from "vitest";
 import {
   createHarness,
   defineHarnessAdapter,
+  type AdapterAbortOptionsFor,
+  type AdapterDeleteOptionsFor,
+  type AdapterGetOptionsFor,
+  type AdapterListOptionsFor,
+  type AdapterPromptOptionsFor,
+  type AdapterResumeOptionsFor,
   type CreatedSessionFor,
+  type HarnessAdapterPromptResult,
+  type HarnessAdapterSessionInfo,
   type HarnessContentEvent,
   type HarnessModelRef,
   type HarnessPromptContent,
@@ -16,6 +24,29 @@ import {
 } from "../src";
 
 const shouldRunTypeErrorChecks = process.argv.length === 0;
+
+function requiredHarnessMethods() {
+  return {
+    async resumeSession() {
+      return Result.err(new Error("not implemented in type test"));
+    },
+    async listSessions() {
+      return Result.err(new Error("not implemented in type test"));
+    },
+    async getSession() {
+      return Result.err(new Error("not implemented in type test"));
+    },
+    async prompt() {
+      return Result.err(new Error("not implemented in type test"));
+    },
+    async deleteSession() {
+      return Result.err(new Error("not implemented in type test"));
+    },
+    async abort() {
+      return Result.err(new Error("not implemented in type test"));
+    },
+  };
+}
 
 test("createSession narrows adapter options and results by harness id", () => {
   const harness = createHarness({
@@ -31,6 +62,7 @@ test("createSession narrows adapter options and results by harness id", () => {
                 adapterData: { workspaceId: input.adapterOptions.workspaceId },
               });
             },
+            ...requiredHarnessMethods(),
             async close() {
               return undefined;
             },
@@ -56,6 +88,7 @@ test("createSession narrows adapter options and results by harness id", () => {
                 },
               });
             },
+            ...requiredHarnessMethods(),
             async close() {
               return undefined;
             },
@@ -77,6 +110,7 @@ test("createSession narrows adapter options and results by harness id", () => {
                 adapterData: { mode: input.adapterOptions.mode ?? "safe" },
               });
             },
+            ...requiredHarnessMethods(),
             async close() {
               return undefined;
             },
@@ -158,6 +192,7 @@ test("createSession narrows adapter options and results by harness id", () => {
               async createSession() {
                 return Result.ok({ sessionId: "bad", adapterData: {} });
               },
+              ...requiredHarnessMethods(),
               async close() {
                 return undefined;
               },
@@ -166,6 +201,145 @@ test("createSession narrows adapter options and results by harness id", () => {
         }),
       },
     });
+  }
+});
+
+test("adapter session-control methods reuse createSession adapter options", () => {
+  type OpenCodeOptions = { readonly workspaceId: string; readonly model?: "fast" | "smart" };
+
+  const opencode = defineHarnessAdapter<
+    "opencode",
+    OpenCodeOptions,
+    { readonly projectId: string }
+  >({
+    id: "opencode",
+    async open() {
+      return Result.ok({
+        id: "opencode" as const,
+        async createSession(input) {
+          expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+          return Result.ok({
+            sessionId: "opencode-1",
+            adapterData: { projectId: input.adapterOptions.workspaceId },
+          });
+        },
+        async resumeSession(input) {
+          expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+          return Result.ok({
+            sessionId: input.sessionId,
+            adapterData: { projectId: input.adapterOptions.workspaceId },
+          });
+        },
+        async listSessions(input) {
+          expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+          return Result.ok([]);
+        },
+        async getSession(input) {
+          expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+          expectTypeOf(input.session.adapterData.projectId).toEqualTypeOf<string>();
+          return Result.ok({
+            sessionId: input.session.ref.sessionId,
+            adapterData: input.session.adapterData,
+          });
+        },
+        async prompt(input) {
+          expectTypeOf(input.content).toEqualTypeOf<readonly HarnessPromptContent[]>();
+          expectTypeOf(input.adapterOptions.model).toEqualTypeOf<"fast" | "smart" | undefined>();
+          expectTypeOf(input.session.adapterData.projectId).toEqualTypeOf<string>();
+
+          const events = (async function* (): HarnessAdapterPromptResult<"opencode"> {
+            yield {
+              type: "run",
+              phase: "started",
+              ref: input.session.ref,
+            };
+          })();
+
+          return Result.ok(events);
+        },
+        async deleteSession(input) {
+          expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+          return Result.ok(undefined);
+        },
+        async abort(input) {
+          expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+          return Result.ok(undefined);
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  const pi = defineHarnessAdapter<"pi", { readonly mode: "memory" }, { readonly sessionFile: string }>(
+    {
+      id: "pi",
+      async open() {
+        return Result.ok({
+          id: "pi" as const,
+          async createSession(input) {
+            return Result.ok({
+              sessionId: "pi-1",
+              adapterData: { sessionFile: input.adapterOptions.mode },
+            });
+          },
+          ...requiredHarnessMethods(),
+          async close() {
+            return undefined;
+          },
+        });
+      },
+    },
+  );
+
+  const adapters = { opencode, pi };
+  const harness = createHarness({ adapters });
+
+  void harness.createSession({
+    harnessId: "opencode",
+    cwd: process.cwd(),
+    adapterOptions: { workspaceId: "workspace-1", model: "fast" },
+  });
+  void harness.createSession({
+    harnessId: "pi",
+    cwd: process.cwd(),
+    adapterOptions: { mode: "memory" },
+  });
+
+  expectTypeOf<AdapterResumeOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<AdapterListOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<AdapterGetOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<AdapterPromptOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<AdapterDeleteOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<AdapterAbortOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<AdapterPromptOptionsFor<typeof adapters, "pi">>().toEqualTypeOf<{
+    readonly mode: "memory";
+  }>();
+
+  const adapterInfo = {
+    sessionId: "native-session-1",
+    cwd: process.cwd(),
+    title: "Native session",
+    adapterData: { projectId: "project-1" },
+  } satisfies HarnessAdapterSessionInfo<{ readonly projectId: string }>;
+  expectTypeOf(adapterInfo.cwd).toEqualTypeOf<string>();
+
+  if (shouldRunTypeErrorChecks) {
+    void harness.createSession({
+      harnessId: "opencode",
+      cwd: process.cwd(),
+      // @ts-expect-error pi options must not be accepted by opencode
+      adapterOptions: { mode: "memory" },
+    });
+
+    const invalidAdapterInfo = {
+      sessionId: "native-session-1",
+      // @ts-expect-error adapter-returned session info must use sessionId, not public ref
+      ref: { harnessId: "opencode", sessionId: "native-session-1" },
+      adapterData: { projectId: "project-1" },
+    } satisfies HarnessAdapterSessionInfo<{ readonly projectId: string }>;
+    void invalidAdapterInfo;
   }
 });
 

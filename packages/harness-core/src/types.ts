@@ -35,6 +35,36 @@ export type AdapterSessionFor<
     ? TAdapterSession
     : never;
 
+export type AdapterResumeOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterListOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterGetOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterPromptOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterDeleteOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterAbortOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
 type RequiredKeys<TValue extends HarnessAdapterObject> = {
   [TKey in keyof TValue]-?: {} extends Pick<TValue, TKey> ? never : TKey;
 }[keyof TValue];

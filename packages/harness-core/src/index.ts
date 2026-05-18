@@ -9,10 +9,18 @@ export { createHarness, defineHarnessAdapter } from "./harness";
 export type {
   CreateHarnessOptions,
   Harness,
+  HarnessAdapterAbortInput,
   HarnessAdapterCreateSessionInput,
   HarnessAdapterCreateSessionResult,
   HarnessAdapterDefinition,
+  HarnessAdapterDeleteSessionInput,
+  HarnessAdapterGetSessionInput,
+  HarnessAdapterListSessionsInput,
   HarnessAdapterObject,
+  HarnessAdapterPromptInput,
+  HarnessAdapterPromptResult,
+  HarnessAdapterResumeSessionInput,
+  HarnessAdapterSessionInfo,
   HarnessModelRef,
   HarnessPromptContent,
   HarnessSessionInfo,
@@ -41,6 +49,14 @@ export type {
 } from "./events";
 export type { CreateSessionError } from "./errors";
 export type {
+  AdapterAbortOptionsFor,
+  AdapterDeleteOptionsFor,
+  AdapterGetOptionsFor,
+  AdapterListOptionsFor,
+  AdapterOptionsFor,
+  AdapterPromptOptionsFor,
+  AdapterResumeOptionsFor,
+  AdapterSessionFor,
   CreateSessionInput,
   CreateSessionInputFor,
   CreatedSession,

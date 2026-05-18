@@ -49,6 +49,12 @@ function createTestAdapter<
       return Result.ok({
         id: args.id,
         createSession: args.createSession,
+        resumeSession: async () => Result.err(new Error("not implemented in test adapter")),
+        listSessions: async () => Result.err(new Error("not implemented in test adapter")),
+        getSession: async () => Result.err(new Error("not implemented in test adapter")),
+        prompt: async () => Result.err(new Error("not implemented in test adapter")),
+        deleteSession: async () => Result.err(new Error("not implemented in test adapter")),
+        abort: async () => Result.err(new Error("not implemented in test adapter")),
         close: async () => {
           args.handles.closes.push(args.id);
         },

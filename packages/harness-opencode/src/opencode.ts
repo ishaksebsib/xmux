@@ -26,6 +26,12 @@ async function createOpenedAdapter(
   return Result.ok({
     id: "opencode",
     createSession: async (input) => createSession(runtime, input),
+    resumeSession: async () => Result.err(new Error("OpenCode resumeSession is not implemented")),
+    listSessions: async () => Result.err(new Error("OpenCode listSessions is not implemented")),
+    getSession: async () => Result.err(new Error("OpenCode getSession is not implemented")),
+    prompt: async () => Result.err(new Error("OpenCode prompt is not implemented")),
+    deleteSession: async () => Result.err(new Error("OpenCode deleteSession is not implemented")),
+    abort: async () => Result.err(new Error("OpenCode abort is not implemented")),
     close: async () => {
       await runtime.close();
     },
