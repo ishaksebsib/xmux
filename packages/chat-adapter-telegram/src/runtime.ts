@@ -1,6 +1,7 @@
 import { Result } from "better-result";
 import type { PollingOptions } from "grammy";
 import type {
+  ChatAdapterReplyInput,
   ChatAdapterSendMessageInput,
   ChatAdapterStartContext,
   ChatCommandRegistry,
@@ -18,12 +19,17 @@ import { parseTelegramBotToken } from "./config";
 import {
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
+  TelegramReplyError,
   TelegramSendMessageError,
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
 import { createTelegramTextEvent } from "./messages";
-import { createTelegramSendMessageOptions, createTelegramSentMessage } from "./outbound";
+import {
+  createTelegramReplyMessageOptions,
+  createTelegramSendMessageOptions,
+  createTelegramSentMessage,
+} from "./outbound";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -218,8 +224,37 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     );
   }
 
-  async reply(): Promise<Result<never, Error>> {
-    return Result.err(new Error("Telegram adapter reply is not implemented yet"));
+  async reply(
+    input: ChatAdapterReplyInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramReplyError>> {
+    const options = createTelegramReplyMessageOptions(input);
+    if (options.isErr()) {
+      return Result.err(options.error);
+    }
+
+    const sent = await Result.tryPromise({
+      try: async () =>
+        this.bot.sendMessage({
+          chatId: input.conversationId,
+          text: input.text,
+          options: options.value,
+          signal: input.signal as Parameters<TelegramBotClient["sendMessage"]>[0]["signal"],
+        }),
+      catch: (cause) => new TelegramReplyError({ cause }),
+    });
+    if (sent.isErr()) {
+      return Result.err(sent.error);
+    }
+
+    return Result.ok(
+      createTelegramSentMessage({
+        chatId: this.id,
+        conversationId: input.conversationId,
+        text: input.text,
+        format: input.format,
+        telegramMessage: sent.value,
+      }),
+    );
   }
 
   async close(): Promise<void> {

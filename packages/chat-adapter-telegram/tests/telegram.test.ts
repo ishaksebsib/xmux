@@ -7,6 +7,7 @@ import {
 import {
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
+  TelegramReplyError,
   TelegramSendMessageError,
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
@@ -766,6 +767,137 @@ describe("createTelegramAdapter", () => {
       expect(sent.error).toBeInstanceOf(TelegramSendMessageError);
       if (TelegramSendMessageError.is(sent.error)) {
         expect(sent.error.message).toContain("send failed");
+      }
+    }
+  });
+
+  test("reply auto uses Telegram reply parameters when message id exists", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const replied = await opened.value.reply!({
+      chatId: "telegram",
+      conversationId: "12345",
+      message: { chatId: "telegram", conversationId: "12345", messageId: "777" },
+      text: "reply",
+      adapterOptions: {},
+    });
+
+    expect(replied.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      text: "reply",
+      options: { reply_parameters: { message_id: 777 } },
+      signal: undefined,
+    });
+  });
+
+  test("reply conversation sends a normal message", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const replied = await opened.value.reply!({
+      chatId: "telegram",
+      conversationId: "12345",
+      message: { chatId: "telegram", conversationId: "12345", messageId: "777" },
+      text: "normal",
+      mode: "conversation",
+      adapterOptions: {},
+    });
+
+    expect(replied.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      text: "normal",
+      options: {},
+      signal: undefined,
+    });
+  });
+
+  test("reply strict quote rejects missing message ids", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const replied = await opened.value.reply!({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "quote",
+      mode: "quote",
+      adapterOptions: {},
+    });
+
+    expect(replied.isErr()).toBe(true);
+    if (replied.isErr()) {
+      expect(replied.error).toBeInstanceOf(TelegramReplyError);
+      expect(bot.sendMessageMock).not.toHaveBeenCalled();
+    }
+  });
+
+  test("reply thread requires message_thread_id", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const missingThread = await opened.value.reply!({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "thread",
+      mode: "thread",
+      adapterOptions: {},
+    });
+    expect(missingThread.isErr()).toBe(true);
+
+    const replied = await opened.value.reply!({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "thread",
+      mode: "thread",
+      adapterOptions: { message_thread_id: 9 },
+    });
+    expect(replied.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      text: "thread",
+      options: { message_thread_id: 9 },
+      signal: undefined,
+    });
+  });
+
+  test("reply returns typed Telegram reply failures", async () => {
+    const bot = createFakeTelegramBot({ sendMessageError: new Error("reply failed") });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const replied = await opened.value.reply!({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "reply",
+      adapterOptions: {},
+    });
+
+    expect(replied.isErr()).toBe(true);
+    if (replied.isErr()) {
+      expect(replied.error).toBeInstanceOf(TelegramReplyError);
+      if (TelegramReplyError.is(replied.error)) {
+        expect(replied.error.message).toContain("reply failed");
       }
     }
   });

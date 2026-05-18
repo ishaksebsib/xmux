@@ -1,6 +1,16 @@
-import type { ChatAdapterSendMessageInput, ChatSentMessage } from "@xmux/chat-core";
+import { Result } from "better-result";
+import type {
+  ChatAdapterReplyInput,
+  ChatAdapterSendMessageInput,
+  ChatSentMessage,
+} from "@xmux/chat-core";
 import type { TelegramSentTextMessage } from "./client";
+import { TelegramReplyError } from "./errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "./types";
+
+declare const telegramMessageIdBrand: unique symbol;
+
+type TelegramMessageId = number & { readonly [telegramMessageIdBrand]: true };
 
 export function createTelegramSendMessageOptions(
   input: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>,
@@ -9,6 +19,46 @@ export function createTelegramSendMessageOptions(
     ...createTelegramFormatOptions(input.format),
     ...input.adapterOptions,
   };
+}
+
+export function createTelegramReplyMessageOptions(
+  input: ChatAdapterReplyInput<string, TelegramAdapterOptions>,
+): Result<TelegramAdapterOptions, TelegramReplyError> {
+  const baseOptions = createTelegramSendMessageOptions(input);
+  const mode = input.mode ?? "auto";
+
+  if (mode === "conversation") {
+    return Result.ok(baseOptions);
+  }
+
+  if (mode === "thread") {
+    return "message_thread_id" in baseOptions
+      ? Result.ok(baseOptions)
+      : Result.err(
+          new TelegramReplyError({
+            reason: "Telegram thread replies require adapterOptions.message_thread_id",
+          }),
+        );
+  }
+
+  const messageId = input.message?.messageId;
+  if (messageId === undefined) {
+    return mode === "auto"
+      ? Result.ok(baseOptions)
+      : Result.err(
+          new TelegramReplyError({ reason: "Telegram quote replies require a message id" }),
+        );
+  }
+
+  const parsedMessageId = parseTelegramMessageId(messageId);
+  if (parsedMessageId.isErr()) {
+    return mode === "auto" ? Result.ok(baseOptions) : Result.err(parsedMessageId.error);
+  }
+
+  return Result.ok({
+    ...createTelegramReplyParameters(parsedMessageId.value),
+    ...baseOptions,
+  });
 }
 
 export function createTelegramSentMessage<TChatId extends string>(args: {
@@ -44,4 +94,23 @@ function createTelegramFormatOptions(
   }
 
   return {};
+}
+
+function createTelegramReplyParameters(messageId: TelegramMessageId): TelegramAdapterOptions {
+  return {
+    reply_parameters: {
+      message_id: messageId,
+    },
+  };
+}
+
+function parseTelegramMessageId(messageId: string): Result<TelegramMessageId, TelegramReplyError> {
+  const parsed = Number(messageId);
+  return Number.isInteger(parsed) && parsed > 0
+    ? Result.ok(parsed as TelegramMessageId)
+    : Result.err(
+        new TelegramReplyError({
+          reason: `Telegram message id must be a positive integer: ${messageId}`,
+        }),
+      );
 }
