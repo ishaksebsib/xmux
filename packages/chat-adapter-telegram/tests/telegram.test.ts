@@ -590,6 +590,45 @@ describe("createTelegramAdapter", () => {
     });
   });
 
+  test("single string command options accept Telegram-style positional text", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const commands = defineChatCommands({
+      echo: defineChatCommand({
+        description: "Echo text",
+        options: {
+          text: stringOption({ required: true }),
+        },
+      }),
+    });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(
+      createStartContext({ chatId: "telegram", commands, events }),
+    );
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "/echo hello from telegram",
+        entities: [{ type: "bot_command", offset: 0, length: "/echo".length }],
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "command",
+      command: {
+        name: "echo",
+        options: { text: "hello from telegram" },
+      },
+    });
+  });
+
   test("slash commands for other bots stay normal messages", async () => {
     const bot = createFakeTelegramBot();
     const events: unknown[] = [];

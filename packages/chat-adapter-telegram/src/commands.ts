@@ -1,6 +1,7 @@
 import type {
   ChatAdapterCommandEvent,
   ChatAdapterDiagnosticInput,
+  ChatCommandOption,
   ChatCommandRegistry,
   ChatCommandValues,
 } from "@xmux/chat-core";
@@ -173,7 +174,10 @@ function parseCommandOptions<TChatId extends string>(args: {
   | { readonly status: "valid"; readonly options: Record<string, unknown> }
   | { readonly status: "invalid" } {
   const optionDefinitions = args.definition.options ?? {};
-  const rawOptions = tokenizeCommandOptions(args.input);
+  const rawOptions = createRawCommandOptions({
+    input: args.input,
+    optionDefinitions,
+  });
   const options: Record<string, unknown> = {};
 
   for (const [name, definition] of Object.entries(optionDefinitions)) {
@@ -218,6 +222,32 @@ function parseCommandOptions<TChatId extends string>(args: {
   }
 
   return { status: "valid", options };
+}
+
+function createRawCommandOptions(args: {
+  readonly input: string;
+  readonly optionDefinitions: NonNullable<ChatCommandRegistry[string]["options"]>;
+}): ReadonlyMap<string, string | true> {
+  const namedOptions = tokenizeCommandOptions(args.input);
+  if (namedOptions.size > 0) {
+    return namedOptions;
+  }
+
+  const entries = Object.entries(args.optionDefinitions);
+  const positionalInput = stripWrappingQuotes(args.input.trim());
+  if (entries.length !== 1 || positionalInput.length === 0) {
+    return namedOptions;
+  }
+
+  const entry = entries[0] as readonly [string, ChatCommandOption] | undefined;
+  if (entry === undefined) {
+    return namedOptions;
+  }
+
+  const [name, definition] = entry;
+  return definition.kind === "string"
+    ? new Map<string, string | true>([[name, positionalInput]])
+    : namedOptions;
 }
 
 function tokenizeCommandOptions(input: string): ReadonlyMap<string, string | true> {
@@ -280,6 +310,13 @@ function tokenize(input: string): readonly string[] {
   }
 
   return tokens;
+}
+
+function stripWrappingQuotes(input: string): string {
+  const quote = input[0];
+  return input.length >= 2 && (quote === '"' || quote === "'") && input.at(-1) === quote
+    ? input.slice(1, -1)
+    : input;
 }
 
 function parseOptionValue(args: {
