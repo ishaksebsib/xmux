@@ -23,6 +23,12 @@ importers:
 
   apps/demo:
     dependencies:
+      '@xmux/chat-adapter-telegram':
+        specifier: workspace:^
+        version: link:../../packages/chat-adapter-telegram
+      '@xmux/chat-core':
+        specifier: workspace:^
+        version: link:../../packages/chat-core
       '@xmux/core':
         specifier: workspace:^
         version: link:../../packages/core

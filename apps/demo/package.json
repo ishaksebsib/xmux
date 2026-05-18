@@ -8,10 +8,12 @@
   "type": "module",
   "main": "main.ts",
   "scripts": {
-    "start": "pnpm --filter @xmux/core build && tsx main.ts",
+    "dev": "tsx main.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@xmux/chat-adapter-telegram": "workspace:^",
+    "@xmux/chat-core": "workspace:^",
     "@xmux/core": "workspace:^",
     "dotenv": "^17.4.2"
   },

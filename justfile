@@ -29,4 +29,4 @@ all: fmt check test build
 alias d := demo
 # Run demo app
 demo:
-	pnpm --filter @xmux/demo run start
+	pnpm turbo run dev --filter=@xmux/demo
