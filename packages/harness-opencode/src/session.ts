@@ -217,3 +217,60 @@ export async function listSessions(
     );
   });
 }
+
+export async function getSession(
+  runtime: OpenCodeRuntime,
+  input: {
+    readonly ref: { readonly harnessId: string; readonly sessionId: string };
+    readonly adapterOptions: OpenCodeCreateOptions;
+    readonly signal?: AbortSignal;
+  },
+): Promise<
+  ResultType<
+    { readonly sessionId: string; readonly cwd?: string; readonly adapterData: OpenCodeSessionInfo },
+    OpenCodeSessionRequestError | OpenCodeSessionResponseError
+  >
+> {
+  return Result.gen(async function* () {
+    const response = yield* Result.await(
+      Result.tryPromise({
+        try: () =>
+          runtime.client.session.get(
+            {
+              sessionID: input.ref.sessionId,
+              workspace: input.adapterOptions.workspace,
+            },
+            { signal: input.signal },
+          ),
+        catch: (cause) => new OpenCodeSessionRequestError({ cause }),
+      }),
+    );
+
+    const status = response.response?.status ?? 0;
+
+    if (response.error) {
+      return Result.err(
+        new OpenCodeSessionResponseError({
+          status,
+          detail: describeResponseError(response.error),
+          reason: "OpenCode session get failed",
+        }),
+      );
+    }
+
+    if (!response.data) {
+      return Result.err(
+        new OpenCodeSessionResponseError({
+          status,
+          reason: "OpenCode session get returned no session data",
+        }),
+      );
+    }
+
+    return Result.ok({
+      sessionId: response.data.id,
+      cwd: response.data.directory,
+      adapterData: toSessionInfo(response.data),
+    });
+  });
+}
