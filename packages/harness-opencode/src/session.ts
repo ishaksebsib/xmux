@@ -97,3 +97,66 @@ export async function createSession(
     });
   });
 }
+
+export async function resumeSession(
+  runtime: OpenCodeRuntime,
+  input: {
+    readonly sessionId: string;
+    readonly cwd?: string;
+    readonly adapterOptions: OpenCodeCreateOptions;
+    readonly signal?: AbortSignal;
+  },
+): Promise<
+  ResultType<
+    {
+      readonly sessionId: string;
+      readonly cwd?: string;
+      readonly adapterData: OpenCodeSessionInfo;
+    },
+    OpenCodeSessionRequestError | OpenCodeSessionResponseError
+  >
+> {
+  return Result.gen(async function* () {
+    const response = yield* Result.await(
+      Result.tryPromise({
+        try: () =>
+          runtime.client.session.get(
+            {
+              sessionID: input.sessionId,
+              directory: input.cwd,
+              workspace: input.adapterOptions.workspace,
+            },
+            { signal: input.signal },
+          ),
+        catch: (cause) => new OpenCodeSessionRequestError({ cause }),
+      }),
+    );
+
+    const status = response.response?.status ?? 0;
+
+    if (response.error) {
+      return Result.err(
+        new OpenCodeSessionResponseError({
+          status,
+          detail: describeResponseError(response.error),
+          reason: "OpenCode session resume failed",
+        }),
+      );
+    }
+
+    if (!response.data) {
+      return Result.err(
+        new OpenCodeSessionResponseError({
+          status,
+          reason: "OpenCode session resume returned no session data",
+        }),
+      );
+    }
+
+    return Result.ok({
+      sessionId: response.data.id,
+      cwd: response.data.directory,
+      adapterData: toSessionInfo(response.data),
+    });
+  });
+}
