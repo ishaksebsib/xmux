@@ -30,6 +30,14 @@ type OpenedAdapterHandles = {
   readonly closes: string[];
 };
 
+async function collectAsync<TValue>(iterable: AsyncIterable<TValue>): Promise<TValue[]> {
+  const values: TValue[] = [];
+  for await (const value of iterable) {
+    values.push(value);
+  }
+  return values;
+}
+
 function createTestAdapter<
   THarnessId extends string,
   TAdapterOptions extends Record<string, unknown>,
@@ -538,6 +546,139 @@ describe("createHarness", () => {
       expect(listed.error).toBeInstanceOf(HarnessAdapterListSessionsError);
       expect(listed.error.cause).toBeInstanceOf(InvalidWorkingDirectoryError);
     }
+  });
+
+  test("prompts through the selected adapter", async () => {
+    const handles = { opens: [], closes: [] };
+    const calls: string[] = [];
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            prompt: async (input) => {
+              calls.push(
+                `prompt:${input.ref.sessionId}:${input.adapterOptions.sessionMode}:${input.content.length}`,
+              );
+              return Result.ok(
+                (async function* () {
+                  yield { type: "run", phase: "started", ref: input.ref } as const;
+                  yield {
+                    type: "content",
+                    phase: "delta",
+                    kind: "text",
+                    ref: input.ref,
+                    delta: "hello",
+                  } as const;
+                })(),
+              );
+            },
+          },
+        }),
+      },
+    });
+
+    const prompted = await harness.prompt({
+      ref: { harnessId: "pi", sessionId: "native-1" },
+      content: { type: "text", text: "hello" },
+      adapterOptions: { sessionMode: "persistent" },
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "run", phase: "started" });
+    expect(events[1]).toMatchObject({ type: "content", phase: "delta", delta: "hello" });
+    expect(calls).toEqual(["prompt:native-1:persistent:1"]);
+    expect(handles.opens).toEqual(["pi"]);
+  });
+
+  test("wraps prompt setup failures", async () => {
+    const returnedHandles = { opens: [], closes: [] };
+    const returnedHarness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles: returnedHandles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            prompt: async () => Result.err(new Error("prompt failed")),
+          },
+        }),
+      },
+    });
+    const thrownHandles = { opens: [], closes: [] };
+    const thrownHarness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles: thrownHandles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            prompt: async () => {
+              throw new Error("prompt exploded");
+            },
+          },
+        }),
+      },
+    });
+
+    const returned = await returnedHarness.prompt({
+      ref: { harnessId: "pi", sessionId: "native-1" },
+      content: { type: "text", text: "hello" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const thrown = await thrownHarness.prompt({
+      ref: { harnessId: "pi", sessionId: "native-1" },
+      content: { type: "text", text: "hello" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(returned.isErr()).toBe(true);
+    expect(thrown.isErr()).toBe(true);
+    if (returned.isErr()) expect(returned.error).toBeInstanceOf(HarnessAdapterPromptError);
+    if (thrown.isErr()) expect(thrown.error).toBeInstanceOf(HarnessAdapterPromptError);
+  });
+
+  test("converts prompt stream failures to terminal failed run events", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            prompt: async (input) =>
+              Result.ok(
+                (async function* () {
+                  yield { type: "run", phase: "started", ref: input.ref } as const;
+                  throw new Error("stream exploded");
+                })(),
+              ),
+          },
+        }),
+      },
+    });
+
+    const prompted = await harness.prompt({
+      ref: { harnessId: "pi", sessionId: "native-1" },
+      content: [{ type: "text", text: "hello" }],
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "run", phase: "started" });
+    expect(events[1]).toMatchObject({ type: "run", phase: "failed", reason: "error" });
+    expect((events[1] as { error?: unknown }).error).toBeInstanceOf(Error);
   });
 
   test("ref-based session-control stubs pass refs without requiring core session state", async () => {

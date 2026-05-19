@@ -13,6 +13,7 @@ import type {
   HarnessAdapterDefinition,
   HarnessAdapterObject,
   HarnessAdapterSessionInfo,
+  HarnessPromptContent,
   HarnessSessionInfo,
   OpenedHarnessAdapter,
   WorkingDirectoryPath,
@@ -50,8 +51,12 @@ export function adapterOptionsFromInput<
   return normalizeAdapterOptions("adapterOptions" in input ? input.adapterOptions : undefined);
 }
 
-export function createStubCause(operation: string): Error {
-  return new Error(`${operation} facade behavior is not implemented yet`);
+export function normalizePromptContent(
+  content: HarnessPromptContent | readonly HarnessPromptContent[],
+): readonly HarnessPromptContent[] {
+  return Array.isArray(content)
+    ? (content as readonly HarnessPromptContent[])
+    : [content as HarnessPromptContent];
 }
 
 export async function createWorkingDirectoryPath(
