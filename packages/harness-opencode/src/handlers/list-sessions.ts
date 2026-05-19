@@ -1,3 +1,5 @@
+import { stat } from "node:fs/promises";
+import type { Session } from "@opencode-ai/sdk/v2";
 import type {
   HarnessAdapterListSessionsInput,
   HarnessAdapterSessionInfo,
@@ -11,6 +13,24 @@ import {
   type OpenCodeCreateOptions,
   type OpenCodeSessionInfo,
 } from "./utils";
+
+async function toListedSession(
+  session: Session,
+): Promise<HarnessAdapterSessionInfo<OpenCodeSessionInfo>> {
+  const adapterSession = toAdapterSession(session);
+  const cwd = await Result.tryPromise({
+    try: async () => {
+      const stats = await stat(session.directory);
+      return stats.isDirectory() ? session.directory : undefined;
+    },
+    catch: () => undefined,
+  });
+
+  return {
+    ...adapterSession,
+    cwd: cwd.isOk() ? cwd.value : undefined,
+  };
+}
 
 export async function listSessions(
   runtime: OpenCodeRuntime,
@@ -56,6 +76,6 @@ export async function listSessions(
       );
     }
 
-    return Result.ok(response.data.map(toAdapterSession));
+    return Result.ok(await Promise.all(response.data.map(toListedSession)));
   });
 }
