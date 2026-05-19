@@ -6,4 +6,4 @@ export {
 } from "./errors";
 export type { OpenCodeAdapter } from "./opencode";
 export type { OpenCodeAdapterConfig } from "./runtime";
-export type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "./session";
+export type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "./handlers/utils";

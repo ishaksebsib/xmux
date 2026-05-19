@@ -10,14 +10,12 @@ import {
   type OpenCodeAdapterConfig,
   type OpenCodeRuntime,
 } from "./runtime";
-import {
-  createSession,
-  resumeSession,
-  listSessions,
-  getSession,
-  type OpenCodeCreateOptions,
-  type OpenCodeSessionInfo,
-} from "./session";
+import { createSession } from "./handlers/create-session";
+import { getSession } from "./handlers/get-session";
+import { listSessions } from "./handlers/list-sessions";
+import { prompt } from "./handlers/prompt";
+import { resumeSession } from "./handlers/resume-session";
+import type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "./handlers/utils";
 
 export type OpenCodeAdapter = HarnessAdapterDefinition<
   "opencode",
@@ -36,7 +34,7 @@ async function createOpenedAdapter(
     resumeSession: async (input) => resumeSession(runtime, input),
     listSessions: async (input) => listSessions(runtime, input),
     getSession: async (input) => getSession(runtime, input),
-    prompt: async () => Result.err(new Error("OpenCode prompt is not implemented")),
+    prompt: async (input) => prompt(runtime, input),
     deleteSession: async () => Result.err(new Error("OpenCode deleteSession is not implemented")),
     abort: async () => Result.err(new Error("OpenCode abort is not implemented")),
     close: async () => {
