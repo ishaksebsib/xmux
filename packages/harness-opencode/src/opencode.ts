@@ -10,7 +10,9 @@ import {
   type OpenCodeAdapterConfig,
   type OpenCodeRuntime,
 } from "./runtime";
+import { abortSession } from "./handlers/abort";
 import { createSession } from "./handlers/create-session";
+import { deleteSession } from "./handlers/delete-session";
 import { getSession } from "./handlers/get-session";
 import { listSessions } from "./handlers/list-sessions";
 import { prompt } from "./handlers/prompt";
@@ -35,8 +37,8 @@ async function createOpenedAdapter(
     listSessions: async (input) => listSessions(runtime, input),
     getSession: async (input) => getSession(runtime, input),
     prompt: async (input) => prompt(runtime, input),
-    deleteSession: async () => Result.err(new Error("OpenCode deleteSession is not implemented")),
-    abort: async () => Result.err(new Error("OpenCode abort is not implemented")),
+    deleteSession: async (input) => deleteSession(runtime, input),
+    abort: async (input) => abortSession(runtime, input),
     close: async () => {
       await runtime.close();
     },

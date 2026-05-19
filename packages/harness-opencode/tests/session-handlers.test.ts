@@ -1,6 +1,8 @@
 import type { WorkingDirectoryPath } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
+import { abortSession } from "../src/handlers/abort";
 import { createSession } from "../src/handlers/create-session";
+import { deleteSession } from "../src/handlers/delete-session";
 import { getSession } from "../src/handlers/get-session";
 import { listSessions } from "../src/handlers/list-sessions";
 import { resumeSession } from "../src/handlers/resume-session";
@@ -50,6 +52,44 @@ describe("OpenCode session handlers", () => {
       title: "created",
       workspace: "default",
     });
+  });
+
+  test("deletes and aborts sessions through OpenCode", async () => {
+    const calls: string[] = [];
+    const runtime = {
+      client: {
+        session: {
+          delete: async (parameters: {
+            readonly sessionID: string;
+            readonly workspace?: string;
+          }) => {
+            calls.push(`delete:${parameters.sessionID}:${parameters.workspace}`);
+            return { data: true, response: { status: 200 } };
+          },
+          abort: async (parameters: {
+            readonly sessionID: string;
+            readonly workspace?: string;
+          }) => {
+            calls.push(`abort:${parameters.sessionID}:${parameters.workspace}`);
+            return { data: true, response: { status: 200 } };
+          },
+        },
+      },
+      close: async () => undefined,
+    } as unknown as OpenCodeRuntime;
+
+    const deleted = await deleteSession(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      adapterOptions: { workspace: "default" },
+    });
+    const aborted = await abortSession(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-2" },
+      adapterOptions: { workspace: "default" },
+    });
+
+    expect(deleted.isOk()).toBe(true);
+    expect(aborted.isOk()).toBe(true);
+    expect(calls).toEqual(["delete:session-1:default", "abort:session-2:default"]);
   });
 
   test("returns native title/cwd when resuming, getting, and listing sessions", async () => {
