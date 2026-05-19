@@ -52,7 +52,12 @@ export function openTelegramRuntime<TChatId extends string>(args: {
   readonly mode: TelegramAdapterMode;
   readonly createBot?: CreateTelegramBotClient;
 }): Result<
-  OpenedChatAdapter<TChatId, TelegramAdapterOptions, TelegramAdapterData>,
+  OpenedChatAdapter<
+    TChatId,
+    TelegramAdapterOptions,
+    TelegramAdapterData,
+    typeof telegramAdapterCapabilities
+  >,
   TelegramConfigurationError
 > {
   const token = parseTelegramBotToken(args.options.token);
@@ -79,7 +84,8 @@ export function openTelegramRuntime<TChatId extends string>(args: {
 class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
   TChatId,
   TelegramAdapterOptions,
-  TelegramAdapterData
+  TelegramAdapterData,
+  typeof telegramAdapterCapabilities
 > {
   readonly capabilities = telegramAdapterCapabilities;
   readonly id: TChatId;
