@@ -1,21 +1,9 @@
 import { Result } from "better-result";
-import type {
-  ChatAdapterDefinition,
-  ChatAdapterReplyInput,
-  ChatAdapterSendMessageInput,
-  ChatAdapterStartContext,
-  ChatAdapterStreamMessageInput,
-  ChatAdapterStreamReplyInput,
-  ChatAdapterCapabilities,
-  OpenedChatAdapter,
-} from "./adapter";
+import type { ChatAdapterStartContext, OpenedChatAdapter } from "./adapter";
 import type {
   ChatAdapterObject,
-  ChatSentMessage,
   ChatStreamFallback,
   ChatTextInput,
-  ChatTextContent,
-  ChatTextStreamChunk,
   ChatTextStreamContent,
 } from "./contracts";
 import type { ChatCommandRegistry } from "./commands";
@@ -45,14 +33,8 @@ import type {
 } from "./events";
 import {
   ChatAdapterOpenError,
-  ChatAdapterStartError,
   ChatCloseError,
-  ChatReplyError,
-  ChatSendMessageError,
-  ChatStreamMessageError,
-  ChatStreamReplyError,
   UnknownChatAdapterError,
-  UnsupportedChatOperationError,
   type ChatCloseFailure,
   type ChatLifecycleError,
   type ChatReplyFailure,
@@ -61,6 +43,18 @@ import {
   type ChatStreamMessageFailure,
   type ChatStreamReplyFailure,
 } from "./errors";
+import { createReplyHandler } from "./handlers/reply";
+import { createSendMessageHandler } from "./handlers/send-message";
+import { createStreamMessageHandler } from "./handlers/stream-message";
+import { createStreamReplyHandler } from "./handlers/stream-reply";
+import type { OpenedRuntime } from "./handlers/types";
+import {
+  adapterForChatId,
+  commandNameFor,
+  normalizeChatTextInput,
+  openChatAdapter,
+  startChatAdapter,
+} from "./handlers/utils";
 import {
   ensureCanClose,
   ensureCanStart,
@@ -68,6 +62,41 @@ import {
   initialChatLifecycleState,
   type ChatLifecycleState,
 } from "./lifecycle";
+
+/** Runtime facade for lifecycle and inbound chat events. */
+export interface Chat<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+  TCommands extends ChatCommandRegistry,
+> {
+  readonly chatIds: readonly Extract<keyof TAdapters, string>[];
+  start(): Promise<Result<void, ChatStartError>>;
+  close(): Promise<Result<void, ChatCloseFailure>>;
+  readonly on: ChatOn<
+    TCommands,
+    Extract<keyof TAdapters, string>,
+    Result<
+      ChatSentMessageFromInput<
+        TAdapters,
+        ChatReplyInput<TAdapters> | ChatStreamReplyInput<TAdapters>
+      >,
+      ChatReplyFailure | ChatStreamReplyFailure
+    >,
+    AdapterDataByChatId<TAdapters>,
+    AdapterOptionsByChatId<TAdapters>
+  >;
+  sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>>;
+  reply<TInput extends ChatReplyInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>>;
+  streamMessage<TInput extends ChatStreamMessageInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamMessageFailure>>;
+  streamReply<TInput extends ChatStreamReplyInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamReplyFailure>>;
+}
 
 /** Creates a typed chat runtime over the provided adapters and commands. */
 export function createChat<
@@ -383,247 +412,18 @@ export function createChat<
     );
   }
 
-  async function sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>> {
-    return Result.gen(async function* () {
-      const runtime = yield* Result.await(
-        getStartedRuntime({ chatId: input.chatId, operation: "sendMessage" }),
-      );
-      const adapterInput = createAdapterSendMessageInput<TAdapters, TInput>(input);
-
-      const sentResult = yield* Result.await(
-        Result.tryPromise({
-          try: async () => runtime.sendMessage(adapterInput),
-          catch: (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
-        }),
-      );
-
-      if (sentResult.isErr()) {
-        return Result.err(
-          new ChatSendMessageError({ chatId: input.chatId, cause: sentResult.error }),
-        );
-      }
-
-      return Result.ok(sentResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
-    });
-  }
-
-  async function reply<TInput extends ChatReplyInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>> {
-    return Result.gen(async function* () {
-      const runtime = yield* Result.await(
-        getStartedRuntime({ chatId: input.chatId, operation: "reply" }),
-      );
-      const mode = input.mode ?? "auto";
-
-      if (runtime.reply) {
-        const adapterReplyInput = {
-          ...createAdapterSendMessageInput<TAdapters, TInput>(input),
-          ...(input.messageId === undefined
-            ? {}
-            : {
-                message: {
-                  chatId: input.chatId,
-                  conversationId: input.conversationId,
-                  messageId: input.messageId,
-                },
-              }),
-          mode,
-        } as ChatAdapterReplyInput<
-          TInput["chatId"],
-          AdapterOptionsFor<TAdapters, TInput["chatId"]>
-        >;
-
-        const replyResult = yield* Result.await(
-          Result.tryPromise({
-            try: async () => runtime.reply?.(adapterReplyInput),
-            catch: (cause) => new ChatReplyError({ chatId: input.chatId, cause }),
-          }),
-        );
-
-        if (replyResult === undefined) {
-          return Result.err(
-            new UnsupportedChatOperationError({
-              chatId: input.chatId,
-              operation: "reply",
-              mode,
-            }),
-          );
-        }
-
-        if (replyResult.isErr()) {
-          return Result.err(new ChatReplyError({ chatId: input.chatId, cause: replyResult.error }));
-        }
-
-        return Result.ok(replyResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
-      }
-
-      if (mode !== "auto" && mode !== "conversation") {
-        return Result.err(
-          new UnsupportedChatOperationError({
-            chatId: input.chatId,
-            operation: "reply",
-            mode,
-          }),
-        );
-      }
-
-      const sentResult = yield* Result.await(
-        Result.tryPromise({
-          try: async () =>
-            runtime.sendMessage(createAdapterSendMessageInput<TAdapters, TInput>(input)),
-          catch: (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
-        }),
-      );
-
-      if (sentResult.isErr()) {
-        return Result.err(
-          new ChatSendMessageError({ chatId: input.chatId, cause: sentResult.error }),
-        );
-      }
-
-      return Result.ok(sentResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
-    });
-  }
-
-  async function streamMessage<TInput extends ChatStreamMessageInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamMessageFailure>> {
-    return Result.gen(async function* () {
-      const runtime = yield* Result.await(
-        getStartedRuntime({ chatId: input.chatId, operation: "streamMessage" }),
-      );
-      const fallback = input.fallback ?? "send-message";
-
-      if (hasStreamMessageRuntime(runtime)) {
-        const streamResult = yield* Result.await(
-          Result.tryPromise({
-            try: async () =>
-              runtime.streamMessage(createAdapterStreamMessageInput<TAdapters, TInput>(input)),
-            catch: (cause) => new ChatStreamMessageError({ chatId: input.chatId, cause }),
-          }),
-        );
-
-        if (streamResult.isErr()) {
-          return Result.err(
-            new ChatStreamMessageError({ chatId: input.chatId, cause: streamResult.error }),
-          );
-        }
-
-        return Result.ok(streamResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
-      }
-
-      if (fallback === "error") {
-        return Result.err(
-          new UnsupportedChatOperationError({ chatId: input.chatId, operation: "streamMessage" }),
-        );
-      }
-
-      emitStreamFallbackDiagnostic({ chatId: input.chatId, operation: "streamMessage" });
-      const collected = yield* Result.await(collectStreamForMessage({ input }));
-      const sent = yield* Result.await(sendMessage(collected));
-      return Result.ok(sentMessageFromSameChatInput<TAdapters, TInput>(sent));
-    });
-  }
-
-  async function streamReply<TInput extends ChatStreamReplyInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamReplyFailure>> {
-    return Result.gen(async function* () {
-      const runtime = yield* Result.await(
-        getStartedRuntime({ chatId: input.chatId, operation: "streamReply" }),
-      );
-      const fallback = input.fallback ?? "send-message";
-
-      if (hasStreamReplyRuntime(runtime)) {
-        const streamResult = yield* Result.await(
-          Result.tryPromise({
-            try: async () =>
-              runtime.streamReply(createAdapterStreamReplyInput<TAdapters, TInput>(input)),
-            catch: (cause) => new ChatStreamReplyError({ chatId: input.chatId, cause }),
-          }),
-        );
-
-        if (streamResult.isErr()) {
-          return Result.err(
-            new ChatStreamReplyError({ chatId: input.chatId, cause: streamResult.error }),
-          );
-        }
-
-        return Result.ok(streamResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
-      }
-
-      if (fallback === "error") {
-        return Result.err(
-          new UnsupportedChatOperationError({ chatId: input.chatId, operation: "streamReply" }),
-        );
-      }
-
-      emitStreamFallbackDiagnostic({ chatId: input.chatId, operation: "streamReply" });
-      const collected = yield* Result.await(collectStreamForReply({ input }));
-      const replied = yield* Result.await(reply(collected));
-      return Result.ok(sentMessageFromSameChatInput<TAdapters, TInput>(replied));
-    });
-  }
-
-  function emitStreamFallbackDiagnostic(args: {
-    readonly chatId: TChatId;
-    readonly operation: "streamMessage" | "streamReply";
-  }) {
-    emit({
-      type: "diagnostic",
-      chatId: args.chatId,
-      level: "info",
-      code: "CHAT_STREAM_FALLBACK_TO_SEND_MESSAGE",
-      message: `Chat adapter "${args.chatId}" does not support ${args.operation}; sending final message instead.`,
-    });
-  }
-
-  async function collectStreamForMessage<TInput extends ChatStreamMessageInput<TAdapters>>(args: {
-    readonly input: TInput;
-  }): Promise<Result<SendMessageInputForStream<TAdapters, TInput>, ChatStreamMessageError>> {
-    const collected = await Result.tryPromise({
-      try: async () => collectChatTextStream(args.input.content.chunks),
-      catch: (cause) => new ChatStreamMessageError({ chatId: args.input.chatId, cause }),
-    });
-    if (collected.isErr()) {
-      return Result.err(collected.error);
-    }
-
-    return Result.ok({
-      chatId: args.input.chatId,
-      conversationId: args.input.conversationId,
-      text: collected.value,
-      format: args.input.content.format,
-      adapterOptions: "adapterOptions" in args.input ? args.input.adapterOptions : {},
-      signal: args.input.signal,
-    } as SendMessageInputForStream<TAdapters, TInput>);
-  }
-
-  async function collectStreamForReply<TInput extends ChatStreamReplyInput<TAdapters>>(args: {
-    readonly input: TInput;
-  }): Promise<Result<ReplyInputForStream<TAdapters, TInput>, ChatStreamReplyError>> {
-    const collected = await Result.tryPromise({
-      try: async () => collectChatTextStream(args.input.content.chunks),
-      catch: (cause) => new ChatStreamReplyError({ chatId: args.input.chatId, cause }),
-    });
-    if (collected.isErr()) {
-      return Result.err(collected.error);
-    }
-
-    return Result.ok({
-      chatId: args.input.chatId,
-      conversationId: args.input.conversationId,
-      messageId: args.input.messageId,
-      text: collected.value,
-      format: args.input.content.format,
-      mode: args.input.mode,
-      adapterOptions: "adapterOptions" in args.input ? args.input.adapterOptions : {},
-      signal: args.input.signal,
-    } as ReplyInputForStream<TAdapters, TInput>);
-  }
+  const sendMessage = createSendMessageHandler<TAdapters>({ getStartedRuntime });
+  const reply = createReplyHandler<TAdapters>({ getStartedRuntime });
+  const streamMessage = createStreamMessageHandler<TAdapters>({
+    getStartedRuntime,
+    emit,
+    sendMessage,
+  });
+  const streamReply = createStreamReplyHandler<TAdapters>({
+    getStartedRuntime,
+    emit,
+    reply,
+  });
 
   async function close() {
     const canClose = ensureCanClose(lifecycle);
@@ -675,93 +475,6 @@ export interface CreateChatOptions<
   readonly commands: TCommands;
 }
 
-/** Runtime facade for lifecycle and inbound chat events. */
-export interface Chat<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TCommands extends ChatCommandRegistry,
-> {
-  readonly chatIds: readonly Extract<keyof TAdapters, string>[];
-  start(): Promise<Result<void, ChatStartError>>;
-  close(): Promise<Result<void, ChatCloseFailure>>;
-  readonly on: ChatOn<
-    TCommands,
-    Extract<keyof TAdapters, string>,
-    Result<
-      ChatSentMessageFromInput<
-        TAdapters,
-        ChatReplyInput<TAdapters> | ChatStreamReplyInput<TAdapters>
-      >,
-      ChatReplyFailure | ChatStreamReplyFailure
-    >,
-    AdapterDataByChatId<TAdapters>,
-    AdapterOptionsByChatId<TAdapters>
-  >;
-  sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>>;
-  reply<TInput extends ChatReplyInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>>;
-  streamMessage<TInput extends ChatStreamMessageInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamMessageFailure>>;
-  streamReply<TInput extends ChatStreamReplyInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamReplyFailure>>;
-}
-
-type SendMessageInputForStream<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends { readonly chatId: keyof TAdapters },
-> = Extract<ChatSendMessageInput<TAdapters>, { readonly chatId: TInput["chatId"] }>;
-
-type ReplyInputForStream<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends { readonly chatId: keyof TAdapters },
-> = Extract<ChatReplyInput<TAdapters>, { readonly chatId: TInput["chatId"] }>;
-
-type RuntimeChatAdapterDefinition = ChatAdapterDefinition<
-  string,
-  ChatAdapterObject,
-  ChatAdapterObject,
-  ChatAdapterCapabilities
->;
-
-type OpenedRuntime = OpenedChatAdapter<
-  string,
-  ChatAdapterObject,
-  ChatAdapterObject,
-  ChatAdapterCapabilities
->;
-
-type StreamMessageRuntime = {
-  streamMessage(
-    input: ChatAdapterStreamMessageInput<string, ChatAdapterObject>,
-  ): Promise<Result<ChatSentMessage<string, ChatAdapterObject>, unknown>>;
-};
-
-type StreamReplyRuntime = {
-  streamReply(
-    input: ChatAdapterStreamReplyInput<string, ChatAdapterObject>,
-  ): Promise<Result<ChatSentMessage<string, ChatAdapterObject>, unknown>>;
-};
-
-function adapterForChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>>(
-  adapters: TAdapters,
-  chatId: Extract<keyof TAdapters, string>,
-): RuntimeChatAdapterDefinition {
-  return adapters[chatId];
-}
-
-function sentMessageFromSameChatInput<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends { readonly chatId: keyof TAdapters },
->(
-  message: ChatSentMessage<string, ChatAdapterObject>,
-): ChatSentMessageFromInput<TAdapters, TInput> {
-  return message as ChatSentMessageFromInput<TAdapters, TInput>;
-}
-
 type StoredHandler<
   TCommands extends ChatCommandRegistry,
   TChatId extends string,
@@ -775,147 +488,3 @@ type StoredHandler<
     ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
   >;
 };
-
-async function openChatAdapter(args: {
-  readonly adapter: RuntimeChatAdapterDefinition;
-  readonly chatId: string;
-  readonly signal?: AbortSignal;
-}): Promise<Result<OpenedRuntime, ChatAdapterOpenError>> {
-  const opened = await Result.tryPromise({
-    try: async () => args.adapter.open({ signal: args.signal }),
-    catch: (cause) => new ChatAdapterOpenError({ chatId: args.chatId, cause }),
-  });
-
-  if (opened.isErr()) {
-    return Result.err(opened.error);
-  }
-
-  return opened.value.isErr()
-    ? Result.err(new ChatAdapterOpenError({ chatId: args.chatId, cause: opened.value.error }))
-    : Result.ok(opened.value.value);
-}
-
-async function startChatAdapter<
-  TCommands extends ChatCommandRegistry,
-  TChatId extends string,
->(args: {
-  readonly chatId: TChatId;
-  readonly runtime: OpenedRuntime;
-  readonly context: ChatAdapterStartContext<TCommands, TChatId, ChatAdapterObject>;
-}): Promise<Result<void, ChatAdapterStartError>> {
-  const started = await Result.tryPromise({
-    try: async () =>
-      args.runtime.start(
-        args.context as ChatAdapterStartContext<TCommands, string, ChatAdapterObject>,
-      ),
-    catch: (cause) => new ChatAdapterStartError({ chatId: args.chatId, cause }),
-  });
-
-  if (started.isErr()) {
-    return Result.err(started.error);
-  }
-
-  return started.value.isErr()
-    ? Result.err(new ChatAdapterStartError({ chatId: args.chatId, cause: started.value.error }))
-    : Result.ok();
-}
-
-function commandNameFor(event: {
-  readonly type: ChatEventType;
-  readonly command?: { readonly name: string };
-}): string | undefined {
-  return event.type === "command" ? event.command?.name : undefined;
-}
-
-function normalizeChatTextInput(message: ChatTextInput): ChatTextContent {
-  return typeof message === "string" ? { text: message } : message;
-}
-
-function createAdapterSendMessageInput<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends ChatSendMessageInput<TAdapters> | ChatReplyInput<TAdapters>,
->(input: TInput) {
-  return {
-    chatId: input.chatId,
-    conversationId: input.conversationId,
-    text: input.text,
-    format: input.format,
-    adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
-    signal: input.signal,
-  } as ChatAdapterSendMessageInput<
-    TInput["chatId"],
-    AdapterOptionsFor<TAdapters, TInput["chatId"]>
-  >;
-}
-
-function createAdapterStreamMessageInput<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends ChatStreamMessageInput<TAdapters> | ChatStreamReplyInput<TAdapters>,
->(input: TInput) {
-  return {
-    chatId: input.chatId,
-    conversationId: input.conversationId,
-    content: input.content,
-    adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
-    signal: input.signal,
-  } as ChatAdapterStreamMessageInput<
-    TInput["chatId"],
-    AdapterOptionsFor<TAdapters, TInput["chatId"]>
-  >;
-}
-
-function createAdapterStreamReplyInput<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends ChatStreamReplyInput<TAdapters>,
->(input: TInput) {
-  return {
-    ...createAdapterStreamMessageInput<TAdapters, TInput>(input),
-    ...(input.messageId === undefined
-      ? {}
-      : {
-          message: {
-            chatId: input.chatId,
-            conversationId: input.conversationId,
-            messageId: input.messageId,
-          },
-        }),
-    mode: input.mode ?? "auto",
-  } as ChatAdapterStreamReplyInput<
-    TInput["chatId"],
-    AdapterOptionsFor<TAdapters, TInput["chatId"]>
-  >;
-}
-
-async function collectChatTextStream(chunks: AsyncIterable<ChatTextStreamChunk>): Promise<string> {
-  let text = "";
-
-  for await (const chunk of chunks) {
-    if (chunk.type === "delta") {
-      text += chunk.delta;
-      continue;
-    }
-
-    if (chunk.type === "snapshot") {
-      text = chunk.text;
-      continue;
-    }
-
-    if (chunk.text !== undefined) {
-      text = chunk.text;
-    }
-  }
-
-  return text;
-}
-
-function hasStreamMessageRuntime(
-  runtime: OpenedRuntime,
-): runtime is OpenedRuntime & StreamMessageRuntime {
-  return typeof (runtime as { readonly streamMessage?: unknown }).streamMessage === "function";
-}
-
-function hasStreamReplyRuntime(
-  runtime: OpenedRuntime,
-): runtime is OpenedRuntime & StreamReplyRuntime {
-  return typeof (runtime as { readonly streamReply?: unknown }).streamReply === "function";
-}
