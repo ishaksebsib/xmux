@@ -13,6 +13,7 @@ import {
 import {
   createSession,
   resumeSession,
+  listSessions,
   type OpenCodeCreateOptions,
   type OpenCodeSessionInfo,
 } from "./session";
@@ -32,7 +33,7 @@ async function createOpenedAdapter(
     id: "opencode",
     createSession: async (input) => createSession(runtime, input),
     resumeSession: async (input) => resumeSession(runtime, input),
-    listSessions: async () => Result.err(new Error("OpenCode listSessions is not implemented")),
+    listSessions: async (input) => listSessions(runtime, input),
     getSession: async () => Result.err(new Error("OpenCode getSession is not implemented")),
     prompt: async () => Result.err(new Error("OpenCode prompt is not implemented")),
     deleteSession: async () => Result.err(new Error("OpenCode deleteSession is not implemented")),

@@ -160,3 +160,60 @@ export async function resumeSession(
     });
   });
 }
+
+export async function listSessions(
+  runtime: OpenCodeRuntime,
+  input: {
+    readonly adapterOptions: OpenCodeCreateOptions;
+    readonly signal?: AbortSignal;
+  },
+): Promise<
+  ResultType<
+    readonly { readonly sessionId: string; readonly cwd?: string; readonly adapterData: OpenCodeSessionInfo }[],
+    OpenCodeSessionRequestError | OpenCodeSessionResponseError
+  >
+> {
+  return Result.gen(async function* () {
+    const response = yield* Result.await(
+      Result.tryPromise({
+        try: () =>
+          runtime.client.session.list(
+            {
+              workspace: input.adapterOptions.workspace,
+            },
+            { signal: input.signal },
+          ),
+        catch: (cause) => new OpenCodeSessionRequestError({ cause }),
+      }),
+    );
+
+    const status = response.response?.status ?? 0;
+
+    if (response.error) {
+      return Result.err(
+        new OpenCodeSessionResponseError({
+          status,
+          detail: describeResponseError(response.error),
+          reason: "OpenCode session list failed",
+        }),
+      );
+    }
+
+    if (!response.data) {
+      return Result.err(
+        new OpenCodeSessionResponseError({
+          status,
+          reason: "OpenCode session list returned no data",
+        }),
+      );
+    }
+
+    return Result.ok(
+      response.data.map((session) => ({
+        sessionId: session.id,
+        cwd: session.directory,
+        adapterData: toSessionInfo(session),
+      })),
+    );
+  });
+}
