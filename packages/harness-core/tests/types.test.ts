@@ -244,22 +244,22 @@ test("adapter session-control methods reuse createSession adapter options", () =
         },
         async getSession(input) {
           expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
-          expectTypeOf(input.session.adapterData.projectId).toEqualTypeOf<string>();
+          expectTypeOf(input.ref.harnessId).toEqualTypeOf<"opencode">();
           return Result.ok({
-            sessionId: input.session.ref.sessionId,
-            adapterData: input.session.adapterData,
+            sessionId: input.ref.sessionId,
+            adapterData: { projectId: input.adapterOptions.workspaceId },
           });
         },
         async prompt(input) {
           expectTypeOf(input.content).toEqualTypeOf<readonly HarnessPromptContent[]>();
           expectTypeOf(input.adapterOptions.model).toEqualTypeOf<"fast" | "smart" | undefined>();
-          expectTypeOf(input.session.adapterData.projectId).toEqualTypeOf<string>();
+          expectTypeOf(input.ref.harnessId).toEqualTypeOf<"opencode">();
 
           const events = (async function* (): HarnessAdapterPromptResult<"opencode"> {
             yield {
               type: "run",
               phase: "started",
-              ref: input.session.ref,
+              ref: input.ref,
             };
           })();
 
@@ -280,26 +280,28 @@ test("adapter session-control methods reuse createSession adapter options", () =
     },
   });
 
-  const pi = defineHarnessAdapter<"pi", { readonly mode: "memory" }, { readonly sessionFile: string }>(
-    {
-      id: "pi",
-      async open() {
-        return Result.ok({
-          id: "pi" as const,
-          async createSession(input) {
-            return Result.ok({
-              sessionId: "pi-1",
-              adapterData: { sessionFile: input.adapterOptions.mode },
-            });
-          },
-          ...requiredHarnessMethods(),
-          async close() {
-            return undefined;
-          },
-        });
-      },
+  const pi = defineHarnessAdapter<
+    "pi",
+    { readonly mode: "memory" },
+    { readonly sessionFile: string }
+  >({
+    id: "pi",
+    async open() {
+      return Result.ok({
+        id: "pi" as const,
+        async createSession(input) {
+          return Result.ok({
+            sessionId: "pi-1",
+            adapterData: { sessionFile: input.adapterOptions.mode },
+          });
+        },
+        ...requiredHarnessMethods(),
+        async close() {
+          return undefined;
+        },
+      });
     },
-  );
+  });
 
   const adapters = { opencode, pi };
   const harness = createHarness({ adapters });
@@ -315,12 +317,24 @@ test("adapter session-control methods reuse createSession adapter options", () =
     adapterOptions: { mode: "memory" },
   });
 
-  expectTypeOf<AdapterResumeOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<AdapterListOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<AdapterGetOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<AdapterPromptOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<AdapterDeleteOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<AdapterAbortOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<
+    AdapterResumeOptionsFor<typeof adapters, "opencode">
+  >().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<
+    AdapterListOptionsFor<typeof adapters, "opencode">
+  >().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<
+    AdapterGetOptionsFor<typeof adapters, "opencode">
+  >().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<
+    AdapterPromptOptionsFor<typeof adapters, "opencode">
+  >().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<
+    AdapterDeleteOptionsFor<typeof adapters, "opencode">
+  >().toEqualTypeOf<OpenCodeOptions>();
+  expectTypeOf<
+    AdapterAbortOptionsFor<typeof adapters, "opencode">
+  >().toEqualTypeOf<OpenCodeOptions>();
   expectTypeOf<AdapterPromptOptionsFor<typeof adapters, "pi">>().toEqualTypeOf<{
     readonly mode: "memory";
   }>();
@@ -451,7 +465,9 @@ test("public session-control input types narrow by harness id", () => {
   expectTypeOf(deleteInput.ref.sessionId).toEqualTypeOf<string>();
   expectTypeOf(abort.ref.sessionId).toEqualTypeOf<string>();
   expectTypeOf(optionalOptionsList.harnessId).toEqualTypeOf<"defaultsOnly">();
-  expectTypeOf<ResumeSessionResultFromInput<typeof adapters, typeof resume>["adapterData"]>().toEqualTypeOf<{
+  expectTypeOf<
+    ResumeSessionResultFromInput<typeof adapters, typeof resume>["adapterData"]
+  >().toEqualTypeOf<{
     readonly projectId: string;
   }>();
   expectTypeOf<PromptResultFromInput<typeof adapters, typeof prompt>>().toEqualTypeOf<
@@ -515,7 +531,9 @@ test("shared harness operation data types are narrow and reusable", () => {
   } satisfies HarnessSessionInfo<"pi", { readonly sessionFile: string }>;
 
   expectTypeOf(session.ref.harnessId).toEqualTypeOf<"pi">();
-  expectTypeOf<HarnessSessionInfo<"pi", { readonly sessionFile: string }>["adapterData"]>().toEqualTypeOf<{
+  expectTypeOf<
+    HarnessSessionInfo<"pi", { readonly sessionFile: string }>["adapterData"]
+  >().toEqualTypeOf<{
     readonly sessionFile: string;
   }>();
 

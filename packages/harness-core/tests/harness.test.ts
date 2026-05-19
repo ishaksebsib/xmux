@@ -1,13 +1,16 @@
 import { Result } from "better-result";
 import { describe, expect, test } from "vitest";
 import {
+  HarnessAdapterAbortError,
   HarnessAdapterCreateSessionError,
+  HarnessAdapterDeleteSessionError,
+  HarnessAdapterGetSessionError,
   HarnessAdapterListSessionsError,
   HarnessAdapterOpenError,
+  HarnessAdapterPromptError,
   HarnessAdapterResumeSessionError,
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
-  UnknownSessionError,
   createHarness,
   defineHarnessAdapter,
   type HarnessAdapterDefinition,
@@ -316,7 +319,7 @@ describe("createHarness", () => {
     expect(handles.opens).toEqual(["pi"]);
   });
 
-  test("ref-based session-control stubs return unknown session after known harness lookup", async () => {
+  test("ref-based session-control stubs pass refs without requiring core session state", async () => {
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
       adapters: {
@@ -348,11 +351,21 @@ describe("createHarness", () => {
       adapterOptions: { sessionMode: "memory" },
     });
 
-    for (const result of [get, prompted, deleted, aborted]) {
-      expect(result.isErr()).toBe(true);
-      if (result.isErr()) {
-        expect(result.error).toBeInstanceOf(UnknownSessionError);
-      }
+    expect(get.isErr()).toBe(true);
+    expect(prompted.isErr()).toBe(true);
+    expect(deleted.isErr()).toBe(true);
+    expect(aborted.isErr()).toBe(true);
+    if (get.isErr()) {
+      expect(get.error).toBeInstanceOf(HarnessAdapterGetSessionError);
+    }
+    if (prompted.isErr()) {
+      expect(prompted.error).toBeInstanceOf(HarnessAdapterPromptError);
+    }
+    if (deleted.isErr()) {
+      expect(deleted.error).toBeInstanceOf(HarnessAdapterDeleteSessionError);
+    }
+    if (aborted.isErr()) {
+      expect(aborted.error).toBeInstanceOf(HarnessAdapterAbortError);
     }
     expect(handles.opens).toEqual(["pi"]);
   });

@@ -139,21 +139,19 @@ export interface HarnessAdapterListSessionsInput<TAdapterOptions extends Harness
 /** Ref-based session request passed to an adapter. */
 export interface HarnessAdapterGetSessionInput<
   THarnessId extends string,
-  TAdapterSession extends HarnessAdapterObject,
   TAdapterOptions extends HarnessAdapterObject,
 > {
-  readonly session: HarnessSessionInfo<THarnessId, TAdapterSession>;
+  readonly ref: SessionRef<THarnessId>;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
 
-/** Prompt request passed to an adapter for a known session. */
+/** Prompt request passed to an adapter. */
 export interface HarnessAdapterPromptInput<
   THarnessId extends string,
-  TAdapterSession extends HarnessAdapterObject,
   TAdapterOptions extends HarnessAdapterObject,
 > {
-  readonly session: HarnessSessionInfo<THarnessId, TAdapterSession>;
+  readonly ref: SessionRef<THarnessId>;
   readonly content: readonly HarnessPromptContent[];
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
@@ -165,24 +163,22 @@ export type HarnessAdapterPromptResult<
   TAdapterData extends HarnessAdapterObject = HarnessAdapterObject,
 > = AsyncIterable<HarnessPromptEvent<THarnessId, TAdapterData>>;
 
-/** Delete request passed to an adapter for a known session. */
+/** Delete request passed to an adapter. */
 export interface HarnessAdapterDeleteSessionInput<
   THarnessId extends string,
-  TAdapterSession extends HarnessAdapterObject,
   TAdapterOptions extends HarnessAdapterObject,
 > {
-  readonly session: HarnessSessionInfo<THarnessId, TAdapterSession>;
+  readonly ref: SessionRef<THarnessId>;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
 
-/** Abort request passed to an adapter for a known session. */
+/** Abort request passed to an adapter. */
 export interface HarnessAdapterAbortInput<
   THarnessId extends string,
-  TAdapterSession extends HarnessAdapterObject,
   TAdapterOptions extends HarnessAdapterObject,
 > {
-  readonly session: HarnessSessionInfo<THarnessId, TAdapterSession>;
+  readonly ref: SessionRef<THarnessId>;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -209,16 +205,16 @@ export interface OpenedHarnessAdapter<
     input: HarnessAdapterListSessionsInput<TAdapterOptions>,
   ): Promise<Result<readonly HarnessAdapterSessionInfo<TAdapterSession>[], unknown>>;
   getSession(
-    input: HarnessAdapterGetSessionInput<THarnessId, TAdapterSession, TAdapterOptions>,
+    input: HarnessAdapterGetSessionInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<HarnessAdapterSessionInfo<TAdapterSession>, unknown>>;
   prompt(
-    input: HarnessAdapterPromptInput<THarnessId, TAdapterSession, TAdapterOptions>,
+    input: HarnessAdapterPromptInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<HarnessAdapterPromptResult<THarnessId>, unknown>>;
   deleteSession(
-    input: HarnessAdapterDeleteSessionInput<THarnessId, TAdapterSession, TAdapterOptions>,
+    input: HarnessAdapterDeleteSessionInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<void, unknown>>;
   abort(
-    input: HarnessAdapterAbortInput<THarnessId, TAdapterSession, TAdapterOptions>,
+    input: HarnessAdapterAbortInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<void, unknown>>;
   close(): Promise<void>;
 }
@@ -265,9 +261,7 @@ export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>>
   deleteSession<TInput extends DeleteSessionInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<void, DeleteSessionError>>;
-  abort<TInput extends AbortInput<TAdapters>>(
-    input: TInput,
-  ): Promise<Result<void, AbortError>>;
+  abort<TInput extends AbortInput<TAdapters>>(input: TInput): Promise<Result<void, AbortError>>;
   close(): Promise<Result<void, HarnessCloseError>>;
 }
 

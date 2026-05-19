@@ -10,7 +10,6 @@ export {
   HarnessCloseError,
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
-  UnknownSessionError,
 } from "./errors";
 export { createHarness, defineHarnessAdapter } from "./harness";
 export type {

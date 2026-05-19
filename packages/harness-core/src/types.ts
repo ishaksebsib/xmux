@@ -199,7 +199,9 @@ export type GetSessionResultFor<
 export type GetSessionResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   TInput,
-> = TInput extends { readonly ref: { readonly harnessId: infer THarnessId extends keyof TAdapters } }
+> = TInput extends {
+  readonly ref: { readonly harnessId: infer THarnessId extends keyof TAdapters };
+}
   ? GetSessionResultFor<TAdapters, THarnessId>
   : never;
 
@@ -226,7 +228,9 @@ export type PromptResultFor<
 export type PromptResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   TInput,
-> = TInput extends { readonly ref: { readonly harnessId: infer THarnessId extends keyof TAdapters } }
+> = TInput extends {
+  readonly ref: { readonly harnessId: infer THarnessId extends keyof TAdapters };
+}
   ? PromptResultFor<TAdapters, THarnessId>
   : never;
 

@@ -59,19 +59,6 @@ export class HarnessAdapterCreateSessionError extends TaggedError(
   }
 }
 
-export class UnknownSessionError extends TaggedError("UnknownSessionError")<{
-  harnessId: string;
-  sessionId: string;
-  message: string;
-}>() {
-  constructor(args: { harnessId: string; sessionId: string }) {
-    super({
-      ...args,
-      message: `Unknown session "${args.sessionId}" for harness "${args.harnessId}". Call resumeSession first if the session was created elsewhere.`,
-    });
-  }
-}
-
 export class HarnessAdapterResumeSessionError extends TaggedError(
   "HarnessAdapterResumeSessionError",
 )<{
@@ -87,7 +74,9 @@ export class HarnessAdapterResumeSessionError extends TaggedError(
   }
 }
 
-export class HarnessAdapterListSessionsError extends TaggedError("HarnessAdapterListSessionsError")<{
+export class HarnessAdapterListSessionsError extends TaggedError(
+  "HarnessAdapterListSessionsError",
+)<{
   harnessId: string;
   message: string;
   cause: unknown;
@@ -186,24 +175,14 @@ export type ListSessionsError =
 
 export type GetSessionError =
   | UnknownHarnessError
-  | UnknownSessionError
   | HarnessAdapterOpenError
   | HarnessAdapterGetSessionError;
 
-export type PromptError =
-  | UnknownHarnessError
-  | UnknownSessionError
-  | HarnessAdapterOpenError
-  | HarnessAdapterPromptError;
+export type PromptError = UnknownHarnessError | HarnessAdapterOpenError | HarnessAdapterPromptError;
 
 export type DeleteSessionError =
   | UnknownHarnessError
-  | UnknownSessionError
   | HarnessAdapterOpenError
   | HarnessAdapterDeleteSessionError;
 
-export type AbortError =
-  | UnknownHarnessError
-  | UnknownSessionError
-  | HarnessAdapterOpenError
-  | HarnessAdapterAbortError;
+export type AbortError = UnknownHarnessError | HarnessAdapterOpenError | HarnessAdapterAbortError;

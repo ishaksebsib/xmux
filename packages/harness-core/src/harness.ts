@@ -13,7 +13,6 @@ import {
   HarnessCloseError,
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
-  UnknownSessionError,
 } from "./errors";
 import type {
   CreateHarnessOptions,
@@ -238,7 +237,7 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
           }),
         );
 
-        return Result.ok({
+        const session = {
           ref: {
             harnessId: input.harnessId,
             sessionId: created.sessionId,
@@ -247,7 +246,9 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
           title: input.title,
           createdAt: now().toISOString(),
           adapterData: created.adapterData,
-        } as CreatedSessionFromInput<TAdapters, TInput>);
+        } as CreatedSessionFromInput<TAdapters, TInput>;
+
+        return Result.ok(session);
       });
     },
 
@@ -279,9 +280,9 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       return Result.gen(async function* () {
         yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
         return Result.err(
-          new UnknownSessionError({
+          new HarnessAdapterGetSessionError({
             harnessId: input.ref.harnessId,
-            sessionId: input.ref.sessionId,
+            cause: createStubCause("getSession"),
           }),
         );
       });
@@ -291,9 +292,9 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       return Result.gen(async function* () {
         yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
         return Result.err(
-          new UnknownSessionError({
+          new HarnessAdapterPromptError({
             harnessId: input.ref.harnessId,
-            sessionId: input.ref.sessionId,
+            cause: createStubCause("prompt"),
           }),
         );
       });
@@ -303,9 +304,9 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       return Result.gen(async function* () {
         yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
         return Result.err(
-          new UnknownSessionError({
+          new HarnessAdapterDeleteSessionError({
             harnessId: input.ref.harnessId,
-            sessionId: input.ref.sessionId,
+            cause: createStubCause("deleteSession"),
           }),
         );
       });
@@ -315,9 +316,9 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       return Result.gen(async function* () {
         yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
         return Result.err(
-          new UnknownSessionError({
+          new HarnessAdapterAbortError({
             harnessId: input.ref.harnessId,
-            sessionId: input.ref.sessionId,
+            cause: createStubCause("abort"),
           }),
         );
       });
