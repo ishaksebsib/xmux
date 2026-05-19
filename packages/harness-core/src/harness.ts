@@ -1,35 +1,17 @@
-import { stat } from "node:fs/promises";
-import { resolve } from "node:path";
 import { Result } from "better-result";
-import {
-  HarnessAdapterAbortError,
-  HarnessAdapterCreateSessionError,
-  HarnessAdapterDeleteSessionError,
-  HarnessAdapterGetSessionError,
-  HarnessAdapterListSessionsError,
-  HarnessAdapterOpenError,
-  HarnessAdapterPromptError,
-  HarnessAdapterResumeSessionError,
-  HarnessCloseError,
-  InvalidWorkingDirectoryError,
-  UnknownHarnessError,
-} from "./errors";
+import { HarnessAdapterOpenError, HarnessCloseError, UnknownHarnessError } from "./errors";
 import type {
   CreateHarnessOptions,
-  HarnessAdapterCreateSessionInput,
-  HarnessAdapterCreateSessionResult,
   Harness,
   HarnessAdapterDefinition,
   HarnessAdapterObject,
   OpenedHarnessAdapter,
-  WorkingDirectoryPath,
 } from "./contracts";
 import type {
   AbortInput,
   AdapterOptionsFor,
   AdapterSessionFor,
   CreateSessionInput,
-  CreatedSessionFromInput,
   DeleteSessionInput,
   GetSessionInput,
   ListSessionsInput,
@@ -37,88 +19,14 @@ import type {
   ResumeSessionInput,
   HarnessAdapterDefinitions,
 } from "./types";
-
-function normalizeAdapterOptions<TAdapterOptions extends HarnessAdapterObject>(
-  adapterOptions: TAdapterOptions | undefined,
-): TAdapterOptions {
-  return (adapterOptions ?? {}) as TAdapterOptions;
-}
-
-function createStubCause(operation: string): Error {
-  return new Error(`${operation} facade behavior is not implemented yet`);
-}
-
-async function createWorkingDirectoryPath(
-  cwd: string,
-): Promise<Result<WorkingDirectoryPath, InvalidWorkingDirectoryError>> {
-  const normalizedCwd = resolve(cwd);
-
-  return Result.tryPromise({
-    try: async () => {
-      const stats = await stat(normalizedCwd);
-      if (!stats.isDirectory()) {
-        throw new InvalidWorkingDirectoryError({
-          cwd,
-          reason: `Working directory is not a directory: ${normalizedCwd}`,
-        });
-      }
-
-      return normalizedCwd as WorkingDirectoryPath;
-    },
-    catch: (cause) =>
-      InvalidWorkingDirectoryError.is(cause)
-        ? cause
-        : new InvalidWorkingDirectoryError({
-            cwd,
-            cause,
-            reason: `Working directory does not exist or is not accessible: ${normalizedCwd}`,
-          }),
-  });
-}
-
-async function openHarnessAdapter<
-  THarnessId extends string,
-  TAdapterOptions extends HarnessAdapterObject,
-  TAdapterSession extends HarnessAdapterObject,
->(args: {
-  readonly adapter: HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession>;
-  readonly harnessId: THarnessId;
-  readonly signal?: AbortSignal;
-}): Promise<
-  Result<
-    OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession>,
-    HarnessAdapterOpenError
-  >
-> {
-  const opened = await args.adapter.open({ signal: args.signal });
-
-  return opened.isErr()
-    ? Result.err(new HarnessAdapterOpenError({ harnessId: args.harnessId, cause: opened.error }))
-    : Result.ok(opened.value);
-}
-
-async function createAdapterSession<
-  THarnessId extends string,
-  TAdapterOptions extends HarnessAdapterObject,
-  TAdapterSession extends HarnessAdapterObject,
->(args: {
-  readonly runtime: OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession>;
-  readonly harnessId: THarnessId;
-  readonly input: HarnessAdapterCreateSessionInput<TAdapterOptions>;
-}): Promise<
-  Result<HarnessAdapterCreateSessionResult<TAdapterSession>, HarnessAdapterCreateSessionError>
-> {
-  const created = await args.runtime.createSession(args.input);
-
-  return created.isErr()
-    ? Result.err(
-        new HarnessAdapterCreateSessionError({
-          harnessId: args.harnessId,
-          cause: created.error,
-        }),
-      )
-    : Result.ok(created.value);
-}
+import { handleAbort } from "./handlers/session/abort";
+import { handleCreateSession } from "./handlers/session/create";
+import { handleDeleteSession } from "./handlers/session/delete";
+import { handleGetSession } from "./handlers/session/get";
+import { handleListSessions } from "./handlers/session/list";
+import { handlePrompt } from "./handlers/session/prompt";
+import { handleResumeSession } from "./handlers/session/resume";
+import { openHarnessAdapter } from "./handlers/utils";
 
 export function defineHarnessAdapter<
   THarnessId extends string,
@@ -217,111 +125,31 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
     harnessIds,
 
     async createSession<TInput extends CreateSessionInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        const cwd = yield* Result.await(createWorkingDirectoryPath(input.cwd));
-        const runtime = yield* Result.await(getRuntime(input.harnessId, input.signal));
-        const created = yield* Result.await(
-          createAdapterSession({
-            runtime,
-            harnessId: input.harnessId,
-            input: {
-              cwd,
-              title: input.title,
-              adapterOptions: normalizeAdapterOptions(
-                "adapterOptions" in input
-                  ? (input.adapterOptions as AdapterOptionsFor<TAdapters, TInput["harnessId"]>)
-                  : undefined,
-              ),
-              signal: input.signal,
-            },
-          }),
-        );
-
-        const session = {
-          ref: {
-            harnessId: input.harnessId,
-            sessionId: created.sessionId,
-          },
-          cwd,
-          title: input.title,
-          createdAt: now().toISOString(),
-          adapterData: created.adapterData,
-        } as CreatedSessionFromInput<TAdapters, TInput>;
-
-        return Result.ok(session);
-      });
+      return handleCreateSession({ input, getRuntime, now });
     },
 
     async resumeSession<TInput extends ResumeSessionInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        yield* Result.await(getRuntime(input.harnessId, input.signal));
-        return Result.err(
-          new HarnessAdapterResumeSessionError({
-            harnessId: input.harnessId,
-            cause: createStubCause("resumeSession"),
-          }),
-        );
-      });
+      return handleResumeSession({ input, getRuntime });
     },
 
     async listSessions<TInput extends ListSessionsInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        yield* Result.await(getRuntime(input.harnessId, input.signal));
-        return Result.err(
-          new HarnessAdapterListSessionsError({
-            harnessId: input.harnessId,
-            cause: createStubCause("listSessions"),
-          }),
-        );
-      });
+      return handleListSessions({ input, getRuntime });
     },
 
     async getSession<TInput extends GetSessionInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
-        return Result.err(
-          new HarnessAdapterGetSessionError({
-            harnessId: input.ref.harnessId,
-            cause: createStubCause("getSession"),
-          }),
-        );
-      });
+      return handleGetSession({ input, getRuntime });
     },
 
     async prompt<TInput extends PromptInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
-        return Result.err(
-          new HarnessAdapterPromptError({
-            harnessId: input.ref.harnessId,
-            cause: createStubCause("prompt"),
-          }),
-        );
-      });
+      return handlePrompt({ input, getRuntime });
     },
 
     async deleteSession<TInput extends DeleteSessionInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
-        return Result.err(
-          new HarnessAdapterDeleteSessionError({
-            harnessId: input.ref.harnessId,
-            cause: createStubCause("deleteSession"),
-          }),
-        );
-      });
+      return handleDeleteSession({ input, getRuntime });
     },
 
     async abort<TInput extends AbortInput<TAdapters>>(input: TInput) {
-      return Result.gen(async function* () {
-        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
-        return Result.err(
-          new HarnessAdapterAbortError({
-            harnessId: input.ref.harnessId,
-            cause: createStubCause("abort"),
-          }),
-        );
-      });
+      return handleAbort({ input, getRuntime });
     },
 
     async close() {
