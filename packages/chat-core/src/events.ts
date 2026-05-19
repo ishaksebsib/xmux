@@ -5,7 +5,9 @@ import type {
   ChatConversationRef,
   ChatMessage,
   ChatMessageRef,
+  ChatStreamFallback,
   ChatTextInput,
+  ChatTextStreamContent,
 } from "./contracts";
 import type {
   AdapterOptionsProp,
@@ -78,6 +80,14 @@ export type ChatEventReplyOptions<
   readonly mode?: ChatReplyMode;
 } & AdapterOptionsProp<TAdapterOptions>;
 
+/** Optional stream reply behavior for message and command event helpers. */
+export type ChatEventReplyStreamOptions<
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> = {
+  readonly mode?: ChatReplyMode;
+  readonly fallback?: ChatStreamFallback;
+} & AdapterOptionsProp<TAdapterOptions>;
+
 /** Bound reply helper attached to inbound events by the facade. */
 export type ChatEventReply<
   TResult = unknown,
@@ -85,6 +95,20 @@ export type ChatEventReply<
 > = [RequiredKeys<TAdapterOptions>] extends [never]
   ? (message: ChatTextInput, options?: ChatEventReplyOptions<TAdapterOptions>) => Promise<TResult>
   : (message: ChatTextInput, options: ChatEventReplyOptions<TAdapterOptions>) => Promise<TResult>;
+
+/** Bound stream reply helper attached to inbound events by the facade. */
+export type ChatEventReplyStream<
+  TResult = unknown,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> = [RequiredKeys<TAdapterOptions>] extends [never]
+  ? (
+      content: ChatTextStreamContent,
+      options?: ChatEventReplyStreamOptions<TAdapterOptions>,
+    ) => Promise<TResult>
+  : (
+      content: ChatTextStreamContent,
+      options: ChatEventReplyStreamOptions<TAdapterOptions>,
+    ) => Promise<TResult>;
 
 /** Emitted when an adapter runtime is ready to receive traffic. */
 export interface ChatReadyEvent<TChatId extends string = string> {
@@ -104,6 +128,7 @@ export interface ChatMessageEvent<
   readonly conversation: ChatConversationRef<TChatId>;
   readonly message: ChatMessage<TChatId, TAdapterData>;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
+  readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
 }
 
 /** Message event selected by registered chat id so adapter data/options stay typed. */
@@ -144,6 +169,7 @@ export interface ChatCommandEvent<
   readonly message?: ChatMessageRef<TChatId>;
   readonly command: ChatCommandInvocation<TCommands, TName>;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
+  readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
 }
 
 /** Command event selected by registered chat id so reply options stay typed. */
@@ -230,7 +256,7 @@ export type ChatEvent<
 export type ChatAdapterMessageEvent<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
-> = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply">;
+> = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply" | "replyStream">;
 
 /** Message adapter event selected by registered chat id. */
 export type ChatAdapterMessageEventFor<
@@ -248,7 +274,7 @@ export type ChatAdapterCommandEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TName extends keyof TCommands = keyof TCommands,
   TChatId extends string = string,
-> = Omit<ChatCommandEvent<TCommands, TName, TChatId>, "reply">;
+> = Omit<ChatCommandEvent<TCommands, TName, TChatId>, "reply" | "replyStream">;
 
 /** Event shape accepted from adapters during runtime. */
 export type ChatAdapterEvent<

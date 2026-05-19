@@ -5,7 +5,13 @@ function describeCause(cause: unknown): string {
 }
 
 /** Facade operation names used in lifecycle errors. */
-export type ChatLifecycleOperation = "start" | "close" | "sendMessage" | "reply";
+export type ChatLifecycleOperation =
+  | "start"
+  | "close"
+  | "sendMessage"
+  | "reply"
+  | "streamMessage"
+  | "streamReply";
 
 /** Returned when a caller targets an adapter id that was not registered. */
 export class UnknownChatAdapterError extends TaggedError("UnknownChatAdapterError")<{
@@ -73,6 +79,34 @@ export class ChatReplyError extends TaggedError("ChatReplyError")<{
     super({
       ...args,
       message: `Failed to reply with chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Wraps adapter stream send failures while preserving the original cause. */
+export class ChatStreamMessageError extends TaggedError("ChatStreamMessageError")<{
+  readonly chatId: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to stream chat message with "${args.chatId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Wraps adapter stream reply failures while preserving the original cause. */
+export class ChatStreamReplyError extends TaggedError("ChatStreamReplyError")<{
+  readonly chatId: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to stream reply with chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
     });
   }
 }
@@ -151,5 +185,22 @@ export type ChatReplyFailure =
   | UnknownChatAdapterError
   | ChatLifecycleError
   | UnsupportedChatOperationError
+  | ChatReplyError
+  | ChatSendMessageError;
+
+/** Errors returned by `chat.streamMessage()`. */
+export type ChatStreamMessageFailure =
+  | UnknownChatAdapterError
+  | ChatLifecycleError
+  | UnsupportedChatOperationError
+  | ChatStreamMessageError
+  | ChatSendMessageError;
+
+/** Errors returned by `chat.streamReply()` and event stream reply helpers. */
+export type ChatStreamReplyFailure =
+  | UnknownChatAdapterError
+  | ChatLifecycleError
+  | UnsupportedChatOperationError
+  | ChatStreamReplyError
   | ChatReplyError
   | ChatSendMessageError;

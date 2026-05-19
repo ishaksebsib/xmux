@@ -6,9 +6,17 @@ import type {
   ChatMessageFormat,
   ChatMessageRef,
   ChatSentMessage,
+  ChatStreamFallback,
+  ChatTextStreamContent,
 } from "./contracts";
+import type { ChatAdapterCapabilities } from "./adapter";
 
-type AnyChatAdapterDefinition = ChatAdapterDefinition<string, ChatAdapterObject, ChatAdapterObject>;
+type AnyChatAdapterDefinition = ChatAdapterDefinition<
+  string,
+  ChatAdapterObject,
+  ChatAdapterObject,
+  ChatAdapterCapabilities
+>;
 
 export type RequiredKeys<TValue extends ChatAdapterObject> = {
   [TKey in keyof TValue]-?: {} extends Pick<TValue, TKey> ? never : TKey;
@@ -62,7 +70,8 @@ export type AdapterOptionsFor<
   TAdapters[TChatId] extends ChatAdapterDefinition<
     string,
     infer TAdapterOptions extends ChatAdapterObject,
-    ChatAdapterObject
+    ChatAdapterObject,
+    ChatAdapterCapabilities
   >
     ? TAdapterOptions
     : never;
@@ -75,9 +84,24 @@ export type AdapterDataFor<
   TAdapters[TChatId] extends ChatAdapterDefinition<
     string,
     ChatAdapterObject,
-    infer TAdapterData extends ChatAdapterObject
+    infer TAdapterData extends ChatAdapterObject,
+    ChatAdapterCapabilities
   >
     ? TAdapterData
+    : never;
+
+/** Static capabilities declared by a registered chat adapter. */
+export type AdapterCapabilitiesFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> =
+  TAdapters[TChatId] extends ChatAdapterDefinition<
+    string,
+    ChatAdapterObject,
+    ChatAdapterObject,
+    infer TCapabilities extends ChatAdapterCapabilities
+  >
+    ? TCapabilities
     : never;
 
 /** Adapter registry whose object key must match each adapter's own id. */
@@ -85,7 +109,8 @@ export type ChatAdapterDefinitions<TAdapters extends Record<string, AnyChatAdapt
   readonly [TChatId in keyof TAdapters]: ChatAdapterDefinition<
     Extract<TChatId, string>,
     AdapterOptionsFor<TAdapters, TChatId>,
-    AdapterDataFor<TAdapters, TChatId>
+    AdapterDataFor<TAdapters, TChatId>,
+    AdapterCapabilitiesFor<TAdapters, TChatId>
   >;
 };
 
@@ -137,4 +162,50 @@ export type ChatReplyInputFor<
 /** Reply input union for all registered chat adapters. */
 export type ChatReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
   readonly [TChatId in keyof TAdapters]: ChatReplyInputFor<TAdapters, TChatId>;
+}[keyof TAdapters];
+
+export type ChatStreamFallbackFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+  TKind extends "send" | "reply",
+> = AdapterCapabilitiesFor<TAdapters, TChatId>["messages"] extends {
+  readonly stream: { readonly [TKey in TKind]: true };
+}
+  ? ChatStreamFallback
+  : Exclude<ChatStreamFallback, "error">;
+
+/** Stream send input narrowed to one registered chat adapter. */
+export type ChatStreamMessageInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly content: ChatTextStreamContent;
+  readonly fallback?: ChatStreamFallbackFor<TAdapters, TChatId, "send">;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
+
+/** Stream send input union for all registered chat adapters. */
+export type ChatStreamMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
+  readonly [TChatId in keyof TAdapters]: ChatStreamMessageInputFor<TAdapters, TChatId>;
+}[keyof TAdapters];
+
+/** Stream reply input narrowed to one registered chat adapter. */
+export type ChatStreamReplyInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly messageId?: string;
+  readonly content: ChatTextStreamContent;
+  readonly fallback?: ChatStreamFallbackFor<TAdapters, TChatId, "reply">;
+  readonly mode?: ChatReplyMode;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
+
+/** Stream reply input union for all registered chat adapters. */
+export type ChatStreamReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
+  readonly [TChatId in keyof TAdapters]: ChatStreamReplyInputFor<TAdapters, TChatId>;
 }[keyof TAdapters];

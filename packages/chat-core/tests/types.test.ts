@@ -14,9 +14,35 @@ import {
   type ChatCommandValues,
   type ChatOn,
   type ChatSentMessageFromInput,
+  type ChatStreamMessageInputFor,
 } from "../src";
 
 const shouldRunTypeErrorChecks = process.argv.length === 0;
+
+const basicCapabilities = {
+  messages: {
+    send: true,
+    reply: true,
+    edit: false,
+    delete: false,
+    typing: false,
+    markdown: false,
+    attachments: false,
+  },
+} as const;
+
+const streamCapabilities = {
+  messages: {
+    send: true,
+    reply: true,
+    edit: true,
+    delete: false,
+    typing: false,
+    markdown: false,
+    attachments: false,
+    stream: { send: true, reply: true, strategy: "edit" },
+  },
+} as const;
 
 test("command options infer required, optional, and choice values", () => {
   const commands = defineChatCommands({
@@ -55,6 +81,7 @@ test("adapter helper preserves id, option, and data types", () => {
     { readonly nativeMessageId: string }
   >({
     id: "discord",
+    capabilities: basicCapabilities,
     async open() {
       return Result.ok({
         id: "discord" as const,
@@ -97,6 +124,7 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
     { readonly nativeMessageId: string }
   >({
     id: "discord",
+    capabilities: basicCapabilities,
     async open() {
       return Result.ok({
         id: "discord" as const,
@@ -125,6 +153,7 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
     { readonly mode: "safe" | "fast" }
   >({
     id: "defaultsOnly",
+    capabilities: basicCapabilities,
     async open() {
       return Result.ok({
         id: "defaultsOnly" as const,
@@ -199,6 +228,7 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
         // @ts-expect-error adapter id must match its registration key
         discord: defineChatAdapter<"telegram", Record<never, never>, Record<never, never>>({
           id: "telegram",
+          capabilities: basicCapabilities,
           async open() {
             return Result.ok({
               id: "telegram" as const,
@@ -233,6 +263,7 @@ test("message events preserve adapter data and event.reply adapter options", () 
     { readonly nativeMessageId: string }
   >({
     id: "discord",
+    capabilities: basicCapabilities,
     async open() {
       return Result.ok({
         id: "discord" as const,
@@ -270,6 +301,120 @@ test("message events preserve adapter data and event.reply adapter options", () 
     }
   });
 });
+
+test("stream fallback is typed from adapter capabilities", () => {
+  const nonStreaming = defineChatAdapter<
+    "nonStreaming",
+    Record<never, never>,
+    Record<never, never>,
+    typeof basicCapabilities
+  >({
+    id: "nonStreaming",
+    capabilities: basicCapabilities,
+    async open() {
+      return Result.ok({
+        id: "nonStreaming" as const,
+        async start() {
+          return Result.ok();
+        },
+        async sendMessage(input) {
+          return Result.ok({
+            chatId: "nonStreaming" as const,
+            conversationId: input.conversationId,
+            messageId: "message-1",
+            text: input.text,
+            adapterData: {},
+          });
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  const streaming = defineChatAdapter<
+    "streaming",
+    Record<never, never>,
+    Record<never, never>,
+    typeof streamCapabilities
+  >({
+    id: "streaming",
+    capabilities: streamCapabilities,
+    async open() {
+      return Result.ok({
+        id: "streaming" as const,
+        capabilities: streamCapabilities,
+        async start() {
+          return Result.ok();
+        },
+        async sendMessage(input) {
+          return Result.ok({
+            chatId: "streaming" as const,
+            conversationId: input.conversationId,
+            messageId: "message-1",
+            text: input.text,
+            adapterData: {},
+          });
+        },
+        async streamMessage(input) {
+          return Result.ok({
+            chatId: "streaming" as const,
+            conversationId: input.conversationId,
+            messageId: "stream-1",
+            text: "streamed",
+            adapterData: {},
+          });
+        },
+        async streamReply(input) {
+          return Result.ok({
+            chatId: "streaming" as const,
+            conversationId: input.conversationId,
+            messageId: "stream-reply-1",
+            text: "streamed",
+            adapterData: {},
+          });
+        },
+        async close() {
+          return undefined;
+        },
+      });
+    },
+  });
+
+  type Adapters = {
+    readonly nonStreaming: typeof nonStreaming;
+    readonly streaming: typeof streaming;
+  };
+
+  expectTypeOf({} as ChatStreamMessageInputFor<Adapters, "nonStreaming">["fallback"]).toEqualTypeOf<
+    "send-message" | undefined
+  >();
+  expectTypeOf({} as ChatStreamMessageInputFor<Adapters, "streaming">["fallback"]).toEqualTypeOf<
+    "send-message" | "error" | undefined
+  >();
+
+  const chat = createChat({ adapters: { nonStreaming, streaming }, commands: {} });
+  const content = { chunks: createTextChunks() };
+
+  void chat.streamMessage({
+    chatId: "nonStreaming",
+    conversationId: "conversation",
+    content,
+    fallback: "send-message",
+  });
+
+  void chat.streamMessage({
+    chatId: "streaming",
+    conversationId: "conversation",
+    content,
+    fallback: "error",
+  });
+});
+
+async function* createTextChunks() {
+  yield { type: "delta" as const, delta: "hello" };
+}
 
 test("command event handlers narrow by command name", () => {
   const commands = defineChatCommands({

@@ -14,6 +14,8 @@ export {
   ChatLifecycleError,
   ChatReplyError,
   ChatSendMessageError,
+  ChatStreamMessageError,
+  ChatStreamReplyError,
   UnknownChatAdapterError,
   UnsupportedChatOperationError,
 } from "./errors";
@@ -25,8 +27,12 @@ export type {
   ChatAdapterReplyInput,
   ChatAdapterSendMessageInput,
   ChatAdapterStartContext,
+  ChatAdapterStreamMessageInput,
+  ChatAdapterStreamMethodsFor,
+  ChatAdapterStreamReplyInput,
   OpenChatAdapterContext,
   OpenedChatAdapter,
+  OpenedChatAdapterBase,
 } from "./adapter";
 export type {
   ChatActor,
@@ -37,9 +43,12 @@ export type {
   ChatMessageFormat,
   ChatMessageRef,
   ChatSentMessage,
+  ChatStreamFallback,
   ChatSystemActor,
   ChatTextContent,
   ChatTextInput,
+  ChatTextStreamChunk,
+  ChatTextStreamContent,
   ChatUserActor,
 } from "./contracts";
 export type {
@@ -56,6 +65,7 @@ export type {
   ChatStringOption,
 } from "./commands";
 export type {
+  AdapterCapabilitiesFor,
   AdapterDataFor,
   AdapterDataFromMessage,
   AdapterDataFromSentMessage,
@@ -72,6 +82,11 @@ export type {
   ChatSendMessageInputFor,
   ChatSentMessageFor,
   ChatSentMessageFromInput,
+  ChatStreamFallbackFor,
+  ChatStreamMessageInput,
+  ChatStreamMessageInputFor,
+  ChatStreamReplyInput,
+  ChatStreamReplyInputFor,
 } from "./types";
 export type { Chat, CreateChatOptions } from "./chat";
 export type {
@@ -80,6 +95,8 @@ export type {
   ChatReplyFailure,
   ChatSendMessageFailure,
   ChatStartError,
+  ChatStreamMessageFailure,
+  ChatStreamReplyFailure,
 } from "./errors";
 export type {
   ChatAdapterCommandEvent,
@@ -97,6 +114,8 @@ export type {
   ChatEventHandler,
   ChatEventReply,
   ChatEventReplyOptions,
+  ChatEventReplyStream,
+  ChatEventReplyStreamOptions,
   ChatEventType,
   ChatMessageEvent,
   ChatMessageEventFor,

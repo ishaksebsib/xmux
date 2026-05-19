@@ -57,6 +57,21 @@ export interface ChatTextContent {
 /** Convenience input accepted by send/reply APIs. */
 export type ChatTextInput = string | ChatTextContent;
 
+/** Text stream event consumed by streaming send/reply APIs. */
+export type ChatTextStreamChunk =
+  | { readonly type: "delta"; readonly delta: string }
+  | { readonly type: "snapshot"; readonly text: string }
+  | { readonly type: "completed"; readonly text?: string };
+
+/** Streamed text payload shared by outbound streaming APIs. */
+export interface ChatTextStreamContent {
+  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
+  readonly format?: ChatMessageFormat;
+}
+
+/** Behavior when a streaming adapter operation is unavailable. */
+export type ChatStreamFallback = "send-message" | "error";
+
 /** Message received from an adapter with normalized identity and typed metadata. */
 export interface ChatMessage<
   TChatId extends string = string,

@@ -13,17 +13,51 @@ import {
   defineChatCommand,
   defineChatCommands,
   type ChatAdapterStartContext,
+  type ChatAdapterStreamMessageInput,
+  type ChatCommandRegistry,
+  type ChatAdapterStreamReplyInput,
 } from "../src";
 
 const commands = defineChatCommands({
   start: defineChatCommand({ description: "Start" }),
 });
 
+const basicCapabilities = {
+  messages: {
+    send: true,
+    reply: true,
+    edit: false,
+    delete: false,
+    typing: false,
+    markdown: false,
+    attachments: false,
+  },
+} as const;
+
+const streamCapabilities = {
+  messages: {
+    send: true,
+    reply: true,
+    edit: true,
+    delete: false,
+    typing: false,
+    markdown: false,
+    attachments: false,
+    stream: { send: true, reply: true, strategy: "edit" },
+  },
+} as const;
+
 type Handles = {
   readonly opens: string[];
   readonly starts: string[];
   readonly closes: string[];
 };
+
+async function* textChunks(parts: readonly string[]) {
+  for (const delta of parts) {
+    yield { type: "delta" as const, delta };
+  }
+}
 
 function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly id: TId;
@@ -36,9 +70,10 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly throwOnStart?: unknown;
   readonly throwOnSend?: unknown;
   readonly nativeReply?: boolean;
+  readonly nativeStream?: boolean;
   readonly replyError?: unknown;
   readonly throwOnReply?: unknown;
-  readonly onStart?: (context: ChatAdapterStartContext<typeof commands, TId>) => void;
+  readonly onStart?: (context: ChatAdapterStartContext<ChatCommandRegistry, TId>) => void;
   readonly onSend?: (input: {
     readonly adapterOptions: Record<never, never>;
     readonly conversationId: string;
@@ -49,9 +84,20 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
     readonly mode?: string;
     readonly text: string;
   }) => void;
+  readonly onStreamMessage?: (input: {
+    readonly content: { readonly chunks: AsyncIterable<unknown> };
+  }) => void;
+  readonly onStreamReply?: (input: {
+    readonly message?: { readonly messageId: string };
+    readonly mode?: string;
+    readonly content: { readonly chunks: AsyncIterable<unknown> };
+  }) => void;
 }) {
-  return defineChatAdapter<TId, Record<never, never>, Record<never, never>>({
+  const capabilities = args.nativeStream ? streamCapabilities : basicCapabilities;
+
+  return defineChatAdapter<TId, Record<never, never>, Record<never, never>, typeof capabilities>({
     id: args.id,
+    capabilities,
     async open() {
       args.handles.opens.push(args.id);
       if (args.throwOnOpen !== undefined) {
@@ -71,7 +117,7 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
           if (args.startError !== undefined) {
             return Result.err(args.startError);
           }
-          args.onStart?.(context as unknown as ChatAdapterStartContext<typeof commands, TId>);
+          args.onStart?.(context);
           return Result.ok();
         },
         async sendMessage(input) {
@@ -112,6 +158,32 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
               });
             }
           : undefined,
+        ...(args.nativeStream
+          ? {
+              async streamMessage(input: ChatAdapterStreamMessageInput<TId, Record<never, never>>) {
+                args.onStreamMessage?.(input);
+                return Result.ok({
+                  chatId: args.id,
+                  conversationId: input.conversationId,
+                  messageId: `${args.id}-stream`,
+                  text: "streamed",
+                  format: input.content.format,
+                  adapterData: {},
+                });
+              },
+              async streamReply(input: ChatAdapterStreamReplyInput<TId, Record<never, never>>) {
+                args.onStreamReply?.(input);
+                return Result.ok({
+                  chatId: args.id,
+                  conversationId: input.conversationId,
+                  messageId: `${args.id}-stream-reply`,
+                  text: "streamed reply",
+                  format: input.content.format,
+                  adapterData: {},
+                });
+              },
+            }
+          : {}),
         async close() {
           args.handles.closes.push(args.id);
           if (args.closeError !== undefined) {
@@ -135,7 +207,7 @@ describe("createChat lifecycle", () => {
           id: "alpha",
           handles,
           onStart: (context) => {
-            seenCommands.push(context.commands.start.description);
+            seenCommands.push(context.commands.start?.description ?? "missing");
           },
         }),
         beta: createRuntimeAdapter({ id: "beta", handles }),
@@ -158,7 +230,7 @@ describe("createChat lifecycle", () => {
 
   test("delivers adapter-emitted message and command events", async () => {
     const handles = { opens: [], starts: [], closes: [] };
-    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
     const messages: string[] = [];
     const namedCommands: string[] = [];
     const allCommands: string[] = [];
@@ -214,7 +286,7 @@ describe("createChat lifecycle", () => {
 
   test("routes diagnostics and supports unsubscribe", async () => {
     const handles = { opens: [], starts: [], closes: [] };
-    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
     const diagnostics: string[] = [];
     const messages: string[] = [];
 
@@ -305,7 +377,7 @@ describe("createChat lifecycle", () => {
 
   test("routes synchronous handler throws to error events", async () => {
     const handles = { opens: [], starts: [], closes: [] };
-    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
     const errors: unknown[] = [];
     const chat = createChat({
       adapters: {
@@ -536,7 +608,7 @@ describe("createChat lifecycle", () => {
 
   test("event.reply targets the original message conversation", async () => {
     const handles = { opens: [], starts: [], closes: [] };
-    let startContext: ChatAdapterStartContext<typeof commands, "alpha"> | undefined;
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
     const sends: string[] = [];
     let resolveReply!: (value: unknown) => void;
     const replyHandled = new Promise((resolve) => {
@@ -580,6 +652,151 @@ describe("createChat lifecycle", () => {
 
     await replyHandled;
     expect(sends).toEqual(["conversation:handled"]);
+  });
+
+  test("streamMessage uses adapter streaming when available", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const streams: string[] = [];
+    const sends: string[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          nativeStream: true,
+          onSend: (input) => {
+            sends.push(input.text);
+          },
+          onStreamMessage: (input) => {
+            streams.push(input.content.chunks === undefined ? "missing" : "present");
+          },
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const streamed = await chat.streamMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      content: { chunks: textChunks(["hello"]), format: "markdown" },
+      fallback: "send-message",
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(streams).toEqual(["present"]);
+    expect(sends).toEqual([]);
+    if (streamed.isOk()) {
+      expect(streamed.value.messageId).toBe("alpha-stream");
+      expect(streamed.value.format).toBe("markdown");
+    }
+  });
+
+  test("streamMessage falls back to sendMessage when unsupported", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const sends: string[] = [];
+    const diagnostics: string[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onSend: (input) => {
+            sends.push(input.text);
+          },
+        }),
+      },
+      commands,
+    });
+
+    chat.on("diagnostic", (event) => {
+      diagnostics.push(event.code);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const streamed = await chat.streamMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      content: { chunks: textChunks(["hel", "lo"]) },
+      fallback: "send-message",
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(sends).toEqual(["hello"]);
+    expect(diagnostics).toContain("CHAT_STREAM_FALLBACK_TO_SEND_MESSAGE");
+  });
+
+  test("streamMessage can require adapter streaming", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const chat = createChat({
+      adapters: { alpha: createRuntimeAdapter({ id: "alpha", handles }) },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const streamed = await chat.streamMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      content: { chunks: textChunks(["hello"]) },
+      fallback: "error",
+    } as never);
+
+    expect(streamed.isErr()).toBe(true);
+    if (streamed.isErr()) {
+      expect(streamed.error).toBeInstanceOf(UnsupportedChatOperationError);
+    }
+  });
+
+  test("streamReply falls back to reply and event.replyStream targets the original message", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
+    const replies: string[] = [];
+    let resolveReply!: (value: unknown) => void;
+    const replyHandled = new Promise((resolve) => {
+      resolveReply = resolve;
+    });
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          nativeReply: true,
+          onStart: (context) => {
+            startContext = context;
+          },
+          onReply: (input) => {
+            replies.push(`${input.message?.messageId}:${input.mode}:${input.text}`);
+          },
+        }),
+      },
+      commands,
+    });
+
+    chat.on("message", async (event) => {
+      const result = await event.replyStream(
+        { chunks: textChunks(["stre", "amed"]) },
+        { mode: "quote", fallback: "send-message" },
+      );
+      resolveReply(result);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    startContext?.emit({
+      type: "message",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: {
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "original",
+        actor: { kind: "user", actorId: "user", adapterData: {} },
+        text: "incoming",
+        adapterData: {},
+      },
+    });
+
+    await replyHandled;
+    expect(replies).toEqual(["original:quote:streamed"]);
   });
 
   test("close attempts every opened runtime and aggregates failures", async () => {
