@@ -2,11 +2,18 @@ import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Result } from "better-result";
 import {
+  HarnessAdapterAbortError,
   HarnessAdapterCreateSessionError,
-  HarnessCloseError,
+  HarnessAdapterDeleteSessionError,
+  HarnessAdapterGetSessionError,
+  HarnessAdapterListSessionsError,
   HarnessAdapterOpenError,
+  HarnessAdapterPromptError,
+  HarnessAdapterResumeSessionError,
+  HarnessCloseError,
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
+  UnknownSessionError,
 } from "./errors";
 import type {
   CreateHarnessOptions,
@@ -19,10 +26,16 @@ import type {
   WorkingDirectoryPath,
 } from "./contracts";
 import type {
+  AbortInput,
   AdapterOptionsFor,
   AdapterSessionFor,
   CreateSessionInput,
   CreatedSessionFromInput,
+  DeleteSessionInput,
+  GetSessionInput,
+  ListSessionsInput,
+  PromptInput,
+  ResumeSessionInput,
   HarnessAdapterDefinitions,
 } from "./types";
 
@@ -30,6 +43,10 @@ function normalizeAdapterOptions<TAdapterOptions extends HarnessAdapterObject>(
   adapterOptions: TAdapterOptions | undefined,
 ): TAdapterOptions {
   return (adapterOptions ?? {}) as TAdapterOptions;
+}
+
+function createStubCause(operation: string): Error {
+  return new Error(`${operation} facade behavior is not implemented yet`);
 }
 
 async function createWorkingDirectoryPath(
@@ -231,6 +248,78 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
           createdAt: now().toISOString(),
           adapterData: created.adapterData,
         } as CreatedSessionFromInput<TAdapters, TInput>);
+      });
+    },
+
+    async resumeSession<TInput extends ResumeSessionInput<TAdapters>>(input: TInput) {
+      return Result.gen(async function* () {
+        yield* Result.await(getRuntime(input.harnessId, input.signal));
+        return Result.err(
+          new HarnessAdapterResumeSessionError({
+            harnessId: input.harnessId,
+            cause: createStubCause("resumeSession"),
+          }),
+        );
+      });
+    },
+
+    async listSessions<TInput extends ListSessionsInput<TAdapters>>(input: TInput) {
+      return Result.gen(async function* () {
+        yield* Result.await(getRuntime(input.harnessId, input.signal));
+        return Result.err(
+          new HarnessAdapterListSessionsError({
+            harnessId: input.harnessId,
+            cause: createStubCause("listSessions"),
+          }),
+        );
+      });
+    },
+
+    async getSession<TInput extends GetSessionInput<TAdapters>>(input: TInput) {
+      return Result.gen(async function* () {
+        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
+        return Result.err(
+          new UnknownSessionError({
+            harnessId: input.ref.harnessId,
+            sessionId: input.ref.sessionId,
+          }),
+        );
+      });
+    },
+
+    async prompt<TInput extends PromptInput<TAdapters>>(input: TInput) {
+      return Result.gen(async function* () {
+        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
+        return Result.err(
+          new UnknownSessionError({
+            harnessId: input.ref.harnessId,
+            sessionId: input.ref.sessionId,
+          }),
+        );
+      });
+    },
+
+    async deleteSession<TInput extends DeleteSessionInput<TAdapters>>(input: TInput) {
+      return Result.gen(async function* () {
+        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
+        return Result.err(
+          new UnknownSessionError({
+            harnessId: input.ref.harnessId,
+            sessionId: input.ref.sessionId,
+          }),
+        );
+      });
+    },
+
+    async abort<TInput extends AbortInput<TAdapters>>(input: TInput) {
+      return Result.gen(async function* () {
+        yield* Result.await(getRuntime(input.ref.harnessId, input.signal));
+        return Result.err(
+          new UnknownSessionError({
+            harnessId: input.ref.harnessId,
+            sessionId: input.ref.sessionId,
+          }),
+        );
       });
     },
 

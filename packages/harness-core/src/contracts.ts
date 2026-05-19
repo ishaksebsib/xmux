@@ -1,10 +1,29 @@
 import type { Result } from "better-result";
-import type { CreateSessionError, HarnessCloseError } from "./errors";
+import type {
+  AbortError,
+  CreateSessionError,
+  DeleteSessionError,
+  GetSessionError,
+  HarnessCloseError,
+  ListSessionsError,
+  PromptError,
+  ResumeSessionError,
+} from "./errors";
 import type { HarnessPromptEvent } from "./events";
 import type {
+  AbortInput,
   CreateSessionInput,
   CreatedSessionFromInput,
+  DeleteSessionInput,
+  GetSessionInput,
+  GetSessionResultFromInput,
   HarnessAdapterDefinitions,
+  ListSessionsInput,
+  ListSessionsResultFromInput,
+  PromptInput,
+  PromptResultFromInput,
+  ResumeSessionInput,
+  ResumeSessionResultFromInput,
 } from "./types";
 
 declare const workingDirectoryPathBrand: unique symbol;
@@ -231,6 +250,24 @@ export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>>
   createSession<TInput extends CreateSessionInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<CreatedSessionFromInput<TAdapters, TInput>, CreateSessionError>>;
+  resumeSession<TInput extends ResumeSessionInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ResumeSessionResultFromInput<TAdapters, TInput>, ResumeSessionError>>;
+  listSessions<TInput extends ListSessionsInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ListSessionsResultFromInput<TAdapters, TInput>, ListSessionsError>>;
+  getSession<TInput extends GetSessionInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<GetSessionResultFromInput<TAdapters, TInput>, GetSessionError>>;
+  prompt<TInput extends PromptInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<PromptResultFromInput<TAdapters, TInput>, PromptError>>;
+  deleteSession<TInput extends DeleteSessionInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<void, DeleteSessionError>>;
+  abort<TInput extends AbortInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<void, AbortError>>;
   close(): Promise<Result<void, HarnessCloseError>>;
 }
 

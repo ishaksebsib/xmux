@@ -1,5 +1,9 @@
 import { TaggedError } from "better-result";
 
+function describeCause(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
 export class UnknownHarnessError extends TaggedError("UnknownHarnessError")<{
   harnessId: string;
   availableHarnessIds: readonly string[];
@@ -33,10 +37,9 @@ export class HarnessAdapterOpenError extends TaggedError("HarnessAdapterOpenErro
   cause: unknown;
 }>() {
   constructor(args: { harnessId: string; cause: unknown }) {
-    const detail = args.cause instanceof Error ? args.cause.message : String(args.cause);
     super({
       ...args,
-      message: `Failed to open harness "${args.harnessId}": ${detail}`,
+      message: `Failed to open harness "${args.harnessId}": ${describeCause(args.cause)}`,
     });
   }
 }
@@ -49,10 +52,104 @@ export class HarnessAdapterCreateSessionError extends TaggedError(
   cause: unknown;
 }>() {
   constructor(args: { harnessId: string; cause: unknown }) {
-    const detail = args.cause instanceof Error ? args.cause.message : String(args.cause);
     super({
       ...args,
-      message: `Failed to create session with harness "${args.harnessId}": ${detail}`,
+      message: `Failed to create session with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class UnknownSessionError extends TaggedError("UnknownSessionError")<{
+  harnessId: string;
+  sessionId: string;
+  message: string;
+}>() {
+  constructor(args: { harnessId: string; sessionId: string }) {
+    super({
+      ...args,
+      message: `Unknown session "${args.sessionId}" for harness "${args.harnessId}". Call resumeSession first if the session was created elsewhere.`,
+    });
+  }
+}
+
+export class HarnessAdapterResumeSessionError extends TaggedError(
+  "HarnessAdapterResumeSessionError",
+)<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to resume session with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterListSessionsError extends TaggedError("HarnessAdapterListSessionsError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to list sessions with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterGetSessionError extends TaggedError("HarnessAdapterGetSessionError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to get session with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterPromptError extends TaggedError("HarnessAdapterPromptError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to prompt session with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterDeleteSessionError extends TaggedError(
+  "HarnessAdapterDeleteSessionError",
+)<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to delete session with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterAbortError extends TaggedError("HarnessAdapterAbortError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to abort session with harness "${args.harnessId}": ${describeCause(args.cause)}`,
     });
   }
 }
@@ -75,3 +172,38 @@ export type CreateSessionError =
   | InvalidWorkingDirectoryError
   | HarnessAdapterOpenError
   | HarnessAdapterCreateSessionError;
+
+export type ResumeSessionError =
+  | UnknownHarnessError
+  | InvalidWorkingDirectoryError
+  | HarnessAdapterOpenError
+  | HarnessAdapterResumeSessionError;
+
+export type ListSessionsError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterListSessionsError;
+
+export type GetSessionError =
+  | UnknownHarnessError
+  | UnknownSessionError
+  | HarnessAdapterOpenError
+  | HarnessAdapterGetSessionError;
+
+export type PromptError =
+  | UnknownHarnessError
+  | UnknownSessionError
+  | HarnessAdapterOpenError
+  | HarnessAdapterPromptError;
+
+export type DeleteSessionError =
+  | UnknownHarnessError
+  | UnknownSessionError
+  | HarnessAdapterOpenError
+  | HarnessAdapterDeleteSessionError;
+
+export type AbortError =
+  | UnknownHarnessError
+  | UnknownSessionError
+  | HarnessAdapterOpenError
+  | HarnessAdapterAbortError;

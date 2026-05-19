@@ -9,7 +9,10 @@ import {
   type AdapterListOptionsFor,
   type AdapterPromptOptionsFor,
   type AdapterResumeOptionsFor,
+  type AbortInput,
   type CreatedSessionFor,
+  type DeleteSessionInput,
+  type GetSessionInput,
   type HarnessAdapterPromptResult,
   type HarnessAdapterSessionInfo,
   type HarnessContentEvent,
@@ -19,6 +22,11 @@ import {
   type HarnessSessionInfo,
   type HarnessTokenUsage,
   type HarnessToolOutput,
+  type ListSessionsInput,
+  type PromptInput,
+  type PromptResultFromInput,
+  type ResumeSessionInput,
+  type ResumeSessionResultFromInput,
   type SessionRef,
   type WorkingDirectoryPath,
 } from "../src";
@@ -340,6 +348,141 @@ test("adapter session-control methods reuse createSession adapter options", () =
       adapterData: { projectId: "project-1" },
     } satisfies HarnessAdapterSessionInfo<{ readonly projectId: string }>;
     void invalidAdapterInfo;
+  }
+});
+
+test("public session-control input types narrow by harness id", () => {
+  const adapters = {
+    opencode: defineHarnessAdapter<
+      "opencode",
+      { readonly workspaceId: string; readonly model?: "fast" | "smart" },
+      { readonly projectId: string }
+    >({
+      id: "opencode",
+      async open() {
+        return Result.ok({
+          id: "opencode" as const,
+          async createSession(input) {
+            return Result.ok({
+              sessionId: "opencode-1",
+              adapterData: { projectId: input.adapterOptions.workspaceId },
+            });
+          },
+          ...requiredHarnessMethods(),
+          async close() {
+            return undefined;
+          },
+        });
+      },
+    }),
+    defaultsOnly: defineHarnessAdapter<
+      "defaultsOnly",
+      { readonly mode?: "safe" | "fast" },
+      { readonly mode: "safe" | "fast" }
+    >({
+      id: "defaultsOnly",
+      async open() {
+        return Result.ok({
+          id: "defaultsOnly" as const,
+          async createSession(input) {
+            return Result.ok({
+              sessionId: "defaults-1",
+              adapterData: { mode: input.adapterOptions.mode ?? "safe" },
+            });
+          },
+          ...requiredHarnessMethods(),
+          async close() {
+            return undefined;
+          },
+        });
+      },
+    }),
+  };
+
+  const opencodeRef = {
+    harnessId: "opencode",
+    sessionId: "session-1",
+  } satisfies SessionRef<"opencode">;
+
+  const resume = {
+    harnessId: "opencode",
+    sessionId: "native-session-1",
+    cwd: process.cwd(),
+    adapterOptions: { workspaceId: "workspace-1", model: "smart" },
+  } satisfies ResumeSessionInput<typeof adapters>;
+  const list = {
+    harnessId: "opencode",
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies ListSessionsInput<typeof adapters>;
+  const get = {
+    ref: opencodeRef,
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies GetSessionInput<typeof adapters>;
+  const prompt = {
+    ref: opencodeRef,
+    content: { type: "text", text: "hello" },
+    adapterOptions: { workspaceId: "workspace-1", model: "fast" },
+  } satisfies PromptInput<typeof adapters>;
+  const promptMany = {
+    ref: opencodeRef,
+    content: [
+      { type: "text", text: "hello" },
+      { type: "file", uri: "file:///tmp/a.ts", mime: "text/typescript" },
+    ],
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies PromptInput<typeof adapters>;
+  const deleteInput = {
+    ref: opencodeRef,
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies DeleteSessionInput<typeof adapters>;
+  const abort = {
+    ref: opencodeRef,
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies AbortInput<typeof adapters>;
+  const optionalOptionsList = {
+    harnessId: "defaultsOnly",
+  } satisfies ListSessionsInput<typeof adapters>;
+
+  expectTypeOf(resume.adapterOptions.workspaceId).toEqualTypeOf<string>();
+  expectTypeOf(list.adapterOptions.workspaceId).toEqualTypeOf<string>();
+  expectTypeOf(get.ref.harnessId).toEqualTypeOf<"opencode">();
+  expectTypeOf(prompt.content).toExtend<PromptInput<typeof adapters>["content"]>();
+  expectTypeOf(promptMany.content).toExtend<PromptInput<typeof adapters>["content"]>();
+  expectTypeOf(deleteInput.ref.sessionId).toEqualTypeOf<string>();
+  expectTypeOf(abort.ref.sessionId).toEqualTypeOf<string>();
+  expectTypeOf(optionalOptionsList.harnessId).toEqualTypeOf<"defaultsOnly">();
+  expectTypeOf<ResumeSessionResultFromInput<typeof adapters, typeof resume>["adapterData"]>().toEqualTypeOf<{
+    readonly projectId: string;
+  }>();
+  expectTypeOf<PromptResultFromInput<typeof adapters, typeof prompt>>().toEqualTypeOf<
+    AsyncIterable<HarnessPromptEvent<"opencode">>
+  >();
+
+  if (shouldRunTypeErrorChecks) {
+    const badPrompt = {
+      ref: opencodeRef,
+      content: { type: "text", text: "hello" },
+      // @ts-expect-error prompt input must not accept top-level cwd
+      cwd: process.cwd(),
+      adapterOptions: { workspaceId: "workspace-1" },
+    } satisfies PromptInput<typeof adapters>;
+    void badPrompt;
+
+    const badGet = {
+      ref: opencodeRef,
+      // @ts-expect-error getSession input must not accept top-level cwd
+      cwd: process.cwd(),
+      adapterOptions: { workspaceId: "workspace-1" },
+    } satisfies GetSessionInput<typeof adapters>;
+    void badGet;
+
+    const badResumeOptions = {
+      harnessId: "opencode",
+      sessionId: "native-session-1",
+      // @ts-expect-error opencode session-control inputs require opencode adapter options
+      adapterOptions: { mode: "safe" },
+    } satisfies ResumeSessionInput<typeof adapters>;
+    void badResumeOptions;
   }
 });
 

@@ -2,8 +2,12 @@ import { Result } from "better-result";
 import { describe, expect, test } from "vitest";
 import {
   HarnessAdapterCreateSessionError,
+  HarnessAdapterListSessionsError,
   HarnessAdapterOpenError,
+  HarnessAdapterResumeSessionError,
   InvalidWorkingDirectoryError,
+  UnknownHarnessError,
+  UnknownSessionError,
   createHarness,
   defineHarnessAdapter,
   type HarnessAdapterDefinition,
@@ -241,5 +245,115 @@ describe("createHarness", () => {
 
     expect(closed.isOk()).toBe(true);
     expect(handles.closes.sort()).toEqual(["opencode", "pi"]);
+  });
+
+  test("session-control stubs check unknown harness before method errors", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "a" } }),
+        }),
+      },
+    });
+
+    const resumed = await harness.resumeSession({
+      // @ts-expect-error runtime test intentionally targets an unknown harness
+      harnessId: "missing",
+      sessionId: "session-1",
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const listed = await harness.listSessions({
+      // @ts-expect-error runtime test intentionally targets an unknown harness
+      harnessId: "missing",
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(resumed.isErr()).toBe(true);
+    expect(listed.isErr()).toBe(true);
+    if (resumed.isErr()) {
+      expect(resumed.error).toBeInstanceOf(UnknownHarnessError);
+    }
+    if (listed.isErr()) {
+      expect(listed.error).toBeInstanceOf(UnknownHarnessError);
+    }
+  });
+
+  test("session-control stubs return method errors for harness-id operations", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "a" } }),
+        }),
+      },
+    });
+
+    const resumed = await harness.resumeSession({
+      harnessId: "pi",
+      sessionId: "session-1",
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const listed = await harness.listSessions({
+      harnessId: "pi",
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(resumed.isErr()).toBe(true);
+    expect(listed.isErr()).toBe(true);
+    if (resumed.isErr()) {
+      expect(resumed.error).toBeInstanceOf(HarnessAdapterResumeSessionError);
+    }
+    if (listed.isErr()) {
+      expect(listed.error).toBeInstanceOf(HarnessAdapterListSessionsError);
+    }
+    expect(handles.opens).toEqual(["pi"]);
+  });
+
+  test("ref-based session-control stubs return unknown session after known harness lookup", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "a" } }),
+        }),
+      },
+    });
+
+    const ref = { harnessId: "pi" as const, sessionId: "session-1" };
+    const get = await harness.getSession({
+      ref,
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const prompted = await harness.prompt({
+      ref,
+      content: { type: "text", text: "hello" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const deleted = await harness.deleteSession({
+      ref,
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const aborted = await harness.abort({
+      ref,
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    for (const result of [get, prompted, deleted, aborted]) {
+      expect(result.isErr()).toBe(true);
+      if (result.isErr()) {
+        expect(result.error).toBeInstanceOf(UnknownSessionError);
+      }
+    }
+    expect(handles.opens).toEqual(["pi"]);
   });
 });
