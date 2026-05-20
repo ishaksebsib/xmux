@@ -92,7 +92,10 @@ export function encodeTelegramStreamedMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly conversationId: string;
   readonly text: string;
-  readonly format: ChatAdapterStreamMessageInput<TChatId, TelegramAdapterOptions>["content"]["format"];
+  readonly format: ChatAdapterStreamMessageInput<
+    TChatId,
+    TelegramAdapterOptions
+  >["content"]["format"];
   readonly telegramMessages: TelegramStreamedTextMessages;
 }): ChatSentMessage<TChatId, TelegramAdapterData> {
   const lastMessage = args.telegramMessages.at(-1);
@@ -165,7 +168,10 @@ async function* encodeTelegramMessageDraftPieces(
 function createTelegramStreamMessageRequest(args: {
   readonly conversationId: string;
   readonly chunks: AsyncIterable<ChatTextStreamChunk>;
-  readonly format: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>["content"]["format"];
+  readonly format: ChatAdapterStreamMessageInput<
+    string,
+    TelegramAdapterOptions
+  >["content"]["format"];
   readonly adapterOptions: TelegramAdapterOptions;
 }): TelegramStreamMessageRequest {
   return {
@@ -184,7 +190,10 @@ function createTelegramStreamMessageRequest(args: {
 }
 
 function encodeTelegramMessageDraftOptions(args: {
-  readonly format: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>["content"]["format"];
+  readonly format: ChatAdapterStreamMessageInput<
+    string,
+    TelegramAdapterOptions
+  >["content"]["format"];
   readonly adapterOptions: TelegramAdapterOptions;
 }): TelegramStreamMessageRequest["draftOptions"] {
   const options = {
