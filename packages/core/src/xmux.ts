@@ -10,7 +10,7 @@ import { Chat, type Adapter } from "chat";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type XmuxConfig } from "./config";
 import type { XmuxContext } from "./ctx";
-import { createInMemoryStore } from "./in-memory-store";
+import { createInMemoryStore } from "./store";
 import type { XmuxStore } from "./store";
 
 /**

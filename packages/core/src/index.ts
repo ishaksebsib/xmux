@@ -1,5 +1,5 @@
 export { XmuxCloseError, XmuxInitializeError } from "./errors";
-export { createInMemoryStore } from "./in-memory-store";
+export { createInMemoryStore } from "./store";
 export { createXmux } from "./xmux";
 export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
 export type { XmuxDeliveryMode, XmuxConfig } from "./config";
