@@ -1,10 +1,7 @@
 import { Result } from "better-result";
 import type { ChatAdapterReplyInput, ChatSentMessage } from "@xmux/chat-core";
 import type { TelegramBotClient } from "../client";
-import {
-  encodeTelegramReplyMessage,
-  encodeTelegramSentMessage,
-} from "../conversions/outbound";
+import { encodeTelegramReplyMessage, encodeTelegramSentMessage } from "../conversions/outbound";
 import { TelegramReplyError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 
