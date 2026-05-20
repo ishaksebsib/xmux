@@ -14,6 +14,12 @@ const commands = defineChatCommands({
       text: stringOption({ required: true }),
     },
   }),
+  stream: defineChatCommand({
+    description: "Stream a demo paragraph to Telegram",
+  }),
+  stream_reply: defineChatCommand({
+    description: "Stream a demo paragraph as a reply",
+  }),
 });
 
 export async function runTelegramDemo() {
@@ -57,7 +63,10 @@ export async function runTelegramDemo() {
     }
 
     const name = event.command.options.name ?? "there";
-    await event.reply(`Hello ${name}! Try /echo --text "hello from xmux"`, { mode: "quote" });
+    await event.reply(
+      `Hello ${name}! Try /echo --text "hello from xmux", /stream, or /stream_reply`,
+      { mode: "quote" },
+    );
   });
 
   chat.on("command", "echo", async (event) => {
@@ -67,6 +76,32 @@ export async function runTelegramDemo() {
     }
 
     await event.reply(event.command.options.text, { mode: "quote" });
+  });
+
+  chat.on("command", "stream", async (event) => {
+    if (!isAllowedTelegramActor({ actorId: event.actor?.actorId, allowedUserIds })) {
+      await event.reply("This demo bot is restricted to configured Telegram user ids.");
+      return;
+    }
+
+    await chat.streamMessage({
+      chatId: event.chatId,
+      conversationId: event.conversation.conversationId,
+      content: { chunks: streamDemoParagraph() },
+      fallback: "error",
+    });
+  });
+
+  chat.on("command", "stream_reply", async (event) => {
+    if (!isAllowedTelegramActor({ actorId: event.actor?.actorId, allowedUserIds })) {
+      await event.reply("This demo bot is restricted to configured Telegram user ids.");
+      return;
+    }
+
+    await event.replyStream(
+      { chunks: streamDemoParagraph() },
+      { mode: "quote", fallback: "error" },
+    );
   });
 
   const started = await chat.start();
@@ -90,6 +125,20 @@ export async function runTelegramDemo() {
   process.once("SIGTERM", () => {
     void close().finally(() => process.exit());
   });
+}
+
+async function* streamDemoParagraph() {
+  const parts = [
+    "Streaming lets xmux show progress while work is still happening. ",
+    "This Telegram demo sends a message draft first, then keeps updating it as chunks arrive. ",
+    "When the paragraph is complete, grammY persists the final text as a normal Telegram message. ",
+    "This is useful for long-running agent responses, summaries, and status updates.",
+  ];
+
+  for (const delta of parts) {
+    yield { type: "delta" as const, delta };
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
 }
 
 function parseAllowedTelegramUserIds(input: string | undefined): ReadonlySet<string> {
