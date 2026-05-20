@@ -18,6 +18,11 @@ alias t := test
 test:
 	pnpm run test
 
+alias i := integration
+# Run the integration tests
+integration:
+	pnpm turbo run test:integration
+
 alias b := build
 # Build the project
 build:

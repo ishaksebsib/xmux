@@ -1,23 +1,7 @@
-import { spawnSync } from "node:child_process";
 import { createServer, type IncomingMessage } from "node:http";
 import { HarnessAdapterCreateSessionError, createHarness } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
 import { createOpenCodeAdapter } from "../src";
-
-function hasOpenCodeBinary(): boolean {
-  const command = process.platform === "win32" ? "where opencode" : "command -v opencode";
-  return (
-    spawnSync(
-      process.platform === "win32" ? "cmd" : "sh",
-      [process.platform === "win32" ? "/c" : "-lc", command],
-      {
-        stdio: "ignore",
-      },
-    ).status === 0
-  );
-}
-
-const opencodeBinaryTest = hasOpenCodeBinary() ? test : test.skip;
 
 function createNativeSession(args: { readonly directory: string; readonly title: string }) {
   return {
@@ -92,35 +76,6 @@ async function startSessionServer() {
 }
 
 describe("createOpenCodeAdapter", () => {
-  opencodeBinaryTest("creates a session against an embedded OpenCode runtime", async () => {
-    const harness = createHarness({
-      adapters: {
-        opencode: createOpenCodeAdapter(),
-      },
-    });
-
-    try {
-      const created = await harness.createSession({
-        harnessId: "opencode",
-        cwd: process.cwd(),
-        title: "xmux embedded session",
-      });
-
-      expect(created.isOk()).toBe(true);
-
-      const session = created.unwrap("expected embedded OpenCode session to be created");
-      expect(session.ref.harnessId).toBe("opencode");
-      expect(session.title).toBe("xmux embedded session");
-      expect(session.adapterData.directory).toBe(process.cwd());
-      expect(session.adapterData.projectId.length).toBeGreaterThan(0);
-      expect(session.adapterData.slug.length).toBeGreaterThan(0);
-      expect(session.adapterData.version.length).toBeGreaterThan(0);
-    } finally {
-      //TODO: delete the sessions after the test
-      await harness.close();
-    }
-  });
-
   test("creates a session against an external OpenCode runtime", async () => {
     const server = await startSessionServer();
     const harness = createHarness({
