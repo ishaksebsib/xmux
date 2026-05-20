@@ -57,3 +57,41 @@ export interface ActorRef {
 
 /** Lifecycle state of an xmux-managed harness session. */
 export type SessionStatus = "open" | "closed";
+
+export interface CreateSessionRecordInput {
+  readonly ref: SessionRecord["ref"];
+  readonly origin: ChatThreadRef;
+  readonly requester: ActorRef;
+  readonly cwd: string;
+  readonly deliveryMode: SessionRecord["deliveryMode"];
+  readonly title?: string;
+  readonly now: string;
+}
+
+export function createSessionRecord(input: CreateSessionRecordInput): SessionRecord {
+  return {
+    ref: input.ref,
+    origin: input.origin,
+    requester: input.requester,
+    cwd: input.cwd,
+    ...(input.title === undefined ? {} : { title: input.title }),
+    deliveryMode: input.deliveryMode,
+    status: "open",
+    createdAt: input.now,
+    updatedAt: input.now,
+  };
+}
+
+export interface CreateThreadBindingInput {
+  readonly thread: ChatThreadRef;
+  readonly sessionRef: ThreadBinding["sessionRef"];
+  readonly now: string;
+}
+
+export function createThreadBinding(input: CreateThreadBindingInput): ThreadBinding {
+  return {
+    thread: input.thread,
+    sessionRef: input.sessionRef,
+    createdAt: input.now,
+  };
+}

@@ -42,6 +42,37 @@ export interface XmuxHandlerContext<
   readonly session?: XmuxHandlerSession<THarnessId>;
 }
 
+export interface CreateXmuxHandlerContextInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+  TChatId extends Extract<keyof TChats, string>,
+  THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
+> {
+  readonly xmux: XmuxContext<TAdapters, TChats>;
+  readonly chatId: TChatId;
+  readonly actor?: XmuxActor;
+  readonly session?: XmuxHandlerSession<THarnessId>;
+}
+
+/** Creates request-scoped context for one routed xmux handler invocation. */
+export function createXmuxHandlerContext<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+  TChatId extends Extract<keyof TChats, string>,
+  THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
+>(
+  input: CreateXmuxHandlerContextInput<TAdapters, TChats, TChatId, THarnessId>,
+): XmuxHandlerContext<TAdapters, TChats, TChatId, THarnessId> {
+  return {
+    xmux: input.xmux,
+    chatId: input.chatId,
+    requestId: input.xmux.services.createRequestId(),
+    signal: input.xmux.services.shutdownSignal,
+    actor: input.actor,
+    session: input.session,
+  };
+}
+
 /** Stable app-scoped services shared across xmux handlers. */
 export interface XmuxServices {
   readonly createRequestId: () => string;

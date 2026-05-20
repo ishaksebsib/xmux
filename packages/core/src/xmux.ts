@@ -10,6 +10,7 @@ import { xmuxCommands } from "./commands";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type XmuxConfig } from "./config";
 import type { XmuxContext } from "./ctx";
+import { registerXmuxRoutes } from "./router";
 import { createInMemoryStore } from "./store";
 import type { XmuxStore } from "./store";
 
@@ -70,6 +71,7 @@ export function createXmux<
       shutdownSignal: shutdownController.signal,
     }),
   });
+  const routeUnsubscribers = registerXmuxRoutes(ctx);
 
   return {
     ctx,
@@ -91,6 +93,9 @@ export function createXmux<
 
     async shutdown() {
       shutdownController.abort();
+      for (const unsubscribe of routeUnsubscribers) {
+        unsubscribe();
+      }
 
       const chatClose = await Result.tryPromise({
         try: () => chat.close(),

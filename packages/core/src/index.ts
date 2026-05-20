@@ -18,7 +18,9 @@ export {
   StoreNotFoundError,
   StoreOperationError,
 } from "./errors";
+export { createXmuxHandlerContext } from "./ctx";
 export type {
+  CreateXmuxHandlerContextInput,
   XmuxActor,
   XmuxContext,
   XmuxHandlerContext,
