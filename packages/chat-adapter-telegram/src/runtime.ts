@@ -24,12 +24,12 @@ import {
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
-import { createTelegramTextEvent } from "./messages";
+import { decodeTelegramTextUpdate } from "./conversions/inbound";
 import {
-  createTelegramReplyMessageOptions,
-  createTelegramSendMessageOptions,
-  createTelegramSentMessage,
-} from "./outbound";
+  encodeTelegramReplyMessage,
+  encodeTelegramSendMessage,
+  encodeTelegramSentMessage,
+} from "./conversions/outbound";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -127,7 +127,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     });
     this.bot.onTextMessage((telegramContext) => {
       const botInfo = this.bot.getBotInfo();
-      const event = createTelegramTextEvent<TCommands, TChatId>({
+      const decoded = decodeTelegramTextUpdate<TCommands, TChatId>({
         chatId: this.id,
         commands: context.commands,
         context: telegramContext,
@@ -136,8 +136,8 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
         diagnostic: context.diagnostic,
       });
 
-      if (event !== undefined) {
-        context.emit(event);
+      if (decoded.status === "event") {
+        context.emit(decoded.event);
       }
     });
 
@@ -202,14 +202,9 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
   async sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendMessageError>> {
+    const request = encodeTelegramSendMessage(input);
     const sent = await Result.tryPromise({
-      try: async () =>
-        this.bot.sendMessage({
-          chatId: input.conversationId,
-          text: input.text,
-          options: createTelegramSendMessageOptions(input),
-          signal: input.signal,
-        }),
+      try: async () => this.bot.sendMessage({ ...request, signal: input.signal }),
       catch: (cause) => new TelegramSendMessageError({ cause }),
     });
     if (sent.isErr()) {
@@ -217,7 +212,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     }
 
     return Result.ok(
-      createTelegramSentMessage({
+      encodeTelegramSentMessage({
         chatId: this.id,
         conversationId: input.conversationId,
         text: input.text,
@@ -230,19 +225,13 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
   async reply(
     input: ChatAdapterReplyInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramReplyError>> {
-    const options = createTelegramReplyMessageOptions(input);
-    if (options.isErr()) {
-      return Result.err(options.error);
+    const request = encodeTelegramReplyMessage(input);
+    if (request.isErr()) {
+      return Result.err(request.error);
     }
 
     const sent = await Result.tryPromise({
-      try: async () =>
-        this.bot.sendMessage({
-          chatId: input.conversationId,
-          text: input.text,
-          options: options.value,
-          signal: input.signal,
-        }),
+      try: async () => this.bot.sendMessage({ ...request.value, signal: input.signal }),
       catch: (cause) => new TelegramReplyError({ cause }),
     });
     if (sent.isErr()) {
@@ -250,7 +239,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     }
 
     return Result.ok(
-      createTelegramSentMessage({
+      encodeTelegramSentMessage({
         chatId: this.id,
         conversationId: input.conversationId,
         text: input.text,

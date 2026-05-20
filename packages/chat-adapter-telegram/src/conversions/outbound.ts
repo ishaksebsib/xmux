@@ -4,27 +4,76 @@ import type {
   ChatAdapterSendMessageInput,
   ChatSentMessage,
 } from "@xmux/chat-core";
-import type { TelegramSentTextMessage } from "./client";
-import { TelegramReplyError } from "./errors";
-import type { TelegramAdapterData, TelegramAdapterOptions } from "./types";
+import type { TelegramBotClient, TelegramSentTextMessage } from "../client";
+import { TelegramReplyError } from "../errors";
+import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 
 declare const telegramMessageIdBrand: unique symbol;
 
 type TelegramMessageId = number & { readonly [telegramMessageIdBrand]: true };
+type TelegramBotSendMessageArgs = Parameters<TelegramBotClient["sendMessage"]>[0];
 
-export function createTelegramSendMessageOptions(
+export type TelegramSendMessageRequest = Omit<TelegramBotSendMessageArgs, "signal">;
+
+export function encodeTelegramSendMessage(
+  input: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>,
+): TelegramSendMessageRequest {
+  return {
+    chatId: input.conversationId,
+    text: input.text,
+    options: encodeTelegramSendMessageOptions(input),
+  };
+}
+
+export function encodeTelegramReplyMessage(
+  input: ChatAdapterReplyInput<string, TelegramAdapterOptions>,
+): Result<TelegramSendMessageRequest, TelegramReplyError> {
+  const options = encodeTelegramReplyMessageOptions(input);
+  if (options.isErr()) {
+    return Result.err(options.error);
+  }
+
+  return Result.ok({
+    chatId: input.conversationId,
+    text: input.text,
+    options: options.value,
+  });
+}
+
+export function encodeTelegramSentMessage<TChatId extends string>(args: {
+  readonly chatId: TChatId;
+  readonly conversationId: string;
+  readonly text: string;
+  readonly format: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>["format"];
+  readonly telegramMessage: TelegramSentTextMessage;
+}): ChatSentMessage<TChatId, TelegramAdapterData> {
+  return {
+    chatId: args.chatId,
+    conversationId: args.conversationId,
+    messageId: String(args.telegramMessage.message_id),
+    text: args.text,
+    format: args.format,
+    adapterData: {
+      telegramChatId: String(args.telegramMessage.chat.id),
+      telegramMessageId: args.telegramMessage.message_id,
+      raw: args.telegramMessage,
+    },
+  };
+}
+
+function encodeTelegramSendMessageOptions(
   input: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>,
 ): TelegramAdapterOptions {
   return {
-    ...createTelegramFormatOptions(input.format),
+    ...encodeTelegramFormatOptions(input.format),
     ...input.adapterOptions,
   };
 }
 
-export function createTelegramReplyMessageOptions(
+function encodeTelegramReplyMessageOptions(
   input: ChatAdapterReplyInput<string, TelegramAdapterOptions>,
 ): Result<TelegramAdapterOptions, TelegramReplyError> {
-  const baseOptions = createTelegramSendMessageOptions(input);
+  const baseOptions = encodeTelegramSendMessageOptions(input);
   const mode = input.mode ?? "auto";
 
   if (mode === "conversation") {
@@ -56,33 +105,12 @@ export function createTelegramReplyMessageOptions(
   }
 
   return Result.ok({
-    ...createTelegramReplyParameters(parsedMessageId.value),
+    ...encodeTelegramReplyParameters(parsedMessageId.value),
     ...baseOptions,
   });
 }
 
-export function createTelegramSentMessage<TChatId extends string>(args: {
-  readonly chatId: TChatId;
-  readonly conversationId: string;
-  readonly text: string;
-  readonly format: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>["format"];
-  readonly telegramMessage: TelegramSentTextMessage;
-}): ChatSentMessage<TChatId, TelegramAdapterData> {
-  return {
-    chatId: args.chatId,
-    conversationId: args.conversationId,
-    messageId: String(args.telegramMessage.message_id),
-    text: args.text,
-    format: args.format,
-    adapterData: {
-      telegramChatId: String(args.telegramMessage.chat.id),
-      telegramMessageId: args.telegramMessage.message_id,
-      raw: args.telegramMessage,
-    },
-  };
-}
-
-function createTelegramFormatOptions(
+function encodeTelegramFormatOptions(
   format: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>["format"],
 ): TelegramAdapterOptions {
   if (format === "html") {
@@ -96,7 +124,7 @@ function createTelegramFormatOptions(
   return {};
 }
 
-function createTelegramReplyParameters(messageId: TelegramMessageId): TelegramAdapterOptions {
+function encodeTelegramReplyParameters(messageId: TelegramMessageId): TelegramAdapterOptions {
   return {
     reply_parameters: {
       message_id: messageId,

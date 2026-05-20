@@ -1,14 +1,19 @@
 import type {
   ChatActor,
+  ChatAdapterDiagnosticInput,
   ChatAdapterEvent,
   ChatAdapterMessageEvent,
   ChatCommandRegistry,
 } from "@xmux/chat-core";
-import type { TelegramTextMessageContext } from "./client";
-import { createTelegramCommandEvent, parseTelegramCommand } from "./commands";
-import type { TelegramAdapterData } from "./types";
+import type { TelegramTextMessageContext } from "../client";
+import { createTelegramCommandEvent, parseTelegramCommand } from "../commands";
+import type { TelegramAdapterData } from "../types";
 
-export function createTelegramTextEvent<
+export type TelegramInboundDecodeResult<TEvent> =
+  | { readonly status: "event"; readonly event: TEvent }
+  | { readonly status: "ignored"; readonly reason: "self_message" };
+
+export function decodeTelegramTextUpdate<
   TCommands extends ChatCommandRegistry,
   TChatId extends string,
 >(args: {
@@ -17,17 +22,17 @@ export function createTelegramTextEvent<
   readonly context: TelegramTextMessageContext;
   readonly botUserId: number;
   readonly botUsername: string;
-  readonly diagnostic: Parameters<typeof parseTelegramCommand<TCommands, TChatId>>[0]["diagnostic"];
-}):
-  | ChatAdapterEvent<TCommands, TChatId, { readonly [TKey in TChatId]: TelegramAdapterData }>
-  | undefined {
-  const messageEvent = createTelegramTextMessageEvent({
+  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
+}): TelegramInboundDecodeResult<
+  ChatAdapterEvent<TCommands, TChatId, { readonly [TKey in TChatId]: TelegramAdapterData }>
+> {
+  const messageEvent = decodeTelegramTextMessage({
     chatId: args.chatId,
     context: args.context,
     botUserId: args.botUserId,
   });
-  if (messageEvent === undefined) {
-    return undefined;
+  if (messageEvent.status === "ignored") {
+    return messageEvent;
   }
 
   const command = parseTelegramCommand({
@@ -41,33 +46,36 @@ export function createTelegramTextEvent<
     return messageEvent;
   }
 
-  return createTelegramCommandEvent({
-    chatId: args.chatId,
-    conversationId: messageEvent.conversation.conversationId,
-    messageId: messageEvent.message.messageId,
-    actor: messageEvent.message.actor,
-    command: command.command,
-  });
+  return {
+    status: "event",
+    event: createTelegramCommandEvent({
+      chatId: args.chatId,
+      conversationId: messageEvent.event.conversation.conversationId,
+      messageId: messageEvent.event.message.messageId,
+      actor: messageEvent.event.message.actor,
+      command: command.command,
+    }),
+  };
 }
 
-export function createTelegramTextMessageEvent<TChatId extends string>(args: {
+function decodeTelegramTextMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly context: TelegramTextMessageContext;
   readonly botUserId: number;
-}): ChatAdapterMessageEvent<TChatId, TelegramAdapterData> | undefined {
+}): TelegramInboundDecodeResult<ChatAdapterMessageEvent<TChatId, TelegramAdapterData>> {
   const message = args.context.message;
   const chat = message.chat;
   const from = message.from ?? args.context.from;
 
   if (from?.id === args.botUserId) {
-    return undefined;
+    return { status: "ignored", reason: "self_message" };
   }
 
   const conversation = {
     chatId: args.chatId,
     conversationId: String(chat.id),
   };
-  const adapterData = createTelegramAdapterData({
+  const adapterData = decodeTelegramAdapterData({
     chatId: chat.id,
     messageId: message.message_id,
     raw: message,
@@ -75,21 +83,24 @@ export function createTelegramTextMessageEvent<TChatId extends string>(args: {
   });
 
   return {
-    type: "message",
-    chatId: args.chatId,
-    conversation,
-    message: {
-      ...conversation,
-      messageId: String(message.message_id),
-      text: message.text,
-      format: "plain",
-      actor: createTelegramActor({ chat, from, adapterData }),
-      adapterData,
+    status: "event",
+    event: {
+      type: "message",
+      chatId: args.chatId,
+      conversation,
+      message: {
+        ...conversation,
+        messageId: String(message.message_id),
+        text: message.text,
+        format: "plain",
+        actor: decodeTelegramActor({ chat, from, adapterData }),
+        adapterData,
+      },
     },
   };
 }
 
-function createTelegramAdapterData(args: {
+function decodeTelegramAdapterData(args: {
   readonly chatId: number | string;
   readonly messageId?: number;
   readonly raw: unknown;
@@ -103,7 +114,7 @@ function createTelegramAdapterData(args: {
   };
 }
 
-function createTelegramActor(args: {
+function decodeTelegramActor(args: {
   readonly chat: TelegramTextMessageContext["message"]["chat"];
   readonly from: TelegramTextMessageContext["from"];
   readonly adapterData: TelegramAdapterData;
