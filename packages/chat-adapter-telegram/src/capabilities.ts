@@ -15,6 +15,7 @@ export const telegramAdapterCapabilities = {
     typing: false,
     markdown: true,
     attachments: false,
+    stream: { send: true, reply: false, strategy: "native" },
   },
   reactions: {
     receive: false,

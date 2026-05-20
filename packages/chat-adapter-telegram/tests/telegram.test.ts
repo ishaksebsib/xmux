@@ -10,6 +10,7 @@ import {
   TelegramReplyError,
   TelegramSendMessageError,
   TelegramStartError,
+  TelegramStreamMessageError,
   TelegramWebhookModeUnsupportedError,
 } from "../src/errors";
 import type { TelegramTextMessageContext } from "../src/client";
@@ -64,6 +65,7 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly sendMessageMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
+  readonly streamMessageMock: ReturnType<typeof vi.fn>;
   readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
   readonly rejectPolling: (cause: unknown) => void;
 };
@@ -143,6 +145,23 @@ function createFakeTelegramBot(
     }
     return true;
   });
+  const streamMessageMock = vi.fn(
+    async (input: { readonly chatId: number; readonly stream: AsyncIterable<string> }) => {
+      let text = "";
+      for await (const chunk of input.stream) {
+        text += chunk;
+      }
+
+      return [
+        {
+          message_id: 124,
+          date: 1,
+          chat: { id: input.chatId, type: "private", first_name: "Alice" },
+          text,
+        },
+      ];
+    },
+  );
 
   return {
     catch: catchMock,
@@ -154,6 +173,7 @@ function createFakeTelegramBot(
     onTextMessage: onTextMessageMock,
     sendMessage: sendMessageMock,
     setMyCommands: setMyCommandsMock,
+    streamMessage: streamMessageMock,
     initMock,
     startMock,
     stopMock,
@@ -162,6 +182,7 @@ function createFakeTelegramBot(
     onTextMessageMock,
     sendMessageMock,
     setMyCommandsMock,
+    streamMessageMock,
     emitTextMessage: async (context) => {
       for (const handler of textMessageHandlers) {
         await handler(context);
@@ -181,6 +202,12 @@ function createRuntimeWithFakeBot(args: {
     mode: args.mode ?? { type: "polling" },
     createBot: () => args.bot,
   });
+}
+
+async function* textChunks(parts: readonly string[]) {
+  for (const delta of parts) {
+    yield { type: "delta" as const, delta };
+  }
 }
 
 function createTelegramTextContext(args: {
@@ -288,6 +315,7 @@ describe("createTelegramAdapter", () => {
     if (opened.isOk()) {
       expect(opened.value.id).toBe("telegram");
       expect(opened.value.capabilities?.messages.send).toBe(true);
+      expect(opened.value.capabilities?.messages.stream?.send).toBe(true);
       expect(opened.value.capabilities?.commands?.registration).toBe("dynamic");
     }
   });
@@ -826,6 +854,68 @@ describe("createTelegramAdapter", () => {
         expect(sent.error.message).toContain("send failed");
       }
     }
+  });
+
+  test("streamMessage uses grammY stream drafts", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["hel", "lo"]), format: "markdown" },
+      adapterOptions: { disable_notification: true },
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.streamMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 12345,
+        messageOptions: {
+          parse_mode: "MarkdownV2",
+          disable_notification: true,
+        },
+      }),
+    );
+    if (streamed.isOk()) {
+      expect(streamed.value).toMatchObject({
+        chatId: "telegram",
+        conversationId: "12345",
+        messageId: "124",
+        text: "hello",
+        format: "markdown",
+        adapterData: {
+          telegramChatId: "12345",
+          telegramMessageId: 124,
+        },
+      });
+    }
+  });
+
+  test("streamMessage rejects non-numeric conversations", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "@channel",
+      content: { chunks: textChunks(["hello"]) },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isErr()).toBe(true);
+    if (streamed.isErr()) {
+      expect(streamed.error).toBeInstanceOf(TelegramStreamMessageError);
+    }
+    expect(bot.streamMessageMock).not.toHaveBeenCalled();
   });
 
   test("reply auto uses Telegram reply parameters when message id exists", async () => {

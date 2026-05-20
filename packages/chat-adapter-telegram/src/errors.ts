@@ -67,6 +67,19 @@ export class TelegramReplyError extends TaggedError("TelegramReplyError")<{
   }
 }
 
+/** Telegram streamMessage failed. */
+export class TelegramStreamMessageError extends TaggedError("TelegramStreamMessageError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Telegram streamMessage failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Telegram sendMessage failed. */
 export class TelegramSendMessageError extends TaggedError("TelegramSendMessageError")<{
   readonly message: string;

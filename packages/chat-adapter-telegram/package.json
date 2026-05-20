@@ -35,6 +35,8 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@grammyjs/auto-retry": "^2.0.2",
+    "@grammyjs/stream": "^1.0.1",
     "@xmux/chat-core": "workspace:*",
     "better-result": "^2.9.1",
     "grammy": "^1.43.0"
