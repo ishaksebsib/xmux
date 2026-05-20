@@ -35,10 +35,9 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@chat-adapter/state-memory": "^4.27.0",
+    "@xmux/chat-core": "workspace:*",
     "@xmux/harness-core": "workspace:*",
-    "better-result": "^2.9.1",
-    "chat": "^4.27.0"
+    "better-result": "^2.9.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { createMemoryState } from "@chat-adapter/state-memory";
+import { createChat, type ChatAdapterDefinitions } from "@xmux/chat-core";
 import {
   createHarness,
   HarnessCloseError,
   type HarnessAdapterDefinitions,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
-import { Chat, type Adapter } from "chat";
+import { xmuxCommands } from "./commands";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type XmuxConfig } from "./config";
 import type { XmuxContext } from "./ctx";
@@ -15,11 +15,11 @@ import type { XmuxStore } from "./store";
 
 /**
  * Main xmux instance - manages harnesses and chats together.
- * Provides lifecycle control and webhook access.
+ * Provides lifecycle control and chat runtime access.
  */
 export interface Xmux<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends Record<string, Adapter>,
+  TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: XmuxContext<TAdapters, TChats>;
   initialize(): Promise<Result<void, XmuxInitializeError>>;
@@ -28,7 +28,7 @@ export interface Xmux<
 
 export interface CreateXmuxOptions<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends Record<string, Adapter>,
+  TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly harnesses: TAdapters;
   readonly chats: TChats;
@@ -43,7 +43,7 @@ export type XmuxCloseCause = {
 
 export function createXmux<
   const TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  const TChats extends Record<string, Adapter>,
+  const TChats extends ChatAdapterDefinitions<TChats>,
 >(options: CreateXmuxOptions<TAdapters, TChats>): Xmux<TAdapters, TChats> {
   const config = normalizeConfig(options.config);
   const harness = createHarness({ adapters: options.harnesses });
@@ -51,11 +51,9 @@ export function createXmux<
   const shutdownController = new AbortController();
   const store = options.store ?? createInMemoryStore();
 
-  const chat = new Chat<TChats>({
-    userName: config.userName,
+  const chat = createChat({
     adapters: options.chats,
-    // TODO: change this later
-    state: createMemoryState(),
+    commands: xmuxCommands,
   });
 
   const ctx: XmuxContext<TAdapters, TChats> = Object.freeze({
@@ -64,7 +62,7 @@ export function createXmux<
     harnessIds: harness.harnessIds,
     chatIds,
     harness,
-    webhooks: chat.webhooks,
+    chat,
     store,
     services: Object.freeze({
       createRequestId: randomUUID,
@@ -77,32 +75,40 @@ export function createXmux<
     ctx,
 
     async initialize() {
-      return Result.tryPromise({
-        try: async () => {
-          await chat.initialize();
-        },
+      const started = await Result.tryPromise({
+        try: () => chat.start(),
         catch: (cause) => new XmuxInitializeError({ cause }),
       });
+
+      if (started.isErr()) {
+        return Result.err(started.error);
+      }
+
+      return started.value.isOk()
+        ? Result.ok()
+        : Result.err(new XmuxInitializeError({ cause: started.value.error }));
     },
 
     async shutdown() {
       shutdownController.abort();
 
       const chatClose = await Result.tryPromise({
-        try: async () => {
-          await chat.shutdown();
-        },
+        try: () => chat.close(),
         catch: (cause) => cause,
       });
       const harnessClose = await harness.close();
 
-      if (chatClose.isOk() && harnessClose.isOk()) {
+      if (chatClose.isOk() && chatClose.value.isOk() && harnessClose.isOk()) {
         return Result.ok();
       }
 
       return Result.err(
         new XmuxCloseError({
-          chat: chatClose.isErr() ? chatClose.error : undefined,
+          chat: chatClose.isErr()
+            ? chatClose.error
+            : chatClose.value.isErr()
+              ? chatClose.value.error
+              : undefined,
           harness: harnessClose.isErr() ? harnessClose.error : undefined,
         }),
       );

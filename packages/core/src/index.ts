@@ -24,6 +24,4 @@ export type {
   XmuxHandlerContext,
   XmuxHandlerSession,
   XmuxServices,
-  XmuxWebhookHandler,
-  XmuxWebhooks,
 } from "./ctx";

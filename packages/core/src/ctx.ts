@@ -1,5 +1,6 @@
+import type { Chat, ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { Harness, HarnessAdapterDefinitions, SessionRef } from "@xmux/harness-core";
-import type { Adapter, Chat } from "chat";
+import type { XmuxCommands } from "./commands";
 import type { XmuxConfig } from "./config";
 import type { XmuxStore } from "./store";
 
@@ -11,14 +12,14 @@ import type { XmuxStore } from "./store";
  */
 export interface XmuxContext<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends Record<string, Adapter>,
+  TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly kind: "xmux";
   readonly config: XmuxConfig;
   readonly harnessIds: readonly Extract<keyof TAdapters, string>[];
   readonly chatIds: readonly Extract<keyof TChats, string>[];
   readonly harness: Harness<TAdapters>;
-  readonly webhooks: XmuxWebhooks<TChats>;
+  readonly chat: Chat<TChats, XmuxCommands>;
   /** Store for xmux-owned routing and session metadata. */
   readonly store: XmuxStore;
   readonly services: XmuxServices;
@@ -29,7 +30,7 @@ export interface XmuxContext<
  */
 export interface XmuxHandlerContext<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends Record<string, Adapter>,
+  TChats extends ChatAdapterDefinitions<TChats>,
   TChatId extends Extract<keyof TChats, string> = Extract<keyof TChats, string>,
   THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
 > {
@@ -56,11 +57,3 @@ export interface XmuxActor {
 
 /** Active harness session already associated with the current handler. */
 export type XmuxHandlerSession<THarnessId extends string = string> = SessionRef<THarnessId>;
-
-/** Webhook handler for a single chat. */
-export type XmuxWebhookHandler = Chat<Record<string, Adapter>>["webhooks"][string];
-
-/** Webhook handlers for each chat. */
-export type XmuxWebhooks<TChats extends Record<string, Adapter>> = {
-  readonly [K in Extract<keyof TChats, string>]: XmuxWebhookHandler;
-};
