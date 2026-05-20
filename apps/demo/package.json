@@ -15,6 +15,7 @@
     "@xmux/chat-adapter-telegram": "workspace:^",
     "@xmux/chat-core": "workspace:^",
     "@xmux/core": "workspace:^",
+    "@xmux/harness-opencode": "workspace:^",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {

@@ -1,4 +1,5 @@
 import "dotenv/config";
-import { runTelegramDemo } from "./telegram";
+import { runXmuxDemo } from "./xmux";
 
-await runTelegramDemo();
+await runXmuxDemo();
+//await runTelegramDemo();
