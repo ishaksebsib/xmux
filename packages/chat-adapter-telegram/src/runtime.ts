@@ -1,5 +1,4 @@
 import { Result } from "better-result";
-import type { PollingOptions } from "grammy";
 import type {
   ChatAdapterReplyInput,
   ChatAdapterSendMessageInput,
@@ -14,7 +13,6 @@ import {
   type CreateTelegramBotClient,
   type TelegramBotClient,
 } from "./client";
-import { createTelegramCommandRegistration } from "./commands";
 import { parseTelegramBotToken } from "./config";
 import {
   TelegramCommandRegistrationError,
@@ -24,12 +22,11 @@ import {
   TelegramStartError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
-import { decodeTelegramTextUpdate } from "./conversions/inbound";
-import {
-  encodeTelegramReplyMessage,
-  encodeTelegramSendMessage,
-  encodeTelegramSentMessage,
-} from "./conversions/outbound";
+import { registerInboundHandlers } from "./handlers/inbound";
+import { registerCommands } from "./handlers/register-commands";
+import { reply as handleReply } from "./handlers/reply";
+import { sendMessage as handleSendMessage } from "./handlers/send-message";
+import { initializeBot, startPolling } from "./handlers/start-polling";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -122,61 +119,31 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       return Result.err(new TelegramWebhookModeUnsupportedError());
     }
 
-    this.bot.catch((error) => {
-      context.emit({ type: "error", chatId: this.id, error });
-    });
-    this.bot.onTextMessage((telegramContext) => {
-      const botInfo = this.bot.getBotInfo();
-      const decoded = decodeTelegramTextUpdate<TCommands, TChatId>({
-        chatId: this.id,
-        commands: context.commands,
-        context: telegramContext,
-        botUserId: botInfo.id,
-        botUsername: botInfo.username,
-        diagnostic: context.diagnostic,
-      });
+    registerInboundHandlers({ chatId: this.id, bot: this.bot, context });
 
-      if (decoded.status === "event") {
-        context.emit(decoded.event);
-      }
-    });
-
-    const initialized = await Result.tryPromise({
-      try: async () => this.bot.init(context.signal),
-      catch: (cause) => new TelegramStartError({ operation: "init", cause }),
-    });
+    const initialized = await initializeBot({ bot: this.bot, signal: context.signal });
     if (initialized.isErr()) {
       return Result.err(initialized.error);
     }
 
-    const registered = await Result.tryPromise({
-      try: async () => {
-        const commands = createTelegramCommandRegistration({
-          commands: context.commands,
-          diagnostic: context.diagnostic,
-        });
-
-        if (commands.length > 0) {
-          await this.bot.setMyCommands({ commands, signal: context.signal });
-        }
-      },
-      catch: (cause) => new TelegramCommandRegistrationError({ cause }),
+    const registered = await registerCommands({
+      bot: this.bot,
+      commands: context.commands,
+      diagnostic: context.diagnostic,
+      signal: context.signal,
     });
     if (registered.isErr()) {
       return Result.err(registered.error);
     }
 
-    const polling = Result.try({
-      try: () => this.bot.start(createPollingOptions(mode)),
-      catch: (cause) => new TelegramStartError({ operation: "polling", cause }),
-    });
-    if (polling.isErr()) {
-      return Result.err(polling.error);
+    const started = startPolling({ bot: this.bot, mode });
+    if (started.isErr()) {
+      return Result.err(started.error);
     }
 
     this.#state = {
       status: "started",
-      polling: polling.value.catch((error: unknown) => {
+      polling: started.value.polling.catch((error: unknown) => {
         if (this.#state.status !== "closed") {
           context.emit({ type: "error", chatId: this.id, error });
         }
@@ -202,51 +169,13 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
   async sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendMessageError>> {
-    const request = encodeTelegramSendMessage(input);
-    const sent = await Result.tryPromise({
-      try: async () => this.bot.sendMessage({ ...request, signal: input.signal }),
-      catch: (cause) => new TelegramSendMessageError({ cause }),
-    });
-    if (sent.isErr()) {
-      return Result.err(sent.error);
-    }
-
-    return Result.ok(
-      encodeTelegramSentMessage({
-        chatId: this.id,
-        conversationId: input.conversationId,
-        text: input.text,
-        format: input.format,
-        telegramMessage: sent.value,
-      }),
-    );
+    return handleSendMessage({ chatId: this.id, bot: this.bot, input });
   }
 
   async reply(
     input: ChatAdapterReplyInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramReplyError>> {
-    const request = encodeTelegramReplyMessage(input);
-    if (request.isErr()) {
-      return Result.err(request.error);
-    }
-
-    const sent = await Result.tryPromise({
-      try: async () => this.bot.sendMessage({ ...request.value, signal: input.signal }),
-      catch: (cause) => new TelegramReplyError({ cause }),
-    });
-    if (sent.isErr()) {
-      return Result.err(sent.error);
-    }
-
-    return Result.ok(
-      encodeTelegramSentMessage({
-        chatId: this.id,
-        conversationId: input.conversationId,
-        text: input.text,
-        format: input.format,
-        telegramMessage: sent.value,
-      }),
-    );
+    return handleReply({ chatId: this.id, bot: this.bot, input });
   }
 
   async close(): Promise<void> {
@@ -265,17 +194,6 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       await this.bot.stop();
     }
   }
-}
-
-function createPollingOptions(
-  mode: Extract<TelegramAdapterMode, { readonly type: "polling" }>,
-): PollingOptions {
-  return {
-    ...(mode.dropPendingUpdates === undefined
-      ? {}
-      : { drop_pending_updates: mode.dropPendingUpdates }),
-    ...(mode.allowedUpdates === undefined ? {} : { allowed_updates: mode.allowedUpdates }),
-  };
 }
 
 function bindAbortSignal(args: {
