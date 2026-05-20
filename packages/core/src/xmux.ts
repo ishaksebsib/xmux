@@ -6,23 +6,23 @@ import {
   type HarnessAdapterDefinitions,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
-import { xmuxCommands } from "./commands";
+import { commands } from "./commands";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
-import { normalizeConfig, type XmuxConfig } from "./config";
-import type { XmuxContext } from "./ctx";
-import { registerXmuxRoutes } from "./router";
+import { normalizeConfig, type Config } from "./config";
+import type { Context } from "./ctx";
+import { registerRoutes } from "./router";
 import { createInMemoryStore } from "./store";
-import type { XmuxStore } from "./store";
+import type { Store } from "./store";
 
 /**
- * Main xmux instance - manages harnesses and chats together.
+ * Main instance that manages harnesses and chats together.
  * Provides lifecycle control and chat runtime access.
  */
 export interface Xmux<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
-  readonly ctx: XmuxContext<TAdapters, TChats>;
+  readonly ctx: Context<TAdapters, TChats>;
   initialize(): Promise<Result<void, XmuxInitializeError>>;
   shutdown(): Promise<Result<void, XmuxCloseError>>;
 }
@@ -33,8 +33,8 @@ export interface CreateXmuxOptions<
 > {
   readonly harnesses: TAdapters;
   readonly chats: TChats;
-  readonly config: XmuxConfig;
-  readonly store?: XmuxStore;
+  readonly config: Config;
+  readonly store?: Store;
 }
 
 export type XmuxCloseCause = {
@@ -54,10 +54,10 @@ export function createXmux<
 
   const chat = createChat({
     adapters: options.chats,
-    commands: xmuxCommands,
+    commands,
   });
 
-  const ctx: XmuxContext<TAdapters, TChats> = Object.freeze({
+  const ctx: Context<TAdapters, TChats> = Object.freeze({
     kind: "xmux",
     config,
     harnessIds: harness.harnessIds,
@@ -71,7 +71,7 @@ export function createXmux<
       shutdownSignal: shutdownController.signal,
     }),
   });
-  const routeUnsubscribers = registerXmuxRoutes(ctx);
+  const routeUnsubscribers = registerRoutes(ctx);
 
   return {
     ctx,

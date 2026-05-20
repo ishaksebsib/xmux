@@ -1,6 +1,6 @@
 import { TaggedError } from "better-result";
 
-/** Returned when `/new` targets a harness that is not configured in xmux. */
+/** Returned when `/new` targets a harness that is not configured. */
 export class NewCommandHarnessNotConfiguredError extends TaggedError(
   "NewCommandHarnessNotConfiguredError",
 )<{
@@ -21,7 +21,7 @@ export class NewCommandHarnessNotConfiguredError extends TaggedError(
   }
 }
 
-/** Returned when xmux cannot send the `/new` response back to chat. */
+/** Returned when the `/new` response cannot be sent back to chat. */
 export class NewCommandResponseError extends TaggedError("NewCommandResponseError")<{
   readonly cause: unknown;
   readonly message: string;

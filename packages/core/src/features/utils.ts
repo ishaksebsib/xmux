@@ -1,6 +1,6 @@
 import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import { Result, type Result as BetterResult } from "better-result";
-import type { XmuxActor } from "../ctx";
+import type { Actor } from "../ctx";
 import type { ChatThreadRef } from "../store";
 
 export interface ChatEventWithConversation<TChatId extends string = string> {
@@ -21,7 +21,7 @@ export function threadFromChatEvent<TChatId extends string>(
   };
 }
 
-export function actorFromChatActor(actor: ChatActor | undefined): XmuxActor | undefined {
+export function actorFromChatActor(actor: ChatActor | undefined): Actor | undefined {
   if (!actor) {
     return undefined;
   }

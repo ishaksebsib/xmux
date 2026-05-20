@@ -1,13 +1,11 @@
 import { Result } from "better-result";
 import type { SessionRef } from "@xmux/harness-core";
 import type { ChatThreadRef, SessionRecord, ThreadBinding } from "./model";
-import { type XmuxStore } from "./store";
+import { type Store } from "./store";
 import { StoreConflictError, StoreNotFoundError } from "../errors";
 
-/**
- * Creates an in-memory xmux store.
- */
-export function createInMemoryStore(): XmuxStore {
+/** Creates an in-memory store. */
+export function createInMemoryStore(): Store {
   const sessions = new Map<string, SessionRecord>();
   const threadBindings = new Map<string, ThreadBinding>();
 

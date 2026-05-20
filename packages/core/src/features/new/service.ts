@@ -5,8 +5,8 @@ import type {
   HarnessAdapterDefinitions,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
-import type { XmuxConfig } from "../../config";
-import type { XmuxHandlerContext } from "../../ctx";
+import type { Config } from "../../config";
+import type { HandlerContext } from "../../ctx";
 import { type StoreError } from "../../errors";
 import {
   createSessionRecord,
@@ -27,7 +27,7 @@ export interface CreateSessionForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
-  readonly ctx: XmuxHandlerContext<TAdapters, TChats>;
+  readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly thread: ChatThreadRef;
   readonly harnessId: string;
   readonly title?: string;
@@ -42,7 +42,7 @@ export async function createSessionForThread<
 ): Promise<Result<SessionRecord, CreateSessionForThreadError>> {
   const harnessId = requireConfiguredHarnessId({
     harnessId: input.harnessId,
-    availableHarnessIds: input.ctx.xmux.harnessIds,
+    availableHarnessIds: input.ctx.app.harnessIds,
     onMissing: (args) => new NewCommandHarnessNotConfiguredError(args),
   });
 
@@ -50,10 +50,10 @@ export async function createSessionForThread<
     return Result.err(harnessId.error);
   }
 
-  const created = await input.ctx.xmux.harness.createSession(
+  const created = await input.ctx.app.harness.createSession(
     createHarnessSessionInput({
       harnessId: harnessId.value,
-      config: input.ctx.xmux.config,
+      config: input.ctx.app.config,
       title: input.title,
       signal: input.ctx.signal,
     }) as CreateSessionInput<TAdapters>,
@@ -63,18 +63,18 @@ export async function createSessionForThread<
     return Result.err(created.error);
   }
 
-  const now = input.ctx.xmux.services.now().toISOString();
+  const now = input.ctx.app.services.now().toISOString();
   const record = createSessionRecord({
     origin: input.thread,
     requester: input.ctx.actor ?? UNKNOWN_ACTOR,
     cwd: created.value.cwd,
-    deliveryMode: input.ctx.xmux.config.deliveryMode,
+    deliveryMode: input.ctx.app.config.deliveryMode,
     ref: created.value.ref,
     title: created.value.title,
     now,
   });
 
-  const stored = await input.ctx.xmux.store.sessions.create(record);
+  const stored = await input.ctx.app.store.sessions.create(record);
   if (stored.isErr()) {
     return Result.err(stored.error);
   }
@@ -85,7 +85,7 @@ export async function createSessionForThread<
     now,
   });
 
-  const bound = await input.ctx.xmux.store.threadBindings.bind(binding);
+  const bound = await input.ctx.app.store.threadBindings.bind(binding);
   if (bound.isErr()) {
     return Result.err(bound.error);
   }
@@ -97,7 +97,7 @@ const UNKNOWN_ACTOR = { userId: "unknown" } satisfies ActorRef;
 
 function createHarnessSessionInput<THarnessId extends string>(input: {
   readonly harnessId: THarnessId;
-  readonly config: XmuxConfig;
+  readonly config: Config;
   readonly title?: string;
   readonly signal: AbortSignal;
 }) {

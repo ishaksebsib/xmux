@@ -5,15 +5,15 @@ import { resolve } from "node:path";
  * Fanout - all chat platforms (telegram, discord, etc) that are in the same harness session will receive the message.
  * Requester only - only the chat platform that sent the message will receive it.
  */
-export type XmuxDeliveryMode = "requester_only" | "fanout";
+export type DeliveryMode = "requester_only" | "fanout";
 
-export interface XmuxConfig {
+export interface Config {
   readonly userName: string;
   readonly defaultWorkingDirectory: string;
-  readonly deliveryMode: XmuxDeliveryMode;
+  readonly deliveryMode: DeliveryMode;
 }
 
-export function normalizeConfig(config: XmuxConfig): XmuxConfig {
+export function normalizeConfig(config: Config): Config {
   return Object.freeze({
     userName: config.userName,
     defaultWorkingDirectory: resolve(config.defaultWorkingDirectory),

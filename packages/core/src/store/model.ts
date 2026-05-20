@@ -1,12 +1,11 @@
 import type { SessionRef } from "@xmux/harness-core";
-import type { XmuxDeliveryMode } from "../config";
+import type { DeliveryMode } from "../config";
 
 /**
- * Durable xmux session metadata.
+ * Durable session metadata.
  *
- * This record is owned by xmux, not by the underlying harness adapter. Adapter
- * specific session data should stay in harness-core results unless xmux needs it
- * for routing or lifecycle decisions.
+ * Adapter-specific session data should stay in harness-core results unless it is
+ * needed for routing or lifecycle decisions.
  */
 export interface SessionRecord<
   THarnessId extends string = string,
@@ -17,7 +16,7 @@ export interface SessionRecord<
   readonly requester: ActorRef;
   readonly cwd: string;
   readonly title?: string;
-  readonly deliveryMode: XmuxDeliveryMode;
+  readonly deliveryMode: DeliveryMode;
   readonly status: SessionStatus;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -27,13 +26,13 @@ export interface SessionRecord<
 /** Fields callers may change after a session has been created. */
 export interface SessionRecordPatch {
   readonly title?: string;
-  readonly deliveryMode?: XmuxDeliveryMode;
+  readonly deliveryMode?: DeliveryMode;
   readonly status?: SessionStatus;
   readonly updatedAt: string;
   readonly closedAt?: string;
 }
 
-/** Associates a chat thread with the active xmux session serving it. */
+/** Associates a chat thread with the active harness session serving it. */
 export interface ThreadBinding<
   THarnessId extends string = string,
   TChatId extends string = string,
@@ -49,13 +48,13 @@ export interface ChatThreadRef<TChatId extends string = string> {
   readonly threadId: string;
 }
 
-/** User that caused xmux to create or route work. */
+/** User that caused work to be created or routed. */
 export interface ActorRef {
   readonly userId: string;
   readonly displayName?: string;
 }
 
-/** Lifecycle state of an xmux-managed harness session. */
+/** Lifecycle state of a managed harness session. */
 export type SessionStatus = "open" | "closed";
 
 export interface CreateSessionRecordInput {

@@ -6,18 +6,18 @@ import type { StoreConflictError, StoreNotFoundError, StoreOperationError } from
 export type StoreOperation = "create" | "read" | "update" | "delete";
 
 /**
- * Durable xmux package store.
+ * Durable package store.
  *
  * Implement this interface for Postgres, Redis, SQLite, or any other backend.
  * Handlers and services should depend on this contract rather than a concrete
  * implementation.
  */
-export interface XmuxStore {
+export interface Store {
   readonly sessions: SessionStore;
   readonly threadBindings: ThreadBindingStore;
 }
 
-/** Persistence operations for xmux-owned session metadata. */
+/** Persistence operations for owned session metadata. */
 export interface SessionStore {
   create(
     record: SessionRecord,

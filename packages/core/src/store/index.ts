@@ -1,5 +1,5 @@
 export { createInMemoryStore } from "./in-memory-store";
-export type { SessionStore, StoreOperation, ThreadBindingStore, XmuxStore } from "./store";
+export type { SessionStore, StoreOperation, ThreadBindingStore, Store } from "./store";
 export {
   createSessionRecord,
   createThreadBinding,

@@ -2,7 +2,7 @@ export { XmuxCloseError, XmuxInitializeError } from "./errors";
 export { createInMemoryStore } from "./store";
 export { createXmux } from "./xmux";
 export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
-export type { XmuxDeliveryMode, XmuxConfig } from "./config";
+export type { DeliveryMode, Config } from "./config";
 export type {
   ActorRef,
   ChatThreadRef,
@@ -11,19 +11,19 @@ export type {
   SessionStatus,
   ThreadBinding,
 } from "./store";
-export type { SessionStore, StoreOperation, ThreadBindingStore, XmuxStore } from "./store";
+export type { SessionStore, StoreOperation, ThreadBindingStore, Store } from "./store";
 export {
   type StoreError,
   StoreConflictError,
   StoreNotFoundError,
   StoreOperationError,
 } from "./errors";
-export { createXmuxHandlerContext } from "./ctx";
+export { createHandlerContext } from "./ctx";
 export type {
-  CreateXmuxHandlerContextInput,
-  XmuxActor,
-  XmuxContext,
-  XmuxHandlerContext,
-  XmuxHandlerSession,
-  XmuxServices,
+  CreateHandlerContextInput,
+  Actor,
+  Context,
+  HandlerContext,
+  HandlerSession,
+  Services,
 } from "./ctx";

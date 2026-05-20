@@ -1,13 +1,13 @@
 import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { XmuxContext } from "./ctx";
+import type { Context } from "./ctx";
 import { registerNewRoute } from "./features/new";
 
-/** Registers all built-in xmux chat routes. */
-export function registerXmuxRoutes<
+/** Registers all built-in chat routes. */
+export function registerRoutes<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(ctx: XmuxContext<TAdapters, TChats>): readonly Unsubscribe[] {
+>(ctx: Context<TAdapters, TChats>): readonly Unsubscribe[] {
   return [registerNewRoute(ctx)];
 }

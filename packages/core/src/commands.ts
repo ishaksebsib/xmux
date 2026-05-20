@@ -1,7 +1,7 @@
 import { defineChatCommand, defineChatCommands, stringOption } from "@xmux/chat-core";
 
-/** Built-in xmux commands registered with every chat adapter. */
-export const xmuxCommands = defineChatCommands({
+/** Built-in commands registered with every chat adapter. */
+export const commands = defineChatCommands({
   new: defineChatCommand({
     description: "Create a new harness session",
     options: {
@@ -14,4 +14,4 @@ export const xmuxCommands = defineChatCommands({
   }),
 });
 
-export type XmuxCommands = typeof xmuxCommands;
+export type Commands = typeof commands;

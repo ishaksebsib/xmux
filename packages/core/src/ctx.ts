@@ -1,90 +1,90 @@
 import type { Chat, ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { Harness, HarnessAdapterDefinitions, SessionRef } from "@xmux/harness-core";
-import type { XmuxCommands } from "./commands";
-import type { XmuxConfig } from "./config";
-import type { XmuxStore } from "./store";
+import type { Commands } from "./commands";
+import type { Config } from "./config";
+import type { Store } from "./store";
 
 /**
- * Long-lived xmux application context.
+ * Long-lived application context.
  *
  * This should be created once by `createXmux()` and passed to higher-level app
  * code instead of leaking raw runtime objects everywhere.
  */
-export interface XmuxContext<
+export interface Context<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly kind: "xmux";
-  readonly config: XmuxConfig;
+  readonly config: Config;
   readonly harnessIds: readonly Extract<keyof TAdapters, string>[];
   readonly chatIds: readonly Extract<keyof TChats, string>[];
   readonly harness: Harness<TAdapters>;
-  readonly chat: Chat<TChats, XmuxCommands>;
-  /** Store for xmux-owned routing and session metadata. */
-  readonly store: XmuxStore;
-  readonly services: XmuxServices;
+  readonly chat: Chat<TChats, Commands>;
+  /** Store for owned routing and session metadata. */
+  readonly store: Store;
+  readonly services: Services;
 }
 
 /**
  * Short-lived request-scoped context for internal handlers and app code.
  */
-export interface XmuxHandlerContext<
+export interface HandlerContext<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
   TChatId extends Extract<keyof TChats, string> = Extract<keyof TChats, string>,
   THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
 > {
-  readonly xmux: XmuxContext<TAdapters, TChats>;
+  readonly app: Context<TAdapters, TChats>;
   readonly chatId: TChatId;
   readonly requestId: string;
   readonly signal: AbortSignal;
-  readonly actor?: XmuxActor;
-  readonly session?: XmuxHandlerSession<THarnessId>;
+  readonly actor?: Actor;
+  readonly session?: HandlerSession<THarnessId>;
 }
 
-export interface CreateXmuxHandlerContextInput<
+export interface CreateHandlerContextInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
   TChatId extends Extract<keyof TChats, string>,
   THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
 > {
-  readonly xmux: XmuxContext<TAdapters, TChats>;
+  readonly app: Context<TAdapters, TChats>;
   readonly chatId: TChatId;
-  readonly actor?: XmuxActor;
-  readonly session?: XmuxHandlerSession<THarnessId>;
+  readonly actor?: Actor;
+  readonly session?: HandlerSession<THarnessId>;
 }
 
-/** Creates request-scoped context for one routed xmux handler invocation. */
-export function createXmuxHandlerContext<
+/** Creates request-scoped context for one routed handler invocation. */
+export function createHandlerContext<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
   TChatId extends Extract<keyof TChats, string>,
   THarnessId extends Extract<keyof TAdapters, string> = Extract<keyof TAdapters, string>,
 >(
-  input: CreateXmuxHandlerContextInput<TAdapters, TChats, TChatId, THarnessId>,
-): XmuxHandlerContext<TAdapters, TChats, TChatId, THarnessId> {
+  input: CreateHandlerContextInput<TAdapters, TChats, TChatId, THarnessId>,
+): HandlerContext<TAdapters, TChats, TChatId, THarnessId> {
   return {
-    xmux: input.xmux,
+    app: input.app,
     chatId: input.chatId,
-    requestId: input.xmux.services.createRequestId(),
-    signal: input.xmux.services.shutdownSignal,
+    requestId: input.app.services.createRequestId(),
+    signal: input.app.services.shutdownSignal,
     actor: input.actor,
     session: input.session,
   };
 }
 
-/** Stable app-scoped services shared across xmux handlers. */
-export interface XmuxServices {
+/** Stable app-scoped services shared across handlers. */
+export interface Services {
   readonly createRequestId: () => string;
   readonly now: () => Date;
   readonly shutdownSignal: AbortSignal;
 }
 
 /** User identity associated with a handler invocation. */
-export interface XmuxActor {
+export interface Actor {
   readonly userId: string;
   readonly displayName?: string;
 }
 
 /** Active harness session already associated with the current handler. */
-export type XmuxHandlerSession<THarnessId extends string = string> = SessionRef<THarnessId>;
+export type HandlerSession<THarnessId extends string = string> = SessionRef<THarnessId>;
