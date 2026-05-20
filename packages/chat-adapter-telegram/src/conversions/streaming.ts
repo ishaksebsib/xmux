@@ -1,9 +1,12 @@
 import type { MessageDraftPiece } from "@grammyjs/stream";
+import { Result } from "better-result";
 import type {
   ChatAdapterStreamMessageInput,
+  ChatAdapterStreamReplyInput,
   ChatSentMessage,
   ChatTextStreamChunk,
 } from "@xmux/chat-core";
+import { TelegramStreamReplyError } from "../errors";
 import type { TelegramStreamedTextMessages } from "../client";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 
@@ -21,16 +24,68 @@ export type TelegramStreamMessageRequest = {
 export function encodeTelegramStreamMessage(
   input: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>,
 ): TelegramStreamMessageRequest {
-  return {
-    chatId: Number(input.conversationId),
-    draftIdOffset: createTelegramDraftIdOffset(),
-    stream: encodeTelegramMessageDraftPieces(input.content.chunks),
-    draftOptions: encodeTelegramMessageDraftOptions(input),
+  return createTelegramStreamMessageRequest({
+    conversationId: input.conversationId,
+    chunks: input.content.chunks,
+    format: input.content.format,
+    adapterOptions: input.adapterOptions,
+  });
+}
+
+export function encodeTelegramStreamReplyMessage(
+  input: ChatAdapterStreamReplyInput<string, TelegramAdapterOptions>,
+): Result<TelegramStreamMessageRequest, TelegramStreamReplyError> {
+  const baseRequest = createTelegramStreamMessageRequest({
+    conversationId: input.conversationId,
+    chunks: input.content.chunks,
+    format: input.content.format,
+    adapterOptions: input.adapterOptions,
+  });
+  const mode = input.mode ?? "auto";
+
+  if (mode === "conversation") {
+    return Result.ok(baseRequest);
+  }
+
+  if (mode === "thread") {
+    return input.adapterOptions.message_thread_id === undefined
+      ? Result.err(
+          new TelegramStreamReplyError({
+            reason: "Telegram thread stream replies require adapterOptions.message_thread_id",
+          }),
+        )
+      : Result.ok(baseRequest);
+  }
+
+  const messageId = input.message?.messageId;
+  if (messageId === undefined) {
+    return mode === "auto"
+      ? Result.ok(baseRequest)
+      : Result.err(
+          new TelegramStreamReplyError({
+            reason: "Telegram quote stream replies require a message id",
+          }),
+        );
+  }
+
+  const parsedMessageId = parseTelegramMessageId(messageId);
+  if (parsedMessageId === undefined) {
+    return mode === "auto"
+      ? Result.ok(baseRequest)
+      : Result.err(
+          new TelegramStreamReplyError({
+            reason: `Telegram message id must be a positive integer: ${messageId}`,
+          }),
+        );
+  }
+
+  return Result.ok({
+    ...baseRequest,
     messageOptions: {
-      ...encodeTelegramFormatOptions(input.content.format),
-      ...input.adapterOptions,
+      reply_parameters: { message_id: parsedMessageId },
+      ...baseRequest.messageOptions,
     },
-  };
+  });
 }
 
 export function encodeTelegramStreamedMessage<TChatId extends string>(args: {
@@ -107,20 +162,47 @@ async function* encodeTelegramMessageDraftPieces(
   }
 }
 
-function encodeTelegramMessageDraftOptions(
-  input: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>,
-): TelegramStreamMessageRequest["draftOptions"] {
+function createTelegramStreamMessageRequest(args: {
+  readonly conversationId: string;
+  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
+  readonly format: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): TelegramStreamMessageRequest {
+  return {
+    chatId: Number(args.conversationId),
+    draftIdOffset: createTelegramDraftIdOffset(),
+    stream: encodeTelegramMessageDraftPieces(args.chunks),
+    draftOptions: encodeTelegramMessageDraftOptions({
+      format: args.format,
+      adapterOptions: args.adapterOptions,
+    }),
+    messageOptions: {
+      ...encodeTelegramFormatOptions(args.format),
+      ...args.adapterOptions,
+    },
+  };
+}
+
+function encodeTelegramMessageDraftOptions(args: {
+  readonly format: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): TelegramStreamMessageRequest["draftOptions"] {
   const options = {
-    ...encodeTelegramFormatOptions(input.content.format),
-    ...(input.adapterOptions.message_thread_id === undefined
+    ...encodeTelegramFormatOptions(args.format),
+    ...(args.adapterOptions.message_thread_id === undefined
       ? {}
-      : { message_thread_id: input.adapterOptions.message_thread_id }),
-    ...(input.adapterOptions.parse_mode === undefined
+      : { message_thread_id: args.adapterOptions.message_thread_id }),
+    ...(args.adapterOptions.parse_mode === undefined
       ? {}
-      : { parse_mode: input.adapterOptions.parse_mode }),
+      : { parse_mode: args.adapterOptions.parse_mode }),
   } satisfies TelegramStreamMessageRequest["draftOptions"];
 
   return Object.keys(options).length === 0 ? undefined : options;
+}
+
+function parseTelegramMessageId(messageId: string): number | undefined {
+  const parsed = Number(messageId);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function createTelegramDraftIdOffset(): number {

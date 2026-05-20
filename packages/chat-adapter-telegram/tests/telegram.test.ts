@@ -11,6 +11,7 @@ import {
   TelegramSendMessageError,
   TelegramStartError,
   TelegramStreamMessageError,
+  TelegramStreamReplyError,
   TelegramWebhookModeUnsupportedError,
 } from "../src/errors";
 import type { TelegramTextMessageContext } from "../src/client";
@@ -914,6 +915,62 @@ describe("createTelegramAdapter", () => {
     expect(streamed.isErr()).toBe(true);
     if (streamed.isErr()) {
       expect(streamed.error).toBeInstanceOf(TelegramStreamMessageError);
+    }
+    expect(bot.streamMessageMock).not.toHaveBeenCalled();
+  });
+
+  test("streamReply uses grammY stream drafts with reply parameters", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamReply({
+      chatId: "telegram",
+      conversationId: "12345",
+      message: { chatId: "telegram", conversationId: "12345", messageId: "777" },
+      content: { chunks: textChunks(["reply ", "stream"]) },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.streamMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 12345,
+        messageOptions: { reply_parameters: { message_id: 777 } },
+      }),
+    );
+    if (streamed.isOk()) {
+      expect(streamed.value).toMatchObject({
+        chatId: "telegram",
+        conversationId: "12345",
+        messageId: "124",
+        text: "reply stream",
+      });
+    }
+  });
+
+  test("streamReply rejects strict quote replies without message ids", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamReply({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["reply stream"]) },
+      mode: "quote",
+      adapterOptions: {},
+    });
+
+    expect(streamed.isErr()).toBe(true);
+    if (streamed.isErr()) {
+      expect(streamed.error).toBeInstanceOf(TelegramStreamReplyError);
     }
     expect(bot.streamMessageMock).not.toHaveBeenCalled();
   });

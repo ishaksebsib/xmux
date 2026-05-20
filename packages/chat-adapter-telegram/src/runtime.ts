@@ -4,6 +4,7 @@ import type {
   ChatAdapterSendMessageInput,
   ChatAdapterStartContext,
   ChatAdapterStreamMessageInput,
+  ChatAdapterStreamReplyInput,
   ChatCommandRegistry,
   ChatSentMessage,
   OpenedChatAdapter,
@@ -22,6 +23,7 @@ import {
   TelegramSendMessageError,
   TelegramStartError,
   TelegramStreamMessageError,
+  TelegramStreamReplyError,
   TelegramWebhookModeUnsupportedError,
 } from "./errors";
 import { registerInboundHandlers } from "./handlers/inbound";
@@ -30,6 +32,7 @@ import { reply as handleReply } from "./handlers/reply";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { initializeBot, startPolling } from "./handlers/start-polling";
 import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
+import { streamReply as handleStreamReply } from "./handlers/stream-reply";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
@@ -185,6 +188,12 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     input: ChatAdapterStreamMessageInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramStreamMessageError>> {
     return handleStreamMessage({ chatId: this.id, bot: this.bot, input });
+  }
+
+  async streamReply(
+    input: ChatAdapterStreamReplyInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramStreamReplyError>> {
+    return handleStreamReply({ chatId: this.id, bot: this.bot, input });
   }
 
   async close(): Promise<void> {
