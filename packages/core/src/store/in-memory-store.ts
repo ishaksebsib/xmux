@@ -1,6 +1,6 @@
 import { Result } from "better-result";
 import type { SessionRef } from "@xmux/harness-core";
-import type { ChatThreadRef, SessionRecord, ThreadBinding } from "../model";
+import type { ChatThreadRef, SessionRecord, ThreadBinding } from "./model";
 import { type XmuxStore } from "./store";
 import { StoreConflictError, StoreNotFoundError } from "../errors";
 

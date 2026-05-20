@@ -1,6 +1,6 @@
 import { type Result } from "better-result";
 import type { SessionRef } from "@xmux/harness-core";
-import type { ChatThreadRef, SessionRecord, SessionRecordPatch, ThreadBinding } from "../model";
+import type { ChatThreadRef, SessionRecord, SessionRecordPatch, ThreadBinding } from "./model";
 import type { StoreConflictError, StoreNotFoundError, StoreOperationError } from "../errors";
 
 export type StoreOperation = "create" | "read" | "update" | "delete";

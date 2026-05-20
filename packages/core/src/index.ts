@@ -10,7 +10,7 @@ export type {
   SessionRecordPatch,
   SessionStatus,
   ThreadBinding,
-} from "./model";
+} from "./store";
 export type { SessionStore, StoreOperation, ThreadBindingStore, XmuxStore } from "./store";
 export {
   type StoreError,

@@ -1,5 +1,5 @@
 import type { SessionRef } from "@xmux/harness-core";
-import type { XmuxDeliveryMode } from "./config";
+import type { XmuxDeliveryMode } from "../config";
 
 /**
  * Durable xmux session metadata.
