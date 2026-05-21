@@ -69,9 +69,7 @@ function compareDirectoryEntry(
   const leftRank = entryTypeRank(left);
   const rightRank = entryTypeRank(right);
 
-  return leftRank === rightRank
-    ? left.name.localeCompare(right.name)
-    : leftRank - rightRank;
+  return leftRank === rightRank ? left.name.localeCompare(right.name) : leftRank - rightRank;
 }
 
 function entryTypeRank(entry: FileSystemDirectoryEntry): number {

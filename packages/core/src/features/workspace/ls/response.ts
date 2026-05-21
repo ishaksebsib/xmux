@@ -7,9 +7,8 @@ import {
 import type { ListDirectoryForThreadError, ListDirectoryForThreadOutput } from "./service";
 
 export function formatLsSuccess(output: ListDirectoryForThreadOutput): string {
-  const body = output.entries.length === 0
-    ? "(empty)"
-    : output.entries.map(formatDirectoryEntry).join("\n");
+  const body =
+    output.entries.length === 0 ? "(empty)" : output.entries.map(formatDirectoryEntry).join("\n");
   const truncation = output.truncated
     ? `\n\nShowing ${output.entries.length} of ${output.totalEntryCount} entries.`
     : "";

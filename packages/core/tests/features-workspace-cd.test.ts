@@ -28,9 +28,13 @@ describe("/cd command", () => {
       await mkdir(child, { recursive: true });
       const replies: string[] = [];
       let emitCommand: ((event: unknown) => void) | undefined;
-      const xmux = createTestXmux({ replies, defaultWorkingDirectory: root, onEmit: (emit) => {
-        emitCommand = emit;
-      } });
+      const xmux = createTestXmux({
+        replies,
+        defaultWorkingDirectory: root,
+        onEmit: (emit) => {
+          emitCommand = emit;
+        },
+      });
 
       const initialized = await xmux.initialize();
       expect(initialized.isOk()).toBe(true);
@@ -41,8 +45,9 @@ describe("/cd command", () => {
 
       expect(replies[0]).toBe(`Changed directory to ${child}`);
       expect(
-        (await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" }))
-          .unwrap("expected workspace lookup to succeed"),
+        (
+          await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
+        ).unwrap("expected workspace lookup to succeed"),
       ).toMatchObject({ cwd: child });
 
       await xmux.shutdown();
@@ -60,9 +65,13 @@ describe("/cd command", () => {
       await mkdir(child, { recursive: true });
       const replies: string[] = [];
       let emitCommand: ((event: unknown) => void) | undefined;
-      const xmux = createTestXmux({ replies, defaultWorkingDirectory: root, onEmit: (emit) => {
-        emitCommand = emit;
-      } });
+      const xmux = createTestXmux({
+        replies,
+        defaultWorkingDirectory: root,
+        onEmit: (emit) => {
+          emitCommand = emit;
+        },
+      });
 
       const initialized = await xmux.initialize();
       expect(initialized.isOk()).toBe(true);
@@ -75,8 +84,9 @@ describe("/cd command", () => {
 
       expect(replies[1]).toBe(`Changed directory to ${parent}`);
       expect(
-        (await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" }))
-          .unwrap("expected workspace lookup to succeed"),
+        (
+          await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
+        ).unwrap("expected workspace lookup to succeed"),
       ).toMatchObject({ cwd: parent });
 
       await xmux.shutdown();
@@ -92,9 +102,13 @@ describe("/cd command", () => {
       await writeFile(join(root, "README.md"), "hello");
       const replies: string[] = [];
       let emitCommand: ((event: unknown) => void) | undefined;
-      const xmux = createTestXmux({ replies, defaultWorkingDirectory: root, onEmit: (emit) => {
-        emitCommand = emit;
-      } });
+      const xmux = createTestXmux({
+        replies,
+        defaultWorkingDirectory: root,
+        onEmit: (emit) => {
+          emitCommand = emit;
+        },
+      });
 
       const initialized = await xmux.initialize();
       expect(initialized.isOk()).toBe(true);
@@ -108,8 +122,9 @@ describe("/cd command", () => {
       expect(replies[0]).toBe(`Not a directory: ${join(root, "README.md")}`);
       expect(replies[1]).toBe(`Path not found: ${join(root, "missing")}`);
       expect(
-        (await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" }))
-          .unwrap("expected workspace lookup to succeed"),
+        (
+          await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
+        ).unwrap("expected workspace lookup to succeed"),
       ).toBeNull();
 
       await xmux.shutdown();

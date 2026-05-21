@@ -26,8 +26,19 @@ export {
   StoreOperationError,
 } from "./errors";
 export { createHandlerContext } from "./ctx";
-export { createNodeFileSystemHost } from "./filesystem";
-export type { FileSystemHost } from "./filesystem";
+export {
+  createNodeFileSystemHost,
+  FileSystemAccessError,
+  FileSystemPathNotFoundError,
+  InvalidDirectoryError,
+} from "./filesystem";
+export type {
+  FileSystemDirectoryEntry,
+  FileSystemEntryType,
+  FileSystemHost,
+  FileSystemHostError,
+  FileSystemStat,
+} from "./filesystem";
 export type {
   CreateHandlerContextInput,
   Actor,

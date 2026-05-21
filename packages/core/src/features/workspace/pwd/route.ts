@@ -2,7 +2,11 @@ import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { createHandlerContext, type Context } from "../../../ctx";
-import { actorFromChatActor, replyToInvalidCommandUsage, type InvalidCommandEvent } from "../../utils";
+import {
+  actorFromChatActor,
+  replyToInvalidCommandUsage,
+  type InvalidCommandEvent,
+} from "../../utils";
 import { PwdCommandResponseError } from "./errors";
 import { handlePwdCommand, type PwdCommandEvent } from "./handler";
 import { formatPwdCommandUsage } from "./response";

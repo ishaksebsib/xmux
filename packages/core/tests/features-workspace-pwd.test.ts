@@ -23,9 +23,13 @@ describe("/pwd command", () => {
     let emitCommand: ((event: unknown) => void) | undefined;
     const defaultWorkingDirectory = process.cwd();
 
-    const xmux = createTestXmux({ replies, defaultWorkingDirectory, onEmit: (emit) => {
-      emitCommand = emit;
-    } });
+    const xmux = createTestXmux({
+      replies,
+      defaultWorkingDirectory,
+      onEmit: (emit) => {
+        emitCommand = emit;
+      },
+    });
 
     const initialized = await xmux.initialize();
     expect(initialized.isOk()).toBe(true);
@@ -45,9 +49,13 @@ describe("/pwd command", () => {
     const defaultWorkingDirectory = process.cwd();
     const storedCwd = `${process.cwd()}/packages/core`;
 
-    const xmux = createTestXmux({ replies, defaultWorkingDirectory, onEmit: (emit) => {
-      emitCommand = emit;
-    } });
+    const xmux = createTestXmux({
+      replies,
+      defaultWorkingDirectory,
+      onEmit: (emit) => {
+        emitCommand = emit;
+      },
+    });
 
     await xmux.ctx.store.workspaces.set(
       createThreadWorkspace({
