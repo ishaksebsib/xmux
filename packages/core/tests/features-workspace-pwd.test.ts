@@ -38,7 +38,7 @@ describe("/pwd command", () => {
 
     await eventually(() => replies.length === 1);
 
-    expect(replies[0]).toBe(defaultWorkingDirectory);
+    expect(replies[0]).toBe(`**Current directory** :\n\n\`${defaultWorkingDirectory}\``);
 
     await xmux.shutdown();
   });
@@ -72,7 +72,7 @@ describe("/pwd command", () => {
 
     await eventually(() => replies.length === 1);
 
-    expect(replies[0]).toBe(storedCwd);
+    expect(replies[0]).toBe(`**Current directory** :\n\n\`${storedCwd}\``);
 
     await xmux.shutdown();
   });

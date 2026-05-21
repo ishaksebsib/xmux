@@ -33,7 +33,9 @@ describe("/ls command", () => {
       emitCommand(lsEvent({ conversationId: "conversation-1" }));
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`${root}\n\n📁 src\n📄 README.md`);
+      expect(replies[0]).toBe(
+        `**Directory listing**\n\nPath: \`${root}\`\n\n- 📁 \`src/\`\n- 📄 \`README.md\``,
+      );
 
       await xmux.shutdown();
     } finally {
@@ -55,7 +57,9 @@ describe("/ls command", () => {
       emitCommand(lsEvent({ conversationId: "conversation-1", path: "packages/core" }));
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`${child}\n\n📄 package.json`);
+      expect(replies[0]).toBe(
+        `**Directory listing**\n\nPath: \`${child}\`\n\n- 📄 \`package.json\``,
+      );
 
       await xmux.shutdown();
     } finally {
@@ -76,7 +80,7 @@ describe("/ls command", () => {
       emitCommand(lsEvent({ conversationId: "conversation-1" }));
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`${root}\n\n📄 README.md`);
+      expect(replies[0]).toBe(`**Directory listing**\n\nPath: \`${root}\`\n\n- 📄 \`README.md\``);
 
       await xmux.shutdown();
     } finally {
@@ -98,7 +102,9 @@ describe("/ls command", () => {
       emitCommand(lsEvent({ conversationId: "conversation-1" }));
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`${root}\n\n📄 .env\n📄 README.md`);
+      expect(replies[0]).toBe(
+        `**Directory listing**\n\nPath: \`${root}\`\n\n- 📄 \`.env\`\n- 📄 \`README.md\``,
+      );
 
       await xmux.shutdown();
     } finally {
@@ -121,7 +127,9 @@ describe("/ls command", () => {
       emitCommand(lsEvent({ conversationId: "conversation-1" }));
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`${root}\n\n📄 a.txt\n📄 b.txt\n\nShowing 2 of 3 entries.`);
+      expect(replies[0]).toBe(
+        `**Directory listing**\n\nPath: \`${root}\`\n\n- 📄 \`a.txt\`\n- 📄 \`b.txt\`\n\n_Showing 2 of 3 entries._`,
+      );
 
       await xmux.shutdown();
     } finally {

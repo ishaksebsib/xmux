@@ -60,7 +60,7 @@ export function requireConfiguredHarnessId<THarnessId extends string, TError>(in
 
 export async function replyToChatEvent<TError>(input: {
   readonly event: ChatEventWithReply;
-  readonly message: string;
+  readonly message: ChatTextInput;
   readonly onError: (cause: unknown) => TError;
 }): Promise<BetterResult<void, TError>> {
   const replied = await Result.tryPromise({
@@ -82,7 +82,7 @@ export async function replyToChatEvent<TError>(input: {
 export async function replyToInvalidCommandUsage<TError>(input: {
   readonly event: InvalidCommandEvent;
   readonly commandName: string;
-  readonly usage: string;
+  readonly usage: ChatTextInput;
   readonly onError: (cause: unknown) => TError;
 }): Promise<BetterResult<InvalidCommandUsageReplyStatus, TError>> {
   if (input.event.commandName !== input.commandName) {

@@ -113,7 +113,9 @@ describe("/new command", () => {
     await eventually(() => replies.length === 1);
 
     expect(createInputs).toMatchObject([{ cwd: process.cwd(), title: "Fix bug" }]);
-    expect(replies[0]).toBe("Created pi session session-1 (Fix bug).");
+    expect(replies[0]).toBe(
+      "**Session created**\n\nHarness: `pi`\nSession ID: `session-1`\nTitle: Fix bug\n- The session is now active. Send a message to start the conversation.\n",
+    );
 
     const session = await xmux.ctx.store.sessions.get({ harnessId: "pi", sessionId: "session-1" });
     expect(session.unwrap("expected session to be stored")).toMatchObject({
@@ -230,7 +232,7 @@ describe("/new command", () => {
     await eventually(() => replies.length === 1);
 
     expect(createCalls).toBe(0);
-    expect(replies[0]).toBe("Unknown harness 'missing'. Available harnesses: pi");
+    expect(replies[0]).toBe("**Error:** Unknown harness `missing`\n\nAvailable harnesses\n- `pi`");
     expect(
       NewCommandHarnessNotConfiguredError.is(
         new NewCommandHarnessNotConfiguredError({

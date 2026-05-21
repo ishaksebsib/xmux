@@ -1,3 +1,5 @@
+import type { ChatTextInput } from "@xmux/chat-core";
+import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../../components";
 import {
   FileSystemAccessError,
   FileSystemPathNotFoundError,
@@ -6,37 +8,61 @@ import {
 } from "../../../filesystem";
 import type { ListDirectoryForThreadError, ListDirectoryForThreadOutput } from "./service";
 
-export function formatLsSuccess(output: ListDirectoryForThreadOutput): string {
+export function formatLsSuccess(output: ListDirectoryForThreadOutput): ChatTextInput {
   const body =
-    output.entries.length === 0 ? "(empty)" : output.entries.map(formatDirectoryEntry).join("\n");
+    output.entries.length === 0
+      ? "_Empty directory._"
+      : output.entries.map(formatDirectoryEntry).join("\n");
   const truncation = output.truncated
-    ? `\n\nShowing ${output.entries.length} of ${output.totalEntryCount} entries.`
+    ? `\n\n_Showing ${output.entries.length} of ${output.totalEntryCount} entries._`
     : "";
 
-  return `${output.cwd}\n\n${body}${truncation}`;
+  return markdown({
+    text: [
+      "**Directory listing**",
+      "",
+      `Path: ${inlineCode(output.cwd)}`,
+      "",
+      `${body}${truncation}`,
+    ].join("\n"),
+  });
 }
 
-export function formatLsFailure(error: ListDirectoryForThreadError): string {
+export function formatLsFailure(error: ListDirectoryForThreadError): ChatTextInput {
   if (FileSystemPathNotFoundError.is(error)) {
-    return `Path not found: ${error.path}`;
+    return markdown({ text: ["**Error:** Path not found", "", inlineCode(error.path)].join("\n") });
   }
 
   if (InvalidDirectoryError.is(error)) {
-    return `Not a directory: ${error.path}`;
+    return markdown({
+      text: ["**Error:** Not a directory", "", inlineCode(error.path)].join("\n"),
+    });
   }
 
   if (FileSystemAccessError.is(error)) {
-    return `Filesystem access error: ${error.message}`;
+    return markdown({
+      text: ["**Error:** Filesystem access failed", "", markdownText(error.message)].join("\n"),
+    });
   }
 
-  return `Failed to list directory: ${error.message}`;
+  return markdown({
+    text: ["**Error:** Failed to list directory", "", markdownText(error.message)].join("\n"),
+  });
 }
 
-export function formatLsCommandUsage(): string {
-  return "Usage: /ls [path]";
+export function formatLsCommandUsage(): ChatTextInput {
+  return formatCommandHelp({
+    command: "/ls",
+    summary: "list directory entries",
+    description: "Show files and directories in the current workspace or a relative path.",
+    usage: "/ls [path]",
+    examples: ["/ls", "/ls packages/core"],
+  });
 }
 
 function formatDirectoryEntry(entry: FileSystemDirectoryEntry): string {
   const icon = entry.type === "directory" ? "📁" : entry.type === "file" ? "📄" : "•";
-  return `${icon} ${entry.name}`;
+  const name = entry.type === "directory" ? `${entry.name}/` : entry.name;
+
+  return `- ${icon} ${inlineCode(name)}`;
 }

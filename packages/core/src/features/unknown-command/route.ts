@@ -1,6 +1,7 @@
 import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import { commandNames } from "../../commands";
 import type { Context } from "../../ctx";
 import { replyToChatEvent, type ChatEventWithReply } from "../utils";
 import { UnknownCommandResponseError } from "./errors";
@@ -15,7 +16,10 @@ export function registerUnknownCommandRoute<
     const unknownCommandEvent = event as UnknownCommandEvent;
     const responded = await replyToChatEvent({
       event: unknownCommandEvent,
-      message: formatUnknownCommandResponse(unknownCommandEvent.commandName),
+      message: formatUnknownCommandResponse({
+        commandName: unknownCommandEvent.commandName,
+        availableCommands: commandNames,
+      }),
       onError: (cause) => new UnknownCommandResponseError({ cause }),
     });
 

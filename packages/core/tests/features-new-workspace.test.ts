@@ -49,7 +49,9 @@ describe("/new workspace cwd integration", () => {
       await eventually(() => replies.length === 2);
 
       expect(createInputs).toMatchObject([{ cwd: child }]);
-      expect(replies[1]).toBe("Created opencode session session-1.");
+      expect(replies[1]).toBe(
+        "**Session created**\n\nHarness: `opencode`\nSession ID: `session-1`\n- The session is now active. Send a message to start the conversation.\n",
+      );
 
       const session = await xmux.ctx.store.sessions.get({
         harnessId: "opencode",
@@ -87,7 +89,9 @@ describe("/new workspace cwd integration", () => {
       await eventually(() => replies.length === 1);
 
       expect(createInputs).toMatchObject([{ cwd: root }]);
-      expect(replies[0]).toBe("Created opencode session session-1.");
+      expect(replies[0]).toBe(
+        "**Session created**\n\nHarness: `opencode`\nSession ID: `session-1`\n- The session is now active. Send a message to start the conversation.\n",
+      );
 
       await xmux.shutdown();
     } finally {

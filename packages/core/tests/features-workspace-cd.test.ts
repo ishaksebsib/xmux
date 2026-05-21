@@ -43,7 +43,7 @@ describe("/cd command", () => {
 
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`Changed directory to ${child}`);
+      expect(replies[0]).toBe(`**Directory changed**\n\nCurrent directory: \`${child}\``);
       expect(
         (
           await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
@@ -82,7 +82,7 @@ describe("/cd command", () => {
       emitCommand?.(cdEvent({ conversationId: "conversation-1", path: ".." }));
       await eventually(() => replies.length === 2);
 
-      expect(replies[1]).toBe(`Changed directory to ${parent}`);
+      expect(replies[1]).toBe(`**Directory changed**\n\nCurrent directory: \`${parent}\``);
       expect(
         (
           await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
@@ -119,8 +119,8 @@ describe("/cd command", () => {
       emitCommand?.(cdEvent({ conversationId: "conversation-1", path: "missing" }));
       await eventually(() => replies.length === 2);
 
-      expect(replies[0]).toBe(`Not a directory: ${join(root, "README.md")}`);
-      expect(replies[1]).toBe(`Path not found: ${join(root, "missing")}`);
+      expect(replies[0]).toBe(`**Error:** Not a directory\n\n\`${join(root, "README.md")}\``);
+      expect(replies[1]).toBe(`**Error:** Path not found\n\n\`${join(root, "missing")}\``);
       expect(
         (
           await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })

@@ -33,3 +33,5 @@ export const commands = defineChatCommands({
 });
 
 export type Commands = typeof commands;
+
+export const commandNames = Object.freeze(Object.keys(commands).map((name) => `/${name}`));
