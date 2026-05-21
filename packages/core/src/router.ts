@@ -4,11 +4,12 @@ import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
 import { registerNewRoute } from "./features/new";
 import { registerUnknownCommandRoute } from "./features/unknown-command";
+import { registerPwdRoute } from "./features/workspace";
 
 /** Registers all built-in chat routes. */
 export function registerRoutes<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(ctx: Context<TAdapters, TChats>): readonly Unsubscribe[] {
-  return [registerNewRoute(ctx), registerUnknownCommandRoute(ctx)];
+  return [registerNewRoute(ctx), registerPwdRoute(ctx), registerUnknownCommandRoute(ctx)];
 }

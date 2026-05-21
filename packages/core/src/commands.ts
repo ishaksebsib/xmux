@@ -12,6 +12,9 @@ export const commands = defineChatCommands({
       title: stringOption({ description: "Optional session title" }),
     },
   }),
+  pwd: defineChatCommand({
+    description: "Show the current workspace directory for this chat thread",
+  }),
 });
 
 export type Commands = typeof commands;
