@@ -2,7 +2,7 @@ export { XmuxCloseError, XmuxInitializeError } from "./errors";
 export { createInMemoryStore } from "./store";
 export { createXmux } from "./xmux";
 export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
-export type { DeliveryMode, Config } from "./config";
+export type { DeliveryMode, Config, NormalizedConfig, WorkspaceConfig } from "./config";
 export type {
   ActorRef,
   ChatThreadRef,
@@ -26,6 +26,8 @@ export {
   StoreOperationError,
 } from "./errors";
 export { createHandlerContext } from "./ctx";
+export { createNodeFileSystemHost } from "./filesystem";
+export type { FileSystemHost } from "./filesystem";
 export type {
   CreateHandlerContextInput,
   Actor,

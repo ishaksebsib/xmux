@@ -9,6 +9,7 @@ import { Result } from "better-result";
 import { commands } from "./commands";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type Config } from "./config";
+import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
 import { registerRoutes } from "./router";
 import { createInMemoryStore } from "./store";
@@ -35,6 +36,7 @@ export interface CreateXmuxOptions<
   readonly chats: TChats;
   readonly config: Config;
   readonly store?: Store;
+  readonly fs?: FileSystemHost;
 }
 
 export type XmuxCloseCause = {
@@ -51,6 +53,7 @@ export function createXmux<
   const chatIds = Object.freeze(Object.keys(options.chats) as Extract<keyof TChats, string>[]);
   const shutdownController = new AbortController();
   const store = options.store ?? createInMemoryStore();
+  const fs = options.fs ?? createNodeFileSystemHost();
 
   const chat = createChat({
     adapters: options.chats,
@@ -65,6 +68,7 @@ export function createXmux<
     harness,
     chat,
     store,
+    fs,
     services: Object.freeze({
       createRequestId: randomUUID,
       now: () => new Date(),

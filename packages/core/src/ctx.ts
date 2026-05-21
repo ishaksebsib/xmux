@@ -1,7 +1,8 @@
 import type { Chat, ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { Harness, HarnessAdapterDefinitions, SessionRef } from "@xmux/harness-core";
 import type { Commands } from "./commands";
-import type { Config } from "./config";
+import type { NormalizedConfig } from "./config";
+import type { FileSystemHost } from "./filesystem";
 import type { Store } from "./store";
 
 /**
@@ -15,13 +16,14 @@ export interface Context<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly kind: "xmux";
-  readonly config: Config;
+  readonly config: NormalizedConfig;
   readonly harnessIds: readonly Extract<keyof TAdapters, string>[];
   readonly chatIds: readonly Extract<keyof TChats, string>[];
   readonly harness: Harness<TAdapters>;
   readonly chat: Chat<TChats, Commands>;
   /** Store for owned routing and session metadata. */
   readonly store: Store;
+  readonly fs: FileSystemHost;
   readonly services: Services;
 }
 

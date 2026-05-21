@@ -5,7 +5,7 @@ import type {
   HarnessAdapterDefinitions,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
-import type { Config } from "../../config";
+import type { NormalizedConfig } from "../../config";
 import type { HandlerContext } from "../../ctx";
 import { type StoreError } from "../../errors";
 import {
@@ -97,7 +97,7 @@ const UNKNOWN_ACTOR = { userId: "unknown" } satisfies ActorRef;
 
 function createHarnessSessionInput<THarnessId extends string>(input: {
   readonly harnessId: THarnessId;
-  readonly config: Config;
+  readonly config: NormalizedConfig;
   readonly title?: string;
   readonly signal: AbortSignal;
 }) {
