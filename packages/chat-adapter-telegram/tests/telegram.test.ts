@@ -704,7 +704,35 @@ describe("createTelegramAdapter", () => {
     expect(events[0]).toMatchObject({ type: "message", message: { text: "/start@other_bot" } });
   });
 
-  test("invalid slash command options emit diagnostics without malformed command events", async () => {
+  test("unknown slash commands emit unknown command events", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const commands = defineChatCommands({
+      start: defineChatCommand({ description: "Start session" }),
+    });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(
+      createStartContext({ chatId: "telegram", commands, events }),
+    );
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitTextMessage(
+      createTelegramTextContext({
+        text: "/jfkdlfjd",
+        entities: [{ type: "bot_command", offset: 0, length: "/jfkdlfjd".length }],
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "command.unknown", commandName: "jfkdlfjd" });
+  });
+
+  test("invalid slash command options emit diagnostics and invalid command events", async () => {
     const bot = createFakeTelegramBot();
     const diagnostics: string[] = [];
     const events: unknown[] = [];
@@ -736,7 +764,12 @@ describe("createTelegramAdapter", () => {
 
     expect(diagnostics).toContain("COMMAND_PARSE_FAILED");
     expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({ type: "message", message: { text: "/start --harness bad" } });
+    expect(events[0]).toMatchObject({
+      type: "command.invalid",
+      commandName: "start",
+      optionName: "harness",
+      reason: "value must be one of: opencode, pi",
+    });
   });
 
   test("text updates from the current bot are ignored", async () => {

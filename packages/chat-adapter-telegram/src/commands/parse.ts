@@ -9,7 +9,13 @@ import type { TelegramTextMessageContext } from "../client";
 export type TelegramCommandParseResult<TCommands extends ChatCommandRegistry> =
   | { readonly status: "not_command" }
   | { readonly status: "command_for_other_bot" }
-  | { readonly status: "invalid" }
+  | { readonly status: "unknown"; readonly commandName: string }
+  | {
+      readonly status: "invalid";
+      readonly commandName: string;
+      readonly reason: string;
+      readonly optionName?: string;
+    }
   | { readonly status: "command"; readonly command: ParsedTelegramCommand<TCommands> };
 
 type ParsedTelegramCommand<TCommands extends ChatCommandRegistry> = ChatCommandValues<TCommands>;
@@ -35,7 +41,7 @@ export function parseTelegramCommand<
 
   const command = args.commands[parsedToken.name];
   if (command === undefined) {
-    return { status: "not_command" };
+    return { status: "unknown", commandName: parsedToken.name };
   }
 
   const parsedOptions = parseCommandOptions({
@@ -45,7 +51,12 @@ export function parseTelegramCommand<
     diagnostic: args.diagnostic,
   });
   if (parsedOptions.status === "invalid") {
-    return { status: "invalid" };
+    return {
+      status: "invalid",
+      commandName: parsedToken.name,
+      reason: parsedOptions.reason,
+      optionName: parsedOptions.optionName,
+    };
   }
 
   return {
@@ -88,7 +99,7 @@ function parseCommandOptions<TChatId extends string>(args: {
   readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
 }):
   | { readonly status: "valid"; readonly options: Record<string, unknown> }
-  | { readonly status: "invalid" } {
+  | { readonly status: "invalid"; readonly optionName: string; readonly reason: string } {
   const optionDefinitions = args.definition.options ?? {};
   const rawOptions = createRawCommandOptions({
     input: args.input,
@@ -106,7 +117,7 @@ function parseCommandOptions<TChatId extends string>(args: {
           optionName: name,
           reason: "required option is missing",
         });
-        return { status: "invalid" };
+        return { status: "invalid", optionName: name, reason: "required option is missing" };
       }
 
       options[name] = undefined;
@@ -121,17 +132,18 @@ function parseCommandOptions<TChatId extends string>(args: {
         optionName: name,
         reason: value.reason,
       });
-      return { status: "invalid" };
+      return { status: "invalid", optionName: name, reason: value.reason };
     }
 
     if (definition.choices !== undefined && !definition.choices.includes(value.value as never)) {
+      const reason = `value must be one of: ${definition.choices.join(", ")}`;
       emitCommandParseDiagnostic({
         diagnostic: args.diagnostic,
         commandName: args.commandName,
         optionName: name,
-        reason: `value must be one of: ${definition.choices.join(", ")}`,
+        reason,
       });
-      return { status: "invalid" };
+      return { status: "invalid", optionName: name, reason };
     }
 
     options[name] = value.value;

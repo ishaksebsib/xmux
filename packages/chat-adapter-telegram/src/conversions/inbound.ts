@@ -42,6 +42,44 @@ export function decodeTelegramTextUpdate<
     diagnostic: args.diagnostic,
   });
 
+  if (command.status === "unknown") {
+    return {
+      status: "event",
+      event: {
+        type: "command.unknown",
+        chatId: args.chatId,
+        conversation: messageEvent.event.conversation,
+        message: {
+          chatId: args.chatId,
+          conversationId: messageEvent.event.conversation.conversationId,
+          messageId: messageEvent.event.message.messageId,
+        },
+        actor: messageEvent.event.message.actor,
+        commandName: command.commandName,
+      },
+    };
+  }
+
+  if (command.status === "invalid") {
+    return {
+      status: "event",
+      event: {
+        type: "command.invalid",
+        chatId: args.chatId,
+        conversation: messageEvent.event.conversation,
+        message: {
+          chatId: args.chatId,
+          conversationId: messageEvent.event.conversation.conversationId,
+          messageId: messageEvent.event.message.messageId,
+        },
+        actor: messageEvent.event.message.actor,
+        commandName: command.commandName,
+        reason: command.reason,
+        optionName: command.optionName,
+      },
+    };
+  }
+
   if (command.status !== "command") {
     return messageEvent;
   }
