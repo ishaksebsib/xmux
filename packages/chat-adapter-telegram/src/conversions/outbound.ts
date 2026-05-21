@@ -7,6 +7,7 @@ import type {
 import type { TelegramBotClient, TelegramSentTextMessage } from "../client";
 import { TelegramReplyError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
+import { encodeTelegramFormattedText, encodeTelegramFormatOptions } from "./formatting";
 
 declare const telegramMessageIdBrand: unique symbol;
 
@@ -18,10 +19,19 @@ export type TelegramSendMessageRequest = Omit<TelegramBotSendMessageArgs, "signa
 export function encodeTelegramSendMessage(
   input: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>,
 ): TelegramSendMessageRequest {
+  const formattedText = encodeTelegramFormattedText({
+    text: input.text,
+    format: input.format,
+    adapterOptions: input.adapterOptions,
+  });
+
   return {
     chatId: input.conversationId,
-    text: input.text,
-    options: encodeTelegramSendMessageOptions(input),
+    text: formattedText.text,
+    options: {
+      ...formattedText.options,
+      ...input.adapterOptions,
+    },
   };
 }
 
@@ -33,9 +43,15 @@ export function encodeTelegramReplyMessage(
     return Result.err(options.error);
   }
 
+  const formattedText = encodeTelegramFormattedText({
+    text: input.text,
+    format: input.format,
+    adapterOptions: input.adapterOptions,
+  });
+
   return Result.ok({
     chatId: input.conversationId,
-    text: input.text,
+    text: formattedText.text,
     options: options.value,
   });
 }
@@ -108,20 +124,6 @@ function encodeTelegramReplyMessageOptions(
     ...encodeTelegramReplyParameters(parsedMessageId.value),
     ...baseOptions,
   });
-}
-
-function encodeTelegramFormatOptions(
-  format: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>["format"],
-): TelegramAdapterOptions {
-  if (format === "html") {
-    return { parse_mode: "HTML" };
-  }
-
-  if (format === "markdown") {
-    return { parse_mode: "MarkdownV2" };
-  }
-
-  return {};
 }
 
 function encodeTelegramReplyParameters(messageId: TelegramMessageId): TelegramAdapterOptions {

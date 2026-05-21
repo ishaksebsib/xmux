@@ -39,7 +39,8 @@
     "@grammyjs/stream": "^1.0.1",
     "@xmux/chat-core": "workspace:*",
     "better-result": "^2.9.1",
-    "grammy": "^1.43.0"
+    "grammy": "^1.43.0",
+    "telegramify-markdown": "^1.3.3"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

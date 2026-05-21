@@ -811,7 +811,7 @@ describe("createTelegramAdapter", () => {
     const sent = await opened.value.sendMessage({
       chatId: "telegram",
       conversationId: "12345",
-      text: "*hello*",
+      text: "**hello** from hello_world",
       format: "markdown",
       adapterOptions: { disable_notification: true },
     });
@@ -819,7 +819,7 @@ describe("createTelegramAdapter", () => {
     expect(sent.isOk()).toBe(true);
     expect(bot.sendMessageMock).toHaveBeenCalledWith({
       chatId: "12345",
-      text: "*hello*",
+      text: "*hello* from hello\\_world",
       options: {
         parse_mode: "MarkdownV2",
         disable_notification: true,
@@ -831,7 +831,7 @@ describe("createTelegramAdapter", () => {
         chatId: "telegram",
         conversationId: "12345",
         messageId: "123",
-        text: "*hello*",
+        text: "**hello** from hello_world",
         format: "markdown",
         adapterData: {
           telegramChatId: "12345",
@@ -861,6 +861,31 @@ describe("createTelegramAdapter", () => {
     expect(bot.sendMessageMock).toHaveBeenCalledWith({
       chatId: "12345",
       text: "<b>hello</b>",
+      options: { parse_mode: "Markdown" },
+      signal: undefined,
+    });
+  });
+
+  test("sendMessage lets adapter parse mode override markdown conversion", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      text: "**hello**",
+      format: "markdown",
+      adapterOptions: { parse_mode: "Markdown" },
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      text: "**hello**",
       options: { parse_mode: "Markdown" },
       signal: undefined,
     });
@@ -1008,7 +1033,7 @@ describe("createTelegramAdapter", () => {
     expect(bot.streamMessageMock).not.toHaveBeenCalled();
   });
 
-  test("reply auto uses Telegram reply parameters when message id exists", async () => {
+  test("reply auto uses Telegram reply parameters and markdown conversion", async () => {
     const bot = createFakeTelegramBot();
     const opened = createRuntimeWithFakeBot({ bot });
     expect(opened.isOk()).toBe(true);
@@ -1020,15 +1045,16 @@ describe("createTelegramAdapter", () => {
       chatId: "telegram",
       conversationId: "12345",
       message: { chatId: "telegram", conversationId: "12345", messageId: "777" },
-      text: "reply",
+      text: "reply **ok** for hello_world",
+      format: "markdown",
       adapterOptions: {},
     });
 
     expect(replied.isOk()).toBe(true);
     expect(bot.sendMessageMock).toHaveBeenCalledWith({
       chatId: "12345",
-      text: "reply",
-      options: { reply_parameters: { message_id: 777 } },
+      text: "reply *ok* for hello\\_world",
+      options: { reply_parameters: { message_id: 777 }, parse_mode: "MarkdownV2" },
       signal: undefined,
     });
   });
