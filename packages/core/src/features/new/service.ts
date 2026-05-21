@@ -16,6 +16,7 @@ import {
   type SessionRecord,
 } from "../../store";
 import { requireConfiguredHarnessId } from "../utils";
+import { getCurrentWorkspaceCwd } from "../workspace";
 import { NewCommandHarnessNotConfiguredError } from "./errors";
 
 export type CreateSessionForThreadError =
@@ -50,10 +51,16 @@ export async function createSessionForThread<
     return Result.err(harnessId.error);
   }
 
+  const cwd = await getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread });
+
+  if (cwd.isErr()) {
+    return Result.err(cwd.error);
+  }
+
   const created = await input.ctx.app.harness.createSession(
     createHarnessSessionInput({
       harnessId: harnessId.value,
-      config: input.ctx.app.config,
+      cwd: cwd.value,
       title: input.title,
       signal: input.ctx.signal,
     }) as CreateSessionInput<TAdapters>,
@@ -97,13 +104,13 @@ const UNKNOWN_ACTOR = { userId: "unknown" } satisfies ActorRef;
 
 function createHarnessSessionInput<THarnessId extends string>(input: {
   readonly harnessId: THarnessId;
-  readonly config: NormalizedConfig;
+  readonly cwd: NormalizedConfig["defaultWorkingDirectory"];
   readonly title?: string;
   readonly signal: AbortSignal;
 }) {
   return {
     harnessId: input.harnessId,
-    cwd: input.config.defaultWorkingDirectory,
+    cwd: input.cwd,
     ...(input.title === undefined ? {} : { title: input.title }),
     signal: input.signal,
   };
