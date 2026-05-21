@@ -24,6 +24,12 @@ export const commands = defineChatCommands({
       }),
     },
   }),
+  ls: defineChatCommand({
+    description: "List files in the current workspace directory",
+    options: {
+      path: stringOption({ description: "Optional directory path to list" }),
+    },
+  }),
 });
 
 export type Commands = typeof commands;

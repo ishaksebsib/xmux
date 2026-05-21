@@ -4,7 +4,7 @@ import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
 import { registerNewRoute } from "./features/new";
 import { registerUnknownCommandRoute } from "./features/unknown-command";
-import { registerCdRoute, registerPwdRoute } from "./features/workspace";
+import { registerCdRoute, registerLsRoute, registerPwdRoute } from "./features/workspace";
 
 /** Registers all built-in chat routes. */
 export function registerRoutes<
@@ -15,6 +15,7 @@ export function registerRoutes<
     registerNewRoute(ctx),
     registerPwdRoute(ctx),
     registerCdRoute(ctx),
+    registerLsRoute(ctx),
     registerUnknownCommandRoute(ctx),
   ];
 }
