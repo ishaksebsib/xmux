@@ -9,6 +9,7 @@ import type {
 import { TelegramStreamReplyError } from "../errors";
 import type { TelegramStreamedTextMessages } from "../client";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
+import { encodeTelegramFormatOptions } from "./formatting";
 
 export type TelegramStreamMessageRequest = {
   readonly chatId: number;
@@ -122,18 +123,14 @@ export function parseTelegramPrivateChatId(conversationId: string): number | und
   return Number.isInteger(chatId) && chatId > 0 ? chatId : undefined;
 }
 
-export function encodeTelegramFormatOptions(
-  format: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>["content"]["format"],
-): TelegramAdapterOptions {
-  if (format === "html") {
-    return { parse_mode: "HTML" };
-  }
-
-  if (format === "markdown") {
-    return { parse_mode: "MarkdownV2" };
-  }
-
-  return {};
+export function shouldFinalizeTelegramMarkdownStream(args: {
+  readonly format: ChatAdapterStreamMessageInput<
+    string,
+    TelegramAdapterOptions
+  >["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): boolean {
+  return args.format === "markdown" && args.adapterOptions.parse_mode === undefined;
 }
 
 async function* encodeTelegramMessageDraftPieces(
@@ -183,7 +180,10 @@ function createTelegramStreamMessageRequest(args: {
       adapterOptions: args.adapterOptions,
     }),
     messageOptions: {
-      ...encodeTelegramFormatOptions(args.format),
+      ...encodeTelegramStreamFormatOptions({
+        format: args.format,
+        adapterOptions: args.adapterOptions,
+      }),
       ...args.adapterOptions,
     },
   };
@@ -197,7 +197,10 @@ function encodeTelegramMessageDraftOptions(args: {
   readonly adapterOptions: TelegramAdapterOptions;
 }): TelegramStreamMessageRequest["draftOptions"] {
   const options = {
-    ...encodeTelegramFormatOptions(args.format),
+    ...encodeTelegramStreamFormatOptions({
+      format: args.format,
+      adapterOptions: args.adapterOptions,
+    }),
     ...(args.adapterOptions.message_thread_id === undefined
       ? {}
       : { message_thread_id: args.adapterOptions.message_thread_id }),
@@ -207,6 +210,16 @@ function encodeTelegramMessageDraftOptions(args: {
   } satisfies TelegramStreamMessageRequest["draftOptions"];
 
   return Object.keys(options).length === 0 ? undefined : options;
+}
+
+function encodeTelegramStreamFormatOptions(args: {
+  readonly format: ChatAdapterStreamMessageInput<
+    string,
+    TelegramAdapterOptions
+  >["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): TelegramAdapterOptions {
+  return shouldFinalizeTelegramMarkdownStream(args) ? {} : encodeTelegramFormatOptions(args.format);
 }
 
 function parseTelegramMessageId(messageId: string): number | undefined {

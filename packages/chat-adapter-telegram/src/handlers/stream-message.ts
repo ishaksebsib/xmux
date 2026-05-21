@@ -6,9 +6,11 @@ import {
   encodeTelegramStreamedMessage,
   encodeTelegramStreamMessage,
   parseTelegramPrivateChatId,
+  shouldFinalizeTelegramMarkdownStream,
 } from "../conversions/streaming";
 import { TelegramStreamMessageError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
+import { finalizeMarkdownStream } from "./finalize-markdown-stream";
 
 export async function streamMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
@@ -40,6 +42,23 @@ export async function streamMessage<TChatId extends string>(args: {
   });
   if (streamed.isErr()) {
     return Result.err(streamed.error);
+  }
+
+  if (
+    shouldFinalizeTelegramMarkdownStream({
+      format: args.input.content.format,
+      adapterOptions: args.input.adapterOptions,
+    })
+  ) {
+    const finalized = await finalizeMarkdownStream({
+      bot: args.bot,
+      telegramMessages: streamed.value,
+      signal: args.input.signal,
+      createError: (cause) => new TelegramStreamMessageError({ cause }),
+    });
+    if (finalized.isErr()) {
+      return Result.err(finalized.error);
+    }
   }
 
   const sent = Result.try({

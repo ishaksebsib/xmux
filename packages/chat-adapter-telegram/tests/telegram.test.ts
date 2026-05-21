@@ -58,6 +58,7 @@ type CreateBotClient = NonNullable<
 >;
 
 type FakeTelegramBot = ReturnType<CreateBotClient> & {
+  readonly editMessageTextMock: ReturnType<typeof vi.fn>;
   readonly initMock: ReturnType<typeof vi.fn>;
   readonly startMock: ReturnType<typeof vi.fn>;
   readonly stopMock: ReturnType<typeof vi.fn>;
@@ -121,6 +122,13 @@ function createFakeTelegramBot(
   }));
   const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> =
     [];
+  const editMessageTextMock = vi.fn(
+    async (_input: {
+      readonly chatId: string | number;
+      readonly messageId: number;
+      readonly text: string;
+    }) => true,
+  );
   const onTextMessageMock = vi.fn(
     (handler: (context: TelegramTextMessageContext) => void | Promise<void>) => {
       textMessageHandlers.push(handler);
@@ -166,6 +174,7 @@ function createFakeTelegramBot(
 
   return {
     catch: catchMock,
+    editMessageText: editMessageTextMock,
     getBotInfo: getBotInfoMock,
     init: initMock,
     isRunning: () => running,
@@ -184,6 +193,7 @@ function createFakeTelegramBot(
     sendMessageMock,
     setMyCommandsMock,
     streamMessageMock,
+    editMessageTextMock,
     emitTextMessage: async (context) => {
       for (const handler of textMessageHandlers) {
         await handler(context);
@@ -934,12 +944,10 @@ describe("createTelegramAdapter", () => {
     expect(bot.streamMessageMock).toHaveBeenCalledWith(
       expect.objectContaining({
         chatId: 12345,
-        messageOptions: {
-          parse_mode: "MarkdownV2",
-          disable_notification: true,
-        },
+        messageOptions: { disable_notification: true },
       }),
     );
+    expect(bot.editMessageTextMock).not.toHaveBeenCalled();
     if (streamed.isOk()) {
       expect(streamed.value).toMatchObject({
         chatId: "telegram",
@@ -952,6 +960,41 @@ describe("createTelegramAdapter", () => {
           telegramMessageId: 124,
         },
       });
+    }
+  });
+
+  test("streamMessage finalizes markdown streams with MarkdownV2 edit", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["**hel", "lo** from hello_world"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.streamMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 12345,
+        messageOptions: {},
+      }),
+    );
+    expect(bot.editMessageTextMock).toHaveBeenCalledWith({
+      chatId: 12345,
+      messageId: 124,
+      text: "*hello* from hello\\_world",
+      options: { parse_mode: "MarkdownV2" },
+      signal: undefined,
+    });
+    if (streamed.isOk()) {
+      expect(streamed.value.text).toBe("**hello** from hello_world");
+      expect(streamed.value.format).toBe("markdown");
     }
   });
 
@@ -1007,6 +1050,42 @@ describe("createTelegramAdapter", () => {
         messageId: "124",
         text: "reply stream",
       });
+    }
+  });
+
+  test("streamReply finalizes markdown streams with MarkdownV2 edit", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamReply({
+      chatId: "telegram",
+      conversationId: "12345",
+      message: { chatId: "telegram", conversationId: "12345", messageId: "777" },
+      content: { chunks: textChunks(["reply **", "ok**"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.streamMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 12345,
+        messageOptions: { reply_parameters: { message_id: 777 } },
+      }),
+    );
+    expect(bot.editMessageTextMock).toHaveBeenCalledWith({
+      chatId: 12345,
+      messageId: 124,
+      text: "reply *ok*",
+      options: { parse_mode: "MarkdownV2" },
+      signal: undefined,
+    });
+    if (streamed.isOk()) {
+      expect(streamed.value.text).toBe("reply **ok**");
+      expect(streamed.value.format).toBe("markdown");
     }
   });
 

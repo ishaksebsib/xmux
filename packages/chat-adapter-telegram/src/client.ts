@@ -9,9 +9,11 @@ type GrammyBotApi = Bot["api"];
 type BotCatch = Bot["catch"];
 type BotInit = Bot["init"];
 type BotStart = Bot["start"];
+type EditMessageText = GrammyBotApi["editMessageText"];
 type SendMessage = GrammyBotApi["sendMessage"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
 
+export type TelegramEditedTextMessage = Awaited<ReturnType<EditMessageText>>;
 export type TelegramSentTextMessage = Awaited<ReturnType<SendMessage>>;
 export type TelegramStreamedTextMessages = Message.TextMessage[];
 
@@ -23,6 +25,13 @@ export type TelegramTextMessageHandler = (
 
 export interface TelegramBotClient {
   catch(handler: Parameters<BotCatch>[0]): ReturnType<BotCatch>;
+  editMessageText(args: {
+    readonly chatId: Parameters<EditMessageText>[0];
+    readonly messageId: Parameters<EditMessageText>[1];
+    readonly text: Parameters<EditMessageText>[2];
+    readonly options?: Parameters<EditMessageText>[3];
+    readonly signal?: AbortSignal;
+  }): ReturnType<EditMessageText>;
   getBotInfo(): UserFromGetMe;
   init(signal?: AbortSignal): ReturnType<BotInit>;
   isRunning(): boolean;
@@ -64,6 +73,14 @@ export function createTelegramBotClient(args: {
 
   return {
     catch: bot.catch.bind(bot),
+    editMessageText: (input) =>
+      bot.api.editMessageText(
+        input.chatId,
+        input.messageId,
+        input.text,
+        input.options,
+        input.signal as Parameters<EditMessageText>[4],
+      ),
     getBotInfo: () => bot.botInfo,
     init: (signal) => bot.init(signal as Parameters<BotInit>[0]),
     isRunning: bot.isRunning.bind(bot),

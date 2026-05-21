@@ -17,6 +17,9 @@ const commands = defineChatCommands({
   stream: defineChatCommand({
     description: "Stream a demo paragraph to Telegram",
   }),
+  stream_markdown: defineChatCommand({
+    description: "Stream a Markdown demo, then finalize it as Telegram MarkdownV2",
+  }),
   stream_reply: defineChatCommand({
     description: "Stream a demo paragraph as a reply",
   }),
@@ -64,7 +67,7 @@ export async function runTelegramDemo() {
 
     const name = event.command.options.name ?? "there";
     await event.reply(
-      `Hello ${name}! Try /echo --text "hello from xmux", /stream, or /stream_reply`,
+      `Hello ${name}! Try /echo --text "hello from xmux", /stream, /stream_markdown, or /stream_reply`,
       { mode: "quote" },
     );
   });
@@ -88,6 +91,20 @@ export async function runTelegramDemo() {
       chatId: event.chatId,
       conversationId: event.conversation.conversationId,
       content: { chunks: streamDemoParagraph() },
+      fallback: "error",
+    });
+  });
+
+  chat.on("command", "stream_markdown", async (event) => {
+    if (!isAllowedTelegramActor({ actorId: event.actor?.actorId, allowedUserIds })) {
+      await event.reply("This demo bot is restricted to configured Telegram user ids.");
+      return;
+    }
+
+    await chat.streamMessage({
+      chatId: event.chatId,
+      conversationId: event.conversation.conversationId,
+      content: { chunks: streamMarkdownDemoParagraph(), format: "markdown" },
       fallback: "error",
     });
   });
@@ -133,6 +150,22 @@ async function* streamDemoParagraph() {
     "This Telegram demo sends a message draft first, then keeps updating it as chunks arrive. ",
     "When the paragraph is complete, grammY persists the final text as a normal Telegram message. ",
     "This is useful for long-running agent responses, summaries, and status updates.",
+  ];
+
+  for (const delta of parts) {
+    yield { type: "delta" as const, delta };
+    await new Promise((resolve) => setTimeout(resolve, 700));
+  }
+}
+
+async function* streamMarkdownDemoParagraph() {
+  const parts = [
+    "# Markdown stream demo\n\n",
+    "This starts as **normal Markdown** while it streams. ",
+    "The final message is edited into Telegram's MarkdownV2 format.\n\n",
+    "- Safe underscores like `hello_world`\n",
+    "- Links like [xmux](https://github.com/ishaksebsib/xmux)\n",
+    '- Code blocks:\n\n```ts\nconst status = "streamed then finalized";\n```',
   ];
 
   for (const delta of parts) {
