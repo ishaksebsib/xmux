@@ -1,6 +1,6 @@
 import { Result } from "better-result";
 import type { SessionRef } from "@xmux/harness-core";
-import type { ChatThreadRef, SessionRecord, ThreadBinding } from "./model";
+import type { ChatThreadRef, SessionRecord, ThreadBinding, ThreadWorkspace } from "./model";
 import { type Store } from "./store";
 import { StoreConflictError, StoreNotFoundError } from "../errors";
 
@@ -8,6 +8,7 @@ import { StoreConflictError, StoreNotFoundError } from "../errors";
 export function createInMemoryStore(): Store {
   const sessions = new Map<string, SessionRecord>();
   const threadBindings = new Map<string, ThreadBinding>();
+  const workspaces = new Map<string, ThreadWorkspace>();
 
   return {
     sessions: {
@@ -70,6 +71,24 @@ export function createInMemoryStore(): Store {
         return Result.ok();
       },
     },
+
+    workspaces: {
+      async get(thread) {
+        const workspace = workspaces.get(threadKey(thread));
+        return Result.ok(workspace ? cloneWorkspace(workspace) : null);
+      },
+
+      async set(workspace) {
+        const stored = cloneWorkspace(workspace);
+        workspaces.set(threadKey(workspace.thread), stored);
+        return Result.ok(cloneWorkspace(stored));
+      },
+
+      async delete(thread) {
+        workspaces.delete(threadKey(thread));
+        return Result.ok();
+      },
+    },
   };
 }
 
@@ -95,5 +114,12 @@ function cloneBinding(binding: ThreadBinding): ThreadBinding {
     ...binding,
     thread: { ...binding.thread },
     sessionRef: { ...binding.sessionRef },
+  };
+}
+
+function cloneWorkspace(workspace: ThreadWorkspace): ThreadWorkspace {
+  return {
+    ...workspace,
+    thread: { ...workspace.thread },
   };
 }

@@ -1,6 +1,12 @@
 import { type Result } from "better-result";
 import type { SessionRef } from "@xmux/harness-core";
-import type { ChatThreadRef, SessionRecord, SessionRecordPatch, ThreadBinding } from "./model";
+import type {
+  ChatThreadRef,
+  SessionRecord,
+  SessionRecordPatch,
+  ThreadBinding,
+  ThreadWorkspace,
+} from "./model";
 import type { StoreConflictError, StoreNotFoundError, StoreOperationError } from "../errors";
 
 export type StoreOperation = "create" | "read" | "update" | "delete";
@@ -15,6 +21,7 @@ export type StoreOperation = "create" | "read" | "update" | "delete";
 export interface Store {
   readonly sessions: SessionStore;
   readonly threadBindings: ThreadBindingStore;
+  readonly workspaces: WorkspaceStore;
 }
 
 /** Persistence operations for owned session metadata. */
@@ -34,5 +41,12 @@ export interface SessionStore {
 export interface ThreadBindingStore {
   bind(binding: ThreadBinding): Promise<Result<void, StoreOperationError>>;
   get(thread: ChatThreadRef): Promise<Result<ThreadBinding | null, StoreOperationError>>;
+  delete(thread: ChatThreadRef): Promise<Result<void, StoreOperationError>>;
+}
+
+/** Persistence operations for chat-thread workspace state. */
+export interface WorkspaceStore {
+  get(thread: ChatThreadRef): Promise<Result<ThreadWorkspace | null, StoreOperationError>>;
+  set(workspace: ThreadWorkspace): Promise<Result<ThreadWorkspace, StoreOperationError>>;
   delete(thread: ChatThreadRef): Promise<Result<void, StoreOperationError>>;
 }

@@ -5,6 +5,7 @@ import {
   StoreNotFoundError,
   type SessionRecord,
   type ThreadBinding,
+  type ThreadWorkspace,
 } from "../src";
 
 const session = {
@@ -80,5 +81,50 @@ describe("createInMemoryStore", () => {
     expect(bound.isOk()).toBe(true);
     expect(fetched.unwrap("expected binding to exist")).toEqual(binding);
     expect(deleted.unwrap("expected binding lookup to succeed")).toBeNull();
+  });
+
+  test("sets, updates, deletes, and clones thread workspaces", async () => {
+    const store = createInMemoryStore();
+    const workspace = {
+      thread: { chatId: "telegram", threadId: "thread-1" },
+      cwd: "/repo",
+      createdAt: "2026-05-08T10:00:00.000Z",
+      updatedAt: "2026-05-08T10:00:00.000Z",
+    } satisfies ThreadWorkspace<"telegram">;
+
+    const set = await store.workspaces.set(workspace);
+    const fetched = await store.workspaces.get(workspace.thread);
+    const updated = await store.workspaces.set({
+      ...workspace,
+      cwd: "/repo/packages/core",
+      createdAt: "2026-05-08T10:00:00.000Z",
+      updatedAt: "2026-05-08T10:05:00.000Z",
+    });
+
+    expect(set.unwrap("expected workspace set to succeed")).toEqual(workspace);
+    expect(fetched.unwrap("expected workspace to exist")).toEqual(workspace);
+    expect(updated.unwrap("expected workspace update to succeed")).toMatchObject({
+      cwd: "/repo/packages/core",
+      createdAt: "2026-05-08T10:00:00.000Z",
+      updatedAt: "2026-05-08T10:05:00.000Z",
+    });
+
+    const mutableFetched = updated.unwrap("expected workspace update to succeed") as {
+      thread: { chatId: string; threadId: string };
+      cwd: string;
+    };
+    mutableFetched.thread.threadId = "mutated";
+    mutableFetched.cwd = "/mutated";
+
+    const afterMutation = await store.workspaces.get(workspace.thread);
+    expect(afterMutation.unwrap("expected workspace lookup to succeed")).toMatchObject({
+      thread: { chatId: "telegram", threadId: "thread-1" },
+      cwd: "/repo/packages/core",
+    });
+
+    await store.workspaces.delete(workspace.thread);
+    const deleted = await store.workspaces.get(workspace.thread);
+
+    expect(deleted.unwrap("expected workspace lookup to succeed")).toBeNull();
   });
 });

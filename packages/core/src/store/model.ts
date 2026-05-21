@@ -94,3 +94,26 @@ export function createThreadBinding(input: CreateThreadBindingInput): ThreadBind
     createdAt: input.now,
   };
 }
+
+/** Current working directory tracked for one chat thread. */
+export interface ThreadWorkspace<TChatId extends string = string> {
+  readonly thread: ChatThreadRef<TChatId>;
+  readonly cwd: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface CreateThreadWorkspaceInput {
+  readonly thread: ChatThreadRef;
+  readonly cwd: string;
+  readonly now: string;
+}
+
+export function createThreadWorkspace(input: CreateThreadWorkspaceInput): ThreadWorkspace {
+  return {
+    thread: input.thread,
+    cwd: input.cwd,
+    createdAt: input.now,
+    updatedAt: input.now,
+  };
+}

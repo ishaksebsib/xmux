@@ -10,8 +10,15 @@ export type {
   SessionRecordPatch,
   SessionStatus,
   ThreadBinding,
+  ThreadWorkspace,
 } from "./store";
-export type { SessionStore, StoreOperation, ThreadBindingStore, Store } from "./store";
+export type {
+  SessionStore,
+  StoreOperation,
+  ThreadBindingStore,
+  WorkspaceStore,
+  Store,
+} from "./store";
 export {
   type StoreError,
   StoreConflictError,
