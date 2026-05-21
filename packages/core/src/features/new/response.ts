@@ -14,3 +14,7 @@ export function formatNewSessionFailure(error: CreateSessionForThreadError): str
 
   return `Failed to create session: ${error.message}`;
 }
+
+export function formatNewCommandUsage(): string {
+  return "Usage: /new <harnessId> [title]";
+}

@@ -12,6 +12,14 @@ export interface ChatEventWithReply {
   readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
 }
 
+export interface InvalidCommandEvent extends ChatEventWithReply {
+  readonly commandName: string;
+  readonly reason: string;
+  readonly optionName?: string;
+}
+
+export type InvalidCommandUsageReplyStatus = "ignored" | "replied";
+
 export function threadFromChatEvent<TChatId extends string>(
   event: ChatEventWithConversation<TChatId>,
 ): ChatThreadRef<TChatId> {
@@ -69,4 +77,27 @@ export async function replyToChatEvent<TError>(input: {
   }
 
   return Result.ok();
+}
+
+export async function replyToInvalidCommandUsage<TError>(input: {
+  readonly event: InvalidCommandEvent;
+  readonly commandName: string;
+  readonly usage: string;
+  readonly onError: (cause: unknown) => TError;
+}): Promise<BetterResult<InvalidCommandUsageReplyStatus, TError>> {
+  if (input.event.commandName !== input.commandName) {
+    return Result.ok("ignored");
+  }
+
+  const replied = await replyToChatEvent({
+    event: input.event,
+    message: input.usage,
+    onError: input.onError,
+  });
+
+  if (replied.isErr()) {
+    return Result.err(replied.error);
+  }
+
+  return Result.ok("replied");
 }

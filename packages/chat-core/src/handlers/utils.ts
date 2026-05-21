@@ -94,8 +94,15 @@ export async function startChatAdapter<
 export function commandNameFor(event: {
   readonly type: ChatEventType;
   readonly command?: { readonly name: string };
+  readonly commandName?: string;
 }): string | undefined {
-  return event.type === "command" ? event.command?.name : undefined;
+  if (event.type === "command") {
+    return event.command?.name;
+  }
+
+  return event.type === "command.invalid" || event.type === "command.unknown"
+    ? event.commandName
+    : undefined;
 }
 
 export function normalizeChatTextInput(message: ChatTextInput): ChatTextContent {

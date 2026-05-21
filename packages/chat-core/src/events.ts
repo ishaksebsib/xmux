@@ -67,6 +67,8 @@ export type ChatEventType =
   | "ready"
   | "message"
   | "command"
+  | "command.invalid"
+  | "command.unknown"
   | "reaction.added"
   | "reaction.removed"
   | "diagnostic"
@@ -190,6 +192,68 @@ export type ChatCommandEventFor<
   >;
 }[TChatId];
 
+/** Command-like input that targeted a known command but failed validation/parsing. */
+export interface ChatInvalidCommandEvent<
+  TChatId extends string = string,
+  TReplyResult = unknown,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> {
+  readonly type: "command.invalid";
+  readonly chatId: TChatId;
+  readonly conversation: ChatConversationRef<TChatId>;
+  readonly actor?: ChatActor;
+  readonly message?: ChatMessageRef<TChatId>;
+  readonly commandName: string;
+  readonly reason: string;
+  readonly optionName?: string;
+  readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
+  readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
+}
+
+/** Invalid command event selected by registered chat id so reply options stay typed. */
+export type ChatInvalidCommandEventFor<
+  TChatId extends string,
+  TReplyResult = unknown,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
+> = {
+  readonly [TCurrentChatId in TChatId]: ChatInvalidCommandEvent<
+    TCurrentChatId,
+    TReplyResult,
+    TAdapterOptionsByChatId[TCurrentChatId]
+  >;
+}[TChatId];
+
+/** Slash command input that targeted no registered command. */
+export interface ChatUnknownCommandEvent<
+  TChatId extends string = string,
+  TReplyResult = unknown,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> {
+  readonly type: "command.unknown";
+  readonly chatId: TChatId;
+  readonly conversation: ChatConversationRef<TChatId>;
+  readonly actor?: ChatActor;
+  readonly message?: ChatMessageRef<TChatId>;
+  readonly commandName: string;
+  readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
+  readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
+}
+
+/** Unknown command event selected by registered chat id so reply options stay typed. */
+export type ChatUnknownCommandEventFor<
+  TChatId extends string,
+  TReplyResult = unknown,
+  TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
+    ChatEventAdapterOptions<TChatId>,
+> = {
+  readonly [TCurrentChatId in TChatId]: ChatUnknownCommandEvent<
+    TCurrentChatId,
+    TReplyResult,
+    TAdapterOptionsByChatId[TCurrentChatId]
+  >;
+}[TChatId];
+
 /** Reaction added to a message the adapter can observe. */
 export interface ChatReactionAddedEvent<TChatId extends string = string> {
   readonly type: "reaction.added";
@@ -246,6 +310,8 @@ export type ChatEvent<
   | ChatReadyEvent<TChatId>
   | ChatMessageEventFor<TChatId, TAdapterDataByChatId, TReplyResult, TAdapterOptionsByChatId>
   | ChatCommandEventFor<TCommands, keyof TCommands, TChatId, TReplyResult, TAdapterOptionsByChatId>
+  | ChatInvalidCommandEventFor<TChatId, TReplyResult, TAdapterOptionsByChatId>
+  | ChatUnknownCommandEventFor<TChatId, TReplyResult, TAdapterOptionsByChatId>
   | ChatReactionAddedEvent<TChatId>
   | ChatReactionRemovedEvent<TChatId>
   | ChatDiagnosticEvent<TChatId>
@@ -276,6 +342,18 @@ export type ChatAdapterCommandEvent<
   TChatId extends string = string,
 > = Omit<ChatCommandEvent<TCommands, TName, TChatId>, "reply" | "replyStream">;
 
+/** Invalid command adapter event before chat-core binds reply(). */
+export type ChatAdapterInvalidCommandEvent<TChatId extends string = string> = Omit<
+  ChatInvalidCommandEvent<TChatId>,
+  "reply" | "replyStream"
+>;
+
+/** Unknown command adapter event before chat-core binds reply(). */
+export type ChatAdapterUnknownCommandEvent<TChatId extends string = string> = Omit<
+  ChatUnknownCommandEvent<TChatId>,
+  "reply" | "replyStream"
+>;
+
 /** Event shape accepted from adapters during runtime. */
 export type ChatAdapterEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
@@ -284,6 +362,8 @@ export type ChatAdapterEvent<
 > =
   | ChatAdapterMessageEventFor<TChatId, TAdapterDataByChatId>
   | ChatAdapterCommandEvent<TCommands, keyof TCommands, TChatId>
+  | ChatAdapterInvalidCommandEvent<TChatId>
+  | ChatAdapterUnknownCommandEvent<TChatId>
   | ChatReactionAddedEvent<TChatId>
   | ChatReactionRemovedEvent<TChatId>
   | ChatDiagnosticEvent<TChatId>

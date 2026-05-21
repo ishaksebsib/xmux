@@ -179,7 +179,12 @@ export function createChat<
   function bindEvent(
     event: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>,
   ): ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId> {
-    if (event.type !== "message" && event.type !== "command") {
+    if (
+      event.type !== "message" &&
+      event.type !== "command" &&
+      event.type !== "command.invalid" &&
+      event.type !== "command.unknown"
+    ) {
       return event as ChatEvent<
         TCommands,
         TChatId,
