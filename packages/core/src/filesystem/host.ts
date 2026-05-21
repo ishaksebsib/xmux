@@ -23,9 +23,9 @@ export interface FileSystemHost {
   resolvePath(input: ResolvePathInput): string;
   realpath(input: FileSystemPathInput): Promise<Result<string, FileSystemHostError>>;
   stat(input: FileSystemPathInput): Promise<Result<FileSystemStat, FileSystemHostError>>;
-  readdir(input: FileSystemPathInput): Promise<
-    Result<readonly FileSystemDirectoryEntry[], FileSystemHostError>
-  >;
+  readdir(
+    input: FileSystemPathInput,
+  ): Promise<Result<readonly FileSystemDirectoryEntry[], FileSystemHostError>>;
 }
 
 export interface ResolvePathInput {

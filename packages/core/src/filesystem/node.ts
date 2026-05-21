@@ -2,7 +2,6 @@ import { readdir, realpath, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Result } from "better-result";
 import type {
-  FileSystemDirectoryEntry,
   FileSystemEntryType,
   FileSystemHost,
   FileSystemHostError,
