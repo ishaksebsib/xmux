@@ -51,7 +51,6 @@ export type {
   HarnessRunReason,
   HarnessToolEvent,
   HarnessTurnEvent,
-  HarnessWorkspaceEvent,
 } from "./events";
 export type {
   AbortError,

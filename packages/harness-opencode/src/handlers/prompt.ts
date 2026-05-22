@@ -37,6 +37,11 @@ type PromptStreamState = {
   readonly seenTools: Set<string>;
   readonly toolInputs: Map<string, string>;
   terminalRun: boolean;
+  completedRun?: {
+    readonly reason: Exclude<HarnessRunReason, "error" | "aborted">;
+    readonly usage?: HarnessTokenUsage;
+    readonly cost?: number;
+  };
 };
 
 function createPromptStreamState(): PromptStreamState {
@@ -98,6 +103,20 @@ function getEventSessionId(event: OpenCodeEvent): string | undefined {
   };
 
   return properties.sessionID ?? properties.info?.sessionID;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function toOpenCodeEvent(value: unknown): OpenCodeEvent | undefined {
+  const payload = isRecord(value) && "payload" in value ? value.payload : value;
+
+  if (!isRecord(payload) || typeof payload.type !== "string" || payload.type === "sync") {
+    return undefined;
+  }
+
+  return payload as OpenCodeEvent;
 }
 
 function toUsage(tokens: AssistantMessage["tokens"] | undefined): HarnessTokenUsage | undefined {
@@ -401,20 +420,7 @@ function* mapPartUpdated(args: {
       };
       return;
     case "snapshot":
-      yield {
-        type: "workspace",
-        phase: "snapshot",
-        ref: args.ref,
-        snapshot: args.part.snapshot,
-      };
-      return;
     case "patch":
-      yield {
-        type: "workspace",
-        phase: "file",
-        ref: args.ref,
-        files: args.part.files,
-      };
       return;
     case "retry":
       yield {
@@ -527,22 +533,20 @@ function* mapOpenCodeEvent(args: {
         return;
       }
 
-      args.state.terminalRun = true;
+      const usage = toUsage(info.tokens);
+      const reason = toRunReason(info.finish);
+      args.state.completedRun = {
+        reason,
+        usage,
+        cost: info.cost,
+      };
       yield {
         type: "turn",
         phase: "completed",
         ref: args.ref,
         messageId: info.id,
         finish: info.finish,
-        usage: toUsage(info.tokens),
-        cost: info.cost,
-      };
-      yield {
-        type: "run",
-        phase: "completed",
-        ref: args.ref,
-        reason: toRunReason(info.finish),
-        usage: toUsage(info.tokens),
+        usage,
         cost: info.cost,
       };
       return;
@@ -638,13 +642,6 @@ function* mapOpenCodeEvent(args: {
       };
       return;
     case "session.diff":
-      yield {
-        type: "workspace",
-        phase: "diff",
-        ref: args.ref,
-        diff: args.event.properties.diff.map((entry) => entry.patch).join("\n"),
-        files: args.event.properties.diff.map((entry) => entry.file),
-      };
       return;
     case "session.error": {
       if (args.state.terminalRun) return;
@@ -678,7 +675,9 @@ function* mapOpenCodeEvent(args: {
         type: "run",
         phase: "completed",
         ref: args.ref,
-        reason: "stop",
+        reason: args.state.completedRun?.reason ?? "stop",
+        usage: args.state.completedRun?.usage,
+        cost: args.state.completedRun?.cost,
       };
       return;
     case "session.status":
@@ -736,10 +735,10 @@ function createPromptEventStream(args: {
         return;
       }
 
-      const subscribed = await args.runtime.client.event.subscribe(
-        { workspace: args.input.adapterOptions.workspace },
-        { signal: streamAbort.signal, sseMaxRetryAttempts: 1 },
-      );
+      const subscribed = await args.runtime.client.global.event({
+        signal: streamAbort.signal,
+        sseMaxRetryAttempts: 1,
+      });
       const iterator = subscribed.stream[Symbol.asyncIterator]();
       let pendingEvent = iterator.next();
 
@@ -782,12 +781,17 @@ function createPromptEventStream(args: {
 
         pendingEvent = iterator.next();
 
-        for (const event of mapOpenCodeEvent({
-          event: next.value,
+        const event = toOpenCodeEvent(next.value);
+        if (!event) {
+          continue;
+        }
+
+        for (const promptEvent of mapOpenCodeEvent({
+          event,
           ref: args.input.ref,
           state,
         })) {
-          yield event;
+          yield promptEvent;
         }
 
         if (state.terminalRun) {
@@ -809,6 +813,18 @@ function createPromptEventStream(args: {
       }
 
       if (!state.terminalRun) {
+        if (state.completedRun) {
+          yield {
+            type: "run",
+            phase: "completed",
+            ref: args.input.ref,
+            reason: state.completedRun.reason,
+            usage: state.completedRun.usage,
+            cost: state.completedRun.cost,
+          };
+          return;
+        }
+
         yield {
           type: "run",
           phase: "failed",

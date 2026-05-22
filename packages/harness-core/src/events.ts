@@ -168,27 +168,6 @@ export type HarnessToolEvent<
       readonly error: unknown;
     });
 
-export type HarnessWorkspaceEvent<
-  THarnessId extends string = string,
-  TAdapterData extends HarnessAdapterObject = HarnessAdapterObject,
-> =
-  | (HarnessPromptEventBase<THarnessId, TAdapterData> & {
-      readonly type: "workspace";
-      readonly phase: "diff";
-      readonly diff: string;
-      readonly files?: readonly string[];
-    })
-  | (HarnessPromptEventBase<THarnessId, TAdapterData> & {
-      readonly type: "workspace";
-      readonly phase: "file";
-      readonly files: readonly string[];
-    })
-  | (HarnessPromptEventBase<THarnessId, TAdapterData> & {
-      readonly type: "workspace";
-      readonly phase: "snapshot";
-      readonly snapshot: string;
-    });
-
 export type HarnessInteractionEvent<
   THarnessId extends string = string,
   TAdapterData extends HarnessAdapterObject = HarnessAdapterObject,
@@ -244,7 +223,6 @@ export type HarnessPromptEvent<
   | HarnessMessageEvent<THarnessId, TAdapterData>
   | HarnessContentEvent<THarnessId, TAdapterData>
   | HarnessToolEvent<THarnessId, TAdapterData>
-  | HarnessWorkspaceEvent<THarnessId, TAdapterData>
   | HarnessInteractionEvent<THarnessId, TAdapterData>
   | HarnessQueueEvent<THarnessId, TAdapterData>
   | HarnessRetryEvent<THarnessId, TAdapterData>

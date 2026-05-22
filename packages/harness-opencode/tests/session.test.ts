@@ -10,15 +10,19 @@ async function collectAsync<TValue>(iterable: AsyncIterable<TValue>): Promise<TV
   return values;
 }
 
+function globalEvent(payload: unknown) {
+  return { directory: process.cwd(), payload };
+}
+
 describe("OpenCode prompt stream", () => {
   test("maps OpenCode events into harness prompt events", async () => {
     const promptCalls: unknown[] = [];
     const runtime = {
       client: {
-        event: {
-          subscribe: async () => ({
+        global: {
+          event: async () => ({
             stream: (async function* () {
-              yield {
+              yield globalEvent({
                 type: "message.updated",
                 properties: {
                   sessionID: "session-1",
@@ -42,8 +46,8 @@ describe("OpenCode prompt stream", () => {
                     },
                   },
                 },
-              };
-              yield {
+              });
+              yield globalEvent({
                 type: "message.part.updated",
                 properties: {
                   sessionID: "session-1",
@@ -57,8 +61,8 @@ describe("OpenCode prompt stream", () => {
                     time: { start: 2 },
                   },
                 },
-              };
-              yield {
+              });
+              yield globalEvent({
                 type: "message.updated",
                 properties: {
                   sessionID: "session-1",
@@ -84,7 +88,7 @@ describe("OpenCode prompt stream", () => {
                     finish: "stop",
                   },
                 },
-              };
+              });
             })(),
           }),
         },
@@ -128,10 +132,10 @@ describe("OpenCode prompt stream", () => {
     const promptCalls: { readonly parts?: unknown[] }[] = [];
     const runtime = {
       client: {
-        event: {
-          subscribe: async () => ({
+        global: {
+          event: async () => ({
             stream: (async function* () {
-              yield { type: "session.idle", properties: { sessionID: "session-1" } };
+              yield globalEvent({ type: "session.idle", properties: { sessionID: "session-1" } });
             })(),
           }),
         },
