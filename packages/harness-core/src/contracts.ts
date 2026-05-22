@@ -132,6 +132,7 @@ export interface HarnessAdapterResumeSessionInput<TAdapterOptions extends Harnes
 
 /** List request passed to an adapter. */
 export interface HarnessAdapterListSessionsInput<TAdapterOptions extends HarnessAdapterObject> {
+  readonly cwd?: string;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }

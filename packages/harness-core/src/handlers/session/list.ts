@@ -20,6 +20,7 @@ export async function handleListSessions<
       Result.tryPromise({
         try: async () =>
           runtime.listSessions({
+            cwd: args.input.cwd,
             adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
             signal: args.input.signal,
           }),

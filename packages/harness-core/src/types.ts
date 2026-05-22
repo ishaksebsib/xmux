@@ -160,6 +160,7 @@ export type ListSessionsInputFor<
   THarnessId extends keyof TAdapters,
 > = {
   readonly harnessId: Extract<THarnessId, string>;
+  readonly cwd?: string;
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
 
