@@ -48,6 +48,7 @@ export async function listSessions(
           runtime.client.session.list(
             {
               workspace: input.adapterOptions.workspace,
+              directory: input.cwd,
             },
             { signal: input.signal },
           ),
