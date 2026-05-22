@@ -11,6 +11,7 @@ import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type Config } from "./config";
 import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
+import { createPromptRunRegistry } from "./features/prompt/run-registry";
 import { registerRoutes } from "./router";
 import { createInMemoryStore } from "./store";
 import type { Store } from "./store";
@@ -73,6 +74,7 @@ export function createXmux<
       createRequestId: randomUUID,
       now: () => new Date(),
       shutdownSignal: shutdownController.signal,
+      promptRuns: createPromptRunRegistry(),
     }),
   });
   const routeUnsubscribers = registerRoutes(ctx);

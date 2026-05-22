@@ -1,4 +1,9 @@
-import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
+import type {
+  ChatActor,
+  ChatConversationRef,
+  ChatTextInput,
+  ChatTextStreamContent,
+} from "@xmux/chat-core";
 import { Result, type Result as BetterResult } from "better-result";
 import type { Actor } from "../ctx";
 import type { ChatThreadRef } from "../store";
@@ -10,6 +15,13 @@ export interface ChatEventWithConversation<TChatId extends string = string> {
 
 export interface ChatEventWithReply {
   readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+}
+
+export interface ChatEventWithStreamReply {
+  readonly replyStream: (
+    content: ChatTextStreamContent,
+    options?: { readonly mode?: "auto" | "thread" | "quote" | "conversation" },
+  ) => Promise<BetterResult<unknown, unknown>>;
 }
 
 export interface InvalidCommandEvent extends ChatEventWithReply {
@@ -65,6 +77,32 @@ export async function replyToChatEvent<TError>(input: {
 }): Promise<BetterResult<void, TError>> {
   const replied = await Result.tryPromise({
     try: () => input.event.reply(input.message),
+    catch: input.onError,
+  });
+
+  if (replied.isErr()) {
+    return Result.err(replied.error);
+  }
+
+  if (replied.value.isErr()) {
+    return Result.err(input.onError(replied.value.error));
+  }
+
+  return Result.ok();
+}
+
+export async function streamReplyToChatEvent<TError>(input: {
+  readonly event: ChatEventWithStreamReply;
+  readonly content: ChatTextStreamContent;
+  readonly mode?: "auto" | "thread" | "quote" | "conversation";
+  readonly onError: (cause: unknown) => TError;
+}): Promise<BetterResult<void, TError>> {
+  const replied = await Result.tryPromise({
+    try: () =>
+      input.event.replyStream(
+        input.content,
+        input.mode === undefined ? undefined : { mode: input.mode },
+      ),
     catch: input.onError,
   });
 

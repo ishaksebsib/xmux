@@ -3,6 +3,7 @@ import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
 import { registerNewRoute } from "./features/new";
+import { registerPromptRoute } from "./features/prompt";
 import { registerUnknownCommandRoute } from "./features/unknown-command";
 import { registerCdRoute, registerLsRoute, registerPwdRoute } from "./features/workspace";
 
@@ -16,6 +17,7 @@ export function registerRoutes<
     registerPwdRoute(ctx),
     registerCdRoute(ctx),
     registerLsRoute(ctx),
+    registerPromptRoute(ctx),
     registerUnknownCommandRoute(ctx),
   ];
 }

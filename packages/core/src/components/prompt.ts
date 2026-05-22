@@ -1,0 +1,297 @@
+import { inlineCode, markdownText } from "./markdown";
+
+export type PromptToolStatus = "pending" | "running" | "completed" | "failed";
+
+export interface PromptToolComponentInput {
+  readonly name?: string;
+  readonly callId: string;
+  readonly input?: unknown;
+  readonly rawInput?: string;
+  readonly status: PromptToolStatus;
+  readonly output?: readonly PromptToolOutputComponentInput[];
+  readonly error?: unknown;
+}
+
+export type PromptToolOutputComponentInput =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "json"; readonly value: unknown }
+  | { readonly type: "image"; readonly mimeType: string; readonly dataLength: number };
+
+export interface PromptReasoningComponentInput {
+  readonly text: string;
+  readonly status: "streaming" | "done";
+}
+
+const visibleOutputTools = new Set([
+  "bash",
+  "shell",
+  "grep",
+  "find",
+  "glob",
+  "webfetch",
+  "web_fetch",
+  "websearch",
+  "web_search",
+]);
+
+const hiddenOutputTools = new Set(["read", "write", "edit", "ls", "list"]);
+
+/** Renders assistant reasoning as a quiet markdown quote. */
+export function promptReasoning(input: PromptReasoningComponentInput): string {
+  const text = input.text.replace("[REDACTED]", "").trim();
+  if (text.length === 0) return "";
+
+  const label = input.status === "streaming" ? "Reasoning…" : "Reasoning";
+  return blockquote({ header: label, body: truncate(text, 3_000) });
+}
+
+/** Renders a tool call summary with optional compact output preview. */
+export function promptTool(input: PromptToolComponentInput): string {
+  const summary = `${toolStatusIcon(input.status)} ${toolDescription(input)}`;
+
+  if (input.status === "failed") {
+    return [summary, markdownText(describeUnknown(input.error ?? "Tool failed"))].join("\n");
+  }
+
+  if (input.status !== "completed" || !shouldShowToolOutput(input)) {
+    return summary;
+  }
+
+  const output = promptToolOutput(input.output ?? []);
+  return output.length === 0 ? summary : `${summary}\n\n${output}`;
+}
+
+export function promptRetry(input: {
+  readonly attempt: number;
+  readonly maxAttempts?: number;
+  readonly error?: unknown;
+}): string {
+  const max = input.maxAttempts === undefined ? "" : `/${input.maxAttempts}`;
+  const error = input.error === undefined ? "" : ` — ${describeUnknown(input.error)}`;
+  return `↻ Retrying ${input.attempt}${max}${markdownText(error)}`;
+}
+
+export function promptInteraction(input: {
+  readonly kind: "permission" | "question";
+  readonly phase: "requested" | "answered" | "rejected";
+  readonly requestId: string;
+  readonly prompt?: string;
+}): string {
+  const label = input.kind === "permission" ? "Permission" : "Question";
+
+  if (input.phase !== "requested") {
+    return `${input.phase === "answered" ? "✓" : "✗"} ${label} ${input.phase}: ${inlineCode(input.requestId)}`;
+  }
+
+  const prompt = input.prompt?.trim();
+  return [
+    `⚠ ${label} requested ${inlineCode(input.requestId)}`,
+    prompt ? markdownText(prompt) : undefined,
+  ]
+    .filter((line): line is string => line !== undefined && line.length > 0)
+    .join("\n");
+}
+
+export function promptUsage(input: {
+  readonly tokens?: {
+    readonly total?: number;
+    readonly input?: number;
+    readonly output?: number;
+    readonly reasoning?: number;
+  };
+  readonly cost?: number;
+}): string {
+  const parts: string[] = [];
+
+  if (input.tokens?.total !== undefined) {
+    parts.push(`${formatNumber(input.tokens.total)} tokens`);
+  } else {
+    const tokenParts = [
+      input.tokens?.input === undefined ? undefined : `${formatNumber(input.tokens.input)} in`,
+      input.tokens?.output === undefined ? undefined : `${formatNumber(input.tokens.output)} out`,
+      input.tokens?.reasoning === undefined
+        ? undefined
+        : `${formatNumber(input.tokens.reasoning)} reasoning`,
+    ].filter((part): part is string => part !== undefined);
+
+    if (tokenParts.length > 0) {
+      parts.push(tokenParts.join(" · "));
+    }
+  }
+
+  if (input.cost !== undefined && input.cost > 0) {
+    parts.push(`$${input.cost.toFixed(input.cost < 0.01 ? 4 : 2)}`);
+  }
+
+  return parts.length === 0 ? "" : `_Finished · ${parts.join(" · ")}_`;
+}
+
+function toolStatusIcon(status: PromptToolStatus): string {
+  switch (status) {
+    case "pending":
+      return "…";
+    case "running":
+      return "↻";
+    case "completed":
+      return "✓";
+    case "failed":
+      return "✗";
+  }
+}
+
+function toolDescription(input: PromptToolComponentInput): string {
+  const name = input.name ?? "tool";
+  const normalized = name.toLowerCase();
+  const record = toRecord(input.input);
+  const raw =
+    typeof input.rawInput === "string" && input.rawInput.trim().length > 0
+      ? input.rawInput.trim()
+      : undefined;
+
+  if (normalized === "read") {
+    return `Read ${inlineCode(stringField(record, "filePath", "path") ?? "file")}`;
+  }
+
+  if (normalized === "write") {
+    return `Write ${inlineCode(stringField(record, "filePath", "path") ?? "file")}`;
+  }
+
+  if (normalized === "edit") {
+    return `Edit ${inlineCode(stringField(record, "filePath", "path") ?? "file")}`;
+  }
+
+  if (normalized === "ls" || normalized === "list") {
+    return `List ${inlineCode(stringField(record, "path", "directory") ?? ".")}`;
+  }
+
+  if (normalized === "bash" || normalized === "shell") {
+    return `$ ${markdownText(stringField(record, "command", "cmd") ?? raw ?? "command")}`;
+  }
+
+  if (normalized === "grep") {
+    const pattern = stringField(record, "pattern", "query") ?? "pattern";
+    const path = stringField(record, "path", "directory");
+    return path
+      ? `Grep ${inlineCode(pattern)} in ${inlineCode(path)}`
+      : `Grep ${inlineCode(pattern)}`;
+  }
+
+  if (normalized === "find" || normalized === "glob") {
+    const pattern = stringField(record, "pattern", "query") ?? "pattern";
+    const path = stringField(record, "path", "directory");
+    return path
+      ? `${titleCase(normalized)} ${inlineCode(pattern)} in ${inlineCode(path)}`
+      : `${titleCase(normalized)} ${inlineCode(pattern)}`;
+  }
+
+  if (normalized === "webfetch" || normalized === "web_fetch") {
+    return `Web fetch ${inlineCode(stringField(record, "url") ?? "url")}`;
+  }
+
+  if (normalized === "websearch" || normalized === "web_search") {
+    return `Web search ${inlineCode(stringField(record, "query") ?? "query")}`;
+  }
+
+  const inputSummary = record ? compactObject(record) : raw;
+
+  return inputSummary ? `${inlineCode(name)} ${markdownText(inputSummary)}` : inlineCode(name);
+}
+
+function shouldShowToolOutput(input: PromptToolComponentInput): boolean {
+  const normalized = input.name?.toLowerCase();
+  if (!normalized) return true;
+  if (hiddenOutputTools.has(normalized)) return false;
+  return visibleOutputTools.has(normalized) || !hiddenOutputTools.has(normalized);
+}
+
+function promptToolOutput(outputs: readonly PromptToolOutputComponentInput[]): string {
+  const rendered = outputs.map((output) => {
+    switch (output.type) {
+      case "text":
+        return fenced("text", truncate(output.text.trim(), 2_000));
+      case "json":
+        return fenced("json", truncate(stringifyUnknown(output.value), 2_000));
+      case "image":
+        return `_Image output: ${markdownText(output.mimeType)}, ${formatNumber(output.dataLength)} bytes._`;
+    }
+  });
+
+  return rendered.filter((value) => value.length > 0).join("\n\n");
+}
+
+function fenced(language: string, value: string): string {
+  if (value.length === 0) return "";
+  return `\`\`\`${language}\n${value}\n\`\`\``;
+}
+
+function blockquote(input: { readonly header: string; readonly body: string }): string {
+  return [
+    `> **${input.header}**`,
+    ">",
+    ...input.body.split("\n").map((line) => `> ${markdownText(line)}`),
+  ].join("\n");
+}
+
+function toRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function stringField(
+  record: Record<string, unknown> | undefined,
+  ...keys: readonly string[]
+): string | undefined {
+  if (!record) return undefined;
+
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+
+  return undefined;
+}
+
+function compactObject(value: Record<string, unknown>): string {
+  const entries = Object.entries(value).slice(0, 3);
+  if (entries.length === 0) return "";
+
+  const suffix = Object.keys(value).length > entries.length ? ", …" : "";
+  return `{ ${entries.map(([key, item]) => `${key}: ${compactValue(item)}`).join(", ")}${suffix} }`;
+}
+
+function compactValue(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(truncate(value, 80));
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value === null) return "null";
+  if (Array.isArray(value)) return `[${value.length} items]`;
+  if (typeof value === "object") return "{…}";
+  return String(value);
+}
+
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === "string") return value;
+
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function describeUnknown(value: unknown): string {
+  return value instanceof Error ? value.message : stringifyUnknown(value);
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength)}\n… truncated ${formatNumber(value.length - maxLength)} chars`;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+}
+
+function titleCase(value: string): string {
+  return value.length === 0 ? value : `${value[0]?.toUpperCase()}${value.slice(1)}`;
+}
