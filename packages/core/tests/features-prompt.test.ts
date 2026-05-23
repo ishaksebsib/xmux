@@ -64,7 +64,7 @@ describe("prompt messages", () => {
     await eventually(() => replies.length === 1);
 
     expect(replies[0]).toBe(
-      "**No active session**\n\nCreate or resume a session before sending a prompt.\n\nUse `/new <harnessId>` to start one.",
+      "**No active session**\n\nCreate or resume a session before sending a prompt.\n\nUse `/new <harnessId>` or `/resume` to continue conversation.",
     );
 
     await xmux.shutdown();

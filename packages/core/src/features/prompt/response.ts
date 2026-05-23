@@ -16,7 +16,7 @@ export function formatPromptFailure(error: PromptSessionForThreadError): ChatTex
         "",
         "Create or resume a session before sending a prompt.",
         "",
-        `Use ${inlineCode("/new <harnessId>")} to start one.`,
+        `Use ${inlineCode("/new <harnessId>")} or ${inlineCode("/resume")} to continue conversation.`,
       ].join("\n"),
     });
   }
