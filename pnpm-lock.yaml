@@ -173,8 +173,8 @@ importers:
   packages/harness-opencode:
     dependencies:
       '@opencode-ai/sdk':
-        specifier: ^1.14.31
-        version: 1.14.31
+        specifier: ^1.15.10
+        version: 1.15.10
       '@xmux/harness-core':
         specifier: workspace:*
         version: link:../harness-core
@@ -425,8 +425,8 @@ packages:
       '@emnapi/core': ^1.7.1
       '@emnapi/runtime': ^1.7.1
 
-  '@opencode-ai/sdk@1.14.31':
-    resolution: {integrity: sha512-QaV+ti3NYUITmgIDqtNMqGIYBXJOx2zheN1g+7w4HC8QQsbaW1c7glxXExQHRbdUzcQPP2vUQhnXOcEsTw5CcQ==}
+  '@opencode-ai/sdk@1.15.10':
+    resolution: {integrity: sha512-CUhpmMGGOqzvPnNNjjWmEIodAfP6Qnuki2ChIUKWYF7UImZ4zUcMZnzO5BtUxu/Ni1P8qzWxDioXs+7aIZQEhA==}
 
   '@oxc-project/types@0.127.0':
     resolution: {integrity: sha512-aIYXQBo4lCbO4z0R3FHeucQHpF46l2LbMdxRvqvuRuW2OxdnSkcng5B8+K12spgLDj93rtN3+J2Vac/TIO+ciQ==}
@@ -1682,7 +1682,7 @@ snapshots:
       '@tybys/wasm-util': 0.10.1
     optional: true
 
-  '@opencode-ai/sdk@1.14.31':
+  '@opencode-ai/sdk@1.15.10':
     dependencies:
       cross-spawn: 7.0.6
 
