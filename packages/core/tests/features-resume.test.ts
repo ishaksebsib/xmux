@@ -31,13 +31,21 @@ describe("/resume command", () => {
       { harnessId: "opencode", cwd: process.cwd() },
       { harnessId: "pi", cwd: process.cwd() },
     ]);
-    expect(replies[0]).toContain("**Available sessions**");
-    expect(replies[0]).toContain("**opencode**");
-    expect(replies[0]).toContain("`/resume opencode abc1` — Fix bug");
-    expect(replies[0]).toContain("`/resume opencode abc2` — Refactor auth");
-    expect(replies[0]).toContain("`/resume opencode xy9` — Cleanup");
-    expect(replies[0]).toContain("**pi**");
-    expect(replies[0]).toContain("`/resume pi abc` — PI session");
+    expect(replies[0]).toContain("**Available sessions** (4)");
+    expect(replies[0]).toContain("**opencode** (3)");
+    expect(replies[0]).toContain("Short ID: `abc1`");
+    expect(replies[0]).toContain("Title: Fix bug");
+    expect(replies[0]).toContain("Command: `/resume opencode abc1`");
+    expect(replies[0]).toContain("Short ID: `abc2`");
+    expect(replies[0]).toContain("Title: Refactor auth");
+    expect(replies[0]).toContain("Command: `/resume opencode abc2`");
+    expect(replies[0]).toContain("Short ID: `xy9`");
+    expect(replies[0]).toContain("Title: Cleanup");
+    expect(replies[0]).toContain("Command: `/resume opencode xy9`");
+    expect(replies[0]).toContain("**pi** (1)");
+    expect(replies[0]).toContain("Short ID: `abc`");
+    expect(replies[0]).toContain("Title: PI session");
+    expect(replies[0]).toContain("Command: `/resume pi abc`");
 
     await xmux.shutdown();
   });
@@ -52,9 +60,11 @@ describe("/resume command", () => {
     expect(resumeInputs).toEqual([
       { harnessId: "opencode", sessionId: "abc222", cwd: process.cwd() },
     ]);
-    expect(replies[0]).toContain("**Session resumed**");
-    expect(replies[0]).toContain("Harness: `opencode`");
-    expect(replies[0]).toContain("Short ID: `abc2`");
+    expect(replies[0]).toContain("**Resumed** `opencode/abc2`");
+    expect(replies[0]).toContain("- Harness: `opencode`");
+    expect(replies[0]).toContain("- Short ID: `abc2`");
+    expect(replies[0]).toContain("- Title: Refactor auth");
+    expect(replies[0]).toContain("- Directory: ");
 
     const binding = await xmux.ctx.store.threadBindings.get(thread);
     expect(binding.unwrap("expected binding lookup to succeed")).toMatchObject({
@@ -102,6 +112,8 @@ describe("/resume command", () => {
 
     expect(resumeInputs).toHaveLength(0);
     expect(replies[0]).toContain("**Short ID is ambiguous**");
+    expect(replies[0]).toContain("- Harness: `opencode`");
+    expect(replies[0]).toContain("- Short ID: `abc`");
     expect(replies[0]).toContain("`abc111`");
     expect(replies[0]).toContain("`abc222`");
 

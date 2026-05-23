@@ -16,6 +16,8 @@ import type {
   ResumeSessionGroup,
 } from "./service";
 
+const MAX_RESUME_LIST_TEXT_LENGTH = 3200;
+
 export function formatResumeOutput(output: ResumeCommandOutput): ChatTextInput {
   return output.status === "listed" ? formatResumeList(output) : formatResumeSuccess(output);
 }
@@ -38,16 +40,27 @@ export function formatResumeList(output: ResumeListOutput): ChatTextInput {
     });
   }
 
+  const failures = formatListFailures(output.failures);
+  const header = [
+    `**Available sessions** (${total})`,
+    "",
+    `Current directory: ${inlineCode(output.cwd)}`,
+    "",
+    `Use ${inlineCode("/resume <harnessId> <shortId>")} to activate one.`,
+    "",
+  ].join("\n");
+  const groups = formatResumeGroups({
+    groups: output.groups.filter(hasSessions),
+    maxLength: Math.max(0, MAX_RESUME_LIST_TEXT_LENGTH - header.length - failures.length),
+    total,
+  });
+
   return markdown({
     text: [
-      "**Available sessions**",
-      "",
-      `Current directory: ${inlineCode(output.cwd)}`,
-      "",
-      output.groups.filter(hasSessions).map(formatResumeGroup).join("\n\n"),
-      "",
-      `Use ${inlineCode("/resume <harnessId> <shortId>")} to activate one.`,
-      formatListFailures(output.failures),
+      header,
+      groups.text,
+      groups.omitted > 0 ? `_And ${groups.omitted} more sessions._` : "",
+      failures,
     ]
       .filter((line) => line.length > 0)
       .join("\n"),
@@ -60,9 +73,8 @@ export function formatResumeFailure(error: ResumeCommandError): ChatTextInput {
       text: [
         "**Incomplete resume command**",
         "",
-        `Use ${inlineCode("/resume")} to list sessions, then ${inlineCode(
-          "/resume <harnessId> <shortId>",
-        )} to activate one.`,
+        "- Use `/resume` to list sessions.",
+        "- Then use `/resume <harnessId> <shortId>` to activate one.",
       ].join("\n"),
     });
   }
@@ -88,11 +100,11 @@ export function formatResumeFailure(error: ResumeCommandError): ChatTextInput {
       text: [
         "**Session not found**",
         "",
-        `Harness: ${inlineCode(error.harnessId)}`,
-        `Short ID: ${inlineCode(error.shortId)}`,
-        `Current directory: ${inlineCode(error.cwd)}`,
+        `- Harness: ${inlineCode(error.harnessId)}`,
+        `- Short ID: ${inlineCode(error.shortId)}`,
+        `- Directory: ${inlineCode(error.cwd)}`,
         "",
-        `Run ${inlineCode("/resume")} to refresh available sessions.`,
+        `Run ${inlineCode("/resume")} to see available sessions.`,
       ].join("\n"),
     });
   }
@@ -102,8 +114,8 @@ export function formatResumeFailure(error: ResumeCommandError): ChatTextInput {
       text: [
         "**Short ID is ambiguous**",
         "",
-        `Harness: ${inlineCode(error.harnessId)}`,
-        `Short ID: ${inlineCode(error.shortId)}`,
+        `- Harness: ${inlineCode(error.harnessId)}`,
+        `- Short ID: ${inlineCode(error.shortId)}`,
         "",
         "Matching sessions:",
         error.matchingSessionIds.map((sessionId) => `- ${inlineCode(sessionId)}`).join("\n"),
@@ -116,10 +128,11 @@ export function formatResumeFailure(error: ResumeCommandError): ChatTextInput {
   if (ResumeSessionListAllFailedError.is(error)) {
     return markdown({
       text: [
-        "**Failed to list sessions**",
+        `**Failed to list sessions** (${error.failures.length})`,
         "",
         ...error.failures.map(
-          (failure) => `- ${inlineCode(failure.harnessId)}: ${markdownText(failure.error.message)}`,
+          (failure) =>
+            `- ${inlineCode(failure.harnessId)} — ${markdownText(failure.error.message)}`,
         ),
       ].join("\n"),
     });
@@ -145,32 +158,63 @@ function formatResumeSuccess(
   output: Extract<ResumeCommandOutput, { readonly status: "resumed" }>,
 ): ChatTextInput {
   const lines = [
-    "**Session resumed**",
+    `**Resumed** ${inlineCode(`${output.session.ref.harnessId}/${output.shortId}`)}`,
     "",
-    `Harness: ${inlineCode(output.session.ref.harnessId)}`,
-    `Short ID: ${inlineCode(output.shortId)}`,
+    `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
+    `- Short ID: ${inlineCode(output.shortId)}`,
   ];
 
   if (output.session.title) {
-    lines.push(`Title: ${markdownText(output.session.title)}`);
+    lines.push(`- Title: ${markdownText(output.session.title)}`);
   }
 
-  lines.push(`Current directory: ${inlineCode(output.session.cwd)}`);
-  lines.push("");
-  lines.push("The session is now active. Send a message to continue.");
+  lines.push(`- Directory: ${inlineCode(output.session.cwd)}`);
 
   return markdown({ text: lines.join("\n") });
 }
 
-function formatResumeGroup(group: ResumeSessionGroup): string {
-  return [`**${markdownText(group.harnessId)}**`, ...group.sessions.map(formatResumeSession)].join(
-    "\n",
-  );
+function formatResumeGroups(input: {
+  readonly groups: readonly ResumeSessionGroup[];
+  readonly maxLength: number;
+  readonly total: number;
+}): { readonly text: string; readonly omitted: number } {
+  const renderedGroups = [] as string[];
+  let shown = 0;
+
+  for (const group of input.groups) {
+    const lines = [`**${markdownText(group.harnessId)}** (${group.sessions.length})`];
+
+    for (const session of group.sessions) {
+      const sessionLine = formatResumeSession(session);
+      const candidateGroup = [...lines, sessionLine].join("\n");
+      const candidateText = [...renderedGroups, candidateGroup].join("\n\n");
+
+      if (candidateText.length > input.maxLength) {
+        break;
+      }
+
+      lines.push(sessionLine);
+      shown += 1;
+    }
+
+    if (lines.length > 1) {
+      renderedGroups.push(lines.join("\n"));
+    }
+  }
+
+  return {
+    text: renderedGroups.join("\n\n"),
+    omitted: Math.max(0, input.total - shown),
+  };
 }
 
 function formatResumeSession(session: ListedResumeSession): string {
   const title = session.title?.trim() || "Untitled session";
-  return `- ${inlineCode(`/resume ${session.harnessId} ${session.shortId}`)} — ${markdownText(title)}`;
+  return [
+    `- Short ID: ${inlineCode(session.shortId)}`,
+    `  Title: ${markdownText(title)}`,
+    `  Command: ${inlineCode(`/resume ${session.harnessId} ${session.shortId}`)}`,
+  ].join("\n");
 }
 
 function formatListFailures(failures: readonly ResumeSessionListFailure[]): string {
@@ -182,7 +226,7 @@ function formatListFailures(failures: readonly ResumeSessionListFailure[]): stri
     "",
     "Some harnesses could not be listed:",
     ...failures.map(
-      (failure) => `- ${inlineCode(failure.harnessId)}: ${markdownText(failure.error.message)}`,
+      (failure) => `- ${inlineCode(failure.harnessId)} — ${markdownText(failure.error.message)}`,
     ),
   ].join("\n");
 }
