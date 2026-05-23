@@ -32,20 +32,76 @@ describe("/resume command", () => {
       { harnessId: "pi", cwd: process.cwd() },
     ]);
     expect(replies[0]).toContain("**Available sessions** (4)");
-    expect(replies[0]).toContain("**opencode** (3)");
-    expect(replies[0]).toContain("Short ID: `abc1`");
-    expect(replies[0]).toContain("Title: Fix bug");
-    expect(replies[0]).toContain("Command: `/resume opencode abc1`");
+    expect(replies[0]).toContain("> **opencode** (3)");
+    expect(replies[0]).toContain(
+      "- Title: Fix bug\n  Short ID: `abc1`\n  Command: `/resume opencode abc1`",
+    );
     expect(replies[0]).toContain("Short ID: `abc2`");
     expect(replies[0]).toContain("Title: Refactor auth");
     expect(replies[0]).toContain("Command: `/resume opencode abc2`");
     expect(replies[0]).toContain("Short ID: `xy9`");
     expect(replies[0]).toContain("Title: Cleanup");
     expect(replies[0]).toContain("Command: `/resume opencode xy9`");
-    expect(replies[0]).toContain("**pi** (1)");
+    expect(replies[0]).toContain("> **pi** (1)");
     expect(replies[0]).toContain("Short ID: `abc`");
     expect(replies[0]).toContain("Title: PI session");
     expect(replies[0]).toContain("Command: `/resume pi abc`");
+
+    await xmux.shutdown();
+  });
+
+  test("limits listed sessions per harness using the default resume config", async () => {
+    const { emitCommand, replies, xmux } = await initializeXmux({
+      opencodeSessions: createSessions("opencode", 6),
+      piSessions: [],
+    });
+
+    emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("> **opencode** (showing 5 of 6)");
+    expect(replies[0]).toContain("Title: opencode 5");
+    expect(replies[0]).not.toContain("Title: opencode 6");
+    expect(replies[0]).toContain("_And 1 more sessions._");
+
+    await xmux.shutdown();
+  });
+
+  test("uses configured max resume sessions per harness", async () => {
+    const { emitCommand, replies, xmux } = await initializeXmux({
+      maxSessionsPerHarness: 2,
+      opencodeSessions: createSessions("opencode", 4),
+      piSessions: [],
+    });
+
+    emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("> **opencode** (showing 2 of 4)");
+    expect(replies[0]).toContain("Title: opencode 2");
+    expect(replies[0]).not.toContain("Title: opencode 3");
+    expect(replies[0]).toContain("_And 2 more sessions._");
+
+    await xmux.shutdown();
+  });
+
+  test("resolves hidden sessions because resume lookup uses the full harness list", async () => {
+    const { emitCommand, replies, resumeInputs, xmux } = await initializeXmux({
+      maxSessionsPerHarness: 1,
+      opencodeSessions: createSessions("opencode", 2),
+      piSessions: [],
+    });
+
+    emitCommand(commandEvent({ options: { harnessId: "opencode", shortId: "opencode-2" } }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(resumeInputs).toEqual([
+      { harnessId: "opencode", sessionId: "opencode-2", cwd: process.cwd() },
+    ]);
+    expect(replies[0]).toContain("**Resumed** `opencode/opencode-2`");
 
     await xmux.shutdown();
   });
@@ -65,6 +121,7 @@ describe("/resume command", () => {
     expect(replies[0]).toContain("- Short ID: `abc2`");
     expect(replies[0]).toContain("- Title: Refactor auth");
     expect(replies[0]).toContain("- Directory: ");
+    expect(replies[0]).toContain("Send a message to continue the conversation.");
 
     const binding = await xmux.ctx.store.threadBindings.get(thread);
     expect(binding.unwrap("expected binding lookup to succeed")).toMatchObject({
@@ -134,7 +191,18 @@ describe("/resume command", () => {
   });
 });
 
-async function initializeXmux() {
+interface InitializeXmuxInput {
+  readonly maxSessionsPerHarness?: number;
+  readonly opencodeSessions?: readonly SessionFixture[];
+  readonly piSessions?: readonly SessionFixture[];
+}
+
+interface SessionFixture {
+  readonly sessionId: string;
+  readonly title: string;
+}
+
+async function initializeXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
   const listInputs: { readonly harnessId: string; readonly cwd?: string }[] = [];
   const resumeInputs: {
@@ -154,7 +222,7 @@ async function initializeXmux() {
               harnessId: "opencode",
               listInputs,
               resumeInputs,
-              sessions: [
+              sessions: input.opencodeSessions ?? [
                 { sessionId: "abc111", title: "Fix bug" },
                 { sessionId: "abc222", title: "Refactor auth" },
                 { sessionId: "xy9", title: "Cleanup" },
@@ -171,7 +239,7 @@ async function initializeXmux() {
               harnessId: "pi",
               listInputs,
               resumeInputs,
-              sessions: [{ sessionId: "abc999", title: "PI session" }],
+              sessions: input.piSessions ?? [{ sessionId: "abc999", title: "PI session" }],
             }),
           );
         },
@@ -209,6 +277,9 @@ async function initializeXmux() {
       userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
+      ...(input.maxSessionsPerHarness === undefined
+        ? {}
+        : { resume: { maxSessionsPerHarness: input.maxSessionsPerHarness } }),
     },
   });
 
@@ -224,6 +295,13 @@ async function initializeXmux() {
   };
 }
 
+function createSessions(prefix: string, count: number): readonly SessionFixture[] {
+  return Array.from({ length: count }, (_, index) => ({
+    sessionId: `${prefix}-${index + 1}`,
+    title: `${prefix} ${index + 1}`,
+  }));
+}
+
 function createHarnessRuntime<const THarnessId extends "opencode" | "pi">(input: {
   readonly harnessId: THarnessId;
   readonly listInputs: { readonly harnessId: string; readonly cwd?: string }[];
@@ -232,7 +310,7 @@ function createHarnessRuntime<const THarnessId extends "opencode" | "pi">(input:
     readonly sessionId: string;
     readonly cwd?: string;
   }[];
-  readonly sessions: readonly { readonly sessionId: string; readonly title: string }[];
+  readonly sessions: readonly SessionFixture[];
 }) {
   return {
     id: input.harnessId,

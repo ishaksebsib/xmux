@@ -23,7 +23,7 @@ export function formatResumeOutput(output: ResumeCommandOutput): ChatTextInput {
 }
 
 export function formatResumeList(output: ResumeListOutput): ChatTextInput {
-  const total = output.groups.reduce((count, group) => count + group.sessions.length, 0);
+  const total = output.groups.reduce((count, group) => count + group.totalSessionCount, 0);
 
   if (total === 0) {
     return markdown({
@@ -169,6 +169,8 @@ function formatResumeSuccess(
   }
 
   lines.push(`- Directory: ${inlineCode(output.session.cwd)}`);
+  lines.push("");
+  lines.push("Send a message to continue the conversation.");
 
   return markdown({ text: lines.join("\n") });
 }
@@ -182,23 +184,27 @@ function formatResumeGroups(input: {
   let shown = 0;
 
   for (const group of input.groups) {
-    const lines = [`**${markdownText(group.harnessId)}** (${group.sessions.length})`];
+    const header = formatResumeGroupHeader(group);
+    const sessionBlocks = [] as string[];
 
     for (const session of group.sessions) {
-      const sessionLine = formatResumeSession(session);
-      const candidateGroup = [...lines, sessionLine].join("\n");
+      const sessionBlock = formatResumeSession(session);
+      const candidateGroup = formatResumeGroupText({
+        header,
+        sessionBlocks: [...sessionBlocks, sessionBlock],
+      });
       const candidateText = [...renderedGroups, candidateGroup].join("\n\n");
 
       if (candidateText.length > input.maxLength) {
         break;
       }
 
-      lines.push(sessionLine);
+      sessionBlocks.push(sessionBlock);
       shown += 1;
     }
 
-    if (lines.length > 1) {
-      renderedGroups.push(lines.join("\n"));
+    if (sessionBlocks.length > 0) {
+      renderedGroups.push(formatResumeGroupText({ header, sessionBlocks }));
     }
   }
 
@@ -208,11 +214,28 @@ function formatResumeGroups(input: {
   };
 }
 
+function formatResumeGroupHeader(group: ResumeSessionGroup): string {
+  const harnessId = markdownText(group.harnessId);
+
+  if (group.totalSessionCount === group.sessions.length) {
+    return `> **${harnessId}** (${group.totalSessionCount})`;
+  }
+
+  return `> **${harnessId}** (showing ${group.sessions.length} of ${group.totalSessionCount})`;
+}
+
+function formatResumeGroupText(input: {
+  readonly header: string;
+  readonly sessionBlocks: readonly string[];
+}): string {
+  return [input.header, "", input.sessionBlocks.join("\n\n")].join("\n");
+}
+
 function formatResumeSession(session: ListedResumeSession): string {
   const title = session.title?.trim() || "Untitled session";
   return [
-    `- Short ID: ${inlineCode(session.shortId)}`,
-    `  Title: ${markdownText(title)}`,
+    `- Title: ${markdownText(title)}`,
+    `  Short ID: ${inlineCode(session.shortId)}`,
     `  Command: ${inlineCode(`/resume ${session.harnessId} ${session.shortId}`)}`,
   ].join("\n");
 }
