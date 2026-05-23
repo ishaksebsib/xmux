@@ -44,6 +44,9 @@ export const commands = defineChatCommands({
       shortId: stringOption({ description: "Short session id shown by /delete" }),
     },
   }),
+  exit: defineChatCommand({
+    description: "Exit the active session without deleting it",
+  }),
 });
 
 export type Commands = typeof commands;
