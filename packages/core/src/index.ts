@@ -2,7 +2,14 @@ export { XmuxCloseError, XmuxInitializeError } from "./errors";
 export { createInMemoryStore } from "./store";
 export { createXmux } from "./xmux";
 export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
-export type { DeliveryMode, Config, NormalizedConfig, WorkspaceConfig } from "./config";
+export type {
+  Config,
+  DeliveryMode,
+  NormalizedConfig,
+  NormalizedResumeConfig,
+  ResumeConfig,
+  WorkspaceConfig,
+} from "./config";
 export type {
   ActorRef,
   ChatThreadRef,

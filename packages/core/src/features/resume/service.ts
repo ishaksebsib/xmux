@@ -57,6 +57,7 @@ export interface ResumeActivatedOutput {
 export interface ResumeSessionGroup {
   readonly harnessId: string;
   readonly sessions: readonly ListedResumeSession[];
+  readonly totalSessionCount: number;
 }
 
 export interface ListedResumeSession {
@@ -143,7 +144,11 @@ async function listResumeSessions<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly cwd: string;
 }): Promise<Result<ResumeListOutput, ResumeCommandError>> {
-  const catalog = await buildResumeCatalog({ ctx: input.ctx, cwd: input.cwd });
+  const catalog = await buildResumeCatalog({
+    ctx: input.ctx,
+    cwd: input.cwd,
+    maxSessionsPerHarness: input.ctx.app.config.resume.maxSessionsPerHarness,
+  });
 
   if (allHarnessesFailed({ harnessIds: input.ctx.app.harnessIds, failures: catalog.failures })) {
     return Result.err(new ResumeSessionListAllFailedError({ failures: catalog.failures }));
@@ -265,6 +270,7 @@ async function buildResumeCatalog<
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly cwd: string;
+  readonly maxSessionsPerHarness?: number;
 }): Promise<{
   readonly groups: readonly ResumeSessionGroup[];
   readonly failures: readonly ResumeSessionListFailure[];
@@ -273,7 +279,12 @@ async function buildResumeCatalog<
   const failures = [] as ResumeSessionListFailure[];
 
   for (const harnessId of input.ctx.app.harnessIds) {
-    const listed = await listHarnessSessions({ ctx: input.ctx, harnessId, cwd: input.cwd });
+    const listed = await listHarnessSessions({
+      ctx: input.ctx,
+      harnessId,
+      cwd: input.cwd,
+      maxSessions: input.maxSessionsPerHarness,
+    });
 
     if (listed.isErr()) {
       failures.push({ harnessId, error: listed.error });
@@ -294,6 +305,7 @@ async function listHarnessSessions<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly harnessId: THarnessId;
   readonly cwd: string;
+  readonly maxSessions?: number;
 }): Promise<Result<ResumeSessionGroup, ListSessionsError>> {
   const listed = await input.ctx.app.harness.listSessions(
     createHarnessListInput({
@@ -307,9 +319,17 @@ async function listHarnessSessions<
     return Result.err(listed.error);
   }
 
-  const sessions = toListedResumeSessions({ harnessId: input.harnessId, sessions: listed.value });
+  const listing = toResumeSessionListing({
+    harnessId: input.harnessId,
+    sessions: listed.value,
+    maxSessions: input.maxSessions,
+  });
 
-  return Result.ok({ harnessId: input.harnessId, sessions });
+  return Result.ok({
+    harnessId: input.harnessId,
+    sessions: listing.sessions,
+    totalSessionCount: listing.totalSessionCount,
+  });
 }
 
 function allHarnessesFailed(input: {
@@ -319,22 +339,28 @@ function allHarnessesFailed(input: {
   return input.harnessIds.length > 0 && input.failures.length === input.harnessIds.length;
 }
 
-function toListedResumeSessions(input: {
+function toResumeSessionListing(input: {
   readonly harnessId: string;
   readonly sessions: readonly HarnessSessionInfo[];
-}): readonly ListedResumeSession[] {
+  readonly maxSessions?: number;
+}): { readonly sessions: readonly ListedResumeSession[]; readonly totalSessionCount: number } {
   const sessions = deduplicateBySessionId(input.sessions);
   const prefixes = shortestUniquePrefixes(
     sessions.map((session) => ({ sessionId: session.ref.sessionId })),
   );
+  const visibleSessions =
+    input.maxSessions === undefined ? sessions : sessions.slice(0, input.maxSessions);
 
-  return sessions.map((session) => ({
-    harnessId: input.harnessId,
-    sessionId: session.ref.sessionId,
-    shortId: prefixes.get(session.ref.sessionId) ?? session.ref.sessionId,
-    ...(session.title === undefined ? {} : { title: session.title }),
-    ...(session.cwd === undefined ? {} : { cwd: session.cwd }),
-  }));
+  return {
+    totalSessionCount: sessions.length,
+    sessions: visibleSessions.map((session) => ({
+      harnessId: input.harnessId,
+      sessionId: session.ref.sessionId,
+      shortId: prefixes.get(session.ref.sessionId) ?? session.ref.sessionId,
+      ...(session.title === undefined ? {} : { title: session.title }),
+      ...(session.cwd === undefined ? {} : { cwd: session.cwd }),
+    })),
+  };
 }
 
 function deduplicateBySessionId(

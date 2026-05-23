@@ -17,11 +17,20 @@ export interface NormalizedWorkspaceConfig {
   readonly maxListEntries: number;
 }
 
+export interface ResumeConfig {
+  readonly maxSessionsPerHarness?: number;
+}
+
+export interface NormalizedResumeConfig {
+  readonly maxSessionsPerHarness: number;
+}
+
 export interface Config {
   readonly userName: string;
   readonly defaultWorkingDirectory: string;
   readonly deliveryMode: DeliveryMode;
   readonly workspace?: WorkspaceConfig;
+  readonly resume?: ResumeConfig;
 }
 
 export interface NormalizedConfig {
@@ -29,9 +38,11 @@ export interface NormalizedConfig {
   readonly defaultWorkingDirectory: string;
   readonly deliveryMode: DeliveryMode;
   readonly workspace: NormalizedWorkspaceConfig;
+  readonly resume: NormalizedResumeConfig;
 }
 
 const DEFAULT_MAX_LIST_ENTRIES = 100;
+const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
 
 export function normalizeConfig(config: Config): NormalizedConfig {
   return Object.freeze({
@@ -42,12 +53,25 @@ export function normalizeConfig(config: Config): NormalizedConfig {
       showHiddenFiles: config.workspace?.showHiddenFiles ?? false,
       maxListEntries: normalizeMaxListEntries(config.workspace?.maxListEntries),
     }),
+    resume: Object.freeze({
+      maxSessionsPerHarness: normalizeMaxResumeSessionsPerHarness(
+        config.resume?.maxSessionsPerHarness,
+      ),
+    }),
   });
 }
 
 function normalizeMaxListEntries(value: number | undefined): number {
   if (value === undefined || !Number.isInteger(value) || value < 1) {
     return DEFAULT_MAX_LIST_ENTRIES;
+  }
+
+  return value;
+}
+
+function normalizeMaxResumeSessionsPerHarness(value: number | undefined): number {
+  if (value === undefined || !Number.isInteger(value) || value < 1) {
+    return DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS;
   }
 
   return value;
