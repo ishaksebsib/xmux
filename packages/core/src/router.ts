@@ -2,6 +2,7 @@ import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
+import { registerDeleteRoute } from "./features/delete";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
 import { registerResumeRoute } from "./features/resume";
@@ -16,6 +17,7 @@ export function registerRoutes<
   return [
     registerNewRoute(ctx),
     registerResumeRoute(ctx),
+    registerDeleteRoute(ctx),
     registerPwdRoute(ctx),
     registerCdRoute(ctx),
     registerLsRoute(ctx),

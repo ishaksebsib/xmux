@@ -37,6 +37,13 @@ export const commands = defineChatCommands({
       shortId: stringOption({ description: "Short session id shown by /resume" }),
     },
   }),
+  delete: defineChatCommand({
+    description: "Delete the active or selected harness session",
+    options: {
+      harnessId: stringOption({ description: "Harness adapter id from /delete" }),
+      shortId: stringOption({ description: "Short session id shown by /delete" }),
+    },
+  }),
 });
 
 export type Commands = typeof commands;

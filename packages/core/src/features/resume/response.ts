@@ -1,69 +1,26 @@
 import type { ChatTextInput } from "@xmux/chat-core";
 import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
+import { formatSessionSelectionList } from "../shared/session-selection";
 import {
   ResumeCommandHarnessNotConfiguredError,
   ResumeCommandIncompleteTargetError,
   ResumeSessionListAllFailedError,
   ResumeSessionShortIdAmbiguousError,
   ResumeSessionShortIdNotFoundError,
-  type ResumeSessionListFailure,
 } from "./errors";
-import type {
-  ListedResumeSession,
-  ResumeCommandError,
-  ResumeCommandOutput,
-  ResumeListOutput,
-  ResumeSessionGroup,
-} from "./service";
-
-const MAX_RESUME_LIST_TEXT_LENGTH = 3200;
+import type { ResumeCommandError, ResumeCommandOutput, ResumeListOutput } from "./service";
 
 export function formatResumeOutput(output: ResumeCommandOutput): ChatTextInput {
   return output.status === "listed" ? formatResumeList(output) : formatResumeSuccess(output);
 }
 
 export function formatResumeList(output: ResumeListOutput): ChatTextInput {
-  const total = output.groups.reduce((count, group) => count + group.totalSessionCount, 0);
-
-  if (total === 0) {
-    return markdown({
-      text: [
-        "**No sessions found**",
-        "",
-        `Current directory: ${inlineCode(output.cwd)}`,
-        "",
-        "No configured harness reported resumable sessions for this directory.",
-        formatListFailures(output.failures),
-      ]
-        .filter((line) => line.length > 0)
-        .join("\n"),
-    });
-  }
-
-  const failures = formatListFailures(output.failures);
-  const header = [
-    `**Available sessions** (${total})`,
-    "",
-    `Current directory: ${inlineCode(output.cwd)}`,
-    "",
-    `Use ${inlineCode("/resume <harnessId> <shortId>")} to activate one.`,
-    "",
-  ].join("\n");
-  const groups = formatResumeGroups({
-    groups: output.groups.filter(hasSessions),
-    maxLength: Math.max(0, MAX_RESUME_LIST_TEXT_LENGTH - header.length - failures.length),
-    total,
-  });
-
-  return markdown({
-    text: [
-      header,
-      groups.text,
-      groups.omitted > 0 ? `_And ${groups.omitted} more sessions._` : "",
-      failures,
-    ]
-      .filter((line) => line.length > 0)
-      .join("\n"),
+  return formatSessionSelectionList({
+    commandName: "resume",
+    cwd: output.cwd,
+    groups: output.groups,
+    failures: output.failures,
+    emptyDescription: "No configured harness reported resumable sessions for this directory.",
   });
 }
 
@@ -173,87 +130,4 @@ function formatResumeSuccess(
   lines.push("Send a message to continue the conversation.");
 
   return markdown({ text: lines.join("\n") });
-}
-
-function formatResumeGroups(input: {
-  readonly groups: readonly ResumeSessionGroup[];
-  readonly maxLength: number;
-  readonly total: number;
-}): { readonly text: string; readonly omitted: number } {
-  const renderedGroups = [] as string[];
-  let shown = 0;
-
-  for (const group of input.groups) {
-    const header = formatResumeGroupHeader(group);
-    const sessionBlocks = [] as string[];
-
-    for (const session of group.sessions) {
-      const sessionBlock = formatResumeSession(session);
-      const candidateGroup = formatResumeGroupText({
-        header,
-        sessionBlocks: [...sessionBlocks, sessionBlock],
-      });
-      const candidateText = [...renderedGroups, candidateGroup].join("\n\n");
-
-      if (candidateText.length > input.maxLength) {
-        break;
-      }
-
-      sessionBlocks.push(sessionBlock);
-      shown += 1;
-    }
-
-    if (sessionBlocks.length > 0) {
-      renderedGroups.push(formatResumeGroupText({ header, sessionBlocks }));
-    }
-  }
-
-  return {
-    text: renderedGroups.join("\n\n"),
-    omitted: Math.max(0, input.total - shown),
-  };
-}
-
-function formatResumeGroupHeader(group: ResumeSessionGroup): string {
-  const harnessId = markdownText(group.harnessId);
-
-  if (group.totalSessionCount === group.sessions.length) {
-    return `> **${harnessId}** (${group.totalSessionCount})`;
-  }
-
-  return `> **${harnessId}** (showing ${group.sessions.length} of ${group.totalSessionCount})`;
-}
-
-function formatResumeGroupText(input: {
-  readonly header: string;
-  readonly sessionBlocks: readonly string[];
-}): string {
-  return [input.header, "", input.sessionBlocks.join("\n\n")].join("\n");
-}
-
-function formatResumeSession(session: ListedResumeSession): string {
-  const title = session.title?.trim() || "Untitled session";
-  return [
-    `- Title: ${markdownText(title)}`,
-    `  Short ID: ${inlineCode(session.shortId)}`,
-    `  Command: ${inlineCode(`/resume ${session.harnessId} ${session.shortId}`)}`,
-  ].join("\n");
-}
-
-function formatListFailures(failures: readonly ResumeSessionListFailure[]): string {
-  if (failures.length === 0) {
-    return "";
-  }
-
-  return [
-    "",
-    "Some harnesses could not be listed:",
-    ...failures.map(
-      (failure) => `- ${inlineCode(failure.harnessId)} — ${markdownText(failure.error.message)}`,
-    ),
-  ].join("\n");
-}
-
-function hasSessions(group: ResumeSessionGroup): boolean {
-  return group.sessions.length > 0;
 }

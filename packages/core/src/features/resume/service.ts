@@ -3,7 +3,6 @@ import type {
   HarnessAdapterDefinitions,
   HarnessSessionInfo,
   ListSessionsError,
-  ListSessionsInput,
   ResumeSessionError,
   ResumeSessionInput,
 } from "@xmux/harness-core";
@@ -17,6 +16,14 @@ import {
   type ChatThreadRef,
   type SessionRecord,
 } from "../../store";
+import {
+  allHarnessesFailed,
+  findSessionsByShortId,
+  listHarnessSelectableSessions,
+  listSessionSelectionCatalog,
+  type ListedSelectableSession,
+  type SessionSelectionGroup,
+} from "../shared/session-selection";
 import { requireConfiguredHarnessId } from "../utils";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
 import {
@@ -54,19 +61,8 @@ export interface ResumeActivatedOutput {
   readonly shortId: string;
 }
 
-export interface ResumeSessionGroup {
-  readonly harnessId: string;
-  readonly sessions: readonly ListedResumeSession[];
-  readonly totalSessionCount: number;
-}
-
-export interface ListedResumeSession {
-  readonly harnessId: string;
-  readonly sessionId: string;
-  readonly shortId: string;
-  readonly title?: string;
-  readonly cwd?: string;
-}
+export type ResumeSessionGroup = SessionSelectionGroup;
+export type ListedResumeSession = ListedSelectableSession;
 
 export interface ResumeSessionCommandInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -144,7 +140,7 @@ async function listResumeSessions<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly cwd: string;
 }): Promise<Result<ResumeListOutput, ResumeCommandError>> {
-  const catalog = await buildResumeCatalog({
+  const catalog = await listSessionSelectionCatalog({
     ctx: input.ctx,
     cwd: input.cwd,
     maxSessionsPerHarness: input.ctx.app.config.resume.maxSessionsPerHarness,
@@ -182,7 +178,7 @@ async function resumeSelectedSession<
     return Result.err(harnessId.error);
   }
 
-  const listed = await listHarnessSessions({
+  const listed = await listHarnessSelectableSessions({
     ctx: input.ctx,
     harnessId: harnessId.value,
     cwd: input.cwd,
@@ -192,9 +188,10 @@ async function resumeSelectedSession<
     return Result.err(listed.error);
   }
 
-  const matches = listed.value.sessions.filter((session) =>
-    session.sessionId.startsWith(input.shortId),
-  );
+  const matches = findSessionsByShortId({
+    sessions: listed.value.sessions,
+    shortId: input.shortId,
+  });
 
   if (matches.length === 0) {
     return Result.err(
@@ -264,174 +261,6 @@ async function resumeSelectedSession<
   return Result.ok({ status: "resumed", session: stored.value, shortId: input.shortId });
 }
 
-async function buildResumeCatalog<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly cwd: string;
-  readonly maxSessionsPerHarness?: number;
-}): Promise<{
-  readonly groups: readonly ResumeSessionGroup[];
-  readonly failures: readonly ResumeSessionListFailure[];
-}> {
-  const groups = [] as ResumeSessionGroup[];
-  const failures = [] as ResumeSessionListFailure[];
-
-  for (const harnessId of input.ctx.app.harnessIds) {
-    const listed = await listHarnessSessions({
-      ctx: input.ctx,
-      harnessId,
-      cwd: input.cwd,
-      maxSessions: input.maxSessionsPerHarness,
-    });
-
-    if (listed.isErr()) {
-      failures.push({ harnessId, error: listed.error });
-      continue;
-    }
-
-    groups.push(listed.value);
-  }
-
-  return { groups, failures };
-}
-
-async function listHarnessSessions<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
-  THarnessId extends Extract<keyof TAdapters, string>,
->(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly harnessId: THarnessId;
-  readonly cwd: string;
-  readonly maxSessions?: number;
-}): Promise<Result<ResumeSessionGroup, ListSessionsError>> {
-  const listed = await input.ctx.app.harness.listSessions(
-    createHarnessListInput({
-      harnessId: input.harnessId,
-      cwd: input.cwd,
-      signal: input.ctx.signal,
-    }) as unknown as ListSessionsInput<TAdapters>,
-  );
-
-  if (listed.isErr()) {
-    return Result.err(listed.error);
-  }
-
-  const listing = toResumeSessionListing({
-    harnessId: input.harnessId,
-    sessions: listed.value,
-    maxSessions: input.maxSessions,
-  });
-
-  return Result.ok({
-    harnessId: input.harnessId,
-    sessions: listing.sessions,
-    totalSessionCount: listing.totalSessionCount,
-  });
-}
-
-function allHarnessesFailed(input: {
-  readonly harnessIds: readonly string[];
-  readonly failures: readonly ResumeSessionListFailure[];
-}): boolean {
-  return input.harnessIds.length > 0 && input.failures.length === input.harnessIds.length;
-}
-
-function toResumeSessionListing(input: {
-  readonly harnessId: string;
-  readonly sessions: readonly HarnessSessionInfo[];
-  readonly maxSessions?: number;
-}): { readonly sessions: readonly ListedResumeSession[]; readonly totalSessionCount: number } {
-  const sessions = deduplicateBySessionId(input.sessions);
-  const prefixes = shortestUniquePrefixes(
-    sessions.map((session) => ({ sessionId: session.ref.sessionId })),
-  );
-  const visibleSessions =
-    input.maxSessions === undefined ? sessions : sessions.slice(0, input.maxSessions);
-
-  return {
-    totalSessionCount: sessions.length,
-    sessions: visibleSessions.map((session) => ({
-      harnessId: input.harnessId,
-      sessionId: session.ref.sessionId,
-      shortId: prefixes.get(session.ref.sessionId) ?? session.ref.sessionId,
-      ...(session.title === undefined ? {} : { title: session.title }),
-      ...(session.cwd === undefined ? {} : { cwd: session.cwd }),
-    })),
-  };
-}
-
-function deduplicateBySessionId(
-  sessions: readonly HarnessSessionInfo[],
-): readonly HarnessSessionInfo[] {
-  const seen = new Set<string>();
-  const unique = [] as HarnessSessionInfo[];
-
-  for (const session of sessions) {
-    if (seen.has(session.ref.sessionId)) {
-      continue;
-    }
-
-    seen.add(session.ref.sessionId);
-    unique.push(session);
-  }
-
-  return unique;
-}
-
-function shortestUniquePrefixes(
-  sessions: readonly { readonly sessionId: string }[],
-  minLength = 3,
-): ReadonlyMap<string, string> {
-  const lengths = new Map<string, number>();
-
-  for (const session of sessions) {
-    lengths.set(session.sessionId, Math.min(minLength, session.sessionId.length));
-  }
-
-  while (true) {
-    const byPrefix = new Map<string, string[]>();
-
-    for (const session of sessions) {
-      const length = lengths.get(session.sessionId) ?? session.sessionId.length;
-      const prefix = session.sessionId.slice(0, length);
-      const ids = byPrefix.get(prefix) ?? [];
-      ids.push(session.sessionId);
-      byPrefix.set(prefix, ids);
-    }
-
-    let changed = false;
-
-    for (const ids of byPrefix.values()) {
-      if (ids.length < 2) {
-        continue;
-      }
-
-      for (const id of ids) {
-        const current = lengths.get(id) ?? id.length;
-        const next = Math.min(current + 1, id.length);
-        if (next !== current) {
-          lengths.set(id, next);
-          changed = true;
-        }
-      }
-    }
-
-    if (!changed) {
-      break;
-    }
-  }
-
-  return new Map(
-    sessions.map((session) => [
-      session.sessionId,
-      session.sessionId.slice(0, lengths.get(session.sessionId) ?? session.sessionId.length),
-    ]),
-  );
-}
-
 async function upsertResumedSessionRecord<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -473,18 +302,6 @@ async function upsertResumedSessionRecord<
 }
 
 const UNKNOWN_ACTOR = { userId: "unknown" } satisfies ActorRef;
-
-function createHarnessListInput<THarnessId extends string>(input: {
-  readonly harnessId: THarnessId;
-  readonly cwd: string;
-  readonly signal: AbortSignal;
-}) {
-  return {
-    harnessId: input.harnessId,
-    cwd: input.cwd,
-    signal: input.signal,
-  };
-}
 
 function createHarnessResumeInput<THarnessId extends string>(input: {
   readonly harnessId: THarnessId;
