@@ -30,6 +30,13 @@ export const commands = defineChatCommands({
       path: stringOption({ description: "Optional directory path to list" }),
     },
   }),
+  resume: defineChatCommand({
+    description: "List or resume existing harness sessions",
+    options: {
+      harnessId: stringOption({ description: "Harness adapter id from /resume" }),
+      shortId: stringOption({ description: "Short session id shown by /resume" }),
+    },
+  }),
 });
 
 export type Commands = typeof commands;

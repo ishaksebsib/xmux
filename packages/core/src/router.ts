@@ -4,6 +4,7 @@ import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
+import { registerResumeRoute } from "./features/resume";
 import { registerUnknownCommandRoute } from "./features/unknown-command";
 import { registerCdRoute, registerLsRoute, registerPwdRoute } from "./features/workspace";
 
@@ -14,6 +15,7 @@ export function registerRoutes<
 >(ctx: Context<TAdapters, TChats>): readonly Unsubscribe[] {
   return [
     registerNewRoute(ctx),
+    registerResumeRoute(ctx),
     registerPwdRoute(ctx),
     registerCdRoute(ctx),
     registerLsRoute(ctx),
