@@ -13,12 +13,19 @@ import type {
   HarnessAdapterDefinition,
   HarnessAdapterObject,
   HarnessAdapterSessionInfo,
+  HarnessModelTarget,
   HarnessPromptContent,
   HarnessSessionInfo,
   OpenedHarnessAdapter,
   WorkingDirectoryPath,
 } from "../contracts";
-import type { AdapterOptionsFor, AdapterSessionFor, HarnessAdapterDefinitions } from "../types";
+import type {
+  AdapterModelFor,
+  AdapterOptionsFor,
+  AdapterSessionFor,
+  HarnessAdapterDefinitions,
+  ModelTargetHarnessId,
+} from "../types";
 
 export type HarnessRuntimeGetter<TAdapters extends HarnessAdapterDefinitions<TAdapters>> = <
   THarnessId extends keyof TAdapters,
@@ -30,7 +37,8 @@ export type HarnessRuntimeGetter<TAdapters extends HarnessAdapterDefinitions<TAd
     OpenedHarnessAdapter<
       Extract<THarnessId, string>,
       AdapterOptionsFor<TAdapters, THarnessId>,
-      AdapterSessionFor<TAdapters, THarnessId>
+      AdapterSessionFor<TAdapters, THarnessId>,
+      AdapterModelFor<TAdapters, THarnessId>
     >,
     UnknownHarnessError | HarnessAdapterOpenError
   >
@@ -57,6 +65,14 @@ export function normalizePromptContent(
   return Array.isArray(content)
     ? (content as readonly HarnessPromptContent[])
     : [content as HarnessPromptContent];
+}
+
+export function modelTargetHarnessId<TTarget extends HarnessModelTarget>(
+  target: TTarget,
+): ModelTargetHarnessId<TTarget> {
+  return (
+    target.type === "harness" ? target.harnessId : target.ref.harnessId
+  ) as ModelTargetHarnessId<TTarget>;
 }
 
 export async function createWorkingDirectoryPath(
@@ -91,13 +107,19 @@ export async function openHarnessAdapter<
   THarnessId extends string,
   TAdapterOptions extends HarnessAdapterObject,
   TAdapterSession extends HarnessAdapterObject,
+  TAdapterModel extends HarnessAdapterObject,
 >(args: {
-  readonly adapter: HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession>;
+  readonly adapter: HarnessAdapterDefinition<
+    THarnessId,
+    TAdapterOptions,
+    TAdapterSession,
+    TAdapterModel
+  >;
   readonly harnessId: THarnessId;
   readonly signal?: AbortSignal;
 }): Promise<
   Result<
-    OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession>,
+    OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel>,
     HarnessAdapterOpenError
   >
 > {
@@ -145,6 +167,7 @@ export async function createHarnessSessionInfo<
         sessionId: args.adapterSession.sessionId,
       },
       title: args.adapterSession.title,
+      model: args.adapterSession.model,
       adapterData: args.adapterSession.adapterData,
     });
   }
@@ -161,6 +184,7 @@ export async function createHarnessSessionInfo<
     },
     cwd: cwd.value,
     title: args.adapterSession.title,
+    model: args.adapterSession.model,
     adapterData: args.adapterSession.adapterData,
   });
 }

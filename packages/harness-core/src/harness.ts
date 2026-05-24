@@ -9,16 +9,23 @@ import type {
 } from "./contracts";
 import type {
   AbortInput,
+  AdapterModelFor,
   AdapterOptionsFor,
   AdapterSessionFor,
   CreateSessionInput,
   DeleteSessionInput,
+  GetModelInput,
   GetSessionInput,
+  HarnessAdapterDefinitions,
+  ListModelsInput,
   ListSessionsInput,
   PromptInput,
   ResumeSessionInput,
-  HarnessAdapterDefinitions,
+  SetModelInput,
 } from "./types";
+import { handleGetModel } from "./handlers/model/get";
+import { handleListModels } from "./handlers/model/list";
+import { handleSetModel } from "./handlers/model/set";
 import { handleAbort } from "./handlers/session/abort";
 import { handleCreateSession } from "./handlers/session/create";
 import { handleDeleteSession } from "./handlers/session/delete";
@@ -32,9 +39,10 @@ export function defineHarnessAdapter<
   THarnessId extends string,
   TAdapterOptions extends HarnessAdapterObject = Record<never, never>,
   TAdapterSession extends HarnessAdapterObject = Record<never, never>,
+  TAdapterModel extends HarnessAdapterObject = HarnessAdapterObject,
 >(
-  adapter: HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession>,
-): HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession> {
+  adapter: HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel>,
+): HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel> {
   return adapter;
 }
 
@@ -53,7 +61,7 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
   );
   const openedRuntimes = new Map<
     string,
-    OpenedHarnessAdapter<string, HarnessAdapterObject, HarnessAdapterObject>
+    OpenedHarnessAdapter<string, HarnessAdapterObject, HarnessAdapterObject, HarnessAdapterObject>
   >();
 
   async function getRuntime<THarnessId extends keyof TAdapters>(
@@ -64,7 +72,8 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       OpenedHarnessAdapter<
         Extract<THarnessId, string>,
         AdapterOptionsFor<TAdapters, THarnessId>,
-        AdapterSessionFor<TAdapters, THarnessId>
+        AdapterSessionFor<TAdapters, THarnessId>,
+        AdapterModelFor<TAdapters, THarnessId>
       >,
       UnknownHarnessError | HarnessAdapterOpenError
     >
@@ -76,7 +85,8 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
         existing as OpenedHarnessAdapter<
           Extract<THarnessId, string>,
           AdapterOptionsFor<TAdapters, THarnessId>,
-          AdapterSessionFor<TAdapters, THarnessId>
+          AdapterSessionFor<TAdapters, THarnessId>,
+          AdapterModelFor<TAdapters, THarnessId>
         >,
       );
     }
@@ -94,7 +104,8 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
     const selectedAdapter = adapter as HarnessAdapterDefinition<
       Extract<THarnessId, string>,
       AdapterOptionsFor<TAdapters, THarnessId>,
-      AdapterSessionFor<TAdapters, THarnessId>
+      AdapterSessionFor<TAdapters, THarnessId>,
+      AdapterModelFor<TAdapters, THarnessId>
     >;
 
     return Result.gen(async function* () {
@@ -108,14 +119,20 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
 
       openedRuntimes.set(
         key,
-        runtime as OpenedHarnessAdapter<string, HarnessAdapterObject, HarnessAdapterObject>,
+        runtime as OpenedHarnessAdapter<
+          string,
+          HarnessAdapterObject,
+          HarnessAdapterObject,
+          HarnessAdapterObject
+        >,
       );
 
       return Result.ok(
         runtime as OpenedHarnessAdapter<
           Extract<THarnessId, string>,
           AdapterOptionsFor<TAdapters, THarnessId>,
-          AdapterSessionFor<TAdapters, THarnessId>
+          AdapterSessionFor<TAdapters, THarnessId>,
+          AdapterModelFor<TAdapters, THarnessId>
         >,
       );
     });
@@ -134,6 +151,18 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
 
     async listSessions<TInput extends ListSessionsInput<TAdapters>>(input: TInput) {
       return handleListSessions({ input, getRuntime });
+    },
+
+    async listModels<TInput extends ListModelsInput<TAdapters>>(input: TInput) {
+      return handleListModels({ input, getRuntime });
+    },
+
+    async getModel<TInput extends GetModelInput<TAdapters>>(input: TInput) {
+      return handleGetModel({ input, getRuntime });
+    },
+
+    async setModel<TInput extends SetModelInput<TAdapters>>(input: TInput) {
+      return handleSetModel({ input, getRuntime });
     },
 
     async getSession<TInput extends GetSessionInput<TAdapters>>(input: TInput) {

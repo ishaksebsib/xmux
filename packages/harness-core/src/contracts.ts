@@ -3,11 +3,14 @@ import type {
   AbortError,
   CreateSessionError,
   DeleteSessionError,
+  GetModelError,
   GetSessionError,
   HarnessCloseError,
+  ListModelsError,
   ListSessionsError,
   PromptError,
   ResumeSessionError,
+  SetModelError,
 } from "./errors";
 import type { HarnessPromptEvent } from "./events";
 import type {
@@ -15,15 +18,21 @@ import type {
   CreateSessionInput,
   CreatedSessionFromInput,
   DeleteSessionInput,
+  GetModelInput,
+  GetModelResultFromInput,
   GetSessionInput,
   GetSessionResultFromInput,
   HarnessAdapterDefinitions,
+  ListModelsInput,
+  ListModelsResultFromInput,
   ListSessionsInput,
   ListSessionsResultFromInput,
   PromptInput,
   PromptResultFromInput,
   ResumeSessionInput,
   ResumeSessionResultFromInput,
+  SetModelInput,
+  SetModelResultFromInput,
 } from "./types";
 
 declare const workingDirectoryPathBrand: unique symbol;
@@ -47,6 +56,55 @@ export interface HarnessModelRef {
   readonly providerId?: string;
   readonly modelId: string;
   readonly variant?: string;
+}
+
+/** Model metadata normalized across harnesses. */
+export interface HarnessModelInfo<
+  THarnessId extends string = string,
+  TAdapterModel extends HarnessAdapterObject = HarnessAdapterObject,
+> {
+  readonly harnessId: THarnessId;
+  readonly ref: HarnessModelRef;
+  readonly name?: string;
+  readonly providerName?: string;
+  readonly status?: "active" | "beta" | "deprecated" | "unavailable";
+  readonly available?: boolean;
+  readonly capabilities?: {
+    readonly tools?: boolean;
+    readonly reasoning?: boolean;
+    readonly temperature?: boolean;
+    readonly input?: readonly ("text" | "image" | "audio" | "video" | "pdf")[];
+    readonly output?: readonly ("text" | "image" | "audio" | "video" | "pdf")[];
+  };
+  readonly limits?: {
+    readonly context?: number;
+    readonly input?: number;
+    readonly output?: number;
+  };
+  readonly cost?: {
+    readonly input?: number;
+    readonly output?: number;
+    readonly cacheRead?: number;
+    readonly cacheWrite?: number;
+  };
+  readonly adapterData: TAdapterModel;
+}
+
+/** Scope whose selected/default model should be read or updated. */
+export type HarnessModelTarget<THarnessId extends string = string> =
+  | { readonly type: "harness"; readonly harnessId: THarnessId }
+  | { readonly type: "session"; readonly ref: SessionRef<THarnessId> };
+
+/** Model selection mutation for a harness or session target. */
+export type HarnessModelUpdate =
+  | { readonly type: "set"; readonly model: HarnessModelRef }
+  | { readonly type: "clear" };
+
+/** Current model selection for a harness or session target. */
+export interface HarnessSelectedModel<THarnessId extends string = string> {
+  readonly target: HarnessModelTarget<THarnessId>;
+  readonly model?: HarnessModelRef;
+  readonly source: "session" | "harness" | "native" | "unset";
 }
 
 /** Token usage data normalized across harnesses. */
@@ -90,6 +148,7 @@ export interface HarnessSessionInfo<
   readonly ref: SessionRef<THarnessId>;
   readonly cwd?: WorkingDirectoryPath;
   readonly title?: string;
+  readonly model?: HarnessModelRef;
   readonly adapterData: TAdapterSession;
 }
 
@@ -102,6 +161,7 @@ export interface OpenHarnessAdapterContext {
 export interface HarnessAdapterCreateSessionInput<TAdapterOptions extends HarnessAdapterObject> {
   readonly cwd: WorkingDirectoryPath;
   readonly title?: string;
+  readonly model?: HarnessModelRef;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -109,6 +169,7 @@ export interface HarnessAdapterCreateSessionInput<TAdapterOptions extends Harnes
 /** Adapter-native session metadata returned to the unified harness facade. */
 export interface HarnessAdapterCreateSessionResult<TAdapterSession extends HarnessAdapterObject> {
   readonly sessionId: string;
+  readonly model?: HarnessModelRef;
   readonly adapterData: TAdapterSession;
 }
 
@@ -119,6 +180,7 @@ export interface HarnessAdapterSessionInfo<
   readonly sessionId: string;
   readonly cwd?: string;
   readonly title?: string;
+  readonly model?: HarnessModelRef;
   readonly adapterData: TAdapterSession;
 }
 
@@ -133,6 +195,14 @@ export interface HarnessAdapterResumeSessionInput<TAdapterOptions extends Harnes
 /** List request passed to an adapter. */
 export interface HarnessAdapterListSessionsInput<TAdapterOptions extends HarnessAdapterObject> {
   readonly cwd?: string;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+/** Model list request passed to an adapter. */
+export interface HarnessAdapterListModelsInput<TAdapterOptions extends HarnessAdapterObject> {
+  readonly cwd?: string;
+  readonly includeUnavailable?: boolean;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -155,6 +225,7 @@ export interface HarnessAdapterPromptInput<
   readonly ref: SessionRef<THarnessId>;
   readonly cwd: WorkingDirectoryPath;
   readonly content: readonly HarnessPromptContent[];
+  readonly model?: HarnessModelRef;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -164,6 +235,27 @@ export type HarnessAdapterPromptResult<
   THarnessId extends string = string,
   TAdapterData extends HarnessAdapterObject = HarnessAdapterObject,
 > = AsyncIterable<HarnessPromptEvent<THarnessId, TAdapterData>>;
+
+/** Model selection read request passed to an adapter. */
+export interface HarnessAdapterGetModelInput<
+  THarnessId extends string,
+  TAdapterOptions extends HarnessAdapterObject,
+> {
+  readonly target: HarnessModelTarget<THarnessId>;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+/** Model selection write request passed to an adapter. */
+export interface HarnessAdapterSetModelInput<
+  THarnessId extends string,
+  TAdapterOptions extends HarnessAdapterObject,
+> {
+  readonly target: HarnessModelTarget<THarnessId>;
+  readonly update: HarnessModelUpdate;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
 
 /** Delete request passed to an adapter. */
 export interface HarnessAdapterDeleteSessionInput<
@@ -195,6 +287,7 @@ export interface OpenedHarnessAdapter<
   THarnessId extends string,
   TAdapterOptions extends HarnessAdapterObject = Record<never, never>,
   TAdapterSession extends HarnessAdapterObject = Record<never, never>,
+  TAdapterModel extends HarnessAdapterObject = HarnessAdapterObject,
 > {
   readonly id: THarnessId;
   createSession(
@@ -212,6 +305,15 @@ export interface OpenedHarnessAdapter<
   prompt(
     input: HarnessAdapterPromptInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<HarnessAdapterPromptResult<THarnessId>, unknown>>;
+  listModels?(
+    input: HarnessAdapterListModelsInput<TAdapterOptions>,
+  ): Promise<Result<readonly HarnessModelInfo<THarnessId, TAdapterModel>[], unknown>>;
+  getModel?(
+    input: HarnessAdapterGetModelInput<THarnessId, TAdapterOptions>,
+  ): Promise<Result<HarnessSelectedModel<THarnessId>, unknown>>;
+  setModel?(
+    input: HarnessAdapterSetModelInput<THarnessId, TAdapterOptions>,
+  ): Promise<Result<HarnessSelectedModel<THarnessId>, unknown>>;
   deleteSession(
     input: HarnessAdapterDeleteSessionInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<void, unknown>>;
@@ -230,11 +332,17 @@ export interface HarnessAdapterDefinition<
   THarnessId extends string,
   TAdapterOptions extends HarnessAdapterObject = Record<never, never>,
   TAdapterSession extends HarnessAdapterObject = Record<never, never>,
+  TAdapterModel extends HarnessAdapterObject = HarnessAdapterObject,
 > {
   readonly id: THarnessId;
   open(
     context: OpenHarnessAdapterContext,
-  ): Promise<Result<OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession>, unknown>>;
+  ): Promise<
+    Result<
+      OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel>,
+      unknown
+    >
+  >;
 }
 
 /**
@@ -254,6 +362,15 @@ export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>>
   listSessions<TInput extends ListSessionsInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ListSessionsResultFromInput<TAdapters, TInput>, ListSessionsError>>;
+  listModels<TInput extends ListModelsInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ListModelsResultFromInput<TAdapters, TInput>, ListModelsError>>;
+  getModel<TInput extends GetModelInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<GetModelResultFromInput<TAdapters, TInput>, GetModelError>>;
+  setModel<TInput extends SetModelInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<SetModelResultFromInput<TAdapters, TInput>, SetModelError>>;
   getSession<TInput extends GetSessionInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<GetSessionResultFromInput<TAdapters, TInput>, GetSessionError>>;

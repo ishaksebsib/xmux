@@ -102,6 +102,60 @@ export class HarnessAdapterGetSessionError extends TaggedError("HarnessAdapterGe
   }
 }
 
+export class HarnessAdapterModelUnsupportedError extends TaggedError(
+  "HarnessAdapterModelUnsupportedError",
+)<{
+  harnessId: string;
+  operation: "listModels" | "getModel" | "setModel";
+  message: string;
+}>() {
+  constructor(args: { harnessId: string; operation: "listModels" | "getModel" | "setModel" }) {
+    super({
+      ...args,
+      message: `Harness "${args.harnessId}" does not support ${args.operation}`,
+    });
+  }
+}
+
+export class HarnessAdapterListModelsError extends TaggedError("HarnessAdapterListModelsError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to list models with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterGetModelError extends TaggedError("HarnessAdapterGetModelError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to get selected model with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterSetModelError extends TaggedError("HarnessAdapterSetModelError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to set selected model with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 export class HarnessAdapterPromptError extends TaggedError("HarnessAdapterPromptError")<{
   harnessId: string;
   message: string;
@@ -172,6 +226,24 @@ export type ListSessionsError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
   | HarnessAdapterListSessionsError;
+
+export type ListModelsError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterModelUnsupportedError
+  | HarnessAdapterListModelsError;
+
+export type GetModelError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterModelUnsupportedError
+  | HarnessAdapterGetModelError;
+
+export type SetModelError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterModelUnsupportedError
+  | HarnessAdapterSetModelError;
 
 export type GetSessionError =
   | UnknownHarnessError

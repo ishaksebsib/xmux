@@ -29,6 +29,7 @@ export async function handleCreateSession<
         input: {
           cwd,
           title: args.input.title,
+          model: args.input.model,
           adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
           signal: args.input.signal,
         },
@@ -42,6 +43,7 @@ export async function handleCreateSession<
       },
       cwd,
       title: args.input.title,
+      model: created.model ?? args.input.model,
       createdAt: args.now().toISOString(),
       adapterData: created.adapterData,
     } as CreatedSessionFromInput<TAdapters, TInput>;

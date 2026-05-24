@@ -30,6 +30,7 @@ export function createTestAdapter<
   THarnessId extends string,
   TAdapterOptions extends Record<string, unknown>,
   TAdapterSession extends Record<string, unknown>,
+  TAdapterModel extends Record<string, unknown> = Record<string, unknown>,
 >(args: {
   readonly id: THarnessId;
   readonly handles: OpenedAdapterHandles;
@@ -37,15 +38,24 @@ export function createTestAdapter<
   readonly createSession: OpenedHarnessAdapter<
     THarnessId,
     TAdapterOptions,
-    TAdapterSession
+    TAdapterSession,
+    TAdapterModel
   >["createSession"];
   readonly operations?: Partial<
     Pick<
-      OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession>,
-      "abort" | "deleteSession" | "getSession" | "listSessions" | "prompt" | "resumeSession"
+      OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel>,
+      | "abort"
+      | "deleteSession"
+      | "getModel"
+      | "getSession"
+      | "listModels"
+      | "listSessions"
+      | "prompt"
+      | "resumeSession"
+      | "setModel"
     >
   >;
-}): HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession> {
+}): HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel> {
   return defineHarnessAdapter({
     id: args.id,
     async open() {

@@ -5,28 +5,41 @@ import {
   defineHarnessAdapter,
   type AdapterAbortOptionsFor,
   type AdapterDeleteOptionsFor,
+  type AdapterGetModelOptionsFor,
   type AdapterGetOptionsFor,
+  type AdapterListModelsOptionsFor,
   type AdapterListOptionsFor,
+  type AdapterModelFor,
   type AdapterPromptOptionsFor,
   type AdapterResumeOptionsFor,
+  type AdapterSetModelOptionsFor,
   type AbortInput,
   type CreatedSessionFor,
   type DeleteSessionInput,
+  type GetModelInput,
+  type GetModelResultFromInput,
   type GetSessionInput,
   type HarnessAdapterPromptResult,
   type HarnessAdapterSessionInfo,
   type HarnessContentEvent,
+  type HarnessModelInfo,
   type HarnessModelRef,
+  type HarnessModelTarget,
+  type HarnessModelUpdate,
   type HarnessPromptContent,
   type HarnessPromptEvent,
   type HarnessSessionInfo,
   type HarnessTokenUsage,
   type HarnessToolOutput,
+  type ListModelsInput,
+  type ListModelsResultFromInput,
   type ListSessionsInput,
   type PromptInput,
   type PromptResultFromInput,
   type ResumeSessionInput,
   type ResumeSessionResultFromInput,
+  type SetModelInput,
+  type SetModelResultFromInput,
   type SessionRef,
   type WorkingDirectoryPath,
 } from "../src";
@@ -500,6 +513,139 @@ test("public session-control input types narrow by harness id", () => {
       adapterOptions: { mode: "safe" },
     } satisfies ResumeSessionInput<typeof adapters>;
     void badResumeOptions;
+  }
+});
+
+test("model management input and output types narrow by harness id", () => {
+  type OpenCodeModel = { readonly providerID: string; readonly modelID: string };
+  const adapters = {
+    opencode: defineHarnessAdapter<
+      "opencode",
+      { readonly workspaceId: string },
+      { readonly projectId: string },
+      OpenCodeModel
+    >({
+      id: "opencode",
+      async open() {
+        return Result.ok({
+          id: "opencode" as const,
+          async createSession(input) {
+            expectTypeOf(input.model).toEqualTypeOf<HarnessModelRef | undefined>();
+            return Result.ok({
+              sessionId: "opencode-1",
+              model: input.model,
+              adapterData: { projectId: input.adapterOptions.workspaceId },
+            });
+          },
+          ...requiredHarnessMethods(),
+          async listModels(input) {
+            expectTypeOf(input.adapterOptions.workspaceId).toEqualTypeOf<string>();
+            expectTypeOf(input.includeUnavailable).toEqualTypeOf<boolean | undefined>();
+            return Result.ok([
+              {
+                harnessId: "opencode",
+                ref: { providerId: "anthropic", modelId: "claude-sonnet-4-5" },
+                adapterData: { providerID: "anthropic", modelID: "claude-sonnet-4-5" },
+              },
+            ] satisfies readonly HarnessModelInfo<"opencode", OpenCodeModel>[]);
+          },
+          async getModel(input) {
+            expectTypeOf(input.target).toEqualTypeOf<HarnessModelTarget<"opencode">>();
+            return Result.ok({ target: input.target, source: "unset" as const });
+          },
+          async setModel(input) {
+            expectTypeOf(input.update).toEqualTypeOf<HarnessModelUpdate>();
+            return Result.ok({
+              target: input.target,
+              model: input.update.type === "set" ? input.update.model : undefined,
+              source: input.update.type === "set" ? ("harness" as const) : ("unset" as const),
+            });
+          },
+          async close() {
+            return undefined;
+          },
+        });
+      },
+    }),
+    pi: defineHarnessAdapter<"pi", { readonly mode: "memory" }, { readonly sessionFile: string }>({
+      id: "pi",
+      async open() {
+        return Result.ok({
+          id: "pi" as const,
+          async createSession(input) {
+            return Result.ok({
+              sessionId: "pi-1",
+              adapterData: { sessionFile: input.adapterOptions.mode },
+            });
+          },
+          ...requiredHarnessMethods(),
+          async close() {
+            return undefined;
+          },
+        });
+      },
+    }),
+  };
+
+  const harness = createHarness({ adapters });
+  const model = { providerId: "anthropic", modelId: "claude-sonnet-4-5" } satisfies HarnessModelRef;
+  const opencodeRef = {
+    harnessId: "opencode",
+    sessionId: "session-1",
+  } satisfies SessionRef<"opencode">;
+  const listed = {
+    harnessId: "opencode",
+    includeUnavailable: true,
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies ListModelsInput<typeof adapters>;
+  const got = {
+    target: { type: "session", ref: opencodeRef },
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies GetModelInput<typeof adapters>;
+  const set = {
+    target: { type: "harness", harnessId: "opencode" },
+    update: { type: "set", model },
+    adapterOptions: { workspaceId: "workspace-1" },
+  } satisfies SetModelInput<typeof adapters>;
+
+  void harness.listModels(listed);
+  void harness.getModel(got);
+  void harness.setModel(set);
+
+  expectTypeOf<AdapterModelFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeModel>();
+  expectTypeOf<AdapterListModelsOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<{
+    readonly workspaceId: string;
+  }>();
+  expectTypeOf<AdapterGetModelOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<{
+    readonly workspaceId: string;
+  }>();
+  expectTypeOf<AdapterSetModelOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<{
+    readonly workspaceId: string;
+  }>();
+  expectTypeOf<
+    ListModelsResultFromInput<typeof adapters, typeof listed>[number]["adapterData"]
+  >().toEqualTypeOf<OpenCodeModel>();
+  expectTypeOf<GetModelResultFromInput<typeof adapters, typeof got>["target"]>().toEqualTypeOf<
+    HarnessModelTarget<"opencode">
+  >();
+  expectTypeOf<SetModelResultFromInput<typeof adapters, typeof set>["source"]>().toEqualTypeOf<
+    "session" | "harness" | "native" | "unset"
+  >();
+
+  if (shouldRunTypeErrorChecks) {
+    const badList: ListModelsInput<typeof adapters> = {
+      harnessId: "opencode",
+      // @ts-expect-error opencode model inputs require opencode adapter options
+      adapterOptions: { mode: "memory" },
+    };
+    void badList;
+
+    // @ts-expect-error pi model inputs require pi adapter options
+    const badGet: GetModelInput<typeof adapters> = {
+      target: { type: "harness", harnessId: "pi" },
+      adapterOptions: { workspaceId: "workspace-1" },
+    };
+    void badGet;
   }
 });
 
