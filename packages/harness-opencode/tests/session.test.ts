@@ -102,6 +102,8 @@ describe("OpenCode prompt stream", () => {
           },
         },
       },
+      defaultModel: undefined,
+      sessionModels: new Map(),
       close: async () => undefined,
     } as unknown as OpenCodeRuntime;
 
@@ -154,6 +156,8 @@ describe("OpenCode prompt stream", () => {
           },
         },
       },
+      defaultModel: undefined,
+      sessionModels: new Map(),
       close: async () => undefined,
     } as unknown as OpenCodeRuntime;
 

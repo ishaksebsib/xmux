@@ -1,13 +1,18 @@
 import { createOpencode, createOpencodeClient } from "@opencode-ai/sdk/v2";
+import type { HarnessModelRef } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeRuntimeOpenError } from "./errors";
 
-type EmbeddedConfig = {
+type SharedConfig = {
+  readonly defaultModel?: HarnessModelRef;
+};
+
+type EmbeddedConfig = SharedConfig & {
   readonly mode?: "embedded";
   readonly port?: number;
 };
 
-type ExternalConfig = {
+type ExternalConfig = SharedConfig & {
   readonly mode: "external";
   readonly baseUrl: string;
 };
@@ -18,6 +23,8 @@ export type OpenCodeAdapterConfig = EmbeddedConfig | ExternalConfig;
 
 export type OpenCodeRuntime = {
   readonly client: OpenCodeClient;
+  defaultModel?: HarnessModelRef;
+  readonly sessionModels: Map<string, HarnessModelRef>;
   close(): Promise<void>;
 };
 
@@ -31,6 +38,8 @@ function createExternalRuntime(
   return Result.try({
     try: () => ({
       client: createOpencodeClient({ baseUrl: config.baseUrl }),
+      defaultModel: config.defaultModel,
+      sessionModels: new Map<string, HarnessModelRef>(),
       close: async () => {
         return undefined;
       },
@@ -48,6 +57,8 @@ async function createEmbeddedRuntime(
 
       return {
         client: runtime.client,
+        defaultModel: config.defaultModel,
+        sessionModels: new Map<string, HarnessModelRef>(),
         close: async () => {
           runtime.server.close();
         },

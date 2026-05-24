@@ -15,13 +15,23 @@ import type {
   HarnessToolOutput,
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
-import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
+import {
+  OpenCodeModelSelectionError,
+  OpenCodeSessionRequestError,
+  OpenCodeSessionResponseError,
+} from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import { normalizeOpenCodeModelRef } from "./models";
 import { describeResponseError, type OpenCodeCreateOptions } from "./utils";
 
 type OpenCodePromptEvent = HarnessPromptEvent<"opencode">;
 type OpenCodePromptPart = TextPartInput | FilePartInput;
 type OpenCodeToolPart = Extract<Part, { readonly type: "tool" }>;
+type SelectedOpenCodeModel = {
+  readonly providerID: string;
+  readonly modelID: string;
+  readonly variant?: string;
+};
 
 type PromptStreamState = {
   readonly completedMessages: Set<string>;
@@ -697,6 +707,7 @@ async function sendPromptAsync(
   runtime: OpenCodeRuntime,
   input: HarnessAdapterPromptInput<"opencode", OpenCodeCreateOptions>,
   parts: readonly OpenCodePromptPart[],
+  model: SelectedOpenCodeModel | undefined,
 ) {
   return Result.tryPromise({
     try: () =>
@@ -705,6 +716,8 @@ async function sendPromptAsync(
           sessionID: input.ref.sessionId,
           directory: input.cwd,
           workspace: input.adapterOptions.workspace,
+          model: model ? { providerID: model.providerID, modelID: model.modelID } : undefined,
+          variant: model?.variant,
           parts: [...parts],
         },
         { signal: input.signal },
@@ -717,6 +730,7 @@ function createPromptEventStream(args: {
   readonly runtime: OpenCodeRuntime;
   readonly input: HarnessAdapterPromptInput<"opencode", OpenCodeCreateOptions>;
   readonly parts: readonly OpenCodePromptPart[];
+  readonly model?: SelectedOpenCodeModel;
 }): HarnessAdapterPromptResult<"opencode"> {
   async function* eventStream(): AsyncIterable<OpenCodePromptEvent> {
     const state = createPromptStreamState();
@@ -749,7 +763,7 @@ function createPromptEventStream(args: {
         ref: args.input.ref,
       };
 
-      const prompted = await sendPromptAsync(args.runtime, args.input, args.parts);
+      const prompted = await sendPromptAsync(args.runtime, args.input, args.parts, args.model);
       if (prompted.isErr()) {
         streamAbort.abort(prompted.error);
         yield {
@@ -868,9 +882,17 @@ export async function prompt(
 ): Promise<
   ResultType<
     HarnessAdapterPromptResult<"opencode">,
-    OpenCodeSessionRequestError | OpenCodeSessionResponseError
+    OpenCodeModelSelectionError | OpenCodeSessionRequestError | OpenCodeSessionResponseError
   >
 > {
+  const selectedModel =
+    input.model ?? runtime.sessionModels.get(input.ref.sessionId) ?? runtime.defaultModel;
+  const normalizedModel = selectedModel ? normalizeOpenCodeModelRef(selectedModel) : undefined;
+
+  if (normalizedModel?.isErr()) return Result.err(normalizedModel.error);
+  if (input.model) runtime.sessionModels.set(input.ref.sessionId, input.model);
+
   const parts = toPromptParts(input.content);
-  return Result.ok(createPromptEventStream({ runtime, input, parts }));
+  const model = normalizedModel?.isOk() ? normalizedModel.value : undefined;
+  return Result.ok(createPromptEventStream({ runtime, input, parts, model }));
 }

@@ -104,6 +104,8 @@ describe("OpenCode session handlers", () => {
           }),
         },
       },
+      defaultModel: undefined,
+      sessionModels: new Map(),
       close: async () => undefined,
     } as unknown as OpenCodeRuntime;
 

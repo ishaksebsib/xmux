@@ -5,6 +5,7 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import { getEffectiveModel } from "./models";
 import {
   toAdapterSession,
   toSessionResponseError,
@@ -58,6 +59,17 @@ export async function resumeSession(
       );
     }
 
-    return Result.ok(toAdapterSession(response.data));
+    return Result.ok(
+      toAdapterSession({
+        session: response.data,
+        model: getEffectiveModel({
+          runtime,
+          target: {
+            type: "session",
+            ref: { harnessId: "opencode", sessionId: input.sessionId },
+          },
+        }).model,
+      }),
+    );
   });
 }

@@ -1,5 +1,5 @@
-import type { PermissionRuleset, Session } from "@opencode-ai/sdk/v2";
-import type { HarnessAdapterSessionInfo } from "@xmux/harness-core";
+import type { ModelV2Info, PermissionRuleset, Session } from "@opencode-ai/sdk/v2";
+import type { HarnessAdapterSessionInfo, HarnessModelRef } from "@xmux/harness-core";
 import { OpenCodeSessionResponseError } from "../errors";
 
 export type OpenCodeCreateOptions = {
@@ -18,6 +18,11 @@ export type OpenCodeSessionInfo = {
   readonly workspaceId?: string;
 };
 
+export type OpenCodeModelInfo = {
+  readonly model: ModelV2Info;
+  readonly variant?: ModelV2Info["variants"][number];
+};
+
 export function describeResponseError(error: unknown): string {
   return error instanceof Error ? error.message : JSON.stringify(error);
 }
@@ -33,12 +38,16 @@ export function toSessionInfo(session: Session): OpenCodeSessionInfo {
   };
 }
 
-export function toAdapterSession(session: Session): HarnessAdapterSessionInfo<OpenCodeSessionInfo> {
+export function toAdapterSession(args: {
+  readonly session: Session;
+  readonly model?: HarnessModelRef;
+}): HarnessAdapterSessionInfo<OpenCodeSessionInfo> {
   return {
-    sessionId: session.id,
-    cwd: session.directory,
-    title: session.title,
-    adapterData: toSessionInfo(session),
+    sessionId: args.session.id,
+    cwd: args.session.directory,
+    title: args.session.title,
+    model: args.model,
+    adapterData: toSessionInfo(args.session),
   };
 }
 

@@ -7,6 +7,7 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import { getEffectiveModel } from "./models";
 import {
   toAdapterSession,
   toSessionResponseError,
@@ -14,14 +15,24 @@ import {
   type OpenCodeSessionInfo,
 } from "./utils";
 
-async function toListedSession(
-  session: Session,
-): Promise<HarnessAdapterSessionInfo<OpenCodeSessionInfo>> {
-  const adapterSession = toAdapterSession(session);
+async function toListedSession(args: {
+  readonly runtime: OpenCodeRuntime;
+  readonly session: Session;
+}): Promise<HarnessAdapterSessionInfo<OpenCodeSessionInfo>> {
+  const adapterSession = toAdapterSession({
+    session: args.session,
+    model: getEffectiveModel({
+      runtime: args.runtime,
+      target: {
+        type: "session",
+        ref: { harnessId: "opencode", sessionId: args.session.id },
+      },
+    }).model,
+  });
   const cwd = await Result.tryPromise({
     try: async () => {
-      const stats = await stat(session.directory);
-      return stats.isDirectory() ? session.directory : undefined;
+      const stats = await stat(args.session.directory);
+      return stats.isDirectory() ? args.session.directory : undefined;
     },
     catch: () => undefined,
   });
@@ -77,6 +88,8 @@ export async function listSessions(
       );
     }
 
-    return Result.ok(await Promise.all(response.data.map(toListedSession)));
+    return Result.ok(
+      await Promise.all(response.data.map((session) => toListedSession({ runtime, session }))),
+    );
   });
 }

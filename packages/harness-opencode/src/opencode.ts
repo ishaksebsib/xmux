@@ -15,20 +15,29 @@ import { createSession } from "./handlers/create-session";
 import { deleteSession } from "./handlers/delete-session";
 import { getSession } from "./handlers/get-session";
 import { listSessions } from "./handlers/list-sessions";
+import { getModel, listModels, setModel } from "./handlers/models";
 import { prompt } from "./handlers/prompt";
 import { resumeSession } from "./handlers/resume-session";
-import type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "./handlers/utils";
+import type {
+  OpenCodeCreateOptions,
+  OpenCodeModelInfo,
+  OpenCodeSessionInfo,
+} from "./handlers/utils";
 
 export type OpenCodeAdapter = HarnessAdapterDefinition<
   "opencode",
   OpenCodeCreateOptions,
-  OpenCodeSessionInfo
+  OpenCodeSessionInfo,
+  OpenCodeModelInfo
 >;
 
 async function createOpenedAdapter(
   runtime: OpenCodeRuntime,
 ): Promise<
-  Result<OpenedHarnessAdapter<"opencode", OpenCodeCreateOptions, OpenCodeSessionInfo>, never>
+  Result<
+    OpenedHarnessAdapter<"opencode", OpenCodeCreateOptions, OpenCodeSessionInfo, OpenCodeModelInfo>,
+    never
+  >
 > {
   return Result.ok({
     id: "opencode",
@@ -37,6 +46,9 @@ async function createOpenedAdapter(
     listSessions: async (input) => listSessions(runtime, input),
     getSession: async (input) => getSession(runtime, input),
     prompt: async (input) => prompt(runtime, input),
+    listModels: async (input) => listModels(runtime, input),
+    getModel: async (input) => getModel(runtime, input),
+    setModel: async (input) => setModel(runtime, input),
     deleteSession: async (input) => deleteSession(runtime, input),
     abort: async (input) => abortSession(runtime, input),
     close: async () => {

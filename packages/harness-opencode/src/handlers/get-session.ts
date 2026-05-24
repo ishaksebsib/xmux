@@ -2,6 +2,7 @@ import type { HarnessAdapterGetSessionInput, HarnessAdapterSessionInfo } from "@
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import { getEffectiveModel } from "./models";
 import {
   toAdapterSession,
   toSessionResponseError,
@@ -54,6 +55,14 @@ export async function getSession(
       );
     }
 
-    return Result.ok(toAdapterSession(response.data));
+    return Result.ok(
+      toAdapterSession({
+        session: response.data,
+        model: getEffectiveModel({
+          runtime,
+          target: { type: "session", ref: input.ref },
+        }).model,
+      }),
+    );
   });
 }

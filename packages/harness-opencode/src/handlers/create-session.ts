@@ -65,8 +65,14 @@ export async function createSession(
       );
     }
 
+    const model = input.model ?? runtime.defaultModel;
+    if (model) {
+      runtime.sessionModels.set(response.data.id, model);
+    }
+
     return Result.ok({
       sessionId: response.data.id,
+      model,
       adapterData: toSessionInfo(response.data),
     });
   });

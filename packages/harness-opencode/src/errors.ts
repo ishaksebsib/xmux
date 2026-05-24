@@ -42,3 +42,41 @@ export class OpenCodeSessionResponseError extends TaggedError("OpenCodeSessionRe
     });
   }
 }
+
+export class OpenCodeModelRequestError extends TaggedError("OpenCodeModelRequestError")<{
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { cause: unknown }) {
+    super({
+      ...args,
+      message: `OpenCode model request failed: ${causeDetail(args.cause)}`,
+    });
+  }
+}
+
+export class OpenCodeModelResponseError extends TaggedError("OpenCodeModelResponseError")<{
+  status: number;
+  detail?: string;
+  message: string;
+}>() {
+  constructor(args: { status: number; detail?: string; reason: string }) {
+    super({
+      status: args.status,
+      detail: args.detail,
+      message: `${args.reason} (status ${args.status})${args.detail ? `: ${args.detail}` : ""}`,
+    });
+  }
+}
+
+export class OpenCodeModelSelectionError extends TaggedError("OpenCodeModelSelectionError")<{
+  modelId: string;
+  message: string;
+}>() {
+  constructor(args: { modelId: string; reason: string }) {
+    super({
+      modelId: args.modelId,
+      message: `Invalid OpenCode model ${args.modelId}: ${args.reason}`,
+    });
+  }
+}
