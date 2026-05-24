@@ -178,7 +178,11 @@ export type GetSessionError =
   | HarnessAdapterOpenError
   | HarnessAdapterGetSessionError;
 
-export type PromptError = UnknownHarnessError | HarnessAdapterOpenError | HarnessAdapterPromptError;
+export type PromptError =
+  | UnknownHarnessError
+  | InvalidWorkingDirectoryError
+  | HarnessAdapterOpenError
+  | HarnessAdapterPromptError;
 
 export type DeleteSessionError =
   | UnknownHarnessError

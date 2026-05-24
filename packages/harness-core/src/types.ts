@@ -213,6 +213,7 @@ export type PromptInputFor<
   THarnessId extends keyof TAdapters,
 > = {
   readonly ref: SessionRef<Extract<THarnessId, string>>;
+  readonly cwd: string;
   readonly content: PromptContentInput;
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;

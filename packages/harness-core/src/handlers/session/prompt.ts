@@ -3,7 +3,11 @@ import { HarnessAdapterPromptError } from "../../errors";
 import type { HarnessPromptEvent } from "../../events";
 import type { HarnessAdapterDefinitions, PromptInput, PromptResultFromInput } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, normalizePromptContent } from "../utils";
+import {
+  adapterOptionsFromInput,
+  createWorkingDirectoryPath,
+  normalizePromptContent,
+} from "../utils";
 
 async function* catchPromptStreamFailures<THarnessId extends string>(args: {
   readonly ref: { readonly harnessId: THarnessId; readonly sessionId: string };
@@ -27,6 +31,7 @@ export async function handlePrompt<
   TInput extends PromptInput<TAdapters>,
 >(args: { readonly input: TInput; readonly getRuntime: HarnessRuntimeGetter<TAdapters> }) {
   return Result.gen(async function* () {
+    const cwd = yield* Result.await(createWorkingDirectoryPath(args.input.cwd));
     const runtime = yield* Result.await(
       args.getRuntime(args.input.ref.harnessId, args.input.signal),
     );
@@ -35,6 +40,7 @@ export async function handlePrompt<
         try: async () =>
           runtime.prompt({
             ref: args.input.ref,
+            cwd,
             content: normalizePromptContent(args.input.content),
             adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
               args.input,

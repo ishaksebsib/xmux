@@ -434,11 +434,13 @@ test("public session-control input types narrow by harness id", () => {
   } satisfies GetSessionInput<typeof adapters>;
   const prompt = {
     ref: opencodeRef,
+    cwd: process.cwd(),
     content: { type: "text", text: "hello" },
     adapterOptions: { workspaceId: "workspace-1", model: "fast" },
   } satisfies PromptInput<typeof adapters>;
   const promptMany = {
     ref: opencodeRef,
+    cwd: process.cwd(),
     content: [
       { type: "text", text: "hello" },
       { type: "file", uri: "file:///tmp/a.ts", mime: "text/typescript" },
@@ -475,13 +477,12 @@ test("public session-control input types narrow by harness id", () => {
   >();
 
   if (shouldRunTypeErrorChecks) {
-    const badPrompt = {
+    // @ts-expect-error prompt input requires top-level cwd
+    const badPrompt: PromptInput<typeof adapters> = {
       ref: opencodeRef,
       content: { type: "text", text: "hello" },
-      // @ts-expect-error prompt input must not accept top-level cwd
-      cwd: process.cwd(),
       adapterOptions: { workspaceId: "workspace-1" },
-    } satisfies PromptInput<typeof adapters>;
+    };
     void badPrompt;
 
     const badGet = {

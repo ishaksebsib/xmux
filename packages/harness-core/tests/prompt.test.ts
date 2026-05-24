@@ -1,6 +1,6 @@
 import { Result } from "better-result";
 import { describe, expect, test } from "vitest";
-import { HarnessAdapterPromptError, createHarness } from "../src";
+import { HarnessAdapterPromptError, InvalidWorkingDirectoryError, createHarness } from "../src";
 import {
   collectAsync,
   createTestAdapter,
@@ -22,7 +22,7 @@ describe("prompt", () => {
           operations: {
             prompt: async (input) => {
               calls.push(
-                `prompt:${input.ref.sessionId}:${input.adapterOptions.sessionMode}:${input.content.length}`,
+                `prompt:${input.ref.sessionId}:${input.cwd}:${input.adapterOptions.sessionMode}:${input.content.length}`,
               );
               return Result.ok(
                 (async function* () {
@@ -44,6 +44,7 @@ describe("prompt", () => {
 
     const prompted = await harness.prompt({
       ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: process.cwd(),
       content: { type: "text", text: "hello" },
       adapterOptions: { sessionMode: "persistent" },
     });
@@ -53,7 +54,7 @@ describe("prompt", () => {
     expect(events).toHaveLength(2);
     expect(events[0]).toMatchObject({ type: "run", phase: "started" });
     expect(events[1]).toMatchObject({ type: "content", phase: "delta", delta: "hello" });
-    expect(calls).toEqual(["prompt:native-1:persistent:1"]);
+    expect(calls).toEqual([`prompt:native-1:${process.cwd()}:persistent:1`]);
     expect(handles.opens).toEqual(["pi"]);
   });
 
@@ -91,11 +92,13 @@ describe("prompt", () => {
 
     const returned = await returnedHarness.prompt({
       ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: process.cwd(),
       content: { type: "text", text: "hello" },
       adapterOptions: { sessionMode: "memory" },
     });
     const thrown = await thrownHarness.prompt({
       ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: process.cwd(),
       content: { type: "text", text: "hello" },
       adapterOptions: { sessionMode: "memory" },
     });
@@ -104,6 +107,31 @@ describe("prompt", () => {
     expect(thrown.isErr()).toBe(true);
     if (returned.isErr()) expect(returned.error).toBeInstanceOf(HarnessAdapterPromptError);
     if (thrown.isErr()) expect(thrown.error).toBeInstanceOf(HarnessAdapterPromptError);
+  });
+
+  test("rejects an invalid prompt cwd before opening the adapter", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+        }),
+      },
+    });
+
+    const prompted = await harness.prompt({
+      ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: `/tmp/xmux-missing-prompt-cwd-${process.pid}`,
+      content: { type: "text", text: "hello" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(prompted.isErr()).toBe(true);
+    if (prompted.isErr()) expect(prompted.error).toBeInstanceOf(InvalidWorkingDirectoryError);
+    expect(handles.opens).toEqual([]);
   });
 
   test("converts prompt stream failures to terminal failed run events", async () => {
@@ -130,6 +158,7 @@ describe("prompt", () => {
 
     const prompted = await harness.prompt({
       ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: process.cwd(),
       content: [{ type: "text", text: "hello" }],
       adapterOptions: { sessionMode: "memory" },
     });

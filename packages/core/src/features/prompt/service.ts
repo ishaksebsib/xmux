@@ -66,6 +66,7 @@ export async function promptSessionForThread<
   const prompted = await input.ctx.app.harness.prompt(
     createHarnessPromptInput({
       ref: session.value.ref,
+      cwd: session.value.cwd,
       text: input.text,
       signal: input.ctx.signal,
     }) as unknown as PromptInput<TAdapters>,
@@ -137,11 +138,13 @@ export async function getPromptSessionForThread<
 
 function createHarnessPromptInput(input: {
   readonly ref: SessionRecord["ref"];
+  readonly cwd: string;
   readonly text: string;
   readonly signal: AbortSignal;
 }) {
   return {
     ref: input.ref,
+    cwd: input.cwd,
     content: [{ type: "text", text: input.text }] as const,
     signal: input.signal,
   };

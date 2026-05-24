@@ -317,6 +317,7 @@ describe("session-control", () => {
     });
     const prompted = await harness.prompt({
       ref,
+      cwd: process.cwd(),
       content: { type: "text", text: "hello" },
       adapterOptions: { sessionMode: "memory" },
     });

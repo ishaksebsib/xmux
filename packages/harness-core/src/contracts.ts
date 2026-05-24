@@ -153,6 +153,7 @@ export interface HarnessAdapterPromptInput<
   TAdapterOptions extends HarnessAdapterObject,
 > {
   readonly ref: SessionRef<THarnessId>;
+  readonly cwd: WorkingDirectoryPath;
   readonly content: readonly HarnessPromptContent[];
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
