@@ -80,6 +80,7 @@ describe("createOpenCodeAdapter real OpenCode", () => {
       controller.abort(new Error("skip real provider call"));
       const prompted = await harness.prompt({
         ref: session.ref,
+        cwd: session.cwd,
         content: { type: "text", text: "hello" },
         signal: controller.signal,
       });

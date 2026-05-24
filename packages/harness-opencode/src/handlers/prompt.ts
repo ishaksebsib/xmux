@@ -703,6 +703,7 @@ async function sendPromptAsync(
       runtime.client.session.promptAsync(
         {
           sessionID: input.ref.sessionId,
+          directory: input.cwd,
           workspace: input.adapterOptions.workspace,
           parts: [...parts],
         },

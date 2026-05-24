@@ -1,3 +1,4 @@
+import type { WorkingDirectoryPath } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
 import { prompt } from "../src/handlers/prompt";
 import type { OpenCodeRuntime } from "../src/runtime";
@@ -10,8 +11,10 @@ async function collectAsync<TValue>(iterable: AsyncIterable<TValue>): Promise<TV
   return values;
 }
 
+const cwd = process.cwd() as WorkingDirectoryPath;
+
 function globalEvent(payload: unknown) {
-  return { directory: process.cwd(), payload };
+  return { directory: cwd, payload };
 }
 
 describe("OpenCode prompt stream", () => {
@@ -104,6 +107,7 @@ describe("OpenCode prompt stream", () => {
 
     const prompted = await prompt(runtime, {
       ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
       content: [{ type: "text", text: "hello" }],
       adapterOptions: {},
     });
@@ -112,6 +116,7 @@ describe("OpenCode prompt stream", () => {
     const events = await collectAsync(prompted.unwrap("prompt stream"));
 
     expect(promptCalls).toHaveLength(1);
+    expect(promptCalls[0]).toMatchObject({ directory: cwd });
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "run", phase: "started" }),
@@ -129,7 +134,7 @@ describe("OpenCode prompt stream", () => {
   });
 
   test("preserves core prompt content when calling OpenCode", async () => {
-    const promptCalls: { readonly parts?: unknown[] }[] = [];
+    const promptCalls: { readonly directory?: string; readonly parts?: unknown[] }[] = [];
     const runtime = {
       client: {
         global: {
@@ -140,7 +145,10 @@ describe("OpenCode prompt stream", () => {
           }),
         },
         session: {
-          promptAsync: async (parameters: { readonly parts?: unknown[] }) => {
+          promptAsync: async (parameters: {
+            readonly directory?: string;
+            readonly parts?: unknown[];
+          }) => {
             promptCalls.push(parameters);
             return { error: undefined, response: { status: 204 } };
           },
@@ -151,6 +159,7 @@ describe("OpenCode prompt stream", () => {
 
     const prompted = await prompt(runtime, {
       ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
       content: [
         { type: "text", text: "hello" },
         { type: "image", data: "aW1n", mimeType: "image/png", name: "image.png" },
@@ -162,6 +171,7 @@ describe("OpenCode prompt stream", () => {
     expect(prompted.isOk()).toBe(true);
     await collectAsync(prompted.unwrap("prompt stream"));
 
+    expect(promptCalls[0]?.directory).toBe(cwd);
     expect(promptCalls[0]?.parts).toEqual([
       { type: "text", text: "hello" },
       { type: "file", mime: "image/png", filename: "image.png", url: "data:image/png;base64,aW1n" },
