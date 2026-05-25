@@ -14,7 +14,6 @@ import type {
 import type { GetStartedRuntime } from "./types";
 import { createAdapterTypingIndicatorInput } from "./utils";
 
-const defaultTypingIndicatorTimeoutMs = 60_000;
 const defaultTypingIndicatorRefreshIntervalMs = 4_000;
 
 type TypingIndicatorDiagnosticEmit<TChatId extends string> = (event: {
@@ -148,15 +147,14 @@ function normalizeManagedTypingTiming(input: {
   readonly timeoutMs?: number;
   readonly refreshIntervalMs?: number;
 }): Result<
-  { readonly timeoutMs: number; readonly refreshIntervalMs: number },
+  { readonly timeoutMs?: number; readonly refreshIntervalMs: number },
   InvalidChatTypingIndicatorInputError
 > {
-  const timeoutMs = input.timeoutMs ?? defaultTypingIndicatorTimeoutMs;
   const refreshIntervalMs = input.refreshIntervalMs ?? defaultTypingIndicatorRefreshIntervalMs;
 
-  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+  if (input.timeoutMs !== undefined && (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0)) {
     return Result.err(
-      new InvalidChatTypingIndicatorInputError({ field: "timeoutMs", value: timeoutMs }),
+      new InvalidChatTypingIndicatorInputError({ field: "timeoutMs", value: input.timeoutMs }),
     );
   }
 
@@ -169,7 +167,10 @@ function normalizeManagedTypingTiming(input: {
     );
   }
 
-  return Result.ok({ timeoutMs, refreshIntervalMs });
+  return Result.ok({
+    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+    refreshIntervalMs,
+  });
 }
 
 function createManagedTypingIndicator<
@@ -177,7 +178,7 @@ function createManagedTypingIndicator<
   TInput extends ChatTypingIndicatorInput<TAdapters>,
 >(args: {
   readonly input: TInput;
-  readonly timeoutMs: number;
+  readonly timeoutMs?: number;
   readonly refreshIntervalMs: number;
   readonly sendPulse: () => Promise<Result<void, ChatTypingIndicatorError>>;
   readonly emit: TypingIndicatorDiagnosticEmit<Extract<keyof TAdapters, string>>;
@@ -244,7 +245,9 @@ function createManagedTypingIndicator<
   };
 
   interval = setInterval(refresh, args.refreshIntervalMs);
-  timeout = setTimeout(stop, args.timeoutMs);
+  if (args.timeoutMs !== undefined) {
+    timeout = setTimeout(stop, args.timeoutMs);
+  }
   args.input.signal?.addEventListener("abort", stop, { once: true });
   args.lifecycleSignal?.addEventListener("abort", stop, { once: true });
 

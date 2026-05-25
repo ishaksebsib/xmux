@@ -76,7 +76,7 @@ export type ChatTypingIndicatorBehavior =
        * a native "clear typing now" API; the last sent pulse expires naturally.
        */
       readonly mode: "managed";
-      /** Maximum lifetime for the refresh loop. Defaults to a safe finite timeout. */
+      /** Optional safety cutoff for the refresh loop. Call `stop()` when the request finishes. */
       readonly timeoutMs?: number;
       /** Delay between refresh pulses. Keep below the platform pulse TTL. */
       readonly refreshIntervalMs?: number;
