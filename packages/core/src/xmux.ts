@@ -12,6 +12,7 @@ import { normalizeConfig, type Config } from "./config";
 import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
 import { createPromptRunRegistry } from "./features/prompt/run-registry";
+import type { XmuxMiddleware } from "./middleware";
 import { registerRoutes } from "./router";
 import { createInMemoryStore } from "./store";
 import type { Store } from "./store";
@@ -38,6 +39,7 @@ export interface CreateXmuxOptions<
   readonly config: Config;
   readonly store?: Store;
   readonly fs?: FileSystemHost;
+  readonly middleware?: readonly XmuxMiddleware<TAdapters, TChats>[];
 }
 
 export type XmuxCloseCause = {
@@ -77,7 +79,7 @@ export function createXmux<
       promptRuns: createPromptRunRegistry(),
     }),
   });
-  const routeUnsubscribers = registerRoutes(ctx);
+  const routeUnsubscribers = registerRoutes(ctx, options.middleware ?? []);
 
   return {
     ctx,

@@ -1,7 +1,8 @@
 import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { createHandlerContext, type Context } from "../../ctx";
+import type { Context } from "../../ctx";
+import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
 import { actorFromChatActor } from "../utils";
 import { handlePromptMessage, isUserPromptActor, type PromptMessageEvent } from "./handler";
 
@@ -9,7 +10,10 @@ import { handlePromptMessage, isUserPromptActor, type PromptMessageEvent } from 
 export function registerPromptRoute<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(ctx: Context<TAdapters, TChats>): Unsubscribe {
+>(
+  ctx: Context<TAdapters, TChats>,
+  middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
+): Unsubscribe {
   return ctx.chat.on("message", async (event) => {
     const promptEvent = event as PromptMessageEvent<Extract<keyof TChats, string>>;
 
@@ -21,13 +25,17 @@ export function registerPromptRoute<
       return;
     }
 
-    const handled = await handlePromptMessage({
-      ctx: createHandlerContext({
-        app: ctx,
-        chatId: promptEvent.chatId,
-        actor: actorFromChatActor(promptEvent.message.actor),
-      }),
-      event: promptEvent,
+    const handled = await runXmuxHandler({
+      app: ctx,
+      event,
+      middleware,
+      routeName: "prompt",
+      actor: actorFromChatActor(promptEvent.message.actor),
+      handler: (handlerCtx) =>
+        handlePromptMessage({
+          ctx: handlerCtx,
+          event: promptEvent,
+        }),
     });
 
     if (handled.isErr()) {

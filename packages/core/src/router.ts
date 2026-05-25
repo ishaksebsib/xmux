@@ -2,6 +2,7 @@ import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
+import type { XmuxMiddleware } from "./middleware";
 import { registerDeleteRoute } from "./features/delete";
 import { registerExitRoute } from "./features/exit";
 import { registerModelRoute } from "./features/model";
@@ -15,17 +16,20 @@ import { registerCdRoute, registerLsRoute, registerPwdRoute } from "./features/w
 export function registerRoutes<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(ctx: Context<TAdapters, TChats>): readonly Unsubscribe[] {
+>(
+  ctx: Context<TAdapters, TChats>,
+  middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
+): readonly Unsubscribe[] {
   return [
-    registerNewRoute(ctx),
-    registerResumeRoute(ctx),
-    registerDeleteRoute(ctx),
-    registerExitRoute(ctx),
-    registerModelRoute(ctx),
-    registerPwdRoute(ctx),
-    registerCdRoute(ctx),
-    registerLsRoute(ctx),
-    registerPromptRoute(ctx),
-    registerUnknownCommandRoute(ctx),
+    registerNewRoute(ctx, middleware),
+    registerResumeRoute(ctx, middleware),
+    registerDeleteRoute(ctx, middleware),
+    registerExitRoute(ctx, middleware),
+    registerModelRoute(ctx, middleware),
+    registerPwdRoute(ctx, middleware),
+    registerCdRoute(ctx, middleware),
+    registerLsRoute(ctx, middleware),
+    registerPromptRoute(ctx, middleware),
+    registerUnknownCommandRoute(ctx, middleware),
   ];
 }

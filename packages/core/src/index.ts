@@ -1,6 +1,21 @@
-export { XmuxCloseError, XmuxInitializeError } from "./errors";
+export {
+  XmuxCloseError,
+  XmuxInitializeError,
+  XmuxMiddlewareExecutionError,
+  XmuxMiddlewareNextAlreadyCalledError,
+} from "./errors";
 export { createInMemoryStore } from "./store";
 export { createXmux } from "./xmux";
+export { runXmuxHandler } from "./middleware";
+export type {
+  RunXmuxHandlerInput,
+  XmuxMiddleware,
+  XmuxMiddlewareContext,
+  XmuxMiddlewareNext,
+  XmuxRouteDescriptor,
+  XmuxRoutedChatEvent,
+} from "./middleware";
+export type { XmuxMiddlewareError } from "./errors";
 export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
 export type {
   Config,

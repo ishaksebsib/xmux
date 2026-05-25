@@ -41,6 +41,43 @@ export class XmuxCloseError extends TaggedError("XmuxCloseError")<{
 }
 
 // -----------------------------------------------------------------------------
+// Middleware errors
+// -----------------------------------------------------------------------------
+
+/** Returned when middleware calls `next()` more than once in one request. */
+export class XmuxMiddlewareNextAlreadyCalledError extends TaggedError(
+  "XmuxMiddlewareNextAlreadyCalledError",
+)<{
+  readonly routeName: string;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly routeName: string }) {
+    super({
+      ...args,
+      message: `Xmux middleware called next() multiple times while handling ${args.routeName}`,
+    });
+  }
+}
+
+/** Wraps unexpected throws from middleware or the terminal route handler. */
+export class XmuxMiddlewareExecutionError extends TaggedError("XmuxMiddlewareExecutionError")<{
+  readonly routeName: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly routeName: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Xmux middleware failed while handling ${args.routeName}: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export type XmuxMiddlewareError =
+  | XmuxMiddlewareNextAlreadyCalledError
+  | XmuxMiddlewareExecutionError;
+
+// -----------------------------------------------------------------------------
 // Store errors
 // -----------------------------------------------------------------------------
 
