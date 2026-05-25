@@ -1,4 +1,4 @@
-import type { ModelV2Info, PermissionRuleset, Session } from "@opencode-ai/sdk/v2";
+import type { Model, PermissionRuleset, Provider, Session } from "@opencode-ai/sdk/v2";
 import type { HarnessAdapterSessionInfo, HarnessModelRef } from "@xmux/harness-core";
 import { OpenCodeSessionResponseError } from "../errors";
 
@@ -18,9 +18,15 @@ export type OpenCodeSessionInfo = {
   readonly workspaceId?: string;
 };
 
+export type OpenCodeModelVariant = {
+  readonly id: string;
+  readonly data: Record<string, unknown>;
+};
+
 export type OpenCodeModelInfo = {
-  readonly model: ModelV2Info;
-  readonly variant?: ModelV2Info["variants"][number];
+  readonly provider: Provider;
+  readonly model: Model;
+  readonly variant?: OpenCodeModelVariant;
 };
 
 export function describeResponseError(error: unknown): string {

@@ -35,28 +35,28 @@ function isSupportedMediaKind(value: string): value is SupportedMediaKind {
   return supportedMediaKinds.has(value);
 }
 
-function toSupportedMediaKinds(values: readonly string[]): SupportedMediaKind[] {
-  return values.filter(isSupportedMediaKind);
+function toSupportedMediaKinds(values: Readonly<Record<string, boolean>>): SupportedMediaKind[] {
+  return Object.entries(values)
+    .filter(([_, supported]) => supported)
+    .map(([kind]) => kind)
+    .filter(isSupportedMediaKind);
 }
 
 function toModelStatus(model: OpenCodeModelInfo["model"]): HarnessModelInfo["status"] {
-  if (!model.enabled) return "unavailable";
   return model.status === "alpha" ? "beta" : model.status;
 }
 
 function toModelCost(model: OpenCodeModelInfo["model"]): HarnessModelInfo["cost"] {
-  const cost = model.cost.find((candidate) => candidate.tier === undefined) ?? model.cost[0];
-  if (!cost) return undefined;
-
   return {
-    input: cost.input,
-    output: cost.output,
-    cacheRead: cost.cache.read,
-    cacheWrite: cost.cache.write,
+    input: model.cost.input,
+    output: model.cost.output,
+    cacheRead: model.cost.cache.read,
+    cacheWrite: model.cost.cache.write,
   };
 }
 
 function toHarnessModelInfo(args: {
+  readonly provider: OpenCodeModelInfo["provider"];
   readonly model: OpenCodeModelInfo["model"];
   readonly variant?: OpenCodeModelInfo["variant"];
 }): HarnessModelInfo<"opencode", OpenCodeModelInfo> {
@@ -68,10 +68,13 @@ function toHarnessModelInfo(args: {
       variant: args.variant?.id,
     },
     name: args.variant ? `${args.model.name} (${args.variant.id})` : args.model.name,
+    providerName: args.provider.name,
     status: toModelStatus(args.model),
-    available: args.model.enabled,
+    available: true,
     capabilities: {
-      tools: args.model.capabilities.tools,
+      tools: args.model.capabilities.toolcall,
+      reasoning: args.model.capabilities.reasoning,
+      temperature: args.model.capabilities.temperature,
       input: toSupportedMediaKinds(args.model.capabilities.input),
       output: toSupportedMediaKinds(args.model.capabilities.output),
     },
@@ -82,10 +85,29 @@ function toHarnessModelInfo(args: {
     },
     cost: toModelCost(args.model),
     adapterData: {
+      provider: args.provider,
       model: args.model,
       variant: args.variant,
     },
   };
+}
+
+function modelVariants(model: OpenCodeModelInfo["model"]): OpenCodeModelInfo["variant"][] {
+  return Object.entries(model.variants ?? {}).map(([id, data]) => ({ id, data }));
+}
+
+function releaseTime(model: OpenCodeModelInfo["model"]): number {
+  const time = Date.parse(model.release_date);
+  return Number.isFinite(time) ? time : 0;
+}
+
+function sortModelsByNewestFirst(
+  models: readonly OpenCodeModelInfo["model"][],
+): OpenCodeModelInfo["model"][] {
+  return [...models].sort((left, right) => {
+    const byReleaseDate = releaseTime(right) - releaseTime(left);
+    return byReleaseDate === 0 ? left.name.localeCompare(right.name) : byReleaseDate;
+  });
 }
 
 function toModelResponseError(args: {
@@ -149,12 +171,10 @@ export async function listModels(
     const response = yield* Result.await(
       Result.tryPromise({
         try: () =>
-          runtime.client.v2.model.list(
+          runtime.client.config.providers(
             {
-              location: {
-                directory: input.cwd,
-                workspace: input.adapterOptions.workspace,
-              },
+              directory: input.cwd,
+              workspace: input.adapterOptions.workspace,
             },
             { signal: input.signal },
           ),
@@ -183,15 +203,19 @@ export async function listModels(
       );
     }
 
-    const models = input.includeUnavailable
-      ? response.data
-      : response.data.filter((model) => model.enabled);
-
     return Result.ok(
-      models.flatMap((model) => [
-        toHarnessModelInfo({ model }),
-        ...model.variants.map((variant) => toHarnessModelInfo({ model, variant })),
-      ]),
+      response.data.providers.flatMap((provider) =>
+        sortModelsByNewestFirst(
+          Object.values(provider.models).filter(
+            (model) => input.includeUnavailable || model.status !== "deprecated",
+          ),
+        ).flatMap((model) => [
+          toHarnessModelInfo({ provider, model }),
+          ...modelVariants(model).map((variant) =>
+            toHarnessModelInfo({ provider, model, variant }),
+          ),
+        ]),
+      ),
     );
   });
 }

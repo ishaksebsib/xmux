@@ -1,4 +1,4 @@
-import type { ModelV2Info } from "@opencode-ai/sdk/v2";
+import type { Model, Provider } from "@opencode-ai/sdk/v2";
 import type { HarnessModelRef, WorkingDirectoryPath } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
 import { OpenCodeModelSelectionError } from "../src";
@@ -25,37 +25,57 @@ async function collectAsync<TValue>(iterable: AsyncIterable<TValue>): Promise<TV
 
 function createNativeModel(args: {
   readonly id: string;
-  readonly enabled?: boolean;
-  readonly variants?: ModelV2Info["variants"];
-}): ModelV2Info {
+  readonly status?: Model["status"];
+  readonly releaseDate?: string;
+  readonly variants?: NonNullable<Model["variants"]>;
+}): Model {
   return {
     id: args.id,
-    apiID: args.id,
     providerID: "provider-1",
+    api: { id: args.id, url: "", npm: "" },
     family: "family-1",
     name: `${args.id} name`,
-    endpoint: { type: "unknown" },
-    capabilities: { tools: true, input: ["text", "image", "unsupported"], output: ["text"] },
-    options: { headers: {}, body: {}, aisdk: { provider: {}, request: {} } },
-    variants: args.variants ?? [],
-    time: { released: 1 },
-    cost: [{ input: 1, output: 2, cache: { read: 0.1, write: 0.2 } }],
-    status: "active",
-    enabled: args.enabled ?? true,
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, image: true, audio: false, video: false, pdf: false },
+      output: { text: true, image: false, audio: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: { input: 1, output: 2, cache: { read: 0.1, write: 0.2 } },
     limit: { context: 1000, input: 900, output: 100 },
+    status: args.status ?? "active",
+    options: {},
+    headers: {},
+    release_date: args.releaseDate ?? "2026-01-01",
+    variants: args.variants ?? {},
+  };
+}
+
+function createNativeProvider(args: { readonly models?: readonly Model[] }): Provider {
+  return {
+    id: "provider-1",
+    name: "Provider One",
+    source: "custom",
+    env: [],
+    options: {},
+    models: Object.fromEntries((args.models ?? []).map((model) => [model.id, model])),
   };
 }
 
 function createModelRuntime(args: {
   readonly defaultModel?: HarnessModelRef;
-  readonly models?: readonly ModelV2Info[];
+  readonly providers?: readonly Provider[];
 }): OpenCodeRuntime {
   return {
     client: {
-      v2: {
-        model: {
-          list: async () => ({ data: args.models ?? [], response: { status: 200 } }),
-        },
+      config: {
+        providers: async () => ({
+          data: { providers: args.providers ?? [], default: {} },
+          response: { status: 200 },
+        }),
       },
     },
     defaultModel: args.defaultModel,
@@ -98,12 +118,18 @@ function createPromptRuntime(args: {
 describe("OpenCode model management", () => {
   test("lists models and variants with normalized metadata", async () => {
     const runtime = createModelRuntime({
-      models: [
-        createNativeModel({
-          id: "model-1",
-          variants: [{ id: "fast", headers: {}, body: {}, aisdk: { provider: {}, request: {} } }],
+      providers: [
+        createNativeProvider({
+          models: [
+            createNativeModel({ id: "old-model", releaseDate: "2024-01-01" }),
+            createNativeModel({
+              id: "model-1",
+              releaseDate: "2026-01-01",
+              variants: { fast: { headers: {}, body: {}, aisdk: { provider: {}, request: {} } } },
+            }),
+            createNativeModel({ id: "deprecated", status: "deprecated" }),
+          ],
         }),
-        createNativeModel({ id: "disabled", enabled: false }),
       ],
     });
 
@@ -116,6 +142,7 @@ describe("OpenCode model management", () => {
         ref: { providerId: "provider-1", modelId: "model-1", variant: undefined },
         name: "model-1 name",
         available: true,
+        providerName: "Provider One",
         capabilities: expect.objectContaining({ input: ["text", "image"] }),
         limits: { context: 1000, input: 900, output: 100 },
         cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0.2 },
@@ -123,6 +150,9 @@ describe("OpenCode model management", () => {
       expect.objectContaining({
         ref: { providerId: "provider-1", modelId: "model-1", variant: "fast" },
         adapterData: expect.objectContaining({ variant: expect.objectContaining({ id: "fast" }) }),
+      }),
+      expect.objectContaining({
+        ref: { providerId: "provider-1", modelId: "old-model", variant: undefined },
       }),
     ]);
 
@@ -133,7 +163,7 @@ describe("OpenCode model management", () => {
     });
 
     expect(listedWithUnavailable.isOk()).toBe(true);
-    expect(listedWithUnavailable.unwrap("models")).toHaveLength(3);
+    expect(listedWithUnavailable.unwrap("models")).toHaveLength(4);
   });
 
   test("sets, gets, and clears harness and session model selections", async () => {
