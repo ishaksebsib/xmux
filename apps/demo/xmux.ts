@@ -1,7 +1,10 @@
 import { createTelegramAdapter } from "@xmux/chat-adapter-telegram";
 import { createInMemoryStore, createXmux } from "@xmux/core";
 import { createOpenCodeAdapter } from "@xmux/harness-opencode";
-import { createTelegramAllowedUsersMiddleware } from "./middleware";
+import {
+  createTelegramAllowedUsersMiddleware,
+  createTelegramTypingIndicatorMiddleware,
+} from "./middleware";
 
 export async function runXmuxDemo() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -25,7 +28,10 @@ export async function runXmuxDemo() {
       deliveryMode: "requester_only",
     },
     store: createInMemoryStore(),
-    middleware: [createTelegramAllowedUsersMiddleware(process.env.XMUX_ALLOWED_TELEGRAM_USER_IDS)],
+    middleware: [
+      createTelegramAllowedUsersMiddleware(process.env.XMUX_ALLOWED_TELEGRAM_USER_IDS),
+      createTelegramTypingIndicatorMiddleware(),
+    ],
   });
 
   xmux.ctx.chat.on("ready", (event) => {

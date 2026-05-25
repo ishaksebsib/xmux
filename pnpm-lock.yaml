@@ -35,6 +35,9 @@ importers:
       '@xmux/harness-opencode':
         specifier: workspace:^
         version: link:../../packages/harness-opencode
+      better-result:
+        specifier: ^2.9.1
+        version: 2.9.1
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2

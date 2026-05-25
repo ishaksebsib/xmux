@@ -20,10 +20,7 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
     next: () => Promise<BetterResult<void, unknown>>,
   ): Promise<BetterResult<void, unknown>> => {
     const actorId = ctx.handler.actor?.userId;
-    if (
-      ctx.event.chatId !== "telegram" ||
-      (actorId !== undefined && allowedUserIds.has(actorId))
-    ) {
+    if (ctx.event.chatId !== "telegram" || (actorId !== undefined && allowedUserIds.has(actorId))) {
       return next();
     }
 
@@ -31,5 +28,33 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
       RESTRICTED_TELEGRAM_USER_MESSAGE,
     );
     return Result.ok();
+  };
+}
+
+export function createTelegramTypingIndicatorMiddleware() {
+  return async (
+    ctx: { readonly event: XmuxRoutedChatEvent },
+    next: () => Promise<BetterResult<void, unknown>>,
+  ): Promise<BetterResult<void, unknown>> => {
+    const typingIndicator = (
+      ctx.event as {
+        readonly typingIndicator?: (options: {
+          readonly mode: "managed";
+          readonly fallback: "ignore";
+        }) => Promise<BetterResult<{ stop(): void }, unknown>>;
+      }
+    ).typingIndicator;
+    const indicator =
+      ctx.event.chatId === "telegram"
+        ? await typingIndicator?.({ mode: "managed", fallback: "ignore" })
+        : undefined;
+
+    try {
+      return await next();
+    } finally {
+      if (indicator?.isOk()) {
+        indicator.value.stop();
+      }
+    }
   };
 }
