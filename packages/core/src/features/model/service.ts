@@ -38,6 +38,7 @@ export interface ModelShownOutput {
   readonly session: SessionRecord;
   readonly current: HarnessSelectedModel;
   readonly models: readonly HarnessModelInfo[];
+  readonly maxModelsPerProvider: number;
 }
 
 export interface ModelUpdatedOutput {
@@ -95,6 +96,7 @@ export async function modelSessionCommand<
       session: session.value,
       current: current.value as HarnessSelectedModel,
       models: models.value as readonly HarnessModelInfo[],
+      maxModelsPerProvider: input.ctx.app.config.model.maxModelsPerProvider,
     });
   }
 

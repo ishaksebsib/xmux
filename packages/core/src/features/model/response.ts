@@ -18,13 +18,18 @@ import {
 import type { ModelCommandError, ModelCommandOutput, ModelShownOutput } from "./service";
 import { formatModelSelector } from "./selector";
 
-const MAX_MODELS_DISPLAYED = 20;
+export interface ModelFailureFormatOptions {
+  readonly maxSuggestions: number;
+}
 
 export function formatModelOutput(output: ModelCommandOutput): ChatTextInput {
   return output.status === "updated" ? formatModelUpdated(output) : formatModelShown(output);
 }
 
-export function formatModelFailure(error: ModelCommandError): ChatTextInput {
+export function formatModelFailure(
+  error: ModelCommandError,
+  options: ModelFailureFormatOptions,
+): ChatTextInput {
   if (ModelNoActiveSessionError.is(error)) {
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before changing models.",
@@ -67,7 +72,10 @@ export function formatModelFailure(error: ModelCommandError): ChatTextInput {
         "",
         `Selector: ${inlineCode(error.selector)}`,
         "",
-        ...formatSelectorSuggestions(error.availableSelectors),
+        ...formatSelectorSuggestions({
+          selectors: error.availableSelectors,
+          maxSuggestions: options.maxSuggestions,
+        }),
       ].join("\n"),
     });
   }
@@ -80,7 +88,10 @@ export function formatModelFailure(error: ModelCommandError): ChatTextInput {
         `Selector: ${inlineCode(error.selector)}`,
         "",
         "Matching models:",
-        ...error.matchingSelectors.map((selector) => `- ${inlineCode(selector)}`),
+        ...formatSelectorList({
+          selectors: error.matchingSelectors,
+          maxSuggestions: options.maxSuggestions,
+        }),
       ].join("\n"),
     });
   }
@@ -119,7 +130,11 @@ function formatModelShown(output: ModelShownOutput): ChatTextInput {
     `- Current: ${formatCurrentModel(output.current.model)}`,
     `- Source: ${markdownText(output.current.source)}`,
     "",
-    ...formatAvailableModels({ models: output.models, current: output.current.model }),
+    ...formatAvailableModels({
+      models: output.models,
+      current: output.current.model,
+      maxModelsPerProvider: output.maxModelsPerProvider,
+    }),
   ];
 
   return markdown({ text: lines.join("\n") });
@@ -148,20 +163,33 @@ function formatCurrentModel(model: ModelShownOutput["current"]["model"]): string
 function formatAvailableModels(input: {
   readonly models: readonly HarnessModelInfo[];
   readonly current: ModelShownOutput["current"]["model"];
+  readonly maxModelsPerProvider: number;
 }): readonly string[] {
   if (input.models.length === 0) {
     return ["**Available models**", "", "No available models reported by this harness."];
   }
 
-  const displayedModels = input.models.slice(0, MAX_MODELS_DISPLAYED);
   const lines = [`**Available models** (${input.models.length})`, ""];
 
-  for (const group of groupModelsByProvider(displayedModels)) {
-    lines.push(`${markdownText(group.providerName)}:`);
+  for (const group of groupModelsByProvider(input.models)) {
+    const displayedModels = group.models.slice(0, input.maxModelsPerProvider);
+    lines.push(
+      formatProviderHeader({
+        providerName: group.providerName,
+        shown: displayedModels.length,
+        total: group.models.length,
+      }),
+    );
     lines.push("");
 
-    for (const model of group.models) {
+    for (const model of displayedModels) {
       lines.push(formatModelListItem({ model, current: input.current }));
+      lines.push("");
+    }
+
+    const remaining = group.models.length - displayedModels.length;
+    if (remaining > 0) {
+      lines.push(`_And ${remaining} more models from ${markdownText(group.providerName)}._`);
       lines.push("");
     }
   }
@@ -170,12 +198,18 @@ function formatAvailableModels(input: {
     lines.pop();
   }
 
-  const remaining = input.models.length - displayedModels.length;
-  if (remaining > 0) {
-    lines.push(`_And ${remaining} more models._`);
-  }
-
   return lines;
+}
+
+function formatProviderHeader(input: {
+  readonly providerName: string;
+  readonly shown: number;
+  readonly total: number;
+}): string {
+  const label = markdownText(input.providerName);
+  return input.shown === input.total
+    ? `> **${label}** (${input.total})`
+    : `> **${label}** (showing ${input.shown} of ${input.total})`;
 }
 
 function formatModelListItem(input: {
@@ -259,16 +293,27 @@ function isSameModel(
   );
 }
 
-function formatSelectorSuggestions(selectors: readonly string[]): readonly string[] {
-  if (selectors.length === 0) {
+function formatSelectorSuggestions(input: {
+  readonly selectors: readonly string[];
+  readonly maxSuggestions: number;
+}): readonly string[] {
+  if (input.selectors.length === 0) {
     return [`Use ${inlineCode("/model")} to list available models.`];
   }
 
+  return ["Available models:", ...formatSelectorList(input)];
+}
+
+function formatSelectorList(input: {
+  readonly selectors: readonly string[];
+  readonly maxSuggestions: number;
+}): readonly string[] {
   return [
-    "Available models:",
-    ...selectors.slice(0, MAX_MODELS_DISPLAYED).map((selector) => `- ${inlineCode(selector)}`),
-    ...(selectors.length > MAX_MODELS_DISPLAYED
-      ? [`_And ${selectors.length - MAX_MODELS_DISPLAYED} more models._`]
+    ...input.selectors
+      .slice(0, input.maxSuggestions)
+      .map((selector) => `- ${inlineCode(selector)}`),
+    ...(input.selectors.length > input.maxSuggestions
+      ? [`_And ${input.selectors.length - input.maxSuggestions} more models._`]
       : []),
   ];
 }

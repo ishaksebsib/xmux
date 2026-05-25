@@ -45,7 +45,9 @@ export async function handleModelCommand<
 
   const response = selected.isOk()
     ? formatModelOutput(selected.value)
-    : formatModelFailure(selected.error);
+    : formatModelFailure(selected.error, {
+        maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
+      });
 
   return replyToChatEvent({
     event: input.event,

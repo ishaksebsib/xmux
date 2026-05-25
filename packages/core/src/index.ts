@@ -5,7 +5,9 @@ export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
 export type {
   Config,
   DeliveryMode,
+  ModelConfig,
   NormalizedConfig,
+  NormalizedModelConfig,
   NormalizedResumeConfig,
   ResumeConfig,
   WorkspaceConfig,

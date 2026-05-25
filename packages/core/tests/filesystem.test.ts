@@ -19,6 +19,7 @@ describe("workspace filesystem", () => {
     });
 
     expect(config.workspace).toEqual({ showHiddenFiles: false, maxListEntries: 100 });
+    expect(config.model).toEqual({ maxModelsPerProvider: 10 });
   });
 
   test("resolves a relative directory from a base cwd", async () => {

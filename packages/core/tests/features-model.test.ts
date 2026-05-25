@@ -73,12 +73,54 @@ describe("/model command", () => {
     expect(replies[0]).toContain("- Current: `openai/gpt-4.1`");
     expect(replies[0]).toContain("- Source: session");
     expect(replies[0]).toContain("**Available models** (2)");
-    expect(replies[0]).toContain("OpenAI:");
+    expect(replies[0]).toContain("> **OpenAI** (1)");
     expect(replies[0]).toContain("- GPT\\-4\\.1 — current");
     expect(replies[0]).toContain("  - `/model openai/gpt-4.1`");
-    expect(replies[0]).toContain("Anthropic:");
+    expect(replies[0]).toContain("> **Anthropic** (1)");
     expect(replies[0]).toContain("- Claude 3\\.7 Sonnet");
     expect(replies[0]).toContain("  - `/model anthropic/claude-3-7-sonnet`");
+
+    await xmux.shutdown();
+  });
+
+  test("limits listed models per provider using the default model config", async () => {
+    const { emitCommand, replies, xmux } = await initializeXmux({
+      models: [
+        ...createProviderModels({ providerId: "openai", providerName: "OpenAI", count: 11 }),
+        ...createProviderModels({ providerId: "google", providerName: "Google", count: 2 }),
+      ],
+    });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ selector: undefined }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("> **OpenAI** (showing 10 of 11)");
+    expect(replies[0]).toContain("- OpenAI Model 10");
+    expect(replies[0]).not.toContain("- OpenAI Model 11");
+    expect(replies[0]).toContain("_And 1 more models from OpenAI._");
+    expect(replies[0]).toContain("> **Google** (2)");
+    expect(replies[0]).toContain("- Google Model 2");
+
+    await xmux.shutdown();
+  });
+
+  test("uses configured max models per provider", async () => {
+    const { emitCommand, replies, xmux } = await initializeXmux({
+      maxModelsPerProvider: 2,
+      models: createProviderModels({ providerId: "openai", providerName: "OpenAI", count: 4 }),
+    });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ selector: undefined }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("> **OpenAI** (showing 2 of 4)");
+    expect(replies[0]).toContain("- OpenAI Model 2");
+    expect(replies[0]).not.toContain("- OpenAI Model 3");
+    expect(replies[0]).toContain("_And 2 more models from OpenAI._");
 
     await xmux.shutdown();
   });
@@ -187,6 +229,7 @@ describe("/model command", () => {
 
 interface InitializeXmuxInput {
   readonly models?: readonly HarnessModelInfo<"opencode">[];
+  readonly maxModelsPerProvider?: number;
   readonly supportModels?: boolean;
 }
 
@@ -300,6 +343,9 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
       userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
+      ...(input.maxModelsPerProvider === undefined
+        ? {}
+        : { model: { maxModelsPerProvider: input.maxModelsPerProvider } }),
     },
   });
 
@@ -314,6 +360,20 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
     emitCommand: emitCommand as (event: unknown) => void,
     xmux,
   };
+}
+
+function createProviderModels(input: {
+  readonly providerId: string;
+  readonly providerName: string;
+  readonly count: number;
+}): readonly HarnessModelInfo<"opencode">[] {
+  return Array.from({ length: input.count }, (_, index) => ({
+    harnessId: "opencode" as const,
+    ref: { providerId: input.providerId, modelId: `model-${index + 1}` },
+    name: `${input.providerName} Model ${index + 1}`,
+    providerName: input.providerName,
+    adapterData: {},
+  }));
 }
 
 async function bindSession(input: {
