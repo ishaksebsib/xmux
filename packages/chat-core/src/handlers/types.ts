@@ -13,6 +13,7 @@ import type {
   ChatSendMessageFailure,
   ChatStreamMessageFailure,
   ChatStreamReplyFailure,
+  ChatTypingIndicatorFailure,
   UnknownChatAdapterError,
 } from "../errors";
 import type {
@@ -24,6 +25,8 @@ import type {
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
   ChatStreamReplyInput,
+  ChatTypingIndicatorInput,
+  ChatTypingIndicatorResult,
 } from "../types";
 
 export type SendMessageInputForStream<
@@ -62,7 +65,12 @@ export type StreamReplyRuntime = {
   ): Promise<Result<ChatSentMessage<string, ChatAdapterObject>, unknown>>;
 };
 
-export type ChatRuntimeOperation = "sendMessage" | "reply" | "streamMessage" | "streamReply";
+export type ChatRuntimeOperation =
+  | "sendMessage"
+  | "reply"
+  | "streamMessage"
+  | "streamReply"
+  | "typingIndicator";
 
 export type StreamFallbackDiagnosticEmit<TChatId extends string> = (event: {
   readonly type: "diagnostic";
@@ -95,6 +103,12 @@ export type StreamReplyHandler<TAdapters extends ChatAdapterDefinitions<TAdapter
 >(
   input: TInput,
 ) => Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamReplyFailure>>;
+
+export type TypingIndicatorHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>> = <
+  TInput extends ChatTypingIndicatorInput<TAdapters>,
+>(
+  input: TInput,
+) => Promise<Result<ChatTypingIndicatorResult<TInput>, ChatTypingIndicatorFailure>>;
 
 export type GetStartedRuntime<TAdapters extends ChatAdapterDefinitions<TAdapters>> = <
   TChatId extends keyof TAdapters,

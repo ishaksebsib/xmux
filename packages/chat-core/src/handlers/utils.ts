@@ -1,6 +1,7 @@
 import { Result } from "better-result";
 import type {
   ChatAdapterSendMessageInput,
+  ChatAdapterSendTypingInput,
   ChatAdapterStartContext,
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
@@ -23,6 +24,7 @@ import type {
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
   ChatStreamReplyInput,
+  ChatTypingIndicatorInput,
 } from "../types";
 import type {
   OpenedRuntime,
@@ -121,6 +123,31 @@ export function createAdapterSendMessageInput<
     adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
     signal: input.signal,
   } as ChatAdapterSendMessageInput<
+    TInput["chatId"],
+    AdapterOptionsFor<TAdapters, TInput["chatId"]>
+  >;
+}
+
+export function createAdapterTypingIndicatorInput<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+  TInput extends ChatTypingIndicatorInput<TAdapters>,
+>(input: TInput) {
+  return {
+    chatId: input.chatId,
+    conversationId: input.conversationId,
+    ...(input.messageId === undefined
+      ? {}
+      : {
+          message: {
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+          },
+        }),
+    action: input.action ?? "typing",
+    adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
+    signal: input.signal,
+  } as ChatAdapterSendTypingInput<
     TInput["chatId"],
     AdapterOptionsFor<TAdapters, TInput["chatId"]>
   >;

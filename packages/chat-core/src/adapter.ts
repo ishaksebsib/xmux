@@ -9,7 +9,7 @@ import type {
   ChatTextStreamContent,
 } from "./contracts";
 import type { ChatAdapterEvent, ChatDiagnosticEvent } from "./events";
-import type { ChatReplyMode } from "./types";
+import type { ChatReplyMode, ChatTypingAction } from "./types";
 
 /** Defines a chat adapter while preserving its id, options, and data types. */
 export function defineChatAdapter<
@@ -41,6 +41,9 @@ export interface OpenedChatAdapterBase<
   reply?(
     input: ChatAdapterReplyInput<TChatId, TAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, unknown>>;
+  sendTyping?(
+    input: ChatAdapterSendTypingInput<TChatId, TAdapterOptions>,
+  ): Promise<Result<void, unknown>>;
   close(): Promise<void>;
 }
 
@@ -167,6 +170,17 @@ export interface ChatAdapterReplyInput<
 > extends ChatAdapterSendMessageInput<TChatId, TAdapterOptions> {
   readonly message?: ChatMessageRef<TChatId>;
   readonly mode?: ChatReplyMode;
+}
+
+/** One typing/status pulse sent to an adapter for a conversation. */
+export interface ChatAdapterSendTypingInput<
+  TChatId extends string = string,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> extends ChatConversationRef<TChatId> {
+  readonly message?: ChatMessageRef<TChatId>;
+  readonly action: ChatTypingAction;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
 }
 
 /** Common outbound streamed message input every streaming adapter receives. */

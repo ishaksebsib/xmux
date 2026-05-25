@@ -15,6 +15,9 @@ import {
   type ChatOn,
   type ChatSentMessageFromInput,
   type ChatStreamMessageInputFor,
+  type ChatTypingIndicatorHandle,
+  type ChatTypingIndicatorInputFor,
+  type ChatTypingIndicatorResult,
 } from "../src";
 
 const shouldRunTypeErrorChecks = process.argv.length === 0;
@@ -194,6 +197,12 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
   ).toEqualTypeOf<{
     readonly nativeMessageId: string;
   }>();
+  expectTypeOf(
+    {} as ChatTypingIndicatorInputFor<
+      { readonly discord: typeof discord },
+      "discord"
+    >["adapterOptions"],
+  ).toEqualTypeOf<{ readonly allowedMentions: boolean }>();
 
   function assertSendMessageTypes(runtime: typeof chat) {
     void runtime.sendMessage({
@@ -256,6 +265,22 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
   }
 });
 
+test("typing indicator result types follow pulse and managed modes", () => {
+  type PulseInput = {
+    readonly chatId: "alpha";
+    readonly conversationId: "conversation";
+    readonly mode?: "pulse";
+  };
+  type ManagedInput = {
+    readonly chatId: "alpha";
+    readonly conversationId: "conversation";
+    readonly mode: "managed";
+  };
+
+  expectTypeOf<ChatTypingIndicatorResult<PulseInput>>().toEqualTypeOf<void>();
+  expectTypeOf<ChatTypingIndicatorResult<ManagedInput>>().toEqualTypeOf<ChatTypingIndicatorHandle>();
+});
+
 test("message events preserve adapter data and event.reply adapter options", () => {
   const discord = defineChatAdapter<
     "discord",
@@ -293,10 +318,19 @@ test("message events preserve adapter data and event.reply adapter options", () 
       expectTypeOf(event.message.adapterData.nativeMessageId).toEqualTypeOf<string>();
 
       void event.reply("ok", { adapterOptions: { allowedMentions: false } });
+      void event.typingIndicator({ adapterOptions: { allowedMentions: false } });
+      void event.typingIndicator({
+        mode: "managed",
+        timeoutMs: 1_000,
+        refreshIntervalMs: 500,
+        adapterOptions: { allowedMentions: false },
+      });
 
       if (shouldRunTypeErrorChecks) {
         // @ts-expect-error event.reply requires adapter options when the adapter requires them
         void event.reply("ok");
+        // @ts-expect-error event.typingIndicator requires adapter options when the adapter requires them
+        void event.typingIndicator();
       }
     }
   });

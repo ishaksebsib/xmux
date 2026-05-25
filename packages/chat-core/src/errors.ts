@@ -11,7 +11,8 @@ export type ChatLifecycleOperation =
   | "sendMessage"
   | "reply"
   | "streamMessage"
-  | "streamReply";
+  | "streamReply"
+  | "typingIndicator";
 
 /** Returned when a caller targets an adapter id that was not registered. */
 export class UnknownChatAdapterError extends TaggedError("UnknownChatAdapterError")<{
@@ -111,6 +112,36 @@ export class ChatStreamReplyError extends TaggedError("ChatStreamReplyError")<{
   }
 }
 
+/** Wraps adapter typing indicator failures while preserving the original cause. */
+export class ChatTypingIndicatorError extends TaggedError("ChatTypingIndicatorError")<{
+  readonly chatId: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to send typing indicator with chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Returned when typing indicator timing options are unsafe or invalid. */
+export class InvalidChatTypingIndicatorInputError extends TaggedError(
+  "InvalidChatTypingIndicatorInputError",
+)<{
+  readonly field: "timeoutMs" | "refreshIntervalMs";
+  readonly value: number;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly field: "timeoutMs" | "refreshIntervalMs"; readonly value: number }) {
+    super({
+      ...args,
+      message: `Invalid typing indicator ${args.field}: expected a positive finite number, received ${args.value}`,
+    });
+  }
+}
+
 /** Returned when the facade cannot safely emulate a requested adapter feature. */
 export class UnsupportedChatOperationError extends TaggedError("UnsupportedChatOperationError")<{
   readonly chatId: string;
@@ -204,3 +235,11 @@ export type ChatStreamReplyFailure =
   | ChatStreamReplyError
   | ChatReplyError
   | ChatSendMessageError;
+
+/** Errors returned by `chat.typingIndicator()` and event typing helpers. */
+export type ChatTypingIndicatorFailure =
+  | UnknownChatAdapterError
+  | ChatLifecycleError
+  | UnsupportedChatOperationError
+  | InvalidChatTypingIndicatorInputError
+  | ChatTypingIndicatorError;

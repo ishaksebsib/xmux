@@ -1,3 +1,4 @@
+import type { Result } from "better-result";
 import type { ChatCommandRegistry, ChatCommandValueFor } from "./commands";
 import type {
   ChatActor,
@@ -14,8 +15,12 @@ import type {
   ChatEventAdapterData,
   ChatEventAdapterOptions,
   ChatReplyMode,
+  ChatTypingIndicatorBehavior,
+  ChatTypingIndicatorFallback,
+  ChatTypingIndicatorHandle,
   RequiredKeys,
 } from "./types";
+import type { ChatTypingIndicatorFailure } from "./errors";
 
 /** Typed subscription API exposed by the chat facade. */
 export interface ChatOn<
@@ -112,6 +117,31 @@ export type ChatEventReplyStream<
       options: ChatEventReplyStreamOptions<TAdapterOptions>,
     ) => Promise<TResult>;
 
+export type ChatEventTypingIndicatorOptions<
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> = {
+  readonly fallback?: ChatTypingIndicatorFallback;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<TAdapterOptions> &
+  ChatTypingIndicatorBehavior;
+
+export type ChatEventTypingIndicatorResult<TOptions> = TOptions extends {
+  readonly mode: "managed";
+}
+  ? ChatTypingIndicatorHandle
+  : void;
+
+/** Bound typing indicator helper attached to inbound events by the facade. */
+export type ChatEventTypingIndicator<
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> = [RequiredKeys<TAdapterOptions>] extends [never]
+  ? <TOptions extends ChatEventTypingIndicatorOptions<TAdapterOptions> | undefined = undefined>(
+      options?: TOptions,
+    ) => Promise<Result<ChatEventTypingIndicatorResult<TOptions>, ChatTypingIndicatorFailure>>
+  : <TOptions extends ChatEventTypingIndicatorOptions<TAdapterOptions>>(
+      options: TOptions,
+    ) => Promise<Result<ChatEventTypingIndicatorResult<TOptions>, ChatTypingIndicatorFailure>>;
+
 /** Emitted when an adapter runtime is ready to receive traffic. */
 export interface ChatReadyEvent<TChatId extends string = string> {
   readonly type: "ready";
@@ -131,6 +161,7 @@ export interface ChatMessageEvent<
   readonly message: ChatMessage<TChatId, TAdapterData>;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
   readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
+  readonly typingIndicator: ChatEventTypingIndicator<TAdapterOptions>;
 }
 
 /** Message event selected by registered chat id so adapter data/options stay typed. */
@@ -172,6 +203,7 @@ export interface ChatCommandEvent<
   readonly command: ChatCommandInvocation<TCommands, TName>;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
   readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
+  readonly typingIndicator: ChatEventTypingIndicator<TAdapterOptions>;
 }
 
 /** Command event selected by registered chat id so reply options stay typed. */
@@ -208,6 +240,7 @@ export interface ChatInvalidCommandEvent<
   readonly optionName?: string;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
   readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
+  readonly typingIndicator: ChatEventTypingIndicator<TAdapterOptions>;
 }
 
 /** Invalid command event selected by registered chat id so reply options stay typed. */
@@ -238,6 +271,7 @@ export interface ChatUnknownCommandEvent<
   readonly commandName: string;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
   readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
+  readonly typingIndicator: ChatEventTypingIndicator<TAdapterOptions>;
 }
 
 /** Unknown command event selected by registered chat id so reply options stay typed. */
@@ -322,7 +356,7 @@ export type ChatEvent<
 export type ChatAdapterMessageEvent<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
-> = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply" | "replyStream">;
+> = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply" | "replyStream" | "typingIndicator">;
 
 /** Message adapter event selected by registered chat id. */
 export type ChatAdapterMessageEventFor<
@@ -340,18 +374,18 @@ export type ChatAdapterCommandEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TName extends keyof TCommands = keyof TCommands,
   TChatId extends string = string,
-> = Omit<ChatCommandEvent<TCommands, TName, TChatId>, "reply" | "replyStream">;
+> = Omit<ChatCommandEvent<TCommands, TName, TChatId>, "reply" | "replyStream" | "typingIndicator">;
 
 /** Invalid command adapter event before chat-core binds reply(). */
 export type ChatAdapterInvalidCommandEvent<TChatId extends string = string> = Omit<
   ChatInvalidCommandEvent<TChatId>,
-  "reply" | "replyStream"
+  "reply" | "replyStream" | "typingIndicator"
 >;
 
 /** Unknown command adapter event before chat-core binds reply(). */
 export type ChatAdapterUnknownCommandEvent<TChatId extends string = string> = Omit<
   ChatUnknownCommandEvent<TChatId>,
-  "reply" | "replyStream"
+  "reply" | "replyStream" | "typingIndicator"
 >;
 
 /** Event shape accepted from adapters during runtime. */

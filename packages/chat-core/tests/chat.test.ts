@@ -1,11 +1,12 @@
 import { Result } from "better-result";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   ChatAdapterOpenError,
   ChatAdapterStartError,
   ChatCloseError,
   ChatLifecycleError,
   ChatSendMessageError,
+  ChatTypingIndicatorError,
   UnknownChatAdapterError,
   UnsupportedChatOperationError,
   createChat,
@@ -47,6 +48,18 @@ const streamCapabilities = {
   },
 } as const;
 
+const typingCapabilities = {
+  messages: {
+    send: true,
+    reply: true,
+    edit: false,
+    delete: false,
+    typing: true,
+    markdown: false,
+    attachments: false,
+  },
+} as const;
+
 type Handles = {
   readonly opens: string[];
   readonly starts: string[];
@@ -71,8 +84,11 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly throwOnSend?: unknown;
   readonly nativeReply?: boolean;
   readonly nativeStream?: boolean;
+  readonly nativeTyping?: boolean;
   readonly replyError?: unknown;
   readonly throwOnReply?: unknown;
+  readonly typingError?: unknown;
+  readonly throwOnTyping?: unknown;
   readonly onStart?: (context: ChatAdapterStartContext<ChatCommandRegistry, TId>) => void;
   readonly onSend?: (input: {
     readonly adapterOptions: Record<never, never>;
@@ -92,8 +108,17 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
     readonly mode?: string;
     readonly content: { readonly chunks: AsyncIterable<unknown> };
   }) => void;
+  readonly onTyping?: (input: {
+    readonly conversationId: string;
+    readonly message?: { readonly messageId: string };
+    readonly adapterOptions: Record<never, never>;
+  }) => void;
 }) {
-  const capabilities = args.nativeStream ? streamCapabilities : basicCapabilities;
+  const capabilities = args.nativeStream
+    ? streamCapabilities
+    : args.nativeTyping
+      ? typingCapabilities
+      : basicCapabilities;
 
   return defineChatAdapter<TId, Record<never, never>, Record<never, never>, typeof capabilities>({
     id: args.id,
@@ -156,6 +181,19 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
                 format: input.format,
                 adapterData: {},
               });
+            }
+          : undefined,
+        sendTyping: args.nativeTyping
+          ? async (input) => {
+              args.onTyping?.(input);
+              if (args.throwOnTyping !== undefined) {
+                throw args.throwOnTyping;
+              }
+              if (args.typingError !== undefined) {
+                return Result.err(args.typingError);
+              }
+
+              return Result.ok();
             }
           : undefined,
         ...(args.nativeStream
@@ -745,6 +783,186 @@ describe("createChat lifecycle", () => {
     if (streamed.isErr()) {
       expect(streamed.error).toBeInstanceOf(UnsupportedChatOperationError);
     }
+  });
+
+  test("typingIndicator sends one native typing pulse", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const typing: string[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          nativeTyping: true,
+          onTyping: (input) => {
+            typing.push(`${input.conversationId}:${input.adapterOptions === undefined ? "missing" : "ok"}`);
+          },
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const indicated = await chat.typingIndicator({
+      chatId: "alpha",
+      conversationId: "conversation",
+    });
+
+    expect(indicated.isOk()).toBe(true);
+    expect(typing).toEqual(["conversation:ok"]);
+  });
+
+  test("typingIndicator returns unsupported errors or ignored no-op handles", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const diagnostics: string[] = [];
+    const chat = createChat({
+      adapters: { alpha: createRuntimeAdapter({ id: "alpha", handles }) },
+      commands,
+    });
+
+    chat.on("diagnostic", (event) => {
+      diagnostics.push(event.code);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const unsupported = await chat.typingIndicator({
+      chatId: "alpha",
+      conversationId: "conversation",
+    });
+    const ignored = await chat.typingIndicator({
+      chatId: "alpha",
+      conversationId: "conversation",
+      mode: "managed",
+      fallback: "ignore",
+    });
+
+    expect(unsupported.isErr()).toBe(true);
+    if (unsupported.isErr()) {
+      expect(unsupported.error).toBeInstanceOf(UnsupportedChatOperationError);
+    }
+    expect(ignored.isOk()).toBe(true);
+    if (ignored.isOk()) {
+      ignored.value.stop();
+    }
+    expect(diagnostics).toContain("CHAT_TYPING_INDICATOR_UNSUPPORTED_IGNORED");
+  });
+
+  test("managed typingIndicator refreshes until stopped", async () => {
+    vi.useFakeTimers();
+    try {
+      const handles = { opens: [], starts: [], closes: [] };
+      const typing: string[] = [];
+      const chat = createChat({
+        adapters: {
+          alpha: createRuntimeAdapter({
+            id: "alpha",
+            handles,
+            nativeTyping: true,
+            onTyping: (input) => {
+              typing.push(input.conversationId);
+            },
+          }),
+        },
+        commands,
+      });
+
+      expect((await chat.start()).isOk()).toBe(true);
+      const indicated = await chat.typingIndicator({
+        chatId: "alpha",
+        conversationId: "conversation",
+        mode: "managed",
+        refreshIntervalMs: 10,
+        timeoutMs: 100,
+      });
+
+      expect(indicated.isOk()).toBe(true);
+      expect(typing).toEqual(["conversation"]);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(typing).toEqual(["conversation", "conversation"]);
+
+      if (indicated.isOk()) {
+        indicated.value.stop();
+      }
+      await vi.advanceTimersByTimeAsync(50);
+      expect(typing).toEqual(["conversation", "conversation"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("typingIndicator wraps adapter failures", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          nativeTyping: true,
+          typingError: new Error("typing failed"),
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const indicated = await chat.typingIndicator({
+      chatId: "alpha",
+      conversationId: "conversation",
+    });
+
+    expect(indicated.isErr()).toBe(true);
+    if (indicated.isErr()) {
+      expect(indicated.error).toBeInstanceOf(ChatTypingIndicatorError);
+    }
+  });
+
+  test("event.typingIndicator targets the original message conversation", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
+    const typing: string[] = [];
+    let resolveTyping!: (value: unknown) => void;
+    const typingHandled = new Promise((resolve) => {
+      resolveTyping = resolve;
+    });
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          nativeTyping: true,
+          onStart: (context) => {
+            startContext = context;
+          },
+          onTyping: (input) => {
+            typing.push(`${input.conversationId}:${input.message?.messageId}`);
+          },
+        }),
+      },
+      commands,
+    });
+
+    chat.on("message", async (event) => {
+      const result = await event.typingIndicator();
+      resolveTyping(result);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    startContext?.emit({
+      type: "message",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: {
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "original",
+        actor: { kind: "user", actorId: "user", adapterData: {} },
+        text: "incoming",
+        adapterData: {},
+      },
+    });
+
+    await typingHandled;
+    expect(typing).toEqual(["conversation:original"]);
   });
 
   test("streamReply falls back to reply and event.replyStream targets the original message", async () => {

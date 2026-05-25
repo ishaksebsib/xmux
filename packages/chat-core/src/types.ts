@@ -31,6 +31,57 @@ export type AdapterOptionsProp<TAdapterOptions extends ChatAdapterObject> = [
 /** Reply intent used by event helpers and facade replies. */
 export type ChatReplyMode = "auto" | "thread" | "quote" | "conversation";
 
+/** Typing/status action adapters can expose as a platform-native indicator. */
+export type ChatTypingAction = "typing";
+
+/**
+ * Public typing indicator behavior.
+ *
+ * `pulse` sends one short-lived platform typing action and returns after that
+ * adapter call. `managed` sends an initial pulse, refreshes it until stopped,
+ * and returns a handle whose `stop()` method cancels future refreshes.
+ */
+export type ChatTypingIndicatorMode = "pulse" | "managed";
+
+/** Behavior when a typing indicator is not supported by the selected adapter. */
+export type ChatTypingIndicatorFallback = "error" | "ignore";
+
+/** Handle returned by managed typing indicators. */
+export interface ChatTypingIndicatorHandle {
+  /** Stops refreshing future typing pulses. The current platform pulse expires naturally. */
+  stop(): void;
+}
+
+export type ChatTypingIndicatorResult<TInput> = TInput extends { readonly mode: "managed" }
+  ? ChatTypingIndicatorHandle
+  : void;
+
+/** Shared pulse-vs-managed behavior for facade and event typing helpers. */
+export type ChatTypingIndicatorBehavior =
+  | {
+      /**
+       * Sends exactly one typing indicator pulse.
+       *
+       * Use this when the caller owns its own refresh timing or only needs a
+       * short-lived indicator. The visible duration is platform-specific; for
+       * example, Telegram expires a typing pulse after roughly five seconds.
+       */
+      readonly mode?: "pulse";
+    }
+  | {
+      /**
+       * Sends an initial pulse and keeps refreshing until stopped or timed out.
+       *
+       * `stop()` cancels future refresh pulses, but most platforms do not offer
+       * a native "clear typing now" API; the last sent pulse expires naturally.
+       */
+      readonly mode: "managed";
+      /** Maximum lifetime for the refresh loop. Defaults to a safe finite timeout. */
+      readonly timeoutMs?: number;
+      /** Delay between refresh pulses. Keep below the platform pulse TTL. */
+      readonly refreshIntervalMs?: number;
+    };
+
 /** Adapter data map keyed by registered chat id. */
 export type ChatEventAdapterData<TChatId extends string = string> = {
   readonly [TCurrentChatId in TChatId]: ChatAdapterObject;
@@ -162,6 +213,25 @@ export type ChatReplyInputFor<
 /** Reply input union for all registered chat adapters. */
 export type ChatReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
   readonly [TChatId in keyof TAdapters]: ChatReplyInputFor<TAdapters, TChatId>;
+}[keyof TAdapters];
+
+/** Typing indicator input narrowed to one registered chat adapter. */
+export type ChatTypingIndicatorInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly messageId?: string;
+  readonly action?: ChatTypingAction;
+  readonly fallback?: ChatTypingIndicatorFallback;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>> &
+  ChatTypingIndicatorBehavior;
+
+/** Typing indicator input union for all registered chat adapters. */
+export type ChatTypingIndicatorInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
+  readonly [TChatId in keyof TAdapters]: ChatTypingIndicatorInputFor<TAdapters, TChatId>;
 }[keyof TAdapters];
 
 export type ChatStreamFallbackFor<

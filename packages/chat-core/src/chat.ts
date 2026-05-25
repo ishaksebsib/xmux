@@ -21,6 +21,8 @@ import type {
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
   ChatStreamReplyInput,
+  ChatTypingIndicatorInput,
+  ChatTypingIndicatorResult,
 } from "./types";
 import type {
   ChatAdapterEvent,
@@ -28,6 +30,7 @@ import type {
   ChatEvent,
   ChatEventHandler,
   ChatEventType,
+  ChatEventTypingIndicatorOptions,
   ChatOn,
   Unsubscribe,
 } from "./events";
@@ -42,11 +45,13 @@ import {
   type ChatStartError,
   type ChatStreamMessageFailure,
   type ChatStreamReplyFailure,
+  type ChatTypingIndicatorFailure,
 } from "./errors";
 import { createReplyHandler } from "./handlers/reply";
 import { createSendMessageHandler } from "./handlers/send-message";
 import { createStreamMessageHandler } from "./handlers/stream-message";
 import { createStreamReplyHandler } from "./handlers/stream-reply";
+import { createTypingIndicatorHandler } from "./handlers/typing-indicator";
 import type { OpenedRuntime } from "./handlers/types";
 import {
   adapterForChatId,
@@ -96,6 +101,9 @@ export interface Chat<
   streamReply<TInput extends ChatStreamReplyInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamReplyFailure>>;
+  typingIndicator<TInput extends ChatTypingIndicatorInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<ChatTypingIndicatorResult<TInput>, ChatTypingIndicatorFailure>>;
 }
 
 /** Creates a typed chat runtime over the provided adapters and commands. */
@@ -235,6 +243,26 @@ export function createChat<
           mode: replyOptions?.mode,
           ...(adapterOptions === undefined ? {} : { adapterOptions }),
         } as ChatStreamReplyInput<TAdapters>);
+      },
+      typingIndicator: async (typingOptions?: ChatEventTypingIndicatorOptions<ChatAdapterObject>) => {
+        const adapterOptions = typingOptions?.adapterOptions;
+        return typingIndicator({
+          chatId: event.chatId,
+          conversationId: event.conversation.conversationId,
+          messageId,
+          mode: typingOptions?.mode,
+          timeoutMs:
+            typingOptions !== undefined && "timeoutMs" in typingOptions
+              ? typingOptions.timeoutMs
+              : undefined,
+          refreshIntervalMs:
+            typingOptions !== undefined && "refreshIntervalMs" in typingOptions
+              ? typingOptions.refreshIntervalMs
+              : undefined,
+          fallback: typingOptions?.fallback,
+          signal: typingOptions?.signal,
+          ...(adapterOptions === undefined ? {} : { adapterOptions }),
+        } as ChatTypingIndicatorInput<TAdapters>);
       },
     } as ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>;
   }
@@ -382,7 +410,12 @@ export function createChat<
 
   async function getStartedRuntime<TChatId extends keyof TAdapters>(args: {
     readonly chatId: TChatId;
-    readonly operation: "sendMessage" | "reply" | "streamMessage" | "streamReply";
+    readonly operation:
+      | "sendMessage"
+      | "reply"
+      | "streamMessage"
+      | "streamReply"
+      | "typingIndicator";
   }): Promise<
     Result<
       OpenedChatAdapter<
@@ -429,6 +462,11 @@ export function createChat<
     emit,
     reply,
   });
+  const typingIndicator = createTypingIndicatorHandler<TAdapters>({
+    getStartedRuntime,
+    emit,
+    getLifecycleSignal: () => abortController?.signal,
+  });
 
   async function close() {
     const canClose = ensureCanClose(lifecycle);
@@ -468,6 +506,7 @@ export function createChat<
     reply,
     streamMessage,
     streamReply,
+    typingIndicator,
   };
 }
 
