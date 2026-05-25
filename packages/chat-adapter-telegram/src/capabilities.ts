@@ -12,7 +12,7 @@ export const telegramAdapterCapabilities = {
     reply: true,
     edit: false,
     delete: false,
-    typing: false,
+    typing: true,
     markdown: true,
     attachments: false,
     stream: { send: true, reply: true, strategy: "native" },

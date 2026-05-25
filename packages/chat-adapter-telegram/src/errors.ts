@@ -106,6 +106,19 @@ export class TelegramSendMessageError extends TaggedError("TelegramSendMessageEr
   }
 }
 
+/** Telegram sendChatAction typing indicator failed. */
+export class TelegramSendTypingError extends TaggedError("TelegramSendTypingError")<{
+  readonly message: string;
+  readonly cause: unknown;
+}>() {
+  constructor(args: { readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Telegram typing indicator failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Webhook delivery is reserved for the future webhook runtime path. */
 export class TelegramWebhookModeUnsupportedError extends TaggedError(
   "TelegramWebhookModeUnsupportedError",

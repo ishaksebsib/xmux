@@ -9,6 +9,7 @@ import {
   TelegramConfigurationError,
   TelegramReplyError,
   TelegramSendMessageError,
+  TelegramSendTypingError,
   TelegramStartError,
   TelegramStreamMessageError,
   TelegramStreamReplyError,
@@ -66,6 +67,7 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly getBotInfoMock: ReturnType<typeof vi.fn>;
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly sendMessageMock: ReturnType<typeof vi.fn>;
+  readonly sendChatActionMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
   readonly streamMessageMock: ReturnType<typeof vi.fn>;
   readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
@@ -76,6 +78,7 @@ function createFakeTelegramBot(
   args: {
     readonly initError?: unknown;
     readonly sendMessageError?: unknown;
+    readonly sendChatActionError?: unknown;
     readonly setMyCommandsError?: unknown;
     readonly startError?: unknown;
   } = {},
@@ -148,6 +151,19 @@ function createFakeTelegramBot(
       };
     },
   );
+  const sendChatActionMock = vi.fn(
+    async (_input: {
+      readonly chatId: string | number;
+      readonly action: string;
+      readonly options?: unknown;
+    }) => {
+      if (args.sendChatActionError !== undefined) {
+        throw args.sendChatActionError;
+      }
+
+      return true;
+    },
+  );
   const setMyCommandsMock = vi.fn(async () => {
     if (args.setMyCommandsError !== undefined) {
       throw args.setMyCommandsError;
@@ -182,6 +198,7 @@ function createFakeTelegramBot(
     stop: stopMock,
     onTextMessage: onTextMessageMock,
     sendMessage: sendMessageMock,
+    sendChatAction: sendChatActionMock,
     setMyCommands: setMyCommandsMock,
     streamMessage: streamMessageMock,
     initMock,
@@ -191,6 +208,7 @@ function createFakeTelegramBot(
     getBotInfoMock,
     onTextMessageMock,
     sendMessageMock,
+    sendChatActionMock,
     setMyCommandsMock,
     streamMessageMock,
     editMessageTextMock,
@@ -326,6 +344,7 @@ describe("createTelegramAdapter", () => {
     if (opened.isOk()) {
       expect(opened.value.id).toBe("telegram");
       expect(opened.value.capabilities?.messages.send).toBe(true);
+      expect(opened.value.capabilities?.messages.typing).toBe(true);
       expect(opened.value.capabilities?.messages.stream?.send).toBe(true);
       expect(opened.value.capabilities?.commands?.registration).toBe("dynamic");
     }
@@ -921,6 +940,56 @@ describe("createTelegramAdapter", () => {
       expect(sent.error).toBeInstanceOf(TelegramSendMessageError);
       if (TelegramSendMessageError.is(sent.error)) {
         expect(sent.error.message).toContain("send failed");
+      }
+    }
+  });
+
+  test("sendTyping sends a Telegram typing chat action", async () => {
+    const bot = createFakeTelegramBot();
+    const abortController = new AbortController();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendTyping?.({
+      chatId: "telegram",
+      conversationId: "12345",
+      action: "typing",
+      adapterOptions: { message_thread_id: 9, parse_mode: "Markdown" },
+      signal: abortController.signal,
+    });
+
+    expect(sent?.isOk()).toBe(true);
+    expect(bot.sendChatActionMock).toHaveBeenCalledWith({
+      chatId: "12345",
+      action: "typing",
+      options: { message_thread_id: 9 },
+      signal: abortController.signal,
+    });
+  });
+
+  test("sendTyping returns typed Telegram typing failures", async () => {
+    const bot = createFakeTelegramBot({ sendChatActionError: new Error("typing failed") });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendTyping?.({
+      chatId: "telegram",
+      conversationId: "12345",
+      action: "typing",
+      adapterOptions: {},
+    });
+
+    expect(sent?.isErr()).toBe(true);
+    if (sent?.isErr()) {
+      expect(sent.error).toBeInstanceOf(TelegramSendTypingError);
+      if (TelegramSendTypingError.is(sent.error)) {
+        expect(sent.error.message).toContain("typing failed");
       }
     }
   });

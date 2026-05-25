@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type {
   ChatAdapterReplyInput,
   ChatAdapterSendMessageInput,
+  ChatAdapterSendTypingInput,
   ChatSentMessage,
 } from "@xmux/chat-core";
 import type { TelegramBotClient, TelegramSentTextMessage } from "../client";
@@ -13,8 +14,10 @@ declare const telegramMessageIdBrand: unique symbol;
 
 type TelegramMessageId = number & { readonly [telegramMessageIdBrand]: true };
 type TelegramBotSendMessageArgs = Parameters<TelegramBotClient["sendMessage"]>[0];
+type TelegramBotSendChatActionArgs = Parameters<TelegramBotClient["sendChatAction"]>[0];
 
 export type TelegramSendMessageRequest = Omit<TelegramBotSendMessageArgs, "signal">;
+export type TelegramSendTypingRequest = Omit<TelegramBotSendChatActionArgs, "signal">;
 
 export function encodeTelegramSendMessage(
   input: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>,
@@ -56,6 +59,16 @@ export function encodeTelegramReplyMessage(
   });
 }
 
+export function encodeTelegramSendTyping(
+  input: ChatAdapterSendTypingInput<string, TelegramAdapterOptions>,
+): TelegramSendTypingRequest {
+  return {
+    chatId: input.conversationId,
+    action: input.action,
+    options: encodeTelegramSendTypingOptions(input.adapterOptions),
+  };
+}
+
 export function encodeTelegramSentMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly conversationId: string;
@@ -75,6 +88,21 @@ export function encodeTelegramSentMessage<TChatId extends string>(args: {
       raw: args.telegramMessage,
     },
   };
+}
+
+function encodeTelegramSendTypingOptions(
+  adapterOptions: TelegramAdapterOptions,
+): TelegramSendTypingRequest["options"] {
+  const options = {
+    ...("business_connection_id" in adapterOptions
+      ? { business_connection_id: adapterOptions.business_connection_id }
+      : {}),
+    ...("message_thread_id" in adapterOptions
+      ? { message_thread_id: adapterOptions.message_thread_id }
+      : {}),
+  } satisfies NonNullable<TelegramSendTypingRequest["options"]>;
+
+  return Object.keys(options).length === 0 ? undefined : options;
 }
 
 function encodeTelegramSendMessageOptions(

@@ -11,6 +11,7 @@ type BotInit = Bot["init"];
 type BotStart = Bot["start"];
 type EditMessageText = GrammyBotApi["editMessageText"];
 type SendMessage = GrammyBotApi["sendMessage"];
+type SendChatAction = GrammyBotApi["sendChatAction"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
 
 export type TelegramEditedTextMessage = Awaited<ReturnType<EditMessageText>>;
@@ -42,6 +43,12 @@ export interface TelegramBotClient {
     readonly options?: Parameters<SendMessage>[2];
     readonly signal?: AbortSignal;
   }): ReturnType<SendMessage>;
+  sendChatAction(args: {
+    readonly chatId: Parameters<SendChatAction>[0];
+    readonly action: Parameters<SendChatAction>[1];
+    readonly options?: Parameters<SendChatAction>[2];
+    readonly signal?: AbortSignal;
+  }): ReturnType<SendChatAction>;
   setMyCommands(args: {
     readonly commands: Parameters<SetMyCommands>[0];
     readonly signal?: AbortSignal;
@@ -93,6 +100,13 @@ export function createTelegramBotClient(args: {
         input.text,
         input.options,
         input.signal as Parameters<SendMessage>[3],
+      ),
+    sendChatAction: (input) =>
+      bot.api.sendChatAction(
+        input.chatId,
+        input.action,
+        input.options,
+        input.signal as Parameters<SendChatAction>[3],
       ),
     setMyCommands: (input) =>
       bot.api.setMyCommands(

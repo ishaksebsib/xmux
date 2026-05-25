@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type {
   ChatAdapterReplyInput,
   ChatAdapterSendMessageInput,
+  ChatAdapterSendTypingInput,
   ChatAdapterStartContext,
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
@@ -21,6 +22,7 @@ import {
   TelegramConfigurationError,
   TelegramReplyError,
   TelegramSendMessageError,
+  TelegramSendTypingError,
   TelegramStartError,
   TelegramStreamMessageError,
   TelegramStreamReplyError,
@@ -30,6 +32,7 @@ import { registerInboundHandlers } from "./handlers/inbound";
 import { registerCommands } from "./handlers/register-commands";
 import { reply as handleReply } from "./handlers/reply";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
+import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { initializeBot, startPolling } from "./handlers/start-polling";
 import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
 import { streamReply as handleStreamReply } from "./handlers/stream-reply";
@@ -182,6 +185,12 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     input: ChatAdapterReplyInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramReplyError>> {
     return handleReply({ chatId: this.id, bot: this.bot, input });
+  }
+
+  async sendTyping(
+    input: ChatAdapterSendTypingInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<void, TelegramSendTypingError>> {
+    return handleSendTyping({ bot: this.bot, input });
   }
 
   async streamMessage(
