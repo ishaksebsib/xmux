@@ -244,7 +244,9 @@ export function createChat<
           ...(adapterOptions === undefined ? {} : { adapterOptions }),
         } as ChatStreamReplyInput<TAdapters>);
       },
-      typingIndicator: async (typingOptions?: ChatEventTypingIndicatorOptions<ChatAdapterObject>) => {
+      typingIndicator: async (
+        typingOptions?: ChatEventTypingIndicatorOptions<ChatAdapterObject>,
+      ) => {
         const adapterOptions = typingOptions?.adapterOptions;
         return typingIndicator({
           chatId: event.chatId,

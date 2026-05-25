@@ -147,10 +147,7 @@ export function createAdapterTypingIndicatorInput<
     action: input.action ?? "typing",
     adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
     signal: input.signal,
-  } as ChatAdapterSendTypingInput<
-    TInput["chatId"],
-    AdapterOptionsFor<TAdapters, TInput["chatId"]>
-  >;
+  } as ChatAdapterSendTypingInput<TInput["chatId"], AdapterOptionsFor<TAdapters, TInput["chatId"]>>;
 }
 
 export function createAdapterStreamMessageInput<

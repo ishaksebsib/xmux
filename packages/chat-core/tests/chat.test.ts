@@ -795,7 +795,9 @@ describe("createChat lifecycle", () => {
           handles,
           nativeTyping: true,
           onTyping: (input) => {
-            typing.push(`${input.conversationId}:${input.adapterOptions === undefined ? "missing" : "ok"}`);
+            typing.push(
+              `${input.conversationId}:${input.adapterOptions === undefined ? "missing" : "ok"}`,
+            );
           },
         }),
       },

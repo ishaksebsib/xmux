@@ -28,13 +28,13 @@ type TypingIndicatorDiagnosticEmit<TChatId extends string> = (event: {
 }) => void;
 
 /** Creates the facade typing indicator operation over adapter typing pulses. */
-export function createTypingIndicatorHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>>(
-  args: {
-    readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
-    readonly emit: TypingIndicatorDiagnosticEmit<Extract<keyof TAdapters, string>>;
-    readonly getLifecycleSignal: () => AbortSignal | undefined;
-  },
-) {
+export function createTypingIndicatorHandler<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+>(args: {
+  readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
+  readonly emit: TypingIndicatorDiagnosticEmit<Extract<keyof TAdapters, string>>;
+  readonly getLifecycleSignal: () => AbortSignal | undefined;
+}) {
   return async function typingIndicator<TInput extends ChatTypingIndicatorInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatTypingIndicatorResult<TInput>, ChatTypingIndicatorFailure>> {
@@ -152,7 +152,10 @@ function normalizeManagedTypingTiming(input: {
 > {
   const refreshIntervalMs = input.refreshIntervalMs ?? defaultTypingIndicatorRefreshIntervalMs;
 
-  if (input.timeoutMs !== undefined && (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0)) {
+  if (
+    input.timeoutMs !== undefined &&
+    (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0)
+  ) {
     return Result.err(
       new InvalidChatTypingIndicatorInputError({ field: "timeoutMs", value: input.timeoutMs }),
     );

@@ -278,7 +278,9 @@ test("typing indicator result types follow pulse and managed modes", () => {
   };
 
   expectTypeOf<ChatTypingIndicatorResult<PulseInput>>().toEqualTypeOf<void>();
-  expectTypeOf<ChatTypingIndicatorResult<ManagedInput>>().toEqualTypeOf<ChatTypingIndicatorHandle>();
+  expectTypeOf<
+    ChatTypingIndicatorResult<ManagedInput>
+  >().toEqualTypeOf<ChatTypingIndicatorHandle>();
 });
 
 test("message events preserve adapter data and event.reply adapter options", () => {
