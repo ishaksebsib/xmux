@@ -67,15 +67,18 @@ function createModelRuntime(args: {
 function createPromptRuntime(args: {
   readonly defaultModel?: HarnessModelRef;
   readonly calls: unknown[];
+  readonly events?: readonly unknown[];
 }) {
   return {
     client: {
       global: {
         event: async () => ({
           stream: (async function* () {
-            yield {
-              payload: { type: "session.idle", properties: { sessionID: "session-1" } },
-            };
+            for (const event of args.events ?? [
+              { payload: { type: "session.idle", properties: { sessionID: "session-1" } } },
+            ]) {
+              yield event;
+            }
           })(),
         }),
       },
@@ -214,6 +217,47 @@ describe("OpenCode model management", () => {
       model: variantModel,
     });
     expect(sessionModels.get("session-1")).toEqual(variantModel);
+  });
+
+  test("learns the native OpenCode-selected model from prompt events", async () => {
+    const calls: unknown[] = [];
+    const runtime = createPromptRuntime({
+      calls,
+      events: [
+        {
+          payload: {
+            type: "message.updated",
+            properties: {
+              sessionID: "session-1",
+              info: {
+                id: "message-1",
+                role: "assistant",
+                agent: "build",
+                providerID: "provider-native",
+                modelID: "model-native",
+                time: { completed: undefined },
+              },
+            },
+          },
+        },
+        { payload: { type: "session.idle", properties: { sessionID: "session-1" } } },
+      ],
+    });
+
+    const prompted = await prompt(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
+      content: [{ type: "text", text: "hello" }],
+      adapterOptions: {},
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    await collectAsync(prompted.unwrap("stream"));
+
+    expect(runtime.sessionModels.get("session-1")).toEqual({
+      providerId: "provider-native",
+      modelId: "model-native",
+    });
   });
 
   test("passes resolved prompt models to OpenCode and persists explicit selections", async () => {

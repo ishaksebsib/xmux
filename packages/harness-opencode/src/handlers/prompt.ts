@@ -455,6 +455,7 @@ function* mapPartUpdated(args: {
 }
 
 function* mapOpenCodeEvent(args: {
+  readonly runtime: OpenCodeRuntime;
   readonly event: OpenCodeEvent;
   readonly ref: { readonly harnessId: "opencode"; readonly sessionId: string };
   readonly state: PromptStreamState;
@@ -477,17 +478,20 @@ function* mapOpenCodeEvent(args: {
         };
 
         if (info.role === "assistant") {
+          const model = {
+            providerId: info.providerID,
+            modelId: info.modelID,
+            ...(info.variant === undefined ? {} : { variant: info.variant }),
+          };
+          args.runtime.sessionModels.set(args.ref.sessionId, model);
+
           yield {
             type: "turn",
             phase: "started",
             ref: args.ref,
             messageId: info.id,
             agent: info.agent,
-            model: {
-              providerId: info.providerID,
-              modelId: info.modelID,
-              variant: info.variant,
-            },
+            model,
           };
         }
       } else if (!args.state.completedMessages.has(info.id)) {
@@ -802,6 +806,7 @@ function createPromptEventStream(args: {
         }
 
         for (const promptEvent of mapOpenCodeEvent({
+          runtime: args.runtime,
           event,
           ref: args.input.ref,
           state,
