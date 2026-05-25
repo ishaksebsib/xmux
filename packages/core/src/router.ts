@@ -4,6 +4,7 @@ import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
 import { registerDeleteRoute } from "./features/delete";
 import { registerExitRoute } from "./features/exit";
+import { registerModelRoute } from "./features/model";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
 import { registerResumeRoute } from "./features/resume";
@@ -20,6 +21,7 @@ export function registerRoutes<
     registerResumeRoute(ctx),
     registerDeleteRoute(ctx),
     registerExitRoute(ctx),
+    registerModelRoute(ctx),
     registerPwdRoute(ctx),
     registerCdRoute(ctx),
     registerLsRoute(ctx),

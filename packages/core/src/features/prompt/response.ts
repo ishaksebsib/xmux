@@ -1,5 +1,5 @@
 import type { ChatTextInput } from "@xmux/chat-core";
-import { inlineCode, markdown, markdownText } from "../../components";
+import { formatNoActiveSessionMessage, inlineCode, markdown, markdownText } from "../../components";
 import {
   PromptAlreadyRunningError,
   PromptNoActiveSessionError,
@@ -10,14 +10,9 @@ import type { PromptSessionForThreadError } from "./service";
 
 export function formatPromptFailure(error: PromptSessionForThreadError): ChatTextInput {
   if (PromptNoActiveSessionError.is(error)) {
-    return markdown({
-      text: [
-        "**No active session**",
-        "",
-        "Create or resume a session before sending a prompt.",
-        "",
-        `Use ${inlineCode("/new <harnessId>")} or ${inlineCode("/resume")} to continue conversation.`,
-      ].join("\n"),
+    return formatNoActiveSessionMessage({
+      description: "Create or resume a session before sending a prompt.",
+      nextStep: "continue conversation.",
     });
   }
 

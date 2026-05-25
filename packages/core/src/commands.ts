@@ -47,6 +47,12 @@ export const commands = defineChatCommands({
   exit: defineChatCommand({
     description: "Exit the active session without deleting it",
   }),
+  model: defineChatCommand({
+    description: "Show or set the model for the active session",
+    options: {
+      selector: stringOption({ description: "Model selector, for example openai/gpt-4.1" }),
+    },
+  }),
 });
 
 export type Commands = typeof commands;

@@ -1,5 +1,11 @@
 import type { ChatTextInput } from "@xmux/chat-core";
-import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
+import {
+  formatCommandHelp,
+  formatNoActiveSessionMessage,
+  inlineCode,
+  markdown,
+  markdownText,
+} from "../../components";
 import type { ExitActiveSessionError, ExitActiveSessionOutput } from "./service";
 
 export function formatExitOutput(output: ExitActiveSessionOutput): ChatTextInput {
@@ -47,13 +53,8 @@ function formatExitSuccess(
 }
 
 function formatNoActiveSession(): ChatTextInput {
-  return markdown({
-    text: [
-      "**No active session**",
-      "",
-      "You are not currently in a session.",
-      "",
-      `Use ${inlineCode("/new <harnessId>")} or ${inlineCode("/resume")} to continue conversation.`,
-    ].join("\n"),
+  return formatNoActiveSessionMessage({
+    description: "You are not currently in a session.",
+    nextStep: "continue conversation.",
   });
 }
