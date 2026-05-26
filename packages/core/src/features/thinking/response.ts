@@ -13,6 +13,8 @@ import {
 import {
   ThinkingLevelInvalidError,
   ThinkingLevelUnsupportedError,
+  ThinkingModelThinkingUnsupportedError,
+  ThinkingModelUnsetError,
   ThinkingNoActiveSessionError,
   ThinkingSessionClosedError,
   ThinkingSessionRecordMissingError,
@@ -61,14 +63,41 @@ export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInpu
     });
   }
 
+  if (ThinkingModelUnsetError.is(error)) {
+    return markdown({
+      text: [
+        "**Set a model first**",
+        "",
+        "Thinking levels depend on the active model.",
+        "",
+        `Use ${inlineCode("/model")} to choose a model, then run ${inlineCode("/thinking")} again.`,
+      ].join("\n"),
+    });
+  }
+
+  if (ThinkingModelThinkingUnsupportedError.is(error)) {
+    return markdown({
+      text: [
+        "**Thinking not supported**",
+        "",
+        "The active model does not support configurable thinking levels.",
+        "",
+        ...(error.model === undefined
+          ? []
+          : [`- **Model:** ${inlineCode(formatModelRef(error.model))}`]),
+        `- **Next:** choose a reasoning-capable model with ${inlineCode("/model")}.`,
+      ].join("\n"),
+    });
+  }
+
   if (ThinkingLevelInvalidError.is(error)) {
     return markdown({
       text: [
         "**Invalid thinking level**",
         "",
-        `Level: ${inlineCode(error.selector)}`,
+        `- **Requested level:** ${inlineCode(error.selector)}`,
         "",
-        "Use one of:",
+        "**Use one of:**",
         ...formatLevelList(error.availableLevels),
         `- ${inlineCode("clear")}`,
       ].join("\n"),
@@ -80,9 +109,9 @@ export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInpu
       text: [
         "**Thinking level unsupported**",
         "",
-        `Level: ${inlineCode(error.level)}`,
+        `- **Requested level:** ${inlineCode(error.level)}`,
         "",
-        "Supported levels for this session:",
+        "**Supported levels for this session:**",
         ...formatLevelList(error.supportedLevels),
       ].join("\n"),
     });
@@ -121,12 +150,12 @@ export function formatThinkingCommandUsage(): ChatTextInput {
 
 function formatThinkingShown(output: ThinkingShownOutput): ChatTextInput {
   const lines = [
-    "**Thinking**",
+    "**Thinking Level**",
     "",
-    `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-    `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
-    `- Current: ${formatCurrentLevel(output.current.level)}`,
-    `- Source: ${markdownText(output.current.source)}`,
+    `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
+    `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
+    `- **Current Level:** ${formatCurrentLevel(output.current.level)}`,
+    `- **Source:** ${formatSource(output.current.source)}`,
     "",
     ...formatSupportedLevels({
       supportedLevels: output.current.supportedLevels,
@@ -140,12 +169,12 @@ function formatThinkingShown(output: ThinkingShownOutput): ChatTextInput {
 function formatThinkingUpdated(output: ThinkingUpdatedOutput): ChatTextInput {
   return markdown({
     text: [
-      "**Thinking updated**",
+      "**Thinking level updated**",
       "",
-      `- Current: ${formatCurrentLevel(output.selected.level)}`,
-      `- Source: ${markdownText(output.selected.source)}`,
-      `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-      `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
+      `- **Thinking Level:** ${formatCurrentLevel(output.selected.level)}`,
+      `- **Source:** ${formatSource(output.selected.source)}`,
+      `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
+      `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
       "",
       "This thinking level is now selected for the current session.",
     ].join("\n"),
@@ -157,16 +186,20 @@ function formatThinkingCleared(output: ThinkingClearedOutput): ChatTextInput {
     text: [
       "**Thinking override cleared**",
       "",
-      `- Current: ${formatCurrentLevel(output.selected.level)}`,
-      `- Source: ${markdownText(output.selected.source)}`,
-      `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-      `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
+      `- **Current Level:** ${formatCurrentLevel(output.selected.level)}`,
+      `- **Source:** ${formatSource(output.selected.source)}`,
+      `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
+      `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
     ].join("\n"),
   });
 }
 
 function formatCurrentLevel(level: HarnessThinkingLevel | undefined): string {
-  return level === undefined ? markdownText("unset") : inlineCode(level);
+  return level === undefined ? "**unset**" : `**${inlineCode(level)}**`;
+}
+
+function formatSource(source: string): string {
+  return `**${markdownText(source)}**`;
 }
 
 function formatSupportedLevels(input: {
@@ -179,9 +212,12 @@ function formatSupportedLevels(input: {
       "",
       "Supported levels were not reported by this harness.",
       "",
-      `Try ${inlineCode("/thinking low")}, ${inlineCode("/thinking medium")}, ${inlineCode(
-        "/thinking high",
-      )}, ${inlineCode("/thinking xhigh")}, or ${inlineCode("/thinking max")}.`,
+      "**Try one of:**",
+      `- ${inlineCode("/thinking low")}`,
+      `- ${inlineCode("/thinking medium")}`,
+      `- ${inlineCode("/thinking high")}`,
+      `- ${inlineCode("/thinking xhigh")}`,
+      `- ${inlineCode("/thinking max")}`,
     ];
   }
 
@@ -198,7 +234,7 @@ function formatSupportedLevels(input: {
     "",
     ...input.supportedLevels.map((level) => {
       const currentMarker = level === input.current ? " — current" : "";
-      return `- ${inlineCode(level)}${currentMarker}`;
+      return `- ${level === input.current ? `**${inlineCode(level)}**` : inlineCode(level)}${currentMarker}`;
     }),
   ];
 }
@@ -206,4 +242,13 @@ function formatSupportedLevels(input: {
 function formatLevelList(levels: readonly HarnessThinkingLevel[]): readonly string[] {
   const listed = levels.length === 0 ? thinkingLevels : levels;
   return listed.map((level) => `- ${inlineCode(level)}`);
+}
+
+function formatModelRef(ref: {
+  readonly providerId?: string;
+  readonly modelId: string;
+  readonly variant?: string;
+}): string {
+  const base = ref.providerId === undefined ? ref.modelId : `${ref.providerId}/${ref.modelId}`;
+  return ref.variant === undefined ? base : `${base}@${ref.variant}`;
 }

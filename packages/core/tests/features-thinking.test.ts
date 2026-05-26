@@ -3,7 +3,10 @@ import { describe, expect, test } from "vitest";
 import { defineChatAdapter } from "@xmux/chat-core";
 import {
   defineHarnessAdapter,
-  type HarnessSelectedThinking,
+  type HarnessModelInfo,
+  type HarnessModelRef,
+  type HarnessModelTarget,
+  type HarnessThinkingTarget,
   type HarnessThinkingLevel,
 } from "@xmux/harness-core";
 import { createXmux } from "../src";
@@ -51,13 +54,13 @@ describe("/thinking command", () => {
     await eventually(() => replies.length === 1);
 
     expect(getInputs).toEqual([{ target: { type: "session", ref: sessionRef } }]);
-    expect(replies[0]).toContain("**Thinking**");
-    expect(replies[0]).toContain("- Harness: `opencode`");
-    expect(replies[0]).toContain("- Session ID: `session-1`");
-    expect(replies[0]).toContain("- Current: `medium`");
-    expect(replies[0]).toContain("- Source: session");
+    expect(replies[0]).toContain("**Thinking Level**");
+    expect(replies[0]).toContain("- **Harness:** `opencode`");
+    expect(replies[0]).toContain("- **Session ID:** `session-1`");
+    expect(replies[0]).toContain("- **Current Level:** **`medium`**");
+    expect(replies[0]).toContain("- **Source:** **session**");
     expect(replies[0]).toContain("**Supported levels** (6)");
-    expect(replies[0]).toContain("- `medium` — current");
+    expect(replies[0]).toContain("- **`medium`** — current");
     expect(replies[0]).toContain("- `xhigh`");
 
     await xmux.shutdown();
@@ -78,7 +81,7 @@ describe("/thinking command", () => {
       },
     ]);
     expect(replies[0]).toBe(
-      "**Thinking updated**\n\n- Current: `xhigh`\n- Source: session\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis thinking level is now selected for the current session.",
+      "**Thinking level updated**\n\n- **Thinking Level:** **`xhigh`**\n- **Source:** **session**\n- **Harness:** `opencode`\n- **Session ID:** `session-1`\n\nThis thinking level is now selected for the current session.",
     );
 
     await xmux.shutdown();
@@ -93,7 +96,7 @@ describe("/thinking command", () => {
     await eventually(() => replies.length === 1);
 
     expect(setInputs[0]?.update).toEqual({ type: "set", level: "max" });
-    expect(replies[0]).toContain("- Current: `max`");
+    expect(replies[0]).toContain("- **Thinking Level:** **`max`**");
 
     await xmux.shutdown();
   });
@@ -116,7 +119,26 @@ describe("/thinking command", () => {
       },
     ]);
     expect(replies[0]).toBe(
-      "**Thinking override cleared**\n\n- Current: `low`\n- Source: harness\n- Harness: `opencode`\n- Session ID: `session-1`",
+      "**Thinking override cleared**\n\n- **Current Level:** **`low`**\n- **Source:** **harness**\n- **Harness:** `opencode`\n- **Session ID:** `session-1`",
+    );
+
+    await xmux.shutdown();
+  });
+
+  test("asks to set a model first when model management reports no selected model", async () => {
+    const { emitCommand, replies, setInputs, xmux } = await initializeXmux({
+      supportModels: true,
+      selectedModel: null,
+    });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ level: "high" }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(setInputs).toHaveLength(0);
+    expect(replies[0]).toBe(
+      "**Set a model first**\n\nThinking levels depend on the active model.\n\nUse `/model` to choose a model, then run `/thinking` again.",
     );
 
     await xmux.shutdown();
@@ -132,9 +154,49 @@ describe("/thinking command", () => {
 
     expect(setInputs).toHaveLength(0);
     expect(replies[0]).toContain("**Invalid thinking level**");
-    expect(replies[0]).toContain("Level: `xi`");
+    expect(replies[0]).toContain("- **Requested level:** `xi`");
     expect(replies[0]).toContain("- `xhigh`");
     expect(replies[0]).toContain("- `clear`");
+
+    await xmux.shutdown();
+  });
+
+  test("reports models with no configurable thinking support on show", async () => {
+    const { emitCommand, replies, setInputs, xmux } = await initializeXmux({
+      supportModels: true,
+      omitReportedSupportedLevels: true,
+      modelSupportedLevels: ["off"],
+    });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ level: undefined }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(setInputs).toHaveLength(0);
+    expect(replies[0]).toContain("**Thinking not supported**");
+    expect(replies[0]).toContain("The active model does not support configurable thinking levels.");
+    expect(replies[0]).toContain("- **Model:** `openai/gpt-4.1`");
+    expect(replies[0]).toContain("- **Next:** choose a reasoning-capable model with `/model`.");
+
+    await xmux.shutdown();
+  });
+
+  test("reports models with no configurable thinking support before setting", async () => {
+    const { emitCommand, replies, setInputs, xmux } = await initializeXmux({
+      supportModels: true,
+      omitReportedSupportedLevels: true,
+      modelSupportedLevels: ["off"],
+    });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ level: "high" }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(setInputs).toHaveLength(0);
+    expect(replies[0]).toContain("**Thinking not supported**");
+    expect(replies[0]).toContain("- **Model:** `openai/gpt-4.1`");
 
     await xmux.shutdown();
   });
@@ -151,7 +213,7 @@ describe("/thinking command", () => {
 
     expect(setInputs).toHaveLength(0);
     expect(replies[0]).toContain("**Thinking level unsupported**");
-    expect(replies[0]).toContain("Level: `high`");
+    expect(replies[0]).toContain("- **Requested level:** `high`");
     expect(replies[0]).toContain("- `off`");
     expect(replies[0]).toContain("- `low`");
 
@@ -195,18 +257,30 @@ interface InitializeXmuxInput {
   readonly clearFallbackLevel?: HarnessThinkingLevel;
   readonly supportedLevels?: readonly HarnessThinkingLevel[];
   readonly supportThinking?: boolean;
+  readonly supportModels?: boolean;
+  readonly selectedModel?: HarnessModelRef | null;
+  readonly omitReportedSupportedLevels?: boolean;
+  readonly modelSupportedLevels?: readonly HarnessThinkingLevel[];
 }
 
 async function initializeXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
-  const getInputs: { readonly target: HarnessSelectedThinking["target"] }[] = [];
+  const getInputs: { readonly target: HarnessThinkingTarget<"opencode"> }[] = [];
+  const modelGetInputs: { readonly target: HarnessModelTarget<"opencode"> }[] = [];
   const setInputs: {
-    readonly target: HarnessSelectedThinking["target"];
+    readonly target: HarnessThinkingTarget<"opencode">;
     readonly update:
       | { readonly type: "set"; readonly level: HarnessThinkingLevel }
       | { readonly type: "clear" };
   }[] = [];
   let selectedLevel: HarnessThinkingLevel | undefined = input.initialLevel ?? "medium";
+  const selectedModel =
+    input.selectedModel === null
+      ? undefined
+      : (input.selectedModel ?? {
+          providerId: "openai",
+          modelId: "gpt-4.1",
+        });
   let emitCommand: ((event: unknown) => void) | undefined;
 
   const xmux = createXmux({
@@ -240,23 +314,51 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
             close: async () => {},
           };
 
+          const modelOperations = input.supportModels
+            ? {
+                async listModels() {
+                  return Result.ok(
+                    selectedModel === undefined
+                      ? []
+                      : [
+                          createModelInfo({
+                            ref: selectedModel,
+                            supportedLevels: input.modelSupportedLevels ?? supportedLevels,
+                          }),
+                        ],
+                  );
+                },
+                async getModel(getInput: { readonly target: HarnessModelTarget<"opencode"> }) {
+                  modelGetInputs.push({ target: getInput.target });
+                  return Result.ok({
+                    target: getInput.target,
+                    ...(selectedModel === undefined ? {} : { model: selectedModel }),
+                    source: selectedModel === undefined ? ("unset" as const) : ("session" as const),
+                  });
+                },
+              }
+            : {};
+
           if (input.supportThinking === false) {
-            return Result.ok(runtime);
+            return Result.ok({ ...runtime, ...modelOperations });
           }
 
           return Result.ok({
             ...runtime,
-            async getThinking(getInput: { readonly target: HarnessSelectedThinking["target"] }) {
+            ...modelOperations,
+            async getThinking(getInput: { readonly target: HarnessThinkingTarget<"opencode"> }) {
               getInputs.push({ target: getInput.target });
               return Result.ok({
                 target: getInput.target,
                 ...(selectedLevel === undefined ? {} : { level: selectedLevel }),
-                supportedLevels: input.supportedLevels ?? supportedLevels,
+                ...(input.omitReportedSupportedLevels
+                  ? {}
+                  : { supportedLevels: input.supportedLevels ?? supportedLevels }),
                 source: selectedLevel === undefined ? ("unset" as const) : ("session" as const),
               });
             },
             async setThinking(setInput: {
-              readonly target: HarnessSelectedThinking["target"];
+              readonly target: HarnessThinkingTarget<"opencode">;
               readonly update:
                 | { readonly type: "set"; readonly level: HarnessThinkingLevel }
                 | { readonly type: "clear" };
@@ -267,7 +369,9 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
               return Result.ok({
                 target: setInput.target,
                 ...(selectedLevel === undefined ? {} : { level: selectedLevel }),
-                supportedLevels: input.supportedLevels ?? supportedLevels,
+                ...(input.omitReportedSupportedLevels
+                  ? {}
+                  : { supportedLevels: input.supportedLevels ?? supportedLevels }),
                 source:
                   setInput.update.type === "clear"
                     ? input.clearFallbackLevel === undefined
@@ -323,9 +427,25 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
   return {
     replies,
     getInputs,
+    modelGetInputs,
     setInputs,
     emitCommand: emitCommand as (event: unknown) => void,
     xmux,
+  };
+}
+
+function createModelInfo(input: {
+  readonly ref: HarnessModelRef;
+  readonly supportedLevels: readonly HarnessThinkingLevel[];
+}): HarnessModelInfo<"opencode"> {
+  return {
+    harnessId: "opencode",
+    ref: input.ref,
+    name: input.ref.modelId,
+    capabilities: {
+      thinking: { supportedLevels: input.supportedLevels },
+    },
+    adapterData: {},
   };
 }
 

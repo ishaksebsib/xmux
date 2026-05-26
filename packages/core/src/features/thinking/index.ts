@@ -2,6 +2,8 @@ export {
   ThinkingCommandResponseError,
   ThinkingLevelInvalidError,
   ThinkingLevelUnsupportedError,
+  ThinkingModelThinkingUnsupportedError,
+  ThinkingModelUnsetError,
   ThinkingNoActiveSessionError,
   ThinkingSessionClosedError,
   ThinkingSessionRecordMissingError,

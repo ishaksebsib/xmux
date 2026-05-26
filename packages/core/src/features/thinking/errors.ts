@@ -1,5 +1,5 @@
 import { TaggedError } from "better-result";
-import type { HarnessThinkingLevel, SessionRef } from "@xmux/harness-core";
+import type { HarnessModelRef, HarnessThinkingLevel, SessionRef } from "@xmux/harness-core";
 import type { ChatThreadRef } from "../../store";
 
 function describeCause(cause: unknown): string {
@@ -8,6 +8,11 @@ function describeCause(cause: unknown): string {
 
 function formatSessionRef(ref: SessionRef): string {
   return `${ref.harnessId}:${ref.sessionId}`;
+}
+
+function formatModelRef(ref: HarnessModelRef): string {
+  const base = ref.providerId === undefined ? ref.modelId : `${ref.providerId}/${ref.modelId}`;
+  return ref.variant === undefined ? base : `${base}@${ref.variant}`;
 }
 
 /** Returned when a chat thread is not attached to an active session. */
@@ -45,6 +50,36 @@ export class ThinkingSessionClosedError extends TaggedError("ThinkingSessionClos
 }>() {
   constructor(args: { readonly sessionRef: SessionRef }) {
     super({ ...args, message: `Session is closed: ${formatSessionRef(args.sessionRef)}` });
+  }
+}
+
+/** Returned when thinking is requested before the session has a selected model. */
+export class ThinkingModelUnsetError extends TaggedError("ThinkingModelUnsetError")<{
+  readonly sessionRef: SessionRef;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly sessionRef: SessionRef }) {
+    super({
+      ...args,
+      message: `Session model is unset: ${formatSessionRef(args.sessionRef)}`,
+    });
+  }
+}
+
+/** Returned when the active model has no configurable thinking support. */
+export class ThinkingModelThinkingUnsupportedError extends TaggedError(
+  "ThinkingModelThinkingUnsupportedError",
+)<{
+  readonly model?: HarnessModelRef;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly model?: HarnessModelRef }) {
+    super({
+      ...args,
+      message: args.model
+        ? `Model does not support configurable thinking: ${formatModelRef(args.model)}`
+        : "Model does not support configurable thinking",
+    });
   }
 }
 

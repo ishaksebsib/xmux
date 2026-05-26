@@ -1,12 +1,20 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type {
+  GetModelError,
+  GetModelInput,
   GetThinkingError,
   GetThinkingInput,
   HarnessAdapterDefinitions,
+  HarnessModelInfo,
+  HarnessModelRef,
   HarnessSelectedThinking,
+  HarnessThinkingLevel,
+  ListModelsError,
+  ListModelsInput,
   SetThinkingError,
   SetThinkingInput,
 } from "@xmux/harness-core";
+import { HarnessAdapterModelUnsupportedError } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
@@ -14,18 +22,24 @@ import type { ChatThreadRef, SessionRecord } from "../../store";
 import {
   ThinkingLevelInvalidError,
   ThinkingLevelUnsupportedError,
+  ThinkingModelThinkingUnsupportedError,
+  ThinkingModelUnsetError,
   ThinkingNoActiveSessionError,
   ThinkingSessionClosedError,
   ThinkingSessionRecordMissingError,
 } from "./errors";
-import { parseThinkingSelector, type ParsedThinkingSelector } from "./selector";
+import { parseThinkingSelector } from "./selector";
 
 export type ThinkingCommandError =
   | StoreError
+  | GetModelError
   | GetThinkingError
+  | ListModelsError
   | SetThinkingError
   | ThinkingLevelInvalidError
   | ThinkingLevelUnsupportedError
+  | ThinkingModelThinkingUnsupportedError
+  | ThinkingModelUnsetError
   | ThinkingNoActiveSessionError
   | ThinkingSessionRecordMissingError
   | ThinkingSessionClosedError;
@@ -81,19 +95,41 @@ export async function thinkingSessionCommand<
     return Result.err(parsed.error);
   }
 
-  if (parsed.value.type === "show") {
-    const current = await getSessionThinking({ ctx: input.ctx, session: session.value });
+  const model = await getSessionModel({ ctx: input.ctx, session: session.value });
 
-    return current.isErr()
-      ? Result.err(current.error)
-      : Result.ok({ status: "shown", session: session.value, current: current.value });
+  if (model.isErr()) {
+    return Result.err(model.error);
+  }
+
+  const current = await getSessionThinking({ ctx: input.ctx, session: session.value });
+
+  if (current.isErr()) {
+    return Result.err(current.error);
+  }
+
+  const thinking = await enrichThinkingWithModelCapabilities({
+    ctx: input.ctx,
+    session: session.value,
+    current: current.value,
+    model: model.value,
+  });
+
+  if (thinking.isErr()) {
+    return Result.err(thinking.error);
+  }
+
+  if (isThinkingUnsupportedForModel(thinking.value.supportedLevels)) {
+    return Result.err(new ThinkingModelThinkingUnsupportedError({ model: model.value }));
+  }
+
+  if (parsed.value.type === "show") {
+    return Result.ok({ status: "shown", session: session.value, current: thinking.value });
   }
 
   if (parsed.value.type === "set") {
-    const supported = await ensureSupportedThinkingLevel({
-      ctx: input.ctx,
-      session: session.value,
-      parsed: parsed.value,
+    const supported = ensureSupportedThinkingLevel({
+      supportedLevels: thinking.value.supportedLevels,
+      level: parsed.value.level,
     });
 
     if (supported.isErr()) {
@@ -189,29 +225,102 @@ async function getSessionThinking<
     : Result.ok(current.value as HarnessSelectedThinking);
 }
 
-async function ensureSupportedThinkingLevel<
+async function getSessionModel<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
-  readonly parsed: Extract<ParsedThinkingSelector, { readonly type: "set" }>;
-}): Promise<Result<void, GetThinkingError | ThinkingLevelUnsupportedError>> {
-  const current = await getSessionThinking({ ctx: input.ctx, session: input.session });
+}): Promise<Result<HarnessModelRef | undefined, GetModelError | ThinkingModelUnsetError>> {
+  const selected = await input.ctx.app.harness.getModel({
+    target: { type: "session", ref: input.session.ref },
+    signal: input.ctx.signal,
+  } as GetModelInput<TAdapters>);
 
-  if (current.isErr()) {
-    return Result.err(current.error);
+  if (selected.isErr()) {
+    if (HarnessAdapterModelUnsupportedError.is(selected.error)) {
+      return Result.ok(undefined);
+    }
+
+    return Result.err(selected.error);
   }
 
-  const supportedLevels = current.value.supportedLevels;
-  if (supportedLevels === undefined || supportedLevels.includes(input.parsed.level)) {
+  return selected.value.model === undefined
+    ? Result.err(new ThinkingModelUnsetError({ sessionRef: input.session.ref }))
+    : Result.ok(selected.value.model);
+}
+
+async function enrichThinkingWithModelCapabilities<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly session: SessionRecord;
+  readonly current: HarnessSelectedThinking;
+  readonly model?: HarnessModelRef;
+}): Promise<Result<HarnessSelectedThinking, ListModelsError>> {
+  if (input.current.supportedLevels !== undefined || input.model === undefined) {
+    return Result.ok(input.current);
+  }
+
+  const models = await input.ctx.app.harness.listModels({
+    harnessId: input.session.ref.harnessId,
+    cwd: input.session.cwd,
+    signal: input.ctx.signal,
+  } as ListModelsInput<TAdapters>);
+
+  if (models.isErr()) {
+    if (HarnessAdapterModelUnsupportedError.is(models.error)) {
+      return Result.ok(input.current);
+    }
+
+    return Result.err(models.error);
+  }
+
+  const model = findModelInfo({
+    model: input.model,
+    models: models.value as readonly HarnessModelInfo[],
+  });
+  const supportedLevels = model?.capabilities?.thinking?.supportedLevels;
+
+  return supportedLevels === undefined
+    ? Result.ok(input.current)
+    : Result.ok({ ...input.current, supportedLevels });
+}
+
+function ensureSupportedThinkingLevel(input: {
+  readonly supportedLevels?: readonly HarnessThinkingLevel[];
+  readonly level: HarnessThinkingLevel;
+}): Result<void, ThinkingLevelUnsupportedError> {
+  if (input.supportedLevels === undefined || input.supportedLevels.includes(input.level)) {
     return Result.ok();
   }
 
   return Result.err(
     new ThinkingLevelUnsupportedError({
-      level: input.parsed.level,
-      supportedLevels,
+      level: input.level,
+      supportedLevels: input.supportedLevels,
     }),
+  );
+}
+
+function isThinkingUnsupportedForModel(
+  supportedLevels: readonly HarnessThinkingLevel[] | undefined,
+): boolean {
+  return supportedLevels !== undefined && supportedLevels.every((level) => level === "off");
+}
+
+function findModelInfo(input: {
+  readonly model: HarnessModelRef;
+  readonly models: readonly HarnessModelInfo[];
+}): HarnessModelInfo | undefined {
+  return input.models.find((model) => isSameModel(model.ref, input.model));
+}
+
+function isSameModel(left: HarnessModelRef, right: HarnessModelRef): boolean {
+  return (
+    left.providerId === right.providerId &&
+    left.modelId === right.modelId &&
+    left.variant === right.variant
   );
 }
