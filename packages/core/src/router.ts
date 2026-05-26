@@ -9,6 +9,7 @@ import { registerModelRoute } from "./features/model";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
 import { registerResumeRoute } from "./features/resume";
+import { registerThinkingRoute } from "./features/thinking";
 import { registerUnknownCommandRoute } from "./features/unknown-command";
 import { registerCdRoute, registerLsRoute, registerPwdRoute } from "./features/workspace";
 
@@ -26,6 +27,7 @@ export function registerRoutes<
     registerDeleteRoute(ctx, middleware),
     registerExitRoute(ctx, middleware),
     registerModelRoute(ctx, middleware),
+    registerThinkingRoute(ctx, middleware),
     registerPwdRoute(ctx, middleware),
     registerCdRoute(ctx, middleware),
     registerLsRoute(ctx, middleware),

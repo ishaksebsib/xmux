@@ -53,6 +53,14 @@ export const commands = defineChatCommands({
       selector: stringOption({ description: "Model selector, for example openai/gpt-4.1" }),
     },
   }),
+  thinking: defineChatCommand({
+    description: "Show or set the thinking level for the active session",
+    options: {
+      level: stringOption({
+        description: "Thinking level: off, minimal, low, medium, high, xhigh, max, or clear",
+      }),
+    },
+  }),
 });
 
 export type Commands = typeof commands;
