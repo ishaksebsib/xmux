@@ -156,6 +156,47 @@ export class HarnessAdapterSetModelError extends TaggedError("HarnessAdapterSetM
   }
 }
 
+export class HarnessAdapterThinkingUnsupportedError extends TaggedError(
+  "HarnessAdapterThinkingUnsupportedError",
+)<{
+  harnessId: string;
+  operation: "getThinking" | "setThinking";
+  message: string;
+}>() {
+  constructor(args: { harnessId: string; operation: "getThinking" | "setThinking" }) {
+    super({
+      ...args,
+      message: `Harness "${args.harnessId}" does not support ${args.operation}`,
+    });
+  }
+}
+
+export class HarnessAdapterGetThinkingError extends TaggedError("HarnessAdapterGetThinkingError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to get selected thinking level with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class HarnessAdapterSetThinkingError extends TaggedError("HarnessAdapterSetThinkingError")<{
+  harnessId: string;
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { harnessId: string; cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to set selected thinking level with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 export class HarnessAdapterPromptError extends TaggedError("HarnessAdapterPromptError")<{
   harnessId: string;
   message: string;
@@ -244,6 +285,18 @@ export type SetModelError =
   | HarnessAdapterOpenError
   | HarnessAdapterModelUnsupportedError
   | HarnessAdapterSetModelError;
+
+export type GetThinkingError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterThinkingUnsupportedError
+  | HarnessAdapterGetThinkingError;
+
+export type SetThinkingError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterThinkingUnsupportedError
+  | HarnessAdapterSetThinkingError;
 
 export type GetSessionError =
   | UnknownHarnessError

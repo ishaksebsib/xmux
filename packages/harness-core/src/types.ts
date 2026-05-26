@@ -7,6 +7,10 @@ import type {
   HarnessModelUpdate,
   HarnessPromptContent,
   HarnessSelectedModel,
+  HarnessSelectedThinking,
+  HarnessThinkingLevel,
+  HarnessThinkingTarget,
+  HarnessThinkingUpdate,
   HarnessSessionInfo,
   SessionRef,
   WorkingDirectoryPath,
@@ -94,6 +98,16 @@ export type AdapterSetModelOptionsFor<
   THarnessId extends keyof TAdapters,
 > = AdapterOptionsFor<TAdapters, THarnessId>;
 
+export type AdapterGetThinkingOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterSetThinkingOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
 export type AdapterDeleteOptionsFor<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   THarnessId extends keyof TAdapters,
@@ -133,6 +147,7 @@ export type CreateSessionInputFor<
   readonly cwd: string;
   readonly title?: string;
   readonly model?: HarnessModelRef;
+  readonly thinking?: HarnessThinkingLevel;
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
 
@@ -284,6 +299,7 @@ export type PromptInputFor<
   readonly cwd: string;
   readonly content: PromptContentInput;
   readonly model?: HarnessModelRef;
+  readonly thinking?: HarnessThinkingLevel;
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
 
@@ -370,6 +386,73 @@ export type SetModelResultFromInput<
     TInput extends { readonly target: infer TTarget } ? TTarget : never
   > extends infer THarnessId extends keyof TAdapters
     ? SetModelResultFor<TAdapters, THarnessId>
+    : never;
+
+export type ThinkingTargetHarnessId<TTarget> = TTarget extends {
+  readonly type: "harness";
+  readonly harnessId: infer THarnessId extends string;
+}
+  ? THarnessId
+  : TTarget extends {
+        readonly type: "session";
+        readonly ref: { readonly harnessId: infer THarnessId extends string };
+      }
+    ? THarnessId
+    : never;
+
+export type GetThinkingInputFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = {
+  readonly target: HarnessThinkingTarget<Extract<THarnessId, string>>;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
+
+export type GetThinkingInput<TAdapters extends Record<string, AnyHarnessAdapterDefinition>> = {
+  readonly [THarnessId in keyof TAdapters]: GetThinkingInputFor<TAdapters, THarnessId>;
+}[keyof TAdapters];
+
+export type GetThinkingResultFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = HarnessSelectedThinking<Extract<THarnessId, string>>;
+
+export type GetThinkingResultFromInput<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  TInput,
+> =
+  ThinkingTargetHarnessId<
+    TInput extends { readonly target: infer TTarget } ? TTarget : never
+  > extends infer THarnessId extends keyof TAdapters
+    ? GetThinkingResultFor<TAdapters, THarnessId>
+    : never;
+
+export type SetThinkingInputFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = {
+  readonly target: HarnessThinkingTarget<Extract<THarnessId, string>>;
+  readonly update: HarnessThinkingUpdate;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
+
+export type SetThinkingInput<TAdapters extends Record<string, AnyHarnessAdapterDefinition>> = {
+  readonly [THarnessId in keyof TAdapters]: SetThinkingInputFor<TAdapters, THarnessId>;
+}[keyof TAdapters];
+
+export type SetThinkingResultFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = HarnessSelectedThinking<Extract<THarnessId, string>>;
+
+export type SetThinkingResultFromInput<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  TInput,
+> =
+  ThinkingTargetHarnessId<
+    TInput extends { readonly target: infer TTarget } ? TTarget : never
+  > extends infer THarnessId extends keyof TAdapters
+    ? SetThinkingResultFor<TAdapters, THarnessId>
     : never;
 
 export type DeleteSessionInputFor<

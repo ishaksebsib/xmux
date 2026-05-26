@@ -43,6 +43,7 @@ export async function handlePrompt<
             cwd,
             content: normalizePromptContent(args.input.content),
             model: args.input.model,
+            thinking: args.input.thinking,
             adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
               args.input,
             ),

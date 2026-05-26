@@ -5,12 +5,14 @@ import type {
   DeleteSessionError,
   GetModelError,
   GetSessionError,
+  GetThinkingError,
   HarnessCloseError,
   ListModelsError,
   ListSessionsError,
   PromptError,
   ResumeSessionError,
   SetModelError,
+  SetThinkingError,
 } from "./errors";
 import type { HarnessPromptEvent } from "./events";
 import type {
@@ -21,6 +23,8 @@ import type {
   GetModelInput,
   GetModelResultFromInput,
   GetSessionInput,
+  GetThinkingInput,
+  GetThinkingResultFromInput,
   GetSessionResultFromInput,
   HarnessAdapterDefinitions,
   ListModelsInput,
@@ -33,6 +37,8 @@ import type {
   ResumeSessionResultFromInput,
   SetModelInput,
   SetModelResultFromInput,
+  SetThinkingInput,
+  SetThinkingResultFromInput,
 } from "./types";
 
 declare const workingDirectoryPathBrand: unique symbol;
@@ -72,6 +78,10 @@ export interface HarnessModelInfo<
   readonly capabilities?: {
     readonly tools?: boolean;
     readonly reasoning?: boolean;
+    readonly thinking?: {
+      readonly supportedLevels: readonly HarnessThinkingLevel[];
+      readonly defaultLevel?: HarnessThinkingLevel;
+    };
     readonly temperature?: boolean;
     readonly input?: readonly ("text" | "image" | "audio" | "video" | "pdf")[];
     readonly output?: readonly ("text" | "image" | "audio" | "video" | "pdf")[];
@@ -90,6 +100,14 @@ export interface HarnessModelInfo<
   readonly adapterData: TAdapterModel;
 }
 
+/** Canonical xmux thinking scale adapters translate to native provider controls. */
+export type HarnessThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/** Adapter mapping from xmux thinking levels to native values; null means explicitly unsupported. */
+export type HarnessThinkingLevelMap<TNative = string> = Partial<
+  Record<HarnessThinkingLevel, TNative | null>
+>;
+
 /** Scope whose selected/default model should be read or updated. */
 export type HarnessModelTarget<THarnessId extends string = string> =
   | { readonly type: "harness"; readonly harnessId: THarnessId }
@@ -104,6 +122,23 @@ export type HarnessModelUpdate =
 export interface HarnessSelectedModel<THarnessId extends string = string> {
   readonly target: HarnessModelTarget<THarnessId>;
   readonly model?: HarnessModelRef;
+  readonly source: "session" | "harness" | "native" | "unset";
+}
+
+/** Scope whose selected/default thinking level should be read or updated. */
+export type HarnessThinkingTarget<THarnessId extends string = string> =
+  HarnessModelTarget<THarnessId>;
+
+/** Thinking selection mutation for a harness or session target. */
+export type HarnessThinkingUpdate =
+  | { readonly type: "set"; readonly level: HarnessThinkingLevel }
+  | { readonly type: "clear" };
+
+/** Current thinking selection for a harness or session target. */
+export interface HarnessSelectedThinking<THarnessId extends string = string> {
+  readonly target: HarnessThinkingTarget<THarnessId>;
+  readonly level?: HarnessThinkingLevel;
+  readonly supportedLevels?: readonly HarnessThinkingLevel[];
   readonly source: "session" | "harness" | "native" | "unset";
 }
 
@@ -162,6 +197,7 @@ export interface HarnessAdapterCreateSessionInput<TAdapterOptions extends Harnes
   readonly cwd: WorkingDirectoryPath;
   readonly title?: string;
   readonly model?: HarnessModelRef;
+  readonly thinking?: HarnessThinkingLevel;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -226,6 +262,7 @@ export interface HarnessAdapterPromptInput<
   readonly cwd: WorkingDirectoryPath;
   readonly content: readonly HarnessPromptContent[];
   readonly model?: HarnessModelRef;
+  readonly thinking?: HarnessThinkingLevel;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -253,6 +290,27 @@ export interface HarnessAdapterSetModelInput<
 > {
   readonly target: HarnessModelTarget<THarnessId>;
   readonly update: HarnessModelUpdate;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+/** Thinking selection read request passed to an adapter. */
+export interface HarnessAdapterGetThinkingInput<
+  THarnessId extends string,
+  TAdapterOptions extends HarnessAdapterObject,
+> {
+  readonly target: HarnessThinkingTarget<THarnessId>;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+/** Thinking selection write request passed to an adapter. */
+export interface HarnessAdapterSetThinkingInput<
+  THarnessId extends string,
+  TAdapterOptions extends HarnessAdapterObject,
+> {
+  readonly target: HarnessThinkingTarget<THarnessId>;
+  readonly update: HarnessThinkingUpdate;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -314,6 +372,12 @@ export interface OpenedHarnessAdapter<
   setModel?(
     input: HarnessAdapterSetModelInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<HarnessSelectedModel<THarnessId>, unknown>>;
+  getThinking?(
+    input: HarnessAdapterGetThinkingInput<THarnessId, TAdapterOptions>,
+  ): Promise<Result<HarnessSelectedThinking<THarnessId>, unknown>>;
+  setThinking?(
+    input: HarnessAdapterSetThinkingInput<THarnessId, TAdapterOptions>,
+  ): Promise<Result<HarnessSelectedThinking<THarnessId>, unknown>>;
   deleteSession(
     input: HarnessAdapterDeleteSessionInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<void, unknown>>;
@@ -371,6 +435,12 @@ export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>>
   setModel<TInput extends SetModelInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<SetModelResultFromInput<TAdapters, TInput>, SetModelError>>;
+  getThinking<TInput extends GetThinkingInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<GetThinkingResultFromInput<TAdapters, TInput>, GetThinkingError>>;
+  setThinking<TInput extends SetThinkingInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<SetThinkingResultFromInput<TAdapters, TInput>, SetThinkingError>>;
   getSession<TInput extends GetSessionInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<GetSessionResultFromInput<TAdapters, TInput>, GetSessionError>>;

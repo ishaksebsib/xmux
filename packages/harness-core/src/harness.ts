@@ -16,16 +16,20 @@ import type {
   DeleteSessionInput,
   GetModelInput,
   GetSessionInput,
+  GetThinkingInput,
   HarnessAdapterDefinitions,
   ListModelsInput,
   ListSessionsInput,
   PromptInput,
   ResumeSessionInput,
   SetModelInput,
+  SetThinkingInput,
 } from "./types";
 import { handleGetModel } from "./handlers/model/get";
 import { handleListModels } from "./handlers/model/list";
 import { handleSetModel } from "./handlers/model/set";
+import { handleGetThinking } from "./handlers/thinking/get";
+import { handleSetThinking } from "./handlers/thinking/set";
 import { handleAbort } from "./handlers/session/abort";
 import { handleCreateSession } from "./handlers/session/create";
 import { handleDeleteSession } from "./handlers/session/delete";
@@ -163,6 +167,14 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
 
     async setModel<TInput extends SetModelInput<TAdapters>>(input: TInput) {
       return handleSetModel({ input, getRuntime });
+    },
+
+    async getThinking<TInput extends GetThinkingInput<TAdapters>>(input: TInput) {
+      return handleGetThinking({ input, getRuntime });
+    },
+
+    async setThinking<TInput extends SetThinkingInput<TAdapters>>(input: TInput) {
+      return handleSetThinking({ input, getRuntime });
     },
 
     async getSession<TInput extends GetSessionInput<TAdapters>>(input: TInput) {

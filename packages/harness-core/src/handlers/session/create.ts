@@ -30,6 +30,7 @@ export async function handleCreateSession<
           cwd,
           title: args.input.title,
           model: args.input.model,
+          thinking: args.input.thinking,
           adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
           signal: args.input.signal,
         },

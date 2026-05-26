@@ -48,11 +48,13 @@ export function createTestAdapter<
       | "deleteSession"
       | "getModel"
       | "getSession"
+      | "getThinking"
       | "listModels"
       | "listSessions"
       | "prompt"
       | "resumeSession"
       | "setModel"
+      | "setThinking"
     >
   >;
 }): HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel> {
