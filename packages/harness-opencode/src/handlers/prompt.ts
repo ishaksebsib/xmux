@@ -147,7 +147,9 @@ function toOpenCodeEvent(value: unknown): OpenCodeEvent | undefined {
   return payload as OpenCodeEvent;
 }
 
-function toUsage(tokens: TokenUsageInput | AssistantMessage["tokens"] | undefined): HarnessTokenUsage | undefined {
+function toUsage(
+  tokens: TokenUsageInput | AssistantMessage["tokens"] | undefined,
+): HarnessTokenUsage | undefined {
   if (!tokens) return undefined;
 
   return {
@@ -176,7 +178,10 @@ function toToolOutput(output: string | undefined): readonly HarnessToolOutput[] 
 }
 
 function toToolOutputContent(
-  content: readonly ({ readonly type: "text"; readonly text: string } | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string })[],
+  content: readonly (
+    | { readonly type: "text"; readonly text: string }
+    | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string }
+  )[],
   structured?: Record<string, unknown>,
 ): readonly HarnessToolOutput[] {
   const output: HarnessToolOutput[] = [];
@@ -1028,13 +1033,17 @@ function* mapOpenCodeEvent(args: {
         phase: "progress",
         ref: args.ref,
         callId: args.event.properties.callID,
-        output: toToolOutputContent(args.event.properties.content, args.event.properties.structured),
+        output: toToolOutputContent(
+          args.event.properties.content,
+          args.event.properties.structured,
+        ),
       };
       return;
     case "session.next.tool.success": {
       if (!shouldProcessFamily(args.state, "next")) return;
 
-      const name = args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
+      const name =
+        args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
       const input = parseToolInput(args.state.toolInputs.get(args.event.properties.callID) ?? "{}");
       yield* ensureNextToolCalled({
         ref: args.ref,
@@ -1051,14 +1060,18 @@ function* mapOpenCodeEvent(args: {
         phase: "completed",
         ref: args.ref,
         callId: args.event.properties.callID,
-        output: toToolOutputContent(args.event.properties.content, args.event.properties.structured),
+        output: toToolOutputContent(
+          args.event.properties.content,
+          args.event.properties.structured,
+        ),
       };
       return;
     }
     case "session.next.tool.failed": {
       if (!shouldProcessFamily(args.state, "next")) return;
 
-      const name = args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
+      const name =
+        args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
       const input = parseToolInput(args.state.toolInputs.get(args.event.properties.callID) ?? "{}");
       yield* ensureNextToolCalled({
         ref: args.ref,

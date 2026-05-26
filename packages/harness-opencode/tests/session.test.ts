@@ -164,7 +164,12 @@ describe("OpenCode prompt stream", () => {
               });
               yield globalEvent({
                 type: "session.next.tool.input.started",
-                properties: { timestamp: 5, sessionID: "session-1", callID: "call-1", name: "read" },
+                properties: {
+                  timestamp: 5,
+                  sessionID: "session-1",
+                  callID: "call-1",
+                  name: "read",
+                },
               });
               yield globalEvent({
                 type: "session.next.tool.input.delta",

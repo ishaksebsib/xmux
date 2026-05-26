@@ -64,7 +64,9 @@ describe("OpenCode session handlers", () => {
 
   test("deletes and aborts sessions through OpenCode", async () => {
     const calls: string[] = [];
-    const sessionModels = new Map([["session-1", { providerId: "provider-1", modelId: "model-1" }]]);
+    const sessionModels = new Map([
+      ["session-1", { providerId: "provider-1", modelId: "model-1" }],
+    ]);
     const runtime = {
       client: {
         session: {
