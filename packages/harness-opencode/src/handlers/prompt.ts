@@ -27,6 +27,14 @@ import { describeResponseError, type OpenCodeCreateOptions } from "./utils";
 type OpenCodePromptEvent = HarnessPromptEvent<"opencode">;
 type OpenCodePromptPart = TextPartInput | FilePartInput;
 type OpenCodeToolPart = Extract<Part, { readonly type: "tool" }>;
+type EventFamily = "legacy" | "next";
+type TokenUsageInput = {
+  readonly input?: number;
+  readonly output?: number;
+  readonly reasoning?: number;
+  readonly cache?: { readonly read?: number; readonly write?: number };
+  readonly total?: number;
+};
 type SelectedOpenCodeModel = {
   readonly providerID: string;
   readonly modelID: string;
@@ -46,6 +54,13 @@ type PromptStreamState = {
   readonly seenParts: Set<string>;
   readonly seenTools: Set<string>;
   readonly toolInputs: Map<string, string>;
+  readonly toolNames: Map<string, string>;
+  currentNextCompactionPartId?: string;
+  currentNextTextPartId?: string;
+  currentNextTurnId?: string;
+  eventFamily?: EventFamily;
+  nextCompactionPartIndex: number;
+  nextTextPartIndex: number;
   terminalRun: boolean;
   completedRun?: {
     readonly reason: Exclude<HarnessRunReason, "error" | "aborted">;
@@ -68,6 +83,9 @@ function createPromptStreamState(): PromptStreamState {
     seenParts: new Set(),
     seenTools: new Set(),
     toolInputs: new Map(),
+    toolNames: new Map(),
+    nextCompactionPartIndex: 0,
+    nextTextPartIndex: 0,
     terminalRun: false,
   };
 }
@@ -129,15 +147,15 @@ function toOpenCodeEvent(value: unknown): OpenCodeEvent | undefined {
   return payload as OpenCodeEvent;
 }
 
-function toUsage(tokens: AssistantMessage["tokens"] | undefined): HarnessTokenUsage | undefined {
+function toUsage(tokens: TokenUsageInput | AssistantMessage["tokens"] | undefined): HarnessTokenUsage | undefined {
   if (!tokens) return undefined;
 
   return {
     input: tokens.input,
     output: tokens.output,
     reasoning: tokens.reasoning,
-    cacheRead: tokens.cache.read,
-    cacheWrite: tokens.cache.write,
+    cacheRead: tokens.cache?.read,
+    cacheWrite: tokens.cache?.write,
     total: tokens.total,
   };
 }
@@ -155,6 +173,39 @@ function toRunReason(finish: string | undefined): Exclude<HarnessRunReason, "err
 
 function toToolOutput(output: string | undefined): readonly HarnessToolOutput[] {
   return output === undefined || output.length === 0 ? [] : [{ type: "text", text: output }];
+}
+
+function toToolOutputContent(
+  content: readonly ({ readonly type: "text"; readonly text: string } | { readonly type: "file"; readonly uri: string; readonly mime: string; readonly name?: string })[],
+  structured?: Record<string, unknown>,
+): readonly HarnessToolOutput[] {
+  const output: HarnessToolOutput[] = [];
+
+  for (const item of content) {
+    if (item.type === "text" && item.text.length > 0) {
+      output.push({ type: "text", text: item.text });
+      continue;
+    }
+
+    if (item.type === "file") {
+      output.push({ type: "text", text: item.name ? `${item.name}: ${item.uri}` : item.uri });
+    }
+  }
+
+  if (structured && Object.keys(structured).length > 0) {
+    output.push({ type: "json", value: structured });
+  }
+
+  return output;
+}
+
+function parseToolInput(text: string): unknown {
+  const parsed = Result.try({
+    try: () => JSON.parse(text) as unknown,
+    catch: () => text,
+  });
+
+  return parsed.isOk() ? parsed.value : text;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -454,6 +505,87 @@ function* mapPartUpdated(args: {
   }
 }
 
+function shouldProcessFamily(state: PromptStreamState, family: EventFamily): boolean {
+  if (state.eventFamily && state.eventFamily !== family) return false;
+
+  state.eventFamily = family;
+  return true;
+}
+
+function startNextTextPart(state: PromptStreamState): string {
+  const partId = `session-next-text-${state.nextTextPartIndex}`;
+  state.nextTextPartIndex += 1;
+  state.currentNextTextPartId = partId;
+  return partId;
+}
+
+function getNextTextPart(state: PromptStreamState): string {
+  return state.currentNextTextPartId ?? startNextTextPart(state);
+}
+
+function startNextCompactionPart(state: PromptStreamState): string {
+  const partId = `session-next-compaction-${state.nextCompactionPartIndex}`;
+  state.nextCompactionPartIndex += 1;
+  state.currentNextCompactionPartId = partId;
+  return partId;
+}
+
+function getNextCompactionPart(state: PromptStreamState): string {
+  return state.currentNextCompactionPartId ?? startNextCompactionPart(state);
+}
+
+function* ensureNextToolStarted(args: {
+  readonly ref: { readonly harnessId: "opencode"; readonly sessionId: string };
+  readonly state: PromptStreamState;
+  readonly callId: string;
+  readonly name?: string;
+}): Generator<OpenCodePromptEvent> {
+  if (args.name) args.state.toolNames.set(args.callId, args.name);
+  if (args.state.seenTools.has(args.callId)) return;
+
+  args.state.seenTools.add(args.callId);
+  yield {
+    type: "tool",
+    phase: "input_started",
+    ref: args.ref,
+    callId: args.callId,
+    name: args.name,
+  };
+}
+
+function* ensureNextToolCalled(args: {
+  readonly ref: { readonly harnessId: "opencode"; readonly sessionId: string };
+  readonly state: PromptStreamState;
+  readonly callId: string;
+  readonly name: string;
+  readonly input: unknown;
+}): Generator<OpenCodePromptEvent> {
+  yield* ensureNextToolStarted(args);
+
+  if (!args.state.inputCompletedTools.has(args.callId)) {
+    args.state.inputCompletedTools.add(args.callId);
+    yield {
+      type: "tool",
+      phase: "input_completed",
+      ref: args.ref,
+      callId: args.callId,
+      input: args.input,
+    };
+  }
+
+  if (!args.state.calledTools.has(args.callId)) {
+    args.state.calledTools.add(args.callId);
+    yield {
+      type: "tool",
+      phase: "called",
+      ref: args.ref,
+      callId: args.callId,
+      name: args.name,
+      input: args.input,
+    };
+  }
+}
+
 function* mapOpenCodeEvent(args: {
   readonly runtime: OpenCodeRuntime;
   readonly event: OpenCodeEvent;
@@ -464,6 +596,8 @@ function* mapOpenCodeEvent(args: {
 
   switch (args.event.type) {
     case "message.updated": {
+      if (!shouldProcessFamily(args.state, "legacy")) return;
+
       const { info } = args.event.properties;
       args.state.messageRoles.set(info.id, info.role);
 
@@ -566,6 +700,8 @@ function* mapOpenCodeEvent(args: {
       return;
     }
     case "message.removed": {
+      if (!shouldProcessFamily(args.state, "legacy")) return;
+
       const role = args.state.messageRoles.get(args.event.properties.messageID);
       if (!role) return;
 
@@ -579,12 +715,18 @@ function* mapOpenCodeEvent(args: {
       return;
     }
     case "message.part.updated":
+      if (!shouldProcessFamily(args.state, "legacy")) return;
+
       yield* mapPartUpdated({ ref: args.ref, state: args.state, part: args.event.properties.part });
       return;
     case "message.part.removed":
+      if (!shouldProcessFamily(args.state, "legacy")) return;
+
       args.state.completedParts.add(args.event.properties.partID);
       return;
     case "message.part.delta": {
+      if (!shouldProcessFamily(args.state, "legacy")) return;
+
       const kind = args.state.partKinds.get(args.event.properties.partID) ?? "text";
       yield* ensureContentStarted({
         ref: args.ref,
@@ -655,6 +797,340 @@ function* mapOpenCodeEvent(args: {
         requestId: args.event.properties.requestID,
       };
       return;
+    case "session.next.model.switched": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      args.runtime.sessionModels.set(args.ref.sessionId, {
+        providerId: args.event.properties.model.providerID,
+        modelId: args.event.properties.model.id,
+        variant: args.event.properties.model.variant,
+      });
+      return;
+    }
+    case "session.next.step.started": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const messageId = `session-next-step-${args.event.properties.timestamp}`;
+      const model = {
+        providerId: args.event.properties.model.providerID,
+        modelId: args.event.properties.model.id,
+        variant: args.event.properties.model.variant,
+      };
+      args.state.currentNextTurnId = messageId;
+      args.runtime.sessionModels.set(args.ref.sessionId, model);
+      yield {
+        type: "turn",
+        phase: "started",
+        ref: args.ref,
+        messageId,
+        agent: args.event.properties.agent,
+        model,
+        snapshot: args.event.properties.snapshot,
+      };
+      return;
+    }
+    case "session.next.step.ended": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const usage = toUsage(args.event.properties.tokens);
+      const reason = toRunReason(args.event.properties.finish);
+      args.state.completedRun = {
+        reason,
+        usage,
+        cost: args.event.properties.cost,
+      };
+      yield {
+        type: "turn",
+        phase: "completed",
+        ref: args.ref,
+        messageId: args.state.currentNextTurnId,
+        finish: args.event.properties.finish,
+        usage,
+        cost: args.event.properties.cost,
+        snapshot: args.event.properties.snapshot,
+      };
+      return;
+    }
+    case "session.next.step.failed":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      args.state.terminalRun = true;
+      yield {
+        type: "turn",
+        phase: "failed",
+        ref: args.ref,
+        messageId: args.state.currentNextTurnId,
+        error: args.event.properties.error,
+      };
+      yield {
+        type: "run",
+        phase: "failed",
+        ref: args.ref,
+        reason: "error",
+        error: args.event.properties.error,
+      };
+      return;
+    case "session.next.text.started":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureContentStarted({
+        ref: args.ref,
+        state: args.state,
+        kind: "text",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId: startNextTextPart(args.state),
+      });
+      return;
+    case "session.next.text.delta": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const partId = getNextTextPart(args.state);
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "text",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId,
+        text: `${args.state.partTexts.get(partId) ?? ""}${args.event.properties.delta}`,
+        completed: false,
+      });
+      return;
+    }
+    case "session.next.text.ended": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const partId = getNextTextPart(args.state);
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "text",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId,
+        text: args.event.properties.text,
+        completed: true,
+      });
+      args.state.currentNextTextPartId = undefined;
+      return;
+    }
+    case "session.next.reasoning.started":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureContentStarted({
+        ref: args.ref,
+        state: args.state,
+        kind: "reasoning",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId: args.event.properties.reasoningID,
+      });
+      return;
+    case "session.next.reasoning.delta":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "reasoning",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId: args.event.properties.reasoningID,
+        text: `${args.state.partTexts.get(args.event.properties.reasoningID) ?? ""}${args.event.properties.delta}`,
+        completed: false,
+      });
+      return;
+    case "session.next.reasoning.ended":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "reasoning",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId: args.event.properties.reasoningID,
+        text: args.event.properties.text,
+        completed: true,
+      });
+      return;
+    case "session.next.tool.input.started":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureNextToolStarted({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name: args.event.properties.name,
+      });
+      return;
+    case "session.next.tool.input.delta": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureNextToolStarted({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name: args.state.toolNames.get(args.event.properties.callID),
+      });
+      args.state.toolInputs.set(
+        args.event.properties.callID,
+        `${args.state.toolInputs.get(args.event.properties.callID) ?? ""}${args.event.properties.delta}`,
+      );
+      yield {
+        type: "tool",
+        phase: "input_delta",
+        ref: args.ref,
+        callId: args.event.properties.callID,
+        delta: args.event.properties.delta,
+      };
+      return;
+    }
+    case "session.next.tool.input.ended": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureNextToolStarted({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name: args.state.toolNames.get(args.event.properties.callID),
+      });
+      args.state.toolInputs.set(args.event.properties.callID, args.event.properties.text);
+      if (!args.state.inputCompletedTools.has(args.event.properties.callID)) {
+        args.state.inputCompletedTools.add(args.event.properties.callID);
+        yield {
+          type: "tool",
+          phase: "input_completed",
+          ref: args.ref,
+          callId: args.event.properties.callID,
+          input: parseToolInput(args.event.properties.text),
+        };
+      }
+      return;
+    }
+    case "session.next.tool.called":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureNextToolCalled({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name: args.event.properties.tool,
+        input: args.event.properties.input,
+      });
+      return;
+    case "session.next.tool.progress":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureNextToolStarted({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name: args.state.toolNames.get(args.event.properties.callID),
+      });
+      yield {
+        type: "tool",
+        phase: "progress",
+        ref: args.ref,
+        callId: args.event.properties.callID,
+        output: toToolOutputContent(args.event.properties.content, args.event.properties.structured),
+      };
+      return;
+    case "session.next.tool.success": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const name = args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
+      const input = parseToolInput(args.state.toolInputs.get(args.event.properties.callID) ?? "{}");
+      yield* ensureNextToolCalled({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name,
+        input,
+      });
+
+      if (args.state.completedTools.has(args.event.properties.callID)) return;
+      args.state.completedTools.add(args.event.properties.callID);
+      yield {
+        type: "tool",
+        phase: "completed",
+        ref: args.ref,
+        callId: args.event.properties.callID,
+        output: toToolOutputContent(args.event.properties.content, args.event.properties.structured),
+      };
+      return;
+    }
+    case "session.next.tool.failed": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const name = args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
+      const input = parseToolInput(args.state.toolInputs.get(args.event.properties.callID) ?? "{}");
+      yield* ensureNextToolCalled({
+        ref: args.ref,
+        state: args.state,
+        callId: args.event.properties.callID,
+        name,
+        input,
+      });
+
+      if (args.state.completedTools.has(args.event.properties.callID)) return;
+      args.state.completedTools.add(args.event.properties.callID);
+      yield {
+        type: "tool",
+        phase: "failed",
+        ref: args.ref,
+        callId: args.event.properties.callID,
+        error: args.event.properties.error,
+      };
+      return;
+    }
+    case "session.next.retried":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield {
+        type: "retry",
+        ref: args.ref,
+        attempt: args.event.properties.attempt,
+        error: args.event.properties.error,
+      };
+      return;
+    case "session.next.compaction.started":
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      yield* ensureContentStarted({
+        ref: args.ref,
+        state: args.state,
+        kind: "compaction",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId: startNextCompactionPart(args.state),
+      });
+      return;
+    case "session.next.compaction.delta": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const partId = getNextCompactionPart(args.state);
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "compaction",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId,
+        text: `${args.state.partTexts.get(partId) ?? ""}${args.event.properties.text}`,
+        completed: false,
+      });
+      return;
+    }
+    case "session.next.compaction.ended": {
+      if (!shouldProcessFamily(args.state, "next")) return;
+
+      const partId = getNextCompactionPart(args.state);
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "compaction",
+        messageId: args.state.currentNextTurnId ?? args.ref.sessionId,
+        partId,
+        text: args.event.properties.text,
+        completed: true,
+      });
+      args.state.currentNextCompactionPartId = undefined;
+      return;
+    }
     case "session.diff":
       return;
     case "session.error": {
@@ -739,7 +1215,18 @@ function createPromptEventStream(args: {
   async function* eventStream(): AsyncIterable<OpenCodePromptEvent> {
     const state = createPromptStreamState();
     const streamAbort = new AbortController();
-    const abortStream = () => streamAbort.abort(args.input.signal?.reason);
+    let promptAccepted = false;
+    const abortStream = () => {
+      streamAbort.abort(args.input.signal?.reason);
+      if (!promptAccepted) return;
+
+      void args.runtime.client.session
+        .abort({
+          sessionID: args.input.ref.sessionId,
+          workspace: args.input.adapterOptions.workspace,
+        })
+        .catch(() => undefined);
+    };
     args.input.signal?.addEventListener("abort", abortStream, { once: true });
 
     try {
@@ -793,6 +1280,8 @@ function createPromptEventStream(args: {
         };
         return;
       }
+
+      promptAccepted = true;
 
       while (!streamAbort.signal.aborted) {
         const next = await pendingEvent;

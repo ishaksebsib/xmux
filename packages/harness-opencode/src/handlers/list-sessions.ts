@@ -7,9 +7,10 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import { getEffectiveModel } from "./models";
+import { getEffectiveSessionModel } from "./models";
 import {
   toAdapterSession,
+  toResponseResult,
   toSessionResponseError,
   type OpenCodeCreateOptions,
   type OpenCodeSessionInfo,
@@ -21,13 +22,7 @@ async function toListedSession(args: {
 }): Promise<HarnessAdapterSessionInfo<OpenCodeSessionInfo>> {
   const adapterSession = toAdapterSession({
     session: args.session,
-    model: getEffectiveModel({
-      runtime: args.runtime,
-      target: {
-        type: "session",
-        ref: { harnessId: "opencode", sessionId: args.session.id },
-      },
-    }).model,
+    model: getEffectiveSessionModel({ runtime: args.runtime, session: args.session }),
   });
   const cwd = await Result.tryPromise({
     try: async () => {
@@ -67,29 +62,15 @@ export async function listSessions(
       }),
     );
 
-    const status = response.response?.status ?? 0;
-
-    if (response.error) {
-      return Result.err(
-        toSessionResponseError({
-          status,
-          detail: response.error,
-          reason: "OpenCode session list failed",
-        }),
-      );
-    }
-
-    if (!response.data) {
-      return Result.err(
-        toSessionResponseError({
-          status,
-          reason: "OpenCode session list returned no data",
-        }),
-      );
-    }
+    const sessions = yield* toResponseResult({
+      response,
+      toError: toSessionResponseError,
+      failureReason: "OpenCode session list failed",
+      missingReason: "OpenCode session list returned no data",
+    });
 
     return Result.ok(
-      await Promise.all(response.data.map((session) => toListedSession({ runtime, session }))),
+      await Promise.all(sessions.map((session) => toListedSession({ runtime, session }))),
     );
   });
 }

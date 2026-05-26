@@ -6,7 +6,10 @@ import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
 import {
+  toOpenCodeCreateModel,
+  toResponseResult,
   toSessionInfo,
+  toSessionModel,
   toSessionResponseError,
   type OpenCodeCreateOptions,
   type OpenCodeSessionInfo,
@@ -16,6 +19,8 @@ async function requestSession(
   runtime: OpenCodeRuntime,
   input: HarnessAdapterCreateSessionInput<OpenCodeCreateOptions>,
 ) {
+  const model = input.model ?? runtime.defaultModel;
+
   return Result.tryPromise({
     try: () =>
       runtime.client.session.create(
@@ -26,6 +31,7 @@ async function requestSession(
           title: input.title,
           workspace: input.adapterOptions.workspace,
           workspaceID: input.adapterOptions.workspaceId,
+          model: toOpenCodeCreateModel(model),
         },
         { signal: input.signal },
       ),
@@ -44,36 +50,22 @@ export async function createSession(
 > {
   return Result.gen(async function* () {
     const response = yield* Result.await(requestSession(runtime, input));
-    const status = response.response?.status ?? 0;
+    const session = yield* toResponseResult({
+      response,
+      toError: toSessionResponseError,
+      failureReason: "OpenCode session create failed",
+      missingReason: "OpenCode session create returned no session data",
+    });
 
-    if (response.error) {
-      return Result.err(
-        toSessionResponseError({
-          status,
-          detail: response.error,
-          reason: "OpenCode session create failed",
-        }),
-      );
-    }
-
-    if (!response.data) {
-      return Result.err(
-        toSessionResponseError({
-          status,
-          reason: "OpenCode session create returned no session data",
-        }),
-      );
-    }
-
-    const model = input.model ?? runtime.defaultModel;
+    const model = input.model ?? runtime.defaultModel ?? toSessionModel(session);
     if (model) {
-      runtime.sessionModels.set(response.data.id, model);
+      runtime.sessionModels.set(session.id, model);
     }
 
     return Result.ok({
-      sessionId: response.data.id,
+      sessionId: session.id,
       model,
-      adapterData: toSessionInfo(response.data),
+      adapterData: toSessionInfo(session),
     });
   });
 }

@@ -8,13 +8,18 @@ import { listSessions } from "../src/handlers/list-sessions";
 import { resumeSession } from "../src/handlers/resume-session";
 import type { OpenCodeRuntime } from "../src/runtime";
 
-function createNativeSession(args: { readonly id: string; readonly title: string }) {
+function createNativeSession(args: {
+  readonly id: string;
+  readonly title: string;
+  readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string };
+}) {
   return {
     id: args.id,
     slug: `${args.id}-slug`,
     projectID: "project-1",
     directory: process.cwd(),
     title: args.title,
+    model: args.model,
     version: "1.0.0",
     time: { created: 1, updated: 1 },
   };
@@ -32,12 +37,14 @@ describe("OpenCode session handlers", () => {
           },
         },
       },
+      sessionModels: new Map(),
       close: async () => undefined,
     } as unknown as OpenCodeRuntime;
 
     const created = await createSession(runtime, {
       cwd: process.cwd() as WorkingDirectoryPath,
       title: "created",
+      model: { providerId: "provider-1", modelId: "model-1", variant: "fast" },
       adapterOptions: { workspace: "default", parentId: "parent-1" },
     });
 
@@ -51,11 +58,13 @@ describe("OpenCode session handlers", () => {
       parentID: "parent-1",
       title: "created",
       workspace: "default",
+      model: { providerID: "provider-1", id: "model-1", variant: "fast" },
     });
   });
 
   test("deletes and aborts sessions through OpenCode", async () => {
     const calls: string[] = [];
+    const sessionModels = new Map([["session-1", { providerId: "provider-1", modelId: "model-1" }]]);
     const runtime = {
       client: {
         session: {
@@ -75,6 +84,7 @@ describe("OpenCode session handlers", () => {
           },
         },
       },
+      sessionModels,
       close: async () => undefined,
     } as unknown as OpenCodeRuntime;
 
@@ -90,6 +100,7 @@ describe("OpenCode session handlers", () => {
     expect(deleted.isOk()).toBe(true);
     expect(aborted.isOk()).toBe(true);
     expect(calls).toEqual(["delete:session-1:default", "abort:session-2:default"]);
+    expect(sessionModels.has("session-1")).toBe(false);
   });
 
   test("returns native title/cwd when resuming, getting, and listing sessions", async () => {
@@ -97,10 +108,20 @@ describe("OpenCode session handlers", () => {
       client: {
         session: {
           get: async ({ sessionID }: { readonly sessionID: string }) => ({
-            data: createNativeSession({ id: sessionID, title: `${sessionID} title` }),
+            data: createNativeSession({
+              id: sessionID,
+              title: `${sessionID} title`,
+              model: { providerID: "native-provider", id: "native-model", variant: "slow" },
+            }),
           }),
           list: async () => ({
-            data: [createNativeSession({ id: "session-1", title: "listed title" })],
+            data: [
+              createNativeSession({
+                id: "session-1",
+                title: "listed title",
+                model: { providerID: "native-provider", id: "native-model", variant: "slow" },
+              }),
+            ],
           }),
         },
       },
@@ -127,16 +148,19 @@ describe("OpenCode session handlers", () => {
       sessionId: "session-1",
       cwd: process.cwd(),
       title: "session-1 title",
+      model: { providerId: "native-provider", modelId: "native-model", variant: "slow" },
     });
     expect(found.unwrap("found")).toMatchObject({
       sessionId: "session-2",
       cwd: process.cwd(),
       title: "session-2 title",
+      model: { providerId: "native-provider", modelId: "native-model", variant: "slow" },
     });
     expect(listed.unwrap("listed")[0]).toMatchObject({
       sessionId: "session-1",
       cwd: process.cwd(),
       title: "listed title",
+      model: { providerId: "native-provider", modelId: "native-model", variant: "slow" },
     });
   });
 });

@@ -135,6 +135,110 @@ describe("OpenCode prompt stream", () => {
     );
   });
 
+  test("maps OpenCode session.next events into harness prompt events", async () => {
+    const runtime = {
+      client: {
+        global: {
+          event: async () => ({
+            stream: (async function* () {
+              yield globalEvent({
+                type: "session.next.step.started",
+                properties: {
+                  timestamp: 1,
+                  sessionID: "session-1",
+                  agent: "build",
+                  model: { providerID: "provider-next", id: "model-next", variant: "fast" },
+                },
+              });
+              yield globalEvent({
+                type: "session.next.text.started",
+                properties: { timestamp: 2, sessionID: "session-1" },
+              });
+              yield globalEvent({
+                type: "session.next.text.delta",
+                properties: { timestamp: 3, sessionID: "session-1", delta: "hi" },
+              });
+              yield globalEvent({
+                type: "session.next.text.ended",
+                properties: { timestamp: 4, sessionID: "session-1", text: "hi" },
+              });
+              yield globalEvent({
+                type: "session.next.tool.input.started",
+                properties: { timestamp: 5, sessionID: "session-1", callID: "call-1", name: "read" },
+              });
+              yield globalEvent({
+                type: "session.next.tool.input.delta",
+                properties: { timestamp: 6, sessionID: "session-1", callID: "call-1", delta: "{}" },
+              });
+              yield globalEvent({
+                type: "session.next.tool.called",
+                properties: {
+                  timestamp: 7,
+                  sessionID: "session-1",
+                  callID: "call-1",
+                  tool: "read",
+                  input: {},
+                  provider: { executed: true },
+                },
+              });
+              yield globalEvent({
+                type: "session.next.tool.success",
+                properties: {
+                  timestamp: 8,
+                  sessionID: "session-1",
+                  callID: "call-1",
+                  structured: {},
+                  content: [{ type: "text", text: "done" }],
+                  provider: { executed: true },
+                },
+              });
+              yield globalEvent({
+                type: "session.next.step.ended",
+                properties: {
+                  timestamp: 9,
+                  sessionID: "session-1",
+                  finish: "stop",
+                  cost: 0.02,
+                  tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+                },
+              });
+            })(),
+          }),
+        },
+        session: {
+          promptAsync: async () => ({ error: undefined, response: { status: 204 } }),
+        },
+      },
+      defaultModel: undefined,
+      sessionModels: new Map(),
+      close: async () => undefined,
+    } as unknown as OpenCodeRuntime;
+
+    const prompted = await prompt(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
+      content: [{ type: "text", text: "hello" }],
+      adapterOptions: {},
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "turn", phase: "started", agent: "build" }),
+        expect.objectContaining({ type: "content", phase: "delta", kind: "text", delta: "hi" }),
+        expect.objectContaining({ type: "tool", phase: "completed", callId: "call-1" }),
+        expect.objectContaining({ type: "run", phase: "completed", reason: "stop", cost: 0.02 }),
+      ]),
+    );
+    expect(runtime.sessionModels.get("session-1")).toEqual({
+      providerId: "provider-next",
+      modelId: "model-next",
+      variant: "fast",
+    });
+  });
+
   test("preserves core prompt content when calling OpenCode", async () => {
     const promptCalls: { readonly directory?: string; readonly parts?: unknown[] }[] = [];
     const runtime = {

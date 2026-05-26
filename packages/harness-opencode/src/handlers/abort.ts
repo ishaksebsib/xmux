@@ -2,7 +2,7 @@ import type { HarnessAdapterAbortInput } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import { toSessionResponseError, type OpenCodeCreateOptions } from "./utils";
+import { toResponseResult, toSessionResponseError, type OpenCodeCreateOptions } from "./utils";
 
 export async function abortSession(
   runtime: OpenCodeRuntime,
@@ -23,22 +23,17 @@ export async function abortSession(
       }),
     );
 
-    const status = response.response?.status ?? 0;
+    const aborted = yield* toResponseResult({
+      response,
+      toError: toSessionResponseError,
+      failureReason: "OpenCode session abort failed",
+      missingReason: "OpenCode session abort returned no success confirmation",
+    });
 
-    if (response.error) {
+    if (aborted !== true) {
       return Result.err(
         toSessionResponseError({
-          status,
-          detail: response.error,
-          reason: "OpenCode session abort failed",
-        }),
-      );
-    }
-
-    if (response.data !== true) {
-      return Result.err(
-        toSessionResponseError({
-          status,
+          status: response.response?.status ?? 0,
           reason: "OpenCode session abort returned no success confirmation",
         }),
       );

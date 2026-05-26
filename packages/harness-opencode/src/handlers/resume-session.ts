@@ -5,9 +5,10 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import { getEffectiveModel } from "./models";
+import { getEffectiveSessionModel } from "./models";
 import {
   toAdapterSession,
+  toResponseResult,
   toSessionResponseError,
   type OpenCodeCreateOptions,
   type OpenCodeSessionInfo,
@@ -38,37 +39,17 @@ export async function resumeSession(
       }),
     );
 
-    const status = response.response?.status ?? 0;
-
-    if (response.error) {
-      return Result.err(
-        toSessionResponseError({
-          status,
-          detail: response.error,
-          reason: "OpenCode session resume failed",
-        }),
-      );
-    }
-
-    if (!response.data) {
-      return Result.err(
-        toSessionResponseError({
-          status,
-          reason: "OpenCode session resume returned no session data",
-        }),
-      );
-    }
+    const session = yield* toResponseResult({
+      response,
+      toError: toSessionResponseError,
+      failureReason: "OpenCode session resume failed",
+      missingReason: "OpenCode session resume returned no session data",
+    });
 
     return Result.ok(
       toAdapterSession({
-        session: response.data,
-        model: getEffectiveModel({
-          runtime,
-          target: {
-            type: "session",
-            ref: { harnessId: "opencode", sessionId: input.sessionId },
-          },
-        }).model,
+        session,
+        model: getEffectiveSessionModel({ runtime, session }),
       }),
     );
   });

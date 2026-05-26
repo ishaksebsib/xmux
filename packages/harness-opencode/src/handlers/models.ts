@@ -1,3 +1,4 @@
+import type { Session } from "@opencode-ai/sdk/v2";
 import type {
   HarnessAdapterGetModelInput,
   HarnessAdapterListModelsInput,
@@ -14,7 +15,13 @@ import {
   OpenCodeModelSelectionError,
 } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import { describeResponseError, type OpenCodeCreateOptions, type OpenCodeModelInfo } from "./utils";
+import {
+  describeResponseError,
+  toResponseResult,
+  toSessionModel,
+  type OpenCodeCreateOptions,
+  type OpenCodeModelInfo,
+} from "./utils";
 
 type OpenCodeModelRef = {
   readonly providerID: string;
@@ -161,6 +168,17 @@ export function getEffectiveModel(args: {
     : { target: args.target, source: "unset" };
 }
 
+export function getEffectiveSessionModel(args: {
+  readonly runtime: OpenCodeRuntime;
+  readonly session: Session;
+}): HarnessModelRef | undefined {
+  return (
+    args.runtime.sessionModels.get(args.session.id) ??
+    toSessionModel(args.session) ??
+    args.runtime.defaultModel
+  );
+}
+
 export async function listModels(
   runtime: OpenCodeRuntime,
   input: HarnessAdapterListModelsInput<OpenCodeCreateOptions>,
@@ -182,29 +200,15 @@ export async function listModels(
       }),
     );
 
-    const status = response.response?.status ?? 0;
-
-    if (response.error) {
-      return Result.err(
-        toModelResponseError({
-          status,
-          detail: response.error,
-          reason: "OpenCode model list failed",
-        }),
-      );
-    }
-
-    if (!response.data) {
-      return Result.err(
-        toModelResponseError({
-          status,
-          reason: "OpenCode model list returned no data",
-        }),
-      );
-    }
+    const data = yield* toResponseResult({
+      response,
+      toError: toModelResponseError,
+      failureReason: "OpenCode model list failed",
+      missingReason: "OpenCode model list returned no data",
+    });
 
     return Result.ok(
-      response.data.providers.flatMap((provider) =>
+      data.providers.flatMap((provider) =>
         sortModelsByNewestFirst(
           Object.values(provider.models).filter(
             (model) => input.includeUnavailable || model.status !== "deprecated",

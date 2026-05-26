@@ -2,7 +2,7 @@ import type { HarnessAdapterDeleteSessionInput } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import { toSessionResponseError, type OpenCodeCreateOptions } from "./utils";
+import { toResponseResult, toSessionResponseError, type OpenCodeCreateOptions } from "./utils";
 
 export async function deleteSession(
   runtime: OpenCodeRuntime,
@@ -23,26 +23,23 @@ export async function deleteSession(
       }),
     );
 
-    const status = response.response?.status ?? 0;
+    const deleted = yield* toResponseResult({
+      response,
+      toError: toSessionResponseError,
+      failureReason: "OpenCode session delete failed",
+      missingReason: "OpenCode session delete returned no success confirmation",
+    });
 
-    if (response.error) {
+    if (deleted !== true) {
       return Result.err(
         toSessionResponseError({
-          status,
-          detail: response.error,
-          reason: "OpenCode session delete failed",
-        }),
-      );
-    }
-
-    if (response.data !== true) {
-      return Result.err(
-        toSessionResponseError({
-          status,
+          status: response.response?.status ?? 0,
           reason: "OpenCode session delete returned no success confirmation",
         }),
       );
     }
+
+    runtime.sessionModels?.delete(input.ref.sessionId);
 
     return Result.ok(undefined);
   });
