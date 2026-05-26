@@ -3,7 +3,11 @@ import type {
   HarnessAdapterCreateSessionResult,
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
-import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
+import {
+  OpenCodeModelSelectionError,
+  OpenCodeSessionRequestError,
+  OpenCodeSessionResponseError,
+} from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
 import {
   toOpenCodeCreateModel,
@@ -14,13 +18,13 @@ import {
   type OpenCodeCreateOptions,
   type OpenCodeSessionInfo,
 } from "./utils";
+import { applyThinkingToModel } from "./thinking";
 
 async function requestSession(
   runtime: OpenCodeRuntime,
   input: HarnessAdapterCreateSessionInput<OpenCodeCreateOptions>,
+  model: HarnessAdapterCreateSessionInput<OpenCodeCreateOptions>["model"],
 ) {
-  const model = input.model ?? runtime.defaultModel;
-
   return Result.tryPromise({
     try: () =>
       runtime.client.session.create(
@@ -45,11 +49,17 @@ export async function createSession(
 ): Promise<
   ResultType<
     HarnessAdapterCreateSessionResult<OpenCodeSessionInfo>,
-    OpenCodeSessionRequestError | OpenCodeSessionResponseError
+    OpenCodeModelSelectionError | OpenCodeSessionRequestError | OpenCodeSessionResponseError
   >
 > {
   return Result.gen(async function* () {
-    const response = yield* Result.await(requestSession(runtime, input));
+    const thinking = input.thinking ?? runtime.defaultThinking;
+    const selectedModel = yield* applyThinkingToModel({
+      runtime,
+      model: input.model ?? runtime.defaultModel,
+      level: thinking,
+    });
+    const response = yield* Result.await(requestSession(runtime, input, selectedModel));
     const session = yield* toResponseResult({
       response,
       toError: toSessionResponseError,
@@ -57,9 +67,12 @@ export async function createSession(
       missingReason: "OpenCode session create returned no session data",
     });
 
-    const model = input.model ?? runtime.defaultModel ?? toSessionModel(session);
+    const model = selectedModel ?? toSessionModel(session);
     if (model) {
       runtime.sessionModels.set(session.id, model);
+    }
+    if (thinking) {
+      runtime.sessionThinking.set(session.id, thinking);
     }
 
     return Result.ok({

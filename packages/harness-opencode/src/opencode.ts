@@ -17,6 +17,7 @@ import { getSession } from "./handlers/get-session";
 import { listSessions } from "./handlers/list-sessions";
 import { getModel, listModels, setModel } from "./handlers/models";
 import { prompt } from "./handlers/prompt";
+import { getThinking, setThinking } from "./handlers/thinking";
 import { resumeSession } from "./handlers/resume-session";
 import type {
   OpenCodeCreateOptions,
@@ -49,6 +50,8 @@ async function createOpenedAdapter(
     listModels: async (input) => listModels(runtime, input),
     getModel: async (input) => getModel(runtime, input),
     setModel: async (input) => setModel(runtime, input),
+    getThinking: async (input) => getThinking(runtime, input),
+    setThinking: async (input) => setThinking(runtime, input),
     deleteSession: async (input) => deleteSession(runtime, input),
     abort: async (input) => abortSession(runtime, input),
     close: async () => {

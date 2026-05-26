@@ -22,6 +22,7 @@ import {
 } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
 import { normalizeOpenCodeModelRef } from "./models";
+import { applyThinkingToModel } from "./thinking";
 import { describeResponseError, type OpenCodeCreateOptions } from "./utils";
 
 type OpenCodePromptEvent = HarnessPromptEvent<"opencode">;
@@ -1392,12 +1393,21 @@ export async function prompt(
     OpenCodeModelSelectionError | OpenCodeSessionRequestError | OpenCodeSessionResponseError
   >
 > {
-  const selectedModel =
-    input.model ?? runtime.sessionModels.get(input.ref.sessionId) ?? runtime.defaultModel;
-  const normalizedModel = selectedModel ? normalizeOpenCodeModelRef(selectedModel) : undefined;
+  const selectedThinking =
+    input.thinking ?? runtime.sessionThinking?.get(input.ref.sessionId) ?? runtime.defaultThinking;
+  const selectedModel = applyThinkingToModel({
+    runtime,
+    model: input.model ?? runtime.sessionModels.get(input.ref.sessionId) ?? runtime.defaultModel,
+    level: selectedThinking,
+  });
+  if (selectedModel.isErr()) return Result.err(selectedModel.error);
 
+  const normalizedModel = selectedModel.value
+    ? normalizeOpenCodeModelRef(selectedModel.value)
+    : undefined;
   if (normalizedModel?.isErr()) return Result.err(normalizedModel.error);
-  if (input.model) runtime.sessionModels.set(input.ref.sessionId, input.model);
+  if (selectedModel.value) runtime.sessionModels.set(input.ref.sessionId, selectedModel.value);
+  if (input.thinking) runtime.sessionThinking?.set(input.ref.sessionId, input.thinking);
 
   const parts = toPromptParts(input.content);
   const model = normalizedModel?.isOk() ? normalizedModel.value : undefined;

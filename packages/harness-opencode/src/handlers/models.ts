@@ -22,6 +22,7 @@ import {
   type OpenCodeCreateOptions,
   type OpenCodeModelInfo,
 } from "./utils";
+import { applyThinkingToModel, supportedThinkingLevelsForModel } from "./thinking";
 
 type OpenCodeModelRef = {
   readonly providerID: string;
@@ -63,10 +64,15 @@ function toModelCost(model: OpenCodeModelInfo["model"]): HarnessModelInfo["cost"
 }
 
 function toHarnessModelInfo(args: {
+  readonly runtime: OpenCodeRuntime;
   readonly provider: OpenCodeModelInfo["provider"];
   readonly model: OpenCodeModelInfo["model"];
   readonly variant?: OpenCodeModelInfo["variant"];
 }): HarnessModelInfo<"opencode", OpenCodeModelInfo> {
+  const supportedThinkingLevels = supportedThinkingLevelsForModel({
+    runtime: args.runtime,
+    model: args.model,
+  });
   return {
     harnessId: "opencode",
     ref: {
@@ -81,6 +87,12 @@ function toHarnessModelInfo(args: {
     capabilities: {
       tools: args.model.capabilities.toolcall,
       reasoning: args.model.capabilities.reasoning,
+      thinking: {
+        supportedLevels: supportedThinkingLevels,
+        defaultLevel: supportedThinkingLevels.includes("medium")
+          ? "medium"
+          : supportedThinkingLevels[0],
+      },
       temperature: args.model.capabilities.temperature,
       input: toSupportedMediaKinds(args.model.capabilities.input),
       output: toSupportedMediaKinds(args.model.capabilities.output),
@@ -214,9 +226,9 @@ export async function listModels(
             (model) => input.includeUnavailable || model.status !== "deprecated",
           ),
         ).flatMap((model) => [
-          toHarnessModelInfo({ provider, model }),
+          toHarnessModelInfo({ runtime, provider, model }),
           ...modelVariants(model).map((variant) =>
-            toHarnessModelInfo({ provider, model, variant }),
+            toHarnessModelInfo({ runtime, provider, model, variant }),
           ),
         ]),
       ),
@@ -236,13 +248,25 @@ export async function setModel(
   input: HarnessAdapterSetModelInput<"opencode", OpenCodeCreateOptions>,
 ): Promise<ResultType<HarnessSelectedModel<"opencode">, OpenCodeModelSelectionError>> {
   if (input.update.type === "set") {
-    const normalized = normalizeOpenCodeModelRef(input.update.model);
+    const thinking =
+      input.target.type === "harness"
+        ? runtime.defaultThinking
+        : (runtime.sessionThinking?.get(input.target.ref.sessionId) ?? runtime.defaultThinking);
+    const selectedModel = applyThinkingToModel({
+      runtime,
+      model: input.update.model,
+      level: thinking,
+    });
+    if (selectedModel.isErr()) return Result.err(selectedModel.error);
+
+    const model = selectedModel.value ?? input.update.model;
+    const normalized = normalizeOpenCodeModelRef(model);
     if (normalized.isErr()) return Result.err(normalized.error);
 
     if (input.target.type === "harness") {
-      runtime.defaultModel = input.update.model;
+      runtime.defaultModel = model;
     } else {
-      runtime.sessionModels.set(input.target.ref.sessionId, input.update.model);
+      runtime.sessionModels.set(input.target.ref.sessionId, model);
     }
 
     return Result.ok(getEffectiveModel({ runtime, target: input.target }));
