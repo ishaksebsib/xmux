@@ -1,8 +1,8 @@
 import type { XmuxRoutedChatEvent } from "@xmux/core";
 import { Result, type Result as BetterResult } from "better-result";
 
-const RESTRICTED_TELEGRAM_USER_MESSAGE =
-  "This demo bot is restricted to configured Telegram user ids.";
+const restrictedResponse = (userId: string) =>
+  `🪿 his demo bot is restricted to configured Telegram user ids.\n Add your user id to the list of allowed user ids in the demo bot's config. User ID: ${userId}`;
 
 export function createTelegramAllowedUsersMiddleware(input: string | undefined) {
   const allowedUserIds = new Set(
@@ -25,7 +25,7 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
     }
 
     await (ctx.event as { readonly reply?: (message: string) => Promise<unknown> }).reply?.(
-      RESTRICTED_TELEGRAM_USER_MESSAGE,
+      restrictedResponse(actorId ?? "unenable to get user id"),
     );
     return Result.ok();
   };
