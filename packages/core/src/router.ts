@@ -3,6 +3,7 @@ import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "./ctx";
 import type { XmuxMiddleware } from "./middleware";
+import { registerCancelRoute } from "./features/cancel";
 import { registerDeleteRoute } from "./features/delete";
 import { registerExitRoute } from "./features/exit";
 import { registerModelRoute } from "./features/model";
@@ -28,6 +29,7 @@ export function registerRoutes<
     registerExitRoute(ctx, middleware),
     registerModelRoute(ctx, middleware),
     registerThinkingRoute(ctx, middleware),
+    registerCancelRoute(ctx, middleware),
     registerPwdRoute(ctx, middleware),
     registerCdRoute(ctx, middleware),
     registerLsRoute(ctx, middleware),

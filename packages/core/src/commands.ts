@@ -47,6 +47,9 @@ export const commands = defineChatCommands({
   exit: defineChatCommand({
     description: "Exit the active session without deleting it",
   }),
+  cancel: defineChatCommand({
+    description: "Cancel the active harness generation for this chat thread",
+  }),
   model: defineChatCommand({
     description: "Show or set the model for the active session",
     options: {
