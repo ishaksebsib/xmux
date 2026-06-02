@@ -21,6 +21,7 @@ import type {
   ListModelsInput,
   ListSessionsInput,
   PromptInput,
+  RespondInteractionInput,
   ResumeSessionInput,
   SetModelInput,
   SetThinkingInput,
@@ -35,6 +36,7 @@ import { handleCreateSession } from "./handlers/session/create";
 import { handleDeleteSession } from "./handlers/session/delete";
 import { handleGetSession } from "./handlers/session/get";
 import { handleListSessions } from "./handlers/session/list";
+import { handleRespondInteraction } from "./handlers/interaction/respond";
 import { handlePrompt } from "./handlers/session/prompt";
 import { handleResumeSession } from "./handlers/session/resume";
 import { openHarnessAdapter } from "./handlers/utils";
@@ -191,6 +193,10 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
 
     async abort<TInput extends AbortInput<TAdapters>>(input: TInput) {
       return handleAbort({ input, getRuntime });
+    },
+
+    async respondInteraction<TInput extends RespondInteractionInput<TAdapters>>(input: TInput) {
+      return handleRespondInteraction({ input, getRuntime });
     },
 
     async close() {

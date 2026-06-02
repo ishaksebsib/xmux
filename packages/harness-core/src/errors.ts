@@ -253,6 +253,36 @@ export class HarnessAdapterAbortError extends TaggedError("HarnessAdapterAbortEr
   }
 }
 
+export class HarnessAdapterInteractionUnsupportedError extends TaggedError(
+  "HarnessAdapterInteractionUnsupportedError",
+)<{
+  readonly harnessId: string;
+  readonly operation: "respondInteraction";
+  readonly message: string;
+}>() {
+  constructor(args: { readonly harnessId: string; readonly operation: "respondInteraction" }) {
+    super({
+      ...args,
+      message: `Harness "${args.harnessId}" does not support ${args.operation}`,
+    });
+  }
+}
+
+export class HarnessAdapterRespondInteractionError extends TaggedError(
+  "HarnessAdapterRespondInteractionError",
+)<{
+  readonly harnessId: string;
+  readonly message: string;
+  readonly cause: unknown;
+}>() {
+  constructor(args: { readonly harnessId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to respond to interaction with harness "${args.harnessId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 export class HarnessCloseError extends TaggedError("HarnessCloseError")<{
   failures: readonly { harnessId: string; cause: unknown }[];
   message: string;
@@ -330,3 +360,9 @@ export type DeleteSessionError =
   | HarnessAdapterDeleteSessionError;
 
 export type AbortError = UnknownHarnessError | HarnessAdapterOpenError | HarnessAdapterAbortError;
+
+export type RespondInteractionError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessAdapterInteractionUnsupportedError
+  | HarnessAdapterRespondInteractionError;

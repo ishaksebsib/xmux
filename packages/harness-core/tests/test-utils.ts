@@ -52,6 +52,7 @@ export function createTestAdapter<
       | "listModels"
       | "listSessions"
       | "prompt"
+      | "respondInteraction"
       | "resumeSession"
       | "setModel"
       | "setThinking"

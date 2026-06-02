@@ -1,6 +1,7 @@
 import type {
   HarnessAdapterDefinition,
   HarnessAdapterObject,
+  HarnessInteractionResponse,
   HarnessModelInfo,
   HarnessModelRef,
   HarnessModelTarget,
@@ -114,6 +115,11 @@ export type AdapterDeleteOptionsFor<
 > = AdapterOptionsFor<TAdapters, THarnessId>;
 
 export type AdapterAbortOptionsFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = AdapterOptionsFor<TAdapters, THarnessId>;
+
+export type AdapterRespondInteractionOptionsFor<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   THarnessId extends keyof TAdapters,
 > = AdapterOptionsFor<TAdapters, THarnessId>;
@@ -482,3 +488,19 @@ export type AbortInput<TAdapters extends Record<string, AnyHarnessAdapterDefinit
 }[keyof TAdapters];
 
 export type AbortResult = void;
+
+export type RespondInteractionInputFor<
+  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
+  THarnessId extends keyof TAdapters,
+> = {
+  readonly ref: SessionRef<Extract<THarnessId, string>>;
+  readonly response: HarnessInteractionResponse;
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
+
+export type RespondInteractionInput<TAdapters extends Record<string, AnyHarnessAdapterDefinition>> =
+  {
+    readonly [THarnessId in keyof TAdapters]: RespondInteractionInputFor<TAdapters, THarnessId>;
+  }[keyof TAdapters];
+
+export type RespondInteractionResult = void;

@@ -178,6 +178,31 @@ export type HarnessInteractionEvent<
       readonly phase: "requested";
       readonly requestId: string;
       readonly prompt: string;
+      readonly title?: string;
+      readonly description?: string;
+      readonly metadata?: unknown;
+      readonly permission?: {
+        readonly name?: string;
+        readonly patterns?: readonly string[];
+        readonly tool?: {
+          readonly callId?: string;
+          readonly messageId?: string;
+          readonly name?: string;
+        };
+        readonly allowAlways?: boolean;
+      };
+      readonly question?: {
+        readonly questions: readonly {
+          readonly header?: string;
+          readonly question: string;
+          readonly options?: readonly {
+            readonly label: string;
+            readonly description?: string;
+          }[];
+          readonly multiple?: boolean;
+          readonly custom?: boolean;
+        }[];
+      };
     })
   | (HarnessPromptEventBase<THarnessId, TAdapterData> & {
       readonly type: "interaction";

@@ -8,6 +8,7 @@ import type {
   GetThinkingError,
   HarnessCloseError,
   ListModelsError,
+  RespondInteractionError,
   ListSessionsError,
   PromptError,
   ResumeSessionError,
@@ -33,6 +34,7 @@ import type {
   ListSessionsResultFromInput,
   PromptInput,
   PromptResultFromInput,
+  RespondInteractionInput,
   ResumeSessionInput,
   ResumeSessionResultFromInput,
   SetModelInput,
@@ -325,12 +327,39 @@ export interface HarnessAdapterDeleteSessionInput<
   readonly signal?: AbortSignal;
 }
 
+export type HarnessPermissionDecision = "allow_once" | "allow_always" | "reject";
+
+export type HarnessInteractionResponse =
+  | {
+      readonly kind: "permission";
+      readonly requestId: string;
+      readonly decision: HarnessPermissionDecision;
+      readonly message?: string;
+    }
+  | {
+      readonly kind: "question";
+      readonly requestId: string;
+      readonly answers?: readonly (readonly string[])[];
+      readonly reject?: boolean;
+    };
+
 /** Abort request passed to an adapter. */
 export interface HarnessAdapterAbortInput<
   THarnessId extends string,
   TAdapterOptions extends HarnessAdapterObject,
 > {
   readonly ref: SessionRef<THarnessId>;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+/** Interaction response request passed to an adapter. */
+export interface HarnessAdapterRespondInteractionInput<
+  THarnessId extends string,
+  TAdapterOptions extends HarnessAdapterObject,
+> {
+  readonly ref: SessionRef<THarnessId>;
+  readonly response: HarnessInteractionResponse;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }
@@ -383,6 +412,9 @@ export interface OpenedHarnessAdapter<
   ): Promise<Result<void, unknown>>;
   abort(
     input: HarnessAdapterAbortInput<THarnessId, TAdapterOptions>,
+  ): Promise<Result<void, unknown>>;
+  respondInteraction?(
+    input: HarnessAdapterRespondInteractionInput<THarnessId, TAdapterOptions>,
   ): Promise<Result<void, unknown>>;
   close(): Promise<void>;
 }
@@ -451,6 +483,9 @@ export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>>
     input: TInput,
   ): Promise<Result<void, DeleteSessionError>>;
   abort<TInput extends AbortInput<TAdapters>>(input: TInput): Promise<Result<void, AbortError>>;
+  respondInteraction<TInput extends RespondInteractionInput<TAdapters>>(
+    input: TInput,
+  ): Promise<Result<void, RespondInteractionError>>;
   close(): Promise<Result<void, HarnessCloseError>>;
 }
 
