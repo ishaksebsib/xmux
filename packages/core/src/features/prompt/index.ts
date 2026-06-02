@@ -11,6 +11,7 @@ export {
 export {
   PromptAlreadyRunningError,
   PromptInteractionAlreadyRespondingError,
+  PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
   PromptNoActiveRunError,
   PromptNoActiveSessionError,

@@ -50,6 +50,18 @@ export const commands = defineChatCommands({
   cancel: defineChatCommand({
     description: "Cancel the active harness generation for this chat thread",
   }),
+  allow: defineChatCommand({
+    description: "Allow the current harness permission request",
+    options: {
+      mode: stringOption({
+        description: "Use 'always' to allow matching future requests",
+        choices: ["always"] as const,
+      }),
+    },
+  }),
+  reject: defineChatCommand({
+    description: "Reject the current harness permission or question request",
+  }),
   model: defineChatCommand({
     description: "Show or set the model for the active session",
     options: {

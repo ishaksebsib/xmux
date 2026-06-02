@@ -6,6 +6,7 @@ import type { XmuxMiddleware } from "./middleware";
 import { registerCancelRoute } from "./features/cancel";
 import { registerDeleteRoute } from "./features/delete";
 import { registerExitRoute } from "./features/exit";
+import { registerInteractionRoute } from "./features/interaction";
 import { registerModelRoute } from "./features/model";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
@@ -30,6 +31,7 @@ export function registerRoutes<
     registerModelRoute(ctx, middleware),
     registerThinkingRoute(ctx, middleware),
     registerCancelRoute(ctx, middleware),
+    registerInteractionRoute(ctx, middleware),
     registerPwdRoute(ctx, middleware),
     registerCdRoute(ctx, middleware),
     registerLsRoute(ctx, middleware),

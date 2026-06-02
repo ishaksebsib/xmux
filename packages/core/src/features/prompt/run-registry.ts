@@ -31,6 +31,7 @@ export interface ActivePromptRun {
   recordEvent(event: HarnessPromptEvent): void;
   currentInteraction(): PendingPromptInteraction | undefined;
   markInteractionResponding(requestId: string): void;
+  markInteractionPending(requestId: string): void;
   markInteractionResolved(requestId: string, status: "answered" | "rejected"): void;
   markCancelling(): void;
   release(): void;
@@ -174,6 +175,16 @@ class PromptRun implements ActivePromptRun {
     this.interactions.set(requestId, {
       ...interaction,
       status: "responding",
+    });
+  }
+
+  markInteractionPending(requestId: string): void {
+    const interaction = this.interactions.get(requestId);
+    if (!interaction || interaction.status !== "responding") return;
+
+    this.interactions.set(requestId, {
+      ...interaction,
+      status: "pending",
     });
   }
 

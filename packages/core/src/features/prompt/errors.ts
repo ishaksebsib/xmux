@@ -135,6 +135,20 @@ export class PromptInteractionUnsupportedError extends TaggedError(
   }
 }
 
+/** Returned when responding to a pending interaction failed. */
+export class PromptInteractionResponseError extends TaggedError("PromptInteractionResponseError")<{
+  readonly sessionRef: SessionRef;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly sessionRef: SessionRef; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to respond to prompt interaction for session ${formatSessionRef(args.sessionRef)}: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Returned when a pending interaction is already being answered. */
 export class PromptInteractionAlreadyRespondingError extends TaggedError(
   "PromptInteractionAlreadyRespondingError",
