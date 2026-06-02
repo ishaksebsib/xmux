@@ -43,6 +43,36 @@ export class OpenCodeSessionResponseError extends TaggedError("OpenCodeSessionRe
   }
 }
 
+export class OpenCodeInteractionRequestError extends TaggedError(
+  "OpenCodeInteractionRequestError",
+)<{
+  message: string;
+  cause: unknown;
+}>() {
+  constructor(args: { cause: unknown }) {
+    super({
+      ...args,
+      message: `OpenCode interaction request failed: ${causeDetail(args.cause)}`,
+    });
+  }
+}
+
+export class OpenCodeInteractionResponseError extends TaggedError(
+  "OpenCodeInteractionResponseError",
+)<{
+  status: number;
+  detail?: string;
+  message: string;
+}>() {
+  constructor(args: { status: number; detail?: string; reason: string }) {
+    super({
+      status: args.status,
+      detail: args.detail,
+      message: `${args.reason} (status ${args.status})${args.detail ? `: ${args.detail}` : ""}`,
+    });
+  }
+}
+
 export class OpenCodeModelRequestError extends TaggedError("OpenCodeModelRequestError")<{
   message: string;
   cause: unknown;

@@ -764,6 +764,19 @@ function* mapOpenCodeEvent(args: {
         ref: args.ref,
         requestId: args.event.properties.id,
         prompt: `${args.event.properties.permission}: ${args.event.properties.patterns.join(", ")}`,
+        title: args.event.properties.permission,
+        metadata: args.event.properties.metadata,
+        permission: {
+          name: args.event.properties.permission,
+          patterns: args.event.properties.patterns,
+          tool: args.event.properties.tool
+            ? {
+                messageId: args.event.properties.tool.messageID,
+                callId: args.event.properties.tool.callID,
+              }
+            : undefined,
+          allowAlways: args.event.properties.always.length > 0,
+        },
       };
       return;
     case "permission.replied":
@@ -783,6 +796,18 @@ function* mapOpenCodeEvent(args: {
         ref: args.ref,
         requestId: args.event.properties.id,
         prompt: args.event.properties.questions.map((question) => question.question).join("\n"),
+        question: {
+          questions: args.event.properties.questions.map((question) => ({
+            header: question.header,
+            question: question.question,
+            options: question.options.map((option) => ({
+              label: option.label,
+              description: option.description,
+            })),
+            multiple: question.multiple,
+            custom: question.custom,
+          })),
+        },
       };
       return;
     case "question.replied":

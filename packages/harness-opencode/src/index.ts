@@ -1,5 +1,7 @@
 export { createOpenCodeAdapter } from "./opencode";
 export {
+  OpenCodeInteractionRequestError,
+  OpenCodeInteractionResponseError,
   OpenCodeModelRequestError,
   OpenCodeModelResponseError,
   OpenCodeModelSelectionError,
