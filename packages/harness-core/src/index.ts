@@ -16,6 +16,7 @@ export {
   HarnessAdapterThinkingUnsupportedError,
   HarnessCloseError,
   InvalidWorkingDirectoryError,
+  PromptStreamEndedWithoutTerminalEventError,
   UnknownHarnessError,
 } from "./errors";
 export { createHarness, defineHarnessAdapter } from "./harness";

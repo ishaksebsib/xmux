@@ -210,6 +210,21 @@ export class HarnessAdapterPromptError extends TaggedError("HarnessAdapterPrompt
   }
 }
 
+export class PromptStreamEndedWithoutTerminalEventError extends TaggedError(
+  "PromptStreamEndedWithoutTerminalEventError",
+)<{
+  readonly harnessId: string;
+  readonly sessionId: string;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly harnessId: string; readonly sessionId: string }) {
+    super({
+      ...args,
+      message: `Prompt stream ended without a terminal run event: ${args.harnessId}:${args.sessionId}`,
+    });
+  }
+}
+
 export class HarnessAdapterDeleteSessionError extends TaggedError(
   "HarnessAdapterDeleteSessionError",
 )<{

@@ -107,6 +107,7 @@ describe("prompt messages", () => {
       events: [
         { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "Hel" },
         { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "lo" },
+        completedEvent(),
       ],
     });
     await bindSession({ xmux });
@@ -130,6 +131,7 @@ describe("prompt messages", () => {
       events: [
         { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "stream" },
         { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "ed" },
+        completedEvent(),
       ],
     });
     await bindSession({ xmux });
@@ -198,6 +200,7 @@ describe("prompt messages", () => {
             ? toAsync([{ type: "run", phase: "aborted", ref: sessionRef, reason: "aborted" }])
             : toAsync([
                 { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "after" },
+                completedEvent(),
               ]);
       },
     });
@@ -233,6 +236,7 @@ describe("prompt messages", () => {
           ? controlledEvents({ text: "first", waitFor: firstCanFinish })
           : toAsync([
               { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "second" },
+              completedEvent(),
             ]);
       },
     });
@@ -473,7 +477,14 @@ function messageEvent(input: {
 }
 
 function defaultPromptEvents(): readonly PiPromptEvent[] {
-  return [{ type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "ok" }];
+  return [
+    { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "ok" },
+    completedEvent(),
+  ];
+}
+
+function completedEvent(): PiPromptEvent {
+  return { type: "run", phase: "completed", ref: sessionRef, reason: "stop" };
 }
 
 function sentMessage(input: {
