@@ -10,14 +10,23 @@ export {
 } from "./service";
 export {
   PromptAlreadyRunningError,
+  PromptInteractionAlreadyRespondingError,
+  PromptInteractionUnsupportedError,
+  PromptNoActiveRunError,
   PromptNoActiveSessionError,
+  PromptNoPendingInteractionError,
   PromptResponseError,
+  PromptRunCancellationError,
   PromptSessionClosedError,
   PromptSessionRecordMissingError,
 } from "./errors";
 export {
   createPromptRunRegistry,
-  type PromptRunLease,
+  type ActivePromptRun,
+  type PendingPromptInteraction,
+  type PromptRunCancelInput,
   type PromptRunRegistry,
+  type PromptRunStartInput,
+  type PromptRunState,
 } from "./run-registry";
 export { renderPromptEvents } from "./stream";

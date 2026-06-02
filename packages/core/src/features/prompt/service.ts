@@ -15,7 +15,7 @@ import {
   PromptSessionClosedError,
   PromptSessionRecordMissingError,
 } from "./errors";
-import type { PromptRunLease } from "./run-registry";
+import type { ActivePromptRun } from "./run-registry";
 
 export type PromptSessionForThreadError =
   | StoreError
@@ -37,6 +37,7 @@ export interface PromptSessionForThreadInput<
 export interface PromptSessionForThreadOutput {
   readonly session: SessionRecord;
   readonly events: AsyncIterable<HarnessPromptEvent>;
+  cancel(reason?: unknown): void;
   release(): void;
 }
 
@@ -53,34 +54,43 @@ export async function promptSessionForThread<
     return Result.err(session.error);
   }
 
-  const lease = input.ctx.app.services.promptRuns.tryStart({
+  const run = input.ctx.app.services.promptRuns.tryStart({
     sessionRef: session.value.ref,
     requestId: input.ctx.requestId,
     now: input.ctx.app.services.now().toISOString(),
   });
 
-  if (lease.isErr()) {
-    return Result.err(lease.error);
+  if (run.isErr()) {
+    return Result.err(run.error);
   }
 
+  const signal = composeAbortSignals([input.ctx.signal, run.value.signal]);
   const prompted = await input.ctx.app.harness.prompt(
     createHarnessPromptInput({
       ref: session.value.ref,
       cwd: session.value.cwd,
       text: input.text,
-      signal: input.ctx.signal,
+      signal,
     }) as unknown as PromptInput<TAdapters>,
   );
 
   if (prompted.isErr()) {
-    lease.value.release();
+    run.value.release();
     return Result.err(prompted.error);
   }
 
   return Result.ok({
     session: session.value,
-    events: releaseLeaseAfterStream({ events: prompted.value, lease: lease.value }),
-    release: lease.value.release,
+    events: observePromptRunEvents({ events: prompted.value, run: run.value }),
+    cancel(reason?: unknown) {
+      run.value.markCancelling();
+      if (!run.value.signal.aborted) {
+        run.value.controller.abort(reason);
+      }
+    },
+    release() {
+      run.value.release();
+    },
   });
 }
 
@@ -136,6 +146,44 @@ export async function getPromptSessionForThread<
   return Result.ok(session.value);
 }
 
+export function composeAbortSignals(signals: readonly AbortSignal[]): AbortSignal {
+  const controller = new AbortController();
+
+  if (signals.length === 0) {
+    return controller.signal;
+  }
+
+  const listeners: (() => void)[] = [];
+  const abort = (signal: AbortSignal) => {
+    if (!controller.signal.aborted) {
+      controller.abort(signal.reason);
+    }
+  };
+
+  for (const signal of signals) {
+    if (signal.aborted) {
+      abort(signal);
+      return controller.signal;
+    }
+  }
+
+  for (const signal of signals) {
+    const onAbort = () => abort(signal);
+    signal.addEventListener("abort", onAbort, { once: true });
+    listeners.push(() => signal.removeEventListener("abort", onAbort));
+  }
+
+  controller.signal.addEventListener(
+    "abort",
+    () => {
+      for (const cleanup of listeners) cleanup();
+    },
+    { once: true },
+  );
+
+  return controller.signal;
+}
+
 function createHarnessPromptInput(input: {
   readonly ref: SessionRecord["ref"];
   readonly cwd: string;
@@ -150,13 +198,16 @@ function createHarnessPromptInput(input: {
   };
 }
 
-async function* releaseLeaseAfterStream(input: {
+async function* observePromptRunEvents(input: {
   readonly events: AsyncIterable<HarnessPromptEvent>;
-  readonly lease: PromptRunLease;
+  readonly run: ActivePromptRun;
 }): AsyncIterable<HarnessPromptEvent> {
   try {
-    yield* input.events;
+    for await (const event of input.events) {
+      input.run.recordEvent(event);
+      yield event;
+    }
   } finally {
-    input.lease.release();
+    input.run.release();
   }
 }

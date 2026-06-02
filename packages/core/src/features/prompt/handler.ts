@@ -66,6 +66,7 @@ export async function handlePromptMessage<
   });
 
   if (streamed.isErr()) {
+    prompted.value.cancel(streamed.error);
     prompted.value.release();
   }
 

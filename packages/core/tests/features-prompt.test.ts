@@ -5,6 +5,7 @@ import { defineHarnessAdapter, type HarnessPromptEvent } from "@xmux/harness-cor
 import { createHandlerContext, createXmux } from "../src";
 import {
   handlePromptMessage,
+  promptSessionForThread,
   PromptResponseError,
   type PromptMessageEvent,
 } from "../src/features/prompt";
@@ -162,8 +163,8 @@ describe("prompt messages", () => {
     await xmux.shutdown();
   });
 
-  test("stream reply errors become PromptResponseError from the handler path", async () => {
-    const { xmux } = await initializeFallbackXmux();
+  test("stream reply errors cancel and release the active run", async () => {
+    const { promptInputs, xmux } = await initializeFallbackXmux();
     await bindSession({ xmux });
 
     const handled = await handlePromptMessage({
@@ -183,6 +184,8 @@ describe("prompt messages", () => {
       expect(PromptResponseError.is(handled.error)).toBe(true);
       expect(handled.error.message).toContain("stream down");
     }
+    expect((promptInputs[0] as { readonly signal: AbortSignal }).signal.aborted).toBe(true);
+    expect(xmux.ctx.services.promptRuns.get(sessionRef)).toBeUndefined();
 
     await xmux.shutdown();
   });
@@ -219,6 +222,104 @@ describe("prompt messages", () => {
     expect(replies[0]).toBe("**Prompt failed**\n\nboom");
     expect(replies[1]).toBe("**Prompt aborted**");
     expect(replies[2]).toBe("after");
+
+    await xmux.shutdown();
+  });
+
+  test("releases the session lease after a thrown harness stream", async () => {
+    let promptCount = 0;
+    const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux({
+      onPrompt: () => {
+        promptCount += 1;
+        return promptCount === 1
+          ? throwingEvents(new Error("stream exploded"))
+          : toAsync([
+              { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "after" },
+              completedEvent(),
+            ]);
+      },
+    });
+    await bindSession({ xmux });
+
+    emitMessage(messageEvent({ text: "one", messageId: "m1" }));
+    await eventually(() => replies.length === 1);
+
+    emitMessage(messageEvent({ text: "two", messageId: "m2" }));
+    await eventually(() => replies.length === 2);
+
+    expect(promptInputs).toHaveLength(2);
+    expect(replies[0]).toBe("**Prompt failed**\n\nstream exploded");
+    expect(replies[1]).toBe("after");
+    expect(xmux.ctx.services.promptRuns.get(sessionRef)).toBeUndefined();
+
+    await xmux.shutdown();
+  });
+
+  test("records pending interactions from prompt events", async () => {
+    const { xmux } = await initializeFallbackXmux({
+      onPrompt: () => pendingInteractionEvents(),
+    });
+    await bindSession({ xmux });
+
+    const prompted = await promptSessionForThread({
+      ctx: createHandlerContext({
+        app: xmux.ctx,
+        chatId: "telegram",
+        actor: { userId: "user-1", displayName: "Ishak" },
+      }),
+      thread,
+      text: "needs permission",
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const stream = prompted.unwrap("prompted").events[Symbol.asyncIterator]();
+
+    expect((await stream.next()).value).toMatchObject({ type: "run", phase: "started" });
+    expect((await stream.next()).value).toMatchObject({
+      type: "interaction",
+      phase: "requested",
+      requestId: "permission-1",
+    });
+
+    const run = xmux.ctx.services.promptRuns.get(sessionRef);
+    expect(run?.pendingInteractions).toEqual([
+      expect.objectContaining({
+        requestId: "permission-1",
+        kind: "permission",
+        prompt: "Run npm test?",
+        ordinal: 1,
+        status: "pending",
+      }),
+    ]);
+    expect(run?.currentInteraction()?.requestId).toBe("permission-1");
+
+    await stream.return?.();
+    prompted.unwrap("prompted").release();
+    expect(xmux.ctx.services.promptRuns.get(sessionRef)).toBeUndefined();
+
+    await xmux.shutdown();
+  });
+
+  test("clears pending interactions when they are answered or rejected", async () => {
+    const { xmux } = await initializeFallbackXmux({
+      onPrompt: () => resolvedInteractionEvents(),
+    });
+    await bindSession({ xmux });
+
+    const prompted = await promptSessionForThread({
+      ctx: createHandlerContext({
+        app: xmux.ctx,
+        chatId: "telegram",
+        actor: { userId: "user-1", displayName: "Ishak" },
+      }),
+      thread,
+      text: "needs permission",
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    await collectAsync(prompted.unwrap("prompted").events);
+
+    expect(xmux.ctx.services.promptRuns.get(sessionRef)).toBeUndefined();
 
     await xmux.shutdown();
   });
@@ -527,6 +628,48 @@ async function* controlledEvents(input: {
   yield { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: input.text };
   await input.waitFor;
   yield { type: "run", phase: "completed", ref: sessionRef, reason: "stop" };
+}
+
+async function* throwingEvents(error: unknown): AsyncIterable<PiPromptEvent> {
+  if (Date.now() < 0) yield completedEvent();
+  throw error;
+}
+
+async function* pendingInteractionEvents(): AsyncIterable<PiPromptEvent> {
+  yield {
+    type: "interaction",
+    kind: "permission",
+    phase: "requested",
+    requestId: "permission-1",
+    prompt: "Run npm test?",
+    ref: sessionRef,
+  };
+  await new Promise<never>(() => {});
+}
+
+async function* resolvedInteractionEvents(): AsyncIterable<PiPromptEvent> {
+  yield {
+    type: "interaction",
+    kind: "permission",
+    phase: "requested",
+    requestId: "permission-1",
+    prompt: "Run npm test?",
+    ref: sessionRef,
+  };
+  yield {
+    type: "interaction",
+    kind: "permission",
+    phase: "answered",
+    requestId: "permission-1",
+    ref: sessionRef,
+  };
+  yield completedEvent();
+}
+
+async function collectAsync<T>(values: AsyncIterable<T>): Promise<T[]> {
+  const collected: T[] = [];
+  for await (const value of values) collected.push(value);
+  return collected;
 }
 
 async function* toAsync<T>(values: readonly T[]): AsyncIterable<T> {
