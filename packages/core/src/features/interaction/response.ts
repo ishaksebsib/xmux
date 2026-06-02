@@ -90,6 +90,30 @@ export function formatAllowCommandUsage(): ChatTextInput {
   });
 }
 
+export function formatInvalidInteractionCommandUsage(input: {
+  readonly commandName: "allow" | "reject";
+}): ChatTextInput {
+  return input.commandName === "allow"
+    ? markdown({
+        text: [
+          `**Invalid ${inlineCode("/allow")} command**`,
+          "",
+          `Use ${inlineCode("/allow")} to allow once, or ${inlineCode("/allow always")} to always allow matching future requests.`,
+          "",
+          "**Examples**",
+          `- ${inlineCode("/allow")}`,
+          `- ${inlineCode("/allow always")}`,
+        ].join("\n"),
+      })
+    : markdown({
+        text: [
+          `**Invalid ${inlineCode("/reject")} command**`,
+          "",
+          `Use ${inlineCode("/reject")} with no extra text to reject the current request.`,
+        ].join("\n"),
+      });
+}
+
 export function formatRejectCommandUsage(): ChatTextInput {
   return formatCommandHelp({
     command: "/reject",

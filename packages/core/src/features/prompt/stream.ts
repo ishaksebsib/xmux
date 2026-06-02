@@ -27,6 +27,11 @@ interface PromptRenderState {
   toolCallsHeaderEmitted: boolean;
 }
 
+export interface PromptEventRenderer {
+  render(event: HarnessPromptEvent): string;
+  resetMessageBoundary(): void;
+}
+
 function createPromptRenderState(): PromptRenderState {
   return {
     emitted: false,
@@ -53,13 +58,29 @@ function createPromptRenderState(): PromptRenderState {
  * earlier output. Ephemeral states like "thinking" or "tool pending" are kept internal and only
  * emitted once they become stable enough to avoid stuck UI text.
  */
+export function createPromptEventRenderer(): PromptEventRenderer {
+  const state = createPromptRenderState();
+
+  return {
+    render(event) {
+      return renderPromptEvent({ event, state });
+    },
+    resetMessageBoundary() {
+      state.emitted = false;
+      state.emittedAssistantText = false;
+      state.currentTextPart = undefined;
+      state.toolCallsHeaderEmitted = false;
+    },
+  };
+}
+
 export async function* renderPromptEvents(
   events: AsyncIterable<HarnessPromptEvent>,
 ): AsyncIterable<ChatTextStreamChunk> {
-  const state = createPromptRenderState();
+  const renderer = createPromptEventRenderer();
 
   for await (const event of events) {
-    const rendered = renderPromptEvent({ event, state });
+    const rendered = renderer.render(event);
     if (rendered.length === 0) continue;
     yield { type: "delta", delta: rendered };
   }
@@ -221,6 +242,8 @@ function renderInteractionEvent(input: {
   readonly event: Extract<HarnessPromptEvent, { readonly type: "interaction" }>;
   readonly state: PromptRenderState;
 }): string {
+  if (input.event.phase !== "requested") return "";
+
   const key = `${input.event.kind}:${input.event.requestId}:${input.event.phase}`;
   if (input.state.interactionPhases.has(key)) return "";
 
@@ -230,8 +253,10 @@ function renderInteractionEvent(input: {
     promptInteraction({
       kind: input.event.kind,
       phase: input.event.phase,
-      requestId: input.event.requestId,
       prompt: input.event.phase === "requested" ? input.event.prompt : undefined,
+      title: input.event.phase === "requested" ? input.event.title : undefined,
+      permission: input.event.phase === "requested" ? input.event.permission : undefined,
+      question: input.event.phase === "requested" ? input.event.question : undefined,
     }),
   );
 }
@@ -258,10 +283,10 @@ function renderRunEvent(input: {
   }
 
   if (input.event.phase === "aborted") {
-    const error =
-      input.event.error === undefined
-        ? ""
-        : `\n\n${markdownText(describeUnknown(input.event.error))}`;
+    const description = describeUnknown(input.event.error);
+    if (description === "Generation cancelled") return "";
+
+    const error = description.length === 0 ? "" : `\n\n${markdownText(description)}`;
     return appendBlock(input.state, `**Prompt aborted**${error}`);
   }
 

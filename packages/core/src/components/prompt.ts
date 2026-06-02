@@ -1,4 +1,4 @@
-import { inlineCode, markdownText } from "./markdown";
+import { bulletList, inlineCode, markdownText } from "./markdown";
 
 export type PromptToolStatus = "pending" | "running" | "completed" | "failed";
 
@@ -71,25 +71,158 @@ export function promptRetry(input: {
   return `↻ Retrying ${input.attempt}${max}${markdownText(error)}`;
 }
 
-export function promptInteraction(input: {
+export interface PromptInteractionComponentInput {
   readonly kind: "permission" | "question";
   readonly phase: "requested" | "answered" | "rejected";
-  readonly requestId: string;
   readonly prompt?: string;
-}): string {
-  const label = input.kind === "permission" ? "Permission" : "Question";
+  readonly title?: string;
+  readonly permission?: {
+    readonly name?: string;
+    readonly patterns?: readonly string[];
+    readonly allowAlways?: boolean;
+  };
+  readonly question?: {
+    readonly questions: readonly {
+      readonly header?: string;
+      readonly question: string;
+      readonly options?: readonly {
+        readonly label: string;
+        readonly description?: string;
+      }[];
+      readonly multiple?: boolean;
+      readonly custom?: boolean;
+    }[];
+  };
+}
 
+export function promptInteraction(input: PromptInteractionComponentInput): string {
   if (input.phase !== "requested") {
-    return `${input.phase === "answered" ? "✓" : "✗"} ${label} ${input.phase}: ${inlineCode(input.requestId)}`;
+    return formatResolvedInteraction(input);
   }
 
-  const prompt = input.prompt?.trim();
-  return [
-    `⚠ ${label} requested ${inlineCode(input.requestId)}`,
-    prompt ? markdownText(prompt) : undefined,
-  ]
-    .filter((line): line is string => line !== undefined && line.length > 0)
-    .join("\n");
+  return input.kind === "permission"
+    ? formatPermissionRequest(input)
+    : formatQuestionRequest(input);
+}
+
+function formatResolvedInteraction(input: PromptInteractionComponentInput): string {
+  if (input.kind === "permission") {
+    return input.phase === "answered" ? "✓ Permission allowed" : "✗ Permission rejected";
+  }
+
+  return input.phase === "answered" ? "✓ Question answered" : "✗ Question rejected";
+}
+
+function formatPermissionRequest(input: PromptInteractionComponentInput): string {
+  const details = permissionDetails(input);
+  const parts = [
+    "⚠️ **Permission requested**",
+    details.request ? section("Request", details.request) : undefined,
+    details.scope.length > 0 ? section("Scope", bulletList(details.scope)) : undefined,
+    section(
+      "Respond",
+      bulletList([
+        `${inlineCode("/allow")} — allow this request once`,
+        `${inlineCode("/allow always")} — always allow matching future requests`,
+        `${inlineCode("/reject")} — reject this request`,
+      ]),
+    ),
+  ];
+
+  return compactLines(parts);
+}
+
+function formatQuestionRequest(input: PromptInteractionComponentInput): string {
+  const questions = input.question?.questions ?? [];
+  const body =
+    questions.length > 0
+      ? questions.map((question, index) => formatQuestion(question, index)).join("\n\n")
+      : markdownText(input.prompt?.trim() || "The harness is waiting for an answer.");
+
+  return compactLines([
+    "⚠️ **Question requested**",
+    section(questions.length > 1 ? "Questions" : "Question", body),
+    section("Respond", bulletList([`${inlineCode("/reject")} — dismiss this question`])),
+  ]);
+}
+
+function permissionDetails(input: PromptInteractionComponentInput): {
+  readonly request?: string;
+  readonly scope: readonly string[];
+} {
+  const fallback = parsePermissionPrompt(input.prompt);
+  const request = input.permission?.name ?? input.title ?? fallback.request;
+  const patterns = input.permission?.patterns ?? fallback.scope;
+
+  return {
+    request: request ? inlineCode(request) : undefined,
+    scope: patterns.map((pattern) => inlineCode(pattern)),
+  };
+}
+
+function parsePermissionPrompt(prompt: string | undefined): {
+  readonly request?: string;
+  readonly scope: readonly string[];
+} {
+  const trimmed = prompt?.trim();
+  if (!trimmed) return { scope: [] };
+
+  const lines = trimmed
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) return { scope: [] };
+
+  const first = lines[0];
+  if (!first) return { scope: [] };
+
+  const rest = lines.slice(1);
+  const colon = first.indexOf(":");
+  if (colon > 0) {
+    const request = first.slice(0, colon).trim();
+    const firstScope = first
+      .slice(colon + 1)
+      .split(",")
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+    return { request, scope: [...firstScope, ...rest] };
+  }
+
+  return { request: first, scope: rest };
+}
+
+function formatQuestion(
+  question: NonNullable<PromptInteractionComponentInput["question"]>["questions"][number],
+  index: number,
+): string {
+  const title = question.header
+    ? `**${index + 1}. ${markdownText(question.header)}**`
+    : `**${index + 1}.**`;
+  const options = question.options ?? [];
+  const optionLines =
+    options.length === 0
+      ? []
+      : [
+          "",
+          "Options:",
+          bulletList(
+            options.map((option) =>
+              option.description
+                ? `${inlineCode(option.label)} — ${markdownText(option.description)}`
+                : inlineCode(option.label),
+            ),
+          ),
+        ];
+
+  return compactLines([title, markdownText(question.question), ...optionLines]);
+}
+
+function section(title: string, body: string): string {
+  return `**${title}**\n${body}`;
+}
+
+function compactLines(lines: readonly (string | undefined)[]): string {
+  return lines.filter((line): line is string => line !== undefined && line.length > 0).join("\n\n");
 }
 
 export function promptUsage(input: {

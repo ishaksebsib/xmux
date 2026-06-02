@@ -10,7 +10,7 @@ import {
   type AllowCommandEvent,
   type RejectCommandEvent,
 } from "./handler";
-import { formatAllowCommandUsage, formatRejectCommandUsage } from "./response";
+import { formatInvalidInteractionCommandUsage } from "./response";
 
 /** Registers chat routes owned by interaction response commands. */
 export function registerInteractionRoute<
@@ -83,10 +83,9 @@ export function registerInteractionRoute<
         replyToInvalidCommandUsage({
           event: invalidCommandEvent,
           commandName: invalidCommandEvent.commandName,
-          usage:
-            invalidCommandEvent.commandName === "allow"
-              ? formatAllowCommandUsage()
-              : formatRejectCommandUsage(),
+          usage: formatInvalidInteractionCommandUsage({
+            commandName: invalidCommandEvent.commandName as "allow" | "reject",
+          }),
           onError: (cause) => new InteractionCommandResponseError({ cause }),
         }),
     });

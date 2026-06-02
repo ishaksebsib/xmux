@@ -58,6 +58,90 @@ describe("prompt stream renderer", () => {
     expect(text).toContain("> ```text\n> ok\n> ```");
   });
 
+  test("renders permission requests with commands and without request ids", async () => {
+    const text = await collectRendered([
+      {
+        type: "interaction",
+        kind: "permission",
+        phase: "requested",
+        ref,
+        requestId: "per_e887ace980010IuUtH2q4T0iKJ",
+        prompt: "external_directory: /home/pro/dev/forks/pi/*",
+        permission: {
+          name: "external_directory",
+          patterns: ["/home/pro/dev/forks/pi/*"],
+          allowAlways: true,
+        },
+      },
+    ]);
+
+    expect(text).toBe(
+      [
+        "⚠️ **Permission requested**",
+        "",
+        "**Request**",
+        "`external_directory`",
+        "",
+        "**Scope**",
+        "- `/home/pro/dev/forks/pi/*`",
+        "",
+        "**Respond**",
+        "- `/allow` — allow this request once",
+        "- `/allow always` — always allow matching future requests",
+        "- `/reject` — reject this request",
+      ].join("\n"),
+    );
+    expect(text).not.toContain("per_e887ace980010IuUtH2q4T0iKJ");
+  });
+
+  test("renders question requests with reject instructions and without request ids", async () => {
+    const text = await collectRendered([
+      {
+        type: "interaction",
+        kind: "question",
+        phase: "requested",
+        ref,
+        requestId: "question-1",
+        prompt: "Pick a mode",
+        question: {
+          questions: [
+            {
+              header: "Mode",
+              question: "Pick a mode",
+              options: [{ label: "Fast", description: "Skip extra checks" }],
+            },
+          ],
+        },
+      },
+    ]);
+
+    expect(text).toContain("⚠️ **Question requested**");
+    expect(text).toContain("`/reject` — dismiss this question");
+    expect(text).toContain("`Fast` — Skip extra checks");
+    expect(text).not.toContain("question-1");
+  });
+
+  test("suppresses resolved interactions", async () => {
+    const text = await collectRendered([
+      {
+        type: "interaction",
+        kind: "permission",
+        phase: "answered",
+        ref,
+        requestId: "permission-1",
+      },
+      {
+        type: "interaction",
+        kind: "question",
+        phase: "rejected",
+        ref,
+        requestId: "question-1",
+      },
+    ]);
+
+    expect(text).toBe("");
+  });
+
   test("renders run failures and aborts before or after prior output", async () => {
     const failedWithoutOutput = await collectRendered([
       { type: "run", phase: "failed", ref, reason: "error", error: new Error("boom") },
@@ -66,9 +150,13 @@ describe("prompt stream renderer", () => {
       { type: "content", phase: "delta", kind: "text", ref, delta: "hello" },
       { type: "run", phase: "aborted", ref, reason: "aborted" },
     ]);
+    const locallyCancelled = await collectRendered([
+      { type: "run", phase: "aborted", ref, reason: "aborted", error: "Generation cancelled" },
+    ]);
 
     expect(failedWithoutOutput).toBe("**Prompt failed**\n\nboom");
     expect(abortedAfterOutput).toBe("hello\n\n**Prompt aborted**");
+    expect(locallyCancelled).toBe("");
   });
 });
 

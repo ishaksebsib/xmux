@@ -101,9 +101,10 @@ export async function respondToCurrentInteractionForThread<
 
   const responded = await input.ctx.app.harness.respondInteraction({
     ref: session.value.ref,
+    cwd: session.value.cwd,
     response: response.value,
     signal: input.ctx.signal,
-  } as RespondInteractionInput<TAdapters>);
+  } as unknown as RespondInteractionInput<TAdapters>);
 
   if (responded.isErr()) {
     run.markInteractionPending(selected.interaction.requestId);

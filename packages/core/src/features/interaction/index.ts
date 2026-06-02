@@ -17,5 +17,6 @@ export {
   formatAllowCommandUsage,
   formatInteractionFailure,
   formatInteractionOutput,
+  formatInvalidInteractionCommandUsage,
   formatRejectCommandUsage,
 } from "./response";

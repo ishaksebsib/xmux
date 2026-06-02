@@ -127,6 +127,55 @@ describe("prompt messages", () => {
     await xmux.shutdown();
   });
 
+  test("splits permission requests into a separate chat message", async () => {
+    const { emitMessage, replies, xmux } = await initializeFallbackXmux({
+      events: [
+        { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "Need access." },
+        {
+          type: "interaction",
+          kind: "permission",
+          phase: "requested",
+          ref: sessionRef,
+          requestId: "per_internal_1",
+          prompt: "external_directory: /home/pro/dev/forks/pi/*",
+          permission: {
+            name: "external_directory",
+            patterns: ["/home/pro/dev/forks/pi/*"],
+          },
+        },
+        { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "Continuing." },
+        completedEvent(),
+      ],
+    });
+    await bindSession({ xmux });
+
+    emitMessage(messageEvent({ text: "go" }));
+
+    await eventually(() => replies.length === 3);
+
+    expect(replies[0]).toBe("Need access.");
+    expect(replies[1]).toBe(
+      [
+        "⚠️ **Permission requested**",
+        "",
+        "**Request**",
+        "`external_directory`",
+        "",
+        "**Scope**",
+        "- `/home/pro/dev/forks/pi/*`",
+        "",
+        "**Respond**",
+        "- `/allow` — allow this request once",
+        "- `/allow always` — always allow matching future requests",
+        "- `/reject` — reject this request",
+      ].join("\n"),
+    );
+    expect(replies[1]).not.toContain("per_internal_1");
+    expect(replies[2]).toBe("Continuing.");
+
+    await xmux.shutdown();
+  });
+
   test("delivers harness text deltas through native replyStream", async () => {
     const { emitMessage, promptInputs, streams, xmux } = await initializeStreamingXmux({
       events: [

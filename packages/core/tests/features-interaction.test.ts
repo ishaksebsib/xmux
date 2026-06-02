@@ -47,7 +47,7 @@ describe("interaction commands", () => {
     await xmux.shutdown();
   });
 
-  test("/allow responds to the current permission with allow_once", async () => {
+  test("/allow responds to the current permission with allow_once without a confirmation reply", async () => {
     const { emitCommand, replies, respondCalls, xmux } = await initializeXmux({
       promptEvents: permissionEvents("permission-1"),
     });
@@ -56,20 +56,19 @@ describe("interaction commands", () => {
 
     emitCommand(allowCommandEvent());
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => respondCalls.length === 1);
 
     expect(respondCalls).toEqual([
       { kind: "permission", requestId: "permission-1", decision: "allow_once" },
     ]);
-    expect(replies[0]).toBe("**Allowed**\n\nThe current permission request was allowed once.");
-    expect(replies[0]).not.toContain("permission-1");
+    expect(replies).toEqual([]);
     expect(xmux.ctx.services.promptRuns.get(sessionRef)?.pendingInteractions).toEqual([]);
 
     await prompt.close();
     await xmux.shutdown();
   });
 
-  test("/allow always responds with allow_always", async () => {
+  test("/allow always responds with allow_always without a confirmation reply", async () => {
     const { emitCommand, replies, respondCalls, xmux } = await initializeXmux({
       promptEvents: permissionEvents("permission-1"),
     });
@@ -78,15 +77,12 @@ describe("interaction commands", () => {
 
     emitCommand(allowCommandEvent("always"));
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => respondCalls.length === 1);
 
     expect(respondCalls).toEqual([
       { kind: "permission", requestId: "permission-1", decision: "allow_always" },
     ]);
-    expect(replies[0]).toBe(
-      "**Allowed always**\n\nFuture matching requests may be allowed automatically by the harness.",
-    );
-    expect(replies[0]).not.toContain("permission-1");
+    expect(replies).toEqual([]);
 
     await prompt.close();
     await xmux.shutdown();
@@ -211,15 +207,15 @@ describe("interaction commands", () => {
     const prompt = await startPromptAndConsume({ xmux, eventsToConsume: 3 });
 
     emitCommand(allowCommandEvent());
-    await eventually(() => replies.length === 1);
+    await eventually(() => respondCalls.length === 1);
     emitCommand(rejectCommandEvent());
-    await eventually(() => replies.length === 2);
+    await eventually(() => replies.length === 1);
 
     expect(respondCalls).toEqual([
       { kind: "permission", requestId: "permission-1", decision: "allow_once" },
       { kind: "permission", requestId: "permission-2", decision: "reject" },
     ]);
-    expect(replies[0]).toContain("There are more pending requests");
+    expect(replies[0]).toBe("**Rejected**\n\nThe current request was rejected.");
     expect(replies.join("\n")).not.toContain("permission-1");
     expect(replies.join("\n")).not.toContain("permission-2");
 
@@ -238,11 +234,11 @@ describe("interaction commands", () => {
     emitCommand(allowCommandEvent());
     await eventually(() => replies.length === 1);
     emitCommand(allowCommandEvent());
-    await eventually(() => replies.length === 2);
+    await eventually(() => respondCalls.length === 2);
 
     expect(replies[0]).toContain("**Failed to respond to permission request**");
     expect(replies[0]).toContain("adapter failed");
-    expect(replies[1]).toBe("**Allowed**\n\nThe current permission request was allowed once.");
+    expect(replies).toHaveLength(1);
     expect(respondCalls).toEqual([
       { kind: "permission", requestId: "permission-1", decision: "allow_once" },
       { kind: "permission", requestId: "permission-1", decision: "allow_once" },
@@ -259,9 +255,11 @@ describe("interaction commands", () => {
 
     await eventually(() => replies.length === 1);
 
-    expect(replies[0]).toContain("**/allow : allow current permission request**");
-    expect(replies[0]).toContain("`/allow [always]`");
+    expect(replies[0]).toContain("**Invalid `/allow` command**");
+    expect(replies[0]).toContain("Use `/allow` to allow once");
     expect(replies[0]).toContain("`/allow always`");
+    expect(replies[0]).not.toContain("Invalid command option");
+    expect(replies[0]).not.toContain("**/allow : allow current permission request**");
 
     await xmux.shutdown();
   });
