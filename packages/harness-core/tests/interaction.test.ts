@@ -152,7 +152,7 @@ describe("interaction responses", () => {
     }
   });
 
-  test("passes adapter options and signal", async () => {
+  test("passes cwd, adapter options, and signal", async () => {
     const controller = new AbortController();
     let received: HarnessAdapterRespondInteractionInput<"pi", PiAdapterInput> | undefined;
     const harness = createHarness({
@@ -174,12 +174,14 @@ describe("interaction responses", () => {
 
     const responded = await harness.respondInteraction({
       ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: process.cwd(),
       response: { kind: "question", requestId: "question-1", answers: [["yes"]] },
       adapterOptions: { sessionMode: "persistent" },
       signal: controller.signal,
     });
 
     expect(responded.isOk()).toBe(true);
+    expect(received?.cwd).toBe(process.cwd());
     expect(received?.adapterOptions).toEqual({ sessionMode: "persistent" });
     expect(received?.signal).toBe(controller.signal);
   });

@@ -359,6 +359,7 @@ export interface HarnessAdapterRespondInteractionInput<
   TAdapterOptions extends HarnessAdapterObject,
 > {
   readonly ref: SessionRef<THarnessId>;
+  readonly cwd?: WorkingDirectoryPath;
   readonly response: HarnessInteractionResponse;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;

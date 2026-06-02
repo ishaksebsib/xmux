@@ -9,7 +9,7 @@ import type {
   RespondInteractionResult,
 } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput } from "../utils";
+import { adapterOptionsFromInput, createWorkingDirectoryPath } from "../utils";
 
 export async function handleRespondInteraction<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -30,11 +30,16 @@ export async function handleRespondInteraction<
       );
     }
 
+    const cwd = args.input.cwd
+      ? yield* Result.await(createWorkingDirectoryPath(args.input.cwd))
+      : undefined;
+
     const responded = yield* Result.await(
       Result.tryPromise({
         try: async () =>
           respondInteraction({
             ref: args.input.ref,
+            cwd,
             response: args.input.response,
             adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
               args.input,

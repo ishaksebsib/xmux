@@ -363,6 +363,7 @@ export type AbortError = UnknownHarnessError | HarnessAdapterOpenError | Harness
 
 export type RespondInteractionError =
   | UnknownHarnessError
+  | InvalidWorkingDirectoryError
   | HarnessAdapterOpenError
   | HarnessAdapterInteractionUnsupportedError
   | HarnessAdapterRespondInteractionError;

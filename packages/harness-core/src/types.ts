@@ -494,6 +494,7 @@ export type RespondInteractionInputFor<
   THarnessId extends keyof TAdapters,
 > = {
   readonly ref: SessionRef<Extract<THarnessId, string>>;
+  readonly cwd?: string;
   readonly response: HarnessInteractionResponse;
   readonly signal?: AbortSignal;
 } & AdapterOptionsProp<AdapterOptionsFor<TAdapters, THarnessId>>;
