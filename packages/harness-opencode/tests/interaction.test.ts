@@ -24,6 +24,7 @@ describe("OpenCode interaction response", () => {
 
     const responded = await respondInteraction(runtime, {
       ref,
+      cwd,
       response: { kind: "permission", requestId: "permission-1", decision: "allow_once" },
       adapterOptions: { workspace: "workspace-1" },
     });
@@ -34,6 +35,7 @@ describe("OpenCode interaction response", () => {
         target: "permission.reply",
         parameters: {
           requestID: "permission-1",
+          directory: cwd,
           workspace: "workspace-1",
           reply: "once",
           message: undefined,
@@ -91,7 +93,7 @@ describe("OpenCode interaction response", () => {
     expect(calls).toEqual([
       {
         target: "question.reject",
-        parameters: { requestID: "question-1", workspace: "workspace-1" },
+        parameters: { requestID: "question-1", directory: undefined, workspace: "workspace-1" },
       },
     ]);
   });
@@ -111,6 +113,7 @@ describe("OpenCode interaction response", () => {
         target: "question.reply",
         parameters: {
           requestID: "question-1",
+          directory: undefined,
           workspace: "workspace-1",
           answers: [["Yes"], ["A", "B"]],
         },

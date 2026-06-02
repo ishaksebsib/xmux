@@ -53,6 +53,7 @@ async function sendInteractionResponse(
         await runtime.client.permission.reply(
           {
             requestID: input.response.requestId,
+            directory: input.cwd,
             workspace: input.adapterOptions.workspace,
             reply: toOpenCodePermissionReply(input.response.decision),
             message: input.response.message,
@@ -67,6 +68,7 @@ async function sendInteractionResponse(
         await runtime.client.question.reject(
           {
             requestID: input.response.requestId,
+            directory: input.cwd,
             workspace: input.adapterOptions.workspace,
           },
           { signal: input.signal },
@@ -78,6 +80,7 @@ async function sendInteractionResponse(
       await runtime.client.question.reply(
         {
           requestID: input.response.requestId,
+          directory: input.cwd,
           workspace: input.adapterOptions.workspace,
           answers: input.response.answers?.map((answer) => [...answer]) ?? [],
         },
