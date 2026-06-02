@@ -147,3 +147,5 @@ vite.config.ts.timestamp-*
 
 # AGENTS
 AGENTS.md
+
+.direnv
