@@ -8,26 +8,14 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeModelSelectionError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import type { OpenCodeCreateOptions, OpenCodeModelInfo } from "./utils";
-
-const orderedThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-
-const defaultThinkingLevelMap = {
-  off: undefined,
-  minimal: "minimal",
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "xhigh",
-  max: "code-extreme",
-} as const;
+import {
+  defaultOpenCodeThinkingLevelMap,
+  orderedOpenCodeThinkingLevels,
+} from "../thinking-levels";
+import type { OpenCodeCreateOptions, OpenCodeModelInfo } from "../types";
 
 function thinkingLevelMap(runtime: OpenCodeRuntime) {
-  return runtime.thinkingLevelMap ?? defaultThinkingLevelMap;
-}
-
-function sessionThinking(runtime: OpenCodeRuntime): Map<string, HarnessThinkingLevel> {
-  return runtime.sessionThinking ?? new Map<string, HarnessThinkingLevel>();
+  return runtime.thinkingLevelMap ?? defaultOpenCodeThinkingLevelMap;
 }
 
 function hasThinkingLevel(runtime: OpenCodeRuntime, level: HarnessThinkingLevel): boolean {
@@ -41,7 +29,7 @@ export function supportedThinkingLevelsForModel(args: {
 }): HarnessThinkingLevel[] {
   if (args.model && !args.model.capabilities.reasoning) return ["off"];
 
-  return orderedThinkingLevels.filter((level) => {
+  return orderedOpenCodeThinkingLevels.filter((level) => {
     if (!hasThinkingLevel(args.runtime, level)) return false;
 
     const variant = thinkingLevelMap(args.runtime)[level];
@@ -90,7 +78,7 @@ function thinkingLevelForVariant(args: {
   readonly runtime: OpenCodeRuntime;
   readonly variant?: string;
 }): HarnessThinkingLevel | undefined {
-  for (const level of orderedThinkingLevels) {
+  for (const level of orderedOpenCodeThinkingLevels) {
     if (
       hasThinkingLevel(args.runtime, level) &&
       thinkingLevelMap(args.runtime)[level] === args.variant
@@ -122,7 +110,7 @@ export function getEffectiveThinking(args: {
       : { target: args.target, source: "unset" };
   }
 
-  const sessionThinkingLevel = sessionThinking(args.runtime).get(args.target.ref.sessionId);
+  const sessionThinkingLevel = args.runtime.sessionThinking.get(args.target.ref.sessionId);
   if (sessionThinkingLevel) {
     return { target: args.target, level: sessionThinkingLevel, source: "session" };
   }
@@ -161,7 +149,7 @@ export async function setThinking(
     if (input.target.type === "harness") {
       runtime.defaultThinking = input.update.level;
     } else {
-      sessionThinking(runtime).set(input.target.ref.sessionId, input.update.level);
+      runtime.sessionThinking.set(input.target.ref.sessionId, input.update.level);
 
       const model = runtime.sessionModels.get(input.target.ref.sessionId);
       if (model) {
@@ -178,7 +166,7 @@ export async function setThinking(
   if (input.target.type === "harness") {
     runtime.defaultThinking = undefined;
   } else {
-    sessionThinking(runtime).delete(input.target.ref.sessionId);
+    runtime.sessionThinking.delete(input.target.ref.sessionId);
   }
 
   return Result.ok(getEffectiveThinking({ runtime, target: input.target }));

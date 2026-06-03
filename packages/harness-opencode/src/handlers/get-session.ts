@@ -2,14 +2,9 @@ import type { HarnessAdapterGetSessionInput, HarnessAdapterSessionInfo } from "@
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "../types";
 import { getEffectiveSessionModel } from "./models";
-import {
-  toAdapterSession,
-  toResponseResult,
-  toSessionResponseError,
-  type OpenCodeCreateOptions,
-  type OpenCodeSessionInfo,
-} from "./utils";
+import { toAdapterSession, toResponseResult, toSessionResponseError } from "./utils";
 
 export async function getSession(
   runtime: OpenCodeRuntime,

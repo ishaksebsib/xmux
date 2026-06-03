@@ -1,34 +1,8 @@
-import type { Model, PermissionRuleset, Provider, Session } from "@opencode-ai/sdk/v2";
+import type { Session } from "@opencode-ai/sdk/v2";
 import type { HarnessAdapterSessionInfo, HarnessModelRef } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionResponseError } from "../errors";
-
-export type OpenCodeCreateOptions = {
-  readonly parentId?: string;
-  readonly permission?: PermissionRuleset;
-  readonly workspace?: string;
-  readonly workspaceId?: string;
-};
-
-export type OpenCodeSessionInfo = {
-  readonly directory: string;
-  readonly path?: string;
-  readonly projectId: string;
-  readonly slug: string;
-  readonly version: string;
-  readonly workspaceId?: string;
-};
-
-export type OpenCodeModelVariant = {
-  readonly id: string;
-  readonly data: Record<string, unknown>;
-};
-
-export type OpenCodeModelInfo = {
-  readonly provider: Provider;
-  readonly model: Model;
-  readonly variant?: OpenCodeModelVariant;
-};
+import type { OpenCodeSessionInfo } from "../types";
 
 export function describeResponseError(error: unknown): string {
   return error instanceof Error ? error.message : JSON.stringify(error);
@@ -118,6 +92,17 @@ export function toAdapterSession(args: {
     model: args.model ?? toSessionModel(args.session),
     adapterData: toSessionInfo(args.session),
   };
+}
+
+export function expectTrueResponse<TError>(args: {
+  readonly value: boolean;
+  readonly status: number;
+  readonly reason: string;
+  readonly toError: (args: { readonly status: number; readonly reason: string }) => TError;
+}): ResultType<void, TError> {
+  return args.value === true
+    ? Result.ok(undefined)
+    : Result.err(args.toError({ status: args.status, reason: args.reason }));
 }
 
 export function toSessionResponseError(args: {

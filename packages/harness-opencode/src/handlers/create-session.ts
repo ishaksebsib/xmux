@@ -9,14 +9,13 @@ import {
   OpenCodeSessionResponseError,
 } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "../types";
 import {
   toOpenCodeCreateModel,
   toResponseResult,
   toSessionInfo,
   toSessionModel,
   toSessionResponseError,
-  type OpenCodeCreateOptions,
-  type OpenCodeSessionInfo,
 } from "./utils";
 import { applyThinkingToModel } from "./thinking";
 

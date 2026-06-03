@@ -15,13 +15,8 @@ import {
   OpenCodeModelSelectionError,
 } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import {
-  describeResponseError,
-  toResponseResult,
-  toSessionModel,
-  type OpenCodeCreateOptions,
-  type OpenCodeModelInfo,
-} from "./utils";
+import type { OpenCodeCreateOptions, OpenCodeModelInfo } from "../types";
+import { describeResponseError, toResponseResult, toSessionModel } from "./utils";
 import { applyThinkingToModel, supportedThinkingLevelsForModel } from "./thinking";
 
 type OpenCodeModelRef = {

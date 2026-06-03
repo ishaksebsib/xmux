@@ -9,10 +9,11 @@ export {
   OpenCodeSessionRequestError,
   OpenCodeSessionResponseError,
 } from "./errors";
-export type { OpenCodeAdapter } from "./opencode";
-export type { OpenCodeAdapterConfig } from "./runtime";
 export type {
+  OpenCodeAdapter,
+  OpenCodeAdapterConfig,
   OpenCodeCreateOptions,
   OpenCodeModelInfo,
+  OpenCodeModelVariant,
   OpenCodeSessionInfo,
-} from "./handlers/utils";
+} from "./types";

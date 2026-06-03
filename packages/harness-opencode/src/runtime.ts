@@ -6,28 +6,16 @@ import type {
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeRuntimeOpenError } from "./errors";
-
-type OpenCodeThinkingNativeValue = string | undefined;
-
-type SharedConfig = {
-  readonly defaultModel?: HarnessModelRef;
-  readonly defaultThinking?: HarnessThinkingLevel;
-  readonly thinkingLevelMap?: HarnessThinkingLevelMap<OpenCodeThinkingNativeValue>;
-};
-
-type EmbeddedConfig = SharedConfig & {
-  readonly mode?: "embedded";
-  readonly port?: number;
-};
-
-type ExternalConfig = SharedConfig & {
-  readonly mode: "external";
-  readonly baseUrl: string;
-};
+import { defaultOpenCodeThinkingLevelMap } from "./thinking-levels";
+import type {
+  OpenCodeAdapterConfig,
+  OpenCodeEmbeddedConfig,
+  OpenCodeExternalConfig,
+  OpenCodeSharedConfig,
+  OpenCodeThinkingNativeValue,
+} from "./types";
 
 type OpenCodeClient = ReturnType<typeof createOpencodeClient>;
-
-export type OpenCodeAdapterConfig = EmbeddedConfig | ExternalConfig;
 
 export type OpenCodeRuntime = {
   readonly client: OpenCodeClient;
@@ -39,28 +27,16 @@ export type OpenCodeRuntime = {
   close(): Promise<void>;
 };
 
-const defaultThinkingLevelMap = {
-  off: undefined,
-  minimal: "minimal",
-  low: "low",
-  medium: "medium",
-  high: "high",
-  xhigh: "xhigh",
-  max: "code-extreme",
-} satisfies HarnessThinkingLevelMap<OpenCodeThinkingNativeValue>;
-
 function resolveThinkingLevelMap(
-  config: SharedConfig,
+  config: OpenCodeSharedConfig,
 ): HarnessThinkingLevelMap<OpenCodeThinkingNativeValue> {
-  return config.thinkingLevelMap ?? defaultThinkingLevelMap;
+  return config.thinkingLevelMap ?? defaultOpenCodeThinkingLevelMap;
 }
 
-export function normalizeConfig(config: OpenCodeAdapterConfig | undefined): OpenCodeAdapterConfig {
-  return config ?? { mode: "embedded" };
-}
+export { normalizeConfig, normalizeOpenCodeAdapterConfig } from "./config";
 
 function createExternalRuntime(
-  config: ExternalConfig,
+  config: OpenCodeExternalConfig,
 ): ResultType<OpenCodeRuntime, OpenCodeRuntimeOpenError> {
   return Result.try({
     try: () => ({
@@ -79,7 +55,7 @@ function createExternalRuntime(
 }
 
 async function createEmbeddedRuntime(
-  config: EmbeddedConfig,
+  config: OpenCodeEmbeddedConfig,
 ): Promise<ResultType<OpenCodeRuntime, OpenCodeRuntimeOpenError>> {
   return Result.tryPromise({
     try: async () => {

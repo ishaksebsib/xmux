@@ -5,10 +5,11 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeInteractionRequestError, OpenCodeInteractionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
+import type { OpenCodeCreateOptions } from "../types";
 import {
   describeResponseError,
+  expectTrueResponse,
   toResponseResult,
-  type OpenCodeCreateOptions,
   type OpenCodeSdkResponse,
 } from "./utils";
 
@@ -107,15 +108,11 @@ export async function respondInteraction(
       missingReason: "OpenCode interaction response returned no success confirmation",
     });
 
-    if (succeeded !== true) {
-      return Result.err(
-        toInteractionResponseError({
-          status: response.response?.status ?? 0,
-          reason: "OpenCode interaction response returned no success confirmation",
-        }),
-      );
-    }
-
-    return Result.ok(undefined);
+    return expectTrueResponse({
+      value: succeeded,
+      status: response.response?.status ?? 0,
+      reason: "OpenCode interaction response returned no success confirmation",
+      toError: toInteractionResponseError,
+    });
   });
 }

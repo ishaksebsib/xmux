@@ -2,7 +2,8 @@ import type { HarnessAdapterDeleteSessionInput } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import { toResponseResult, toSessionResponseError, type OpenCodeCreateOptions } from "./utils";
+import type { OpenCodeCreateOptions } from "../types";
+import { expectTrueResponse, toResponseResult, toSessionResponseError } from "./utils";
 
 export async function deleteSession(
   runtime: OpenCodeRuntime,
@@ -30,16 +31,16 @@ export async function deleteSession(
       missingReason: "OpenCode session delete returned no success confirmation",
     });
 
-    if (deleted !== true) {
-      return Result.err(
-        toSessionResponseError({
-          status: response.response?.status ?? 0,
-          reason: "OpenCode session delete returned no success confirmation",
-        }),
-      );
-    }
+    const confirmed = expectTrueResponse({
+      value: deleted,
+      status: response.response?.status ?? 0,
+      reason: "OpenCode session delete returned no success confirmation",
+      toError: toSessionResponseError,
+    });
+    if (confirmed.isErr()) return Result.err(confirmed.error);
 
-    runtime.sessionModels?.delete(input.ref.sessionId);
+    runtime.sessionModels.delete(input.ref.sessionId);
+    runtime.sessionThinking?.delete(input.ref.sessionId);
 
     return Result.ok(undefined);
   });

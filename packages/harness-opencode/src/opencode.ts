@@ -1,13 +1,8 @@
-import {
-  defineHarnessAdapter,
-  type HarnessAdapterDefinition,
-  type OpenedHarnessAdapter,
-} from "@xmux/harness-core";
+import { defineHarnessAdapter, type OpenedHarnessAdapter } from "@xmux/harness-core";
 import { Result } from "better-result";
 import {
   openRuntime,
   normalizeConfig,
-  type OpenCodeAdapterConfig,
   type OpenCodeRuntime,
 } from "./runtime";
 import { abortSession } from "./handlers/abort";
@@ -21,17 +16,12 @@ import { getThinking, setThinking } from "./handlers/thinking";
 import { resumeSession } from "./handlers/resume-session";
 import { respondInteraction } from "./handlers/respond-interaction";
 import type {
+  OpenCodeAdapter,
+  OpenCodeAdapterConfig,
   OpenCodeCreateOptions,
   OpenCodeModelInfo,
   OpenCodeSessionInfo,
-} from "./handlers/utils";
-
-export type OpenCodeAdapter = HarnessAdapterDefinition<
-  "opencode",
-  OpenCodeCreateOptions,
-  OpenCodeSessionInfo,
-  OpenCodeModelInfo
->;
+} from "./types";
 
 async function createOpenedAdapter(
   runtime: OpenCodeRuntime,
