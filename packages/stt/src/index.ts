@@ -1,19 +1,21 @@
-export { createSpeechToTextAudioFromFile } from "./audio";
-export { createSpeechToTextClient } from "./client";
+export { createSpeechToTextClient, createSttClient } from "./client";
 export {
   SpeechToTextConfigError,
-  SpeechToTextFileReadError,
+  SpeechToTextInputError,
   SpeechToTextParseError,
   SpeechToTextRequestError,
   SpeechToTextResponseError,
 } from "./errors";
-export type { CreateSpeechToTextAudioInput } from "./audio";
 export type {
-  OpenAICompatibleSpeechToTextConfig,
-  SpeechToTextAudioFileError,
+  SpeechToTextClientConfig,
+  SpeechToTextCreateClientError,
+  SttClientConfig,
+} from "./client";
+export type { OpenAICompatibleSpeechToTextConfig } from "./providers/openai-compatible";
+export type {
   SpeechToTextAudioInput,
   SpeechToTextClient,
-  SpeechToTextClientConfig,
+  SpeechToTextClientError,
   SpeechToTextError,
   SpeechToTextFetch,
   SpeechToTextFormValue,
@@ -25,4 +27,8 @@ export type {
   SpeechToTextTranscript,
   SpeechToTextTranscribeInput,
   SpeechToTextWord,
-} from "./contracts";
+  SttAudioInput,
+  SttClient,
+  SttTranscript,
+  SttTranscribeInput,
+} from "./types";

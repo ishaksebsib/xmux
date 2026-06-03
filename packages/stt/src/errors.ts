@@ -16,6 +16,18 @@ export class SpeechToTextConfigError extends TaggedError("SpeechToTextConfigErro
   }
 }
 
+export class SpeechToTextInputError extends TaggedError("SpeechToTextInputError")<{
+  reason: string;
+  message: string;
+}>() {
+  constructor(args: { readonly reason: string }) {
+    super({
+      reason: args.reason,
+      message: `Invalid speech-to-text input: ${args.reason}`,
+    });
+  }
+}
+
 export class SpeechToTextRequestError extends TaggedError("SpeechToTextRequestError")<{
   url: string;
   message: string;

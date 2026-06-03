@@ -4,12 +4,15 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   SpeechToTextConfigError,
+  SpeechToTextInputError,
   SpeechToTextParseError,
   SpeechToTextRequestError,
   SpeechToTextResponseError,
-  createSpeechToTextAudioFromFile,
   createSpeechToTextClient,
+  type SpeechToTextClient,
+  type SpeechToTextClientConfig,
 } from "../src";
+import { createSpeechToTextAudioFromFile } from "../src/node";
 
 type FetchCall = {
   readonly url: string;
@@ -47,12 +50,27 @@ function createFetch(response: Response): {
   };
 }
 
+function createClient(config: SpeechToTextClientConfig): SpeechToTextClient {
+  const client = createSpeechToTextClient(config);
+  expect(client.isOk()).toBe(true);
+  if (client.isErr()) throw client.error;
+  return client.value;
+}
+
 function requireFormData(call: FetchCall): FormData {
   expect(call.init?.body).toBeInstanceOf(FormData);
   return call.init?.body as FormData;
 }
 
 describe("createSpeechToTextClient", () => {
+  test("normalizes configuration once and returns a Result", () => {
+    const transport = createFetch(createJsonResponse({ text: "unused" }));
+    const client = createSpeechToTextClient({ model: "whisper-1", fetch: transport.fetch });
+
+    expect(client.isOk()).toBe(true);
+    if (client.isOk()) expect(client.value).toHaveProperty("transcribe");
+  });
+
   test("sends OpenAI-compatible multipart transcription requests", async () => {
     const transport = createFetch(
       createJsonResponse({
@@ -63,7 +81,7 @@ describe("createSpeechToTextClient", () => {
         words: [{ start: 0, end: 0.5, word: "hello" }],
       }),
     );
-    const client = createSpeechToTextClient({
+    const client = createClient({
       provider: "openai-compatible",
       apiKey: "test-key",
       model: "gpt-4o-transcribe",
@@ -119,7 +137,7 @@ describe("createSpeechToTextClient", () => {
 
   test("supports local OpenAI-compatible servers without API keys", async () => {
     const transport = createFetch(createJsonResponse({ text: "local transcript" }));
-    const client = createSpeechToTextClient({
+    const client = createClient({
       baseUrl: "http://127.0.0.1:1234/v1",
       endpointPath: "audio/transcriptions",
       model: "whisper-local",
@@ -135,7 +153,7 @@ describe("createSpeechToTextClient", () => {
 
   test("parses text-like transcription responses", async () => {
     const transport = createFetch(new Response("plain transcript"));
-    const client = createSpeechToTextClient({ model: "whisper-1", fetch: transport.fetch });
+    const client = createClient({ model: "whisper-1", fetch: transport.fetch });
 
     const result = await client.transcribe({
       audio: createAudioInput(),
@@ -154,7 +172,7 @@ describe("createSpeechToTextClient", () => {
 
   test("returns typed response errors for non-2xx provider responses", async () => {
     const transport = createFetch(createJsonResponse({ error: "bad model" }, { status: 400 }));
-    const client = createSpeechToTextClient({ model: "missing", fetch: transport.fetch });
+    const client = createClient({ model: "missing", fetch: transport.fetch });
 
     const result = await client.transcribe({ audio: createAudioInput() });
 
@@ -167,7 +185,7 @@ describe("createSpeechToTextClient", () => {
   });
 
   test("returns typed request errors for fetch failures", async () => {
-    const client = createSpeechToTextClient({
+    const client = createClient({
       model: "whisper-1",
       fetch: async () => {
         throw new Error("network down");
@@ -185,7 +203,7 @@ describe("createSpeechToTextClient", () => {
 
   test("returns parse errors for malformed JSON responses", async () => {
     const transport = createFetch(createJsonResponse({ language: "en" }));
-    const client = createSpeechToTextClient({ model: "whisper-1", fetch: transport.fetch });
+    const client = createClient({ model: "whisper-1", fetch: transport.fetch });
 
     const result = await client.transcribe({ audio: createAudioInput() });
 
@@ -195,15 +213,30 @@ describe("createSpeechToTextClient", () => {
     }
   });
 
-  test("validates required configuration before sending requests", async () => {
+  test("validates required configuration during client creation", () => {
     const transport = createFetch(createJsonResponse({ text: "unused" }));
     const client = createSpeechToTextClient({ model: "", fetch: transport.fetch });
 
-    const result = await client.transcribe({ audio: createAudioInput() });
+    expect(client.isErr()).toBe(true);
+    if (client.isErr()) {
+      expect(client.error).toBeInstanceOf(SpeechToTextConfigError);
+    }
+    expect(transport.calls).toHaveLength(0);
+  });
+
+  test("validates request input before sending requests", async () => {
+    const transport = createFetch(createJsonResponse({ text: "unused" }));
+    const client = createClient({ model: "whisper-1", fetch: transport.fetch });
+
+    const result = await client.transcribe({
+      audio: createAudioInput(),
+      timestampGranularities: ["word"],
+    });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error).toBeInstanceOf(SpeechToTextConfigError);
+      expect(result.error).toBeInstanceOf(SpeechToTextInputError);
+      expect(result.error.message).toContain("verbose_json");
     }
     expect(transport.calls).toHaveLength(0);
   });
