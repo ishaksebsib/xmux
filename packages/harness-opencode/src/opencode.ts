@@ -1,10 +1,6 @@
 import { defineHarnessAdapter, type OpenedHarnessAdapter } from "@xmux/harness-core";
 import { Result } from "better-result";
-import {
-  openRuntime,
-  normalizeConfig,
-  type OpenCodeRuntime,
-} from "./runtime";
+import { openRuntime, normalizeConfig, type OpenCodeRuntime } from "./runtime";
 import { abortSession } from "./handlers/abort";
 import { createSession } from "./handlers/create-session";
 import { deleteSession } from "./handlers/delete-session";

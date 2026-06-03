@@ -8,10 +8,7 @@ import type {
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeModelSelectionError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
-import {
-  defaultOpenCodeThinkingLevelMap,
-  orderedOpenCodeThinkingLevels,
-} from "../thinking-levels";
+import { defaultOpenCodeThinkingLevelMap, orderedOpenCodeThinkingLevels } from "../thinking-levels";
 import type { OpenCodeCreateOptions, OpenCodeModelInfo } from "../types";
 
 function thinkingLevelMap(runtime: OpenCodeRuntime) {

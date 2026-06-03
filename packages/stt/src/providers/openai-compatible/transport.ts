@@ -1,6 +1,9 @@
 import { Result } from "better-result";
 
-export function mergeHeaders(baseHeaders: Headers, overrideHeaders?: Readonly<Record<string, string>>): Headers {
+export function mergeHeaders(
+  baseHeaders: Headers,
+  overrideHeaders?: Readonly<Record<string, string>>,
+): Headers {
   const headers = new Headers(baseHeaders);
   for (const [name, value] of Object.entries(overrideHeaders ?? {})) {
     headers.set(name, value);

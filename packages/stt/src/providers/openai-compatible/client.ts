@@ -1,8 +1,5 @@
 import { Result } from "better-result";
-import {
-  SpeechToTextRequestError,
-  SpeechToTextResponseError,
-} from "../../errors";
+import { SpeechToTextRequestError, SpeechToTextResponseError } from "../../errors";
 import type { SpeechToTextClient } from "../../types";
 import type { NormalizedOpenAICompatibleConfig } from "./config";
 import { createTranscriptionFormData } from "./form-data";

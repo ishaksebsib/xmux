@@ -10,11 +10,7 @@ import { toPromptParts } from "./content";
 import { createStreamEndedError, isAbortError, toOpenCodeEvent } from "./event-utils";
 import { mapOpenCodeEvent } from "./event-mapper";
 import { createPromptStreamState } from "./state";
-import type {
-  OpenCodePromptEvent,
-  OpenCodePromptPart,
-  SelectedOpenCodeModel,
-} from "./types";
+import type { OpenCodePromptEvent, OpenCodePromptPart, SelectedOpenCodeModel } from "./types";
 import type { OpenCodeCreateOptions } from "../types";
 import { normalizeOpenCodeModelRef } from "../handlers/models";
 import { applyThinkingToModel } from "../handlers/thinking";

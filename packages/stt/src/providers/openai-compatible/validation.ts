@@ -49,7 +49,9 @@ export function validateOpenAICompatibleTranscribeInput(input: {
   const responseFormat = input.input.responseFormat ?? "json";
   if (!responseFormats.has(responseFormat)) {
     return Result.err(
-      new SpeechToTextInputError({ reason: `unsupported responseFormat: ${String(responseFormat)}` }),
+      new SpeechToTextInputError({
+        reason: `unsupported responseFormat: ${String(responseFormat)}`,
+      }),
     );
   }
 

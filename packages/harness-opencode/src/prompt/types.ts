@@ -1,4 +1,9 @@
-import type { Event as OpenCodeEvent, FilePartInput, Part, TextPartInput } from "@opencode-ai/sdk/v2";
+import type {
+  Event as OpenCodeEvent,
+  FilePartInput,
+  Part,
+  TextPartInput,
+} from "@opencode-ai/sdk/v2";
 import type {
   HarnessContentKind,
   HarnessPromptEvent,
