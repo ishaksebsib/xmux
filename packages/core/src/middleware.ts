@@ -97,11 +97,7 @@ export async function runXmuxHandler<
         catch: (cause) => new XmuxMiddlewareExecutionError({ routeName, cause }),
       });
 
-      if (handled.isErr()) {
-        return Result.err(handled.error);
-      }
-
-      return handled.value.isErr() ? Result.err(handled.value.error) : Result.ok();
+      return Result.map(Result.flatten(handled), () => undefined);
     }
 
     const result = await Result.tryPromise({
@@ -109,11 +105,7 @@ export async function runXmuxHandler<
       catch: (cause) => new XmuxMiddlewareExecutionError({ routeName, cause }),
     });
 
-    if (result.isErr()) {
-      return Result.err(result.error);
-    }
-
-    return result.value;
+    return Result.flatten(result);
   }
 
   return dispatch(0);

@@ -80,15 +80,9 @@ export async function replyToChatEvent<TError>(input: {
     catch: input.onError,
   });
 
-  if (replied.isErr()) {
-    return Result.err(replied.error);
-  }
-
-  if (replied.value.isErr()) {
-    return Result.err(input.onError(replied.value.error));
-  }
-
-  return Result.ok();
+  return Result.andThen(replied, (chatResult) =>
+    Result.map(Result.mapError(chatResult, input.onError), () => undefined),
+  );
 }
 
 export async function streamReplyToChatEvent<TError>(input: {
@@ -106,15 +100,9 @@ export async function streamReplyToChatEvent<TError>(input: {
     catch: input.onError,
   });
 
-  if (replied.isErr()) {
-    return Result.err(replied.error);
-  }
-
-  if (replied.value.isErr()) {
-    return Result.err(input.onError(replied.value.error));
-  }
-
-  return Result.ok();
+  return Result.andThen(replied, (chatResult) =>
+    Result.map(Result.mapError(chatResult, input.onError), () => undefined),
+  );
 }
 
 export async function replyToInvalidCommandUsage<TError>(input: {

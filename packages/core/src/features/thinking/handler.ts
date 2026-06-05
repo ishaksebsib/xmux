@@ -151,7 +151,12 @@ async function sendThinkingPicker<
     catch: (cause) => new ThinkingCommandResponseError({ cause }),
   });
 
-  return unwrapChatResult(sent);
+  return Result.andThen(sent, (chatResult) =>
+    Result.map(
+      Result.mapError(chatResult, (cause) => new ThinkingCommandResponseError({ cause })),
+      () => undefined,
+    ),
+  );
 }
 
 function updateThinkingPicker(input: {
@@ -202,16 +207,10 @@ async function respondToThinkingAction(
     catch: (cause) => new ThinkingCommandResponseError({ cause }),
   });
 
-  return unwrapChatResult(responded);
-}
-
-function unwrapChatResult<T>(
-  result: BetterResult<BetterResult<T, unknown>, ThinkingCommandResponseError>,
-): BetterResult<void, ThinkingCommandResponseError> {
-  if (result.isErr()) return Result.err(result.error);
-  if (result.value.isErr()) {
-    return Result.err(new ThinkingCommandResponseError({ cause: result.value.error }));
-  }
-
-  return Result.ok();
+  return Result.andThen(responded, (chatResult) =>
+    Result.map(
+      Result.mapError(chatResult, (cause) => new ThinkingCommandResponseError({ cause })),
+      () => undefined,
+    ),
+  );
 }
