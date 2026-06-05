@@ -75,14 +75,9 @@ export async function replyToChatEvent<TError>(input: {
   readonly message: ChatTextInput;
   readonly onError: (cause: unknown) => TError;
 }): Promise<BetterResult<void, TError>> {
-  const replied = await Result.tryPromise({
-    try: () => input.event.reply(input.message),
-    catch: input.onError,
-  });
+  const replied = await input.event.reply(input.message);
 
-  return Result.andThen(replied, (chatResult) =>
-    Result.map(Result.mapError(chatResult, input.onError), () => undefined),
-  );
+  return Result.map(Result.mapError(replied, input.onError), () => undefined);
 }
 
 export async function streamReplyToChatEvent<TError>(input: {
@@ -91,18 +86,12 @@ export async function streamReplyToChatEvent<TError>(input: {
   readonly mode?: "auto" | "thread" | "quote" | "conversation";
   readonly onError: (cause: unknown) => TError;
 }): Promise<BetterResult<void, TError>> {
-  const replied = await Result.tryPromise({
-    try: () =>
-      input.event.replyStream(
-        input.content,
-        input.mode === undefined ? undefined : { mode: input.mode },
-      ),
-    catch: input.onError,
-  });
-
-  return Result.andThen(replied, (chatResult) =>
-    Result.map(Result.mapError(chatResult, input.onError), () => undefined),
+  const replied = await input.event.replyStream(
+    input.content,
+    input.mode === undefined ? undefined : { mode: input.mode },
   );
+
+  return Result.map(Result.mapError(replied, input.onError), () => undefined);
 }
 
 export async function replyToInvalidCommandUsage<TError>(input: {
@@ -121,9 +110,5 @@ export async function replyToInvalidCommandUsage<TError>(input: {
     onError: input.onError,
   });
 
-  if (replied.isErr()) {
-    return Result.err(replied.error);
-  }
-
-  return Result.ok("replied");
+  return Result.map(replied, () => "replied" as const);
 }

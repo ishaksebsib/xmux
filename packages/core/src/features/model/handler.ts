@@ -152,16 +152,11 @@ async function sendModelPicker<
   readonly output: ModelShownOutput;
 }): Promise<BetterResult<void, ModelCommandResponseError>> {
   const message = formatModelActionMessage(input.output);
-  const sent = await Result.tryPromise({
-    try: () => input.ctx.app.chat.sendAction(toSendActionInput(input, message)),
-    catch: (cause) => new ModelCommandResponseError({ cause }),
-  });
+  const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, message));
 
-  return Result.andThen(sent, (chatResult) =>
-    Result.map(
-      Result.mapError(chatResult, (cause) => new ModelCommandResponseError({ cause })),
-      () => undefined,
-    ),
+  return Result.map(
+    Result.mapError(sent, (cause) => new ModelCommandResponseError({ cause })),
+    () => undefined,
   );
 }
 
@@ -188,15 +183,10 @@ function toSendActionInput<
 async function respondToModelAction(
   respond: () => Promise<BetterResult<unknown, unknown>>,
 ): Promise<BetterResult<void, ModelCommandResponseError>> {
-  const responded = await Result.tryPromise({
-    try: respond,
-    catch: (cause) => new ModelCommandResponseError({ cause }),
-  });
+  const responded = await respond();
 
-  return Result.andThen(responded, (chatResult) =>
-    Result.map(
-      Result.mapError(chatResult, (cause) => new ModelCommandResponseError({ cause })),
-      () => undefined,
-    ),
+  return Result.map(
+    Result.mapError(responded, (cause) => new ModelCommandResponseError({ cause })),
+    () => undefined,
   );
 }

@@ -148,16 +148,11 @@ async function sendThinkingPicker<
   readonly output: ThinkingCommandOutput;
 }): Promise<BetterResult<void, ThinkingCommandResponseError>> {
   const message = formatThinkingActionMessage(input.output);
-  const sent = await Result.tryPromise({
-    try: () => input.ctx.app.chat.sendAction(toSendActionInput(input, message)),
-    catch: (cause) => new ThinkingCommandResponseError({ cause }),
-  });
+  const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, message));
 
-  return Result.andThen(sent, (chatResult) =>
-    Result.map(
-      Result.mapError(chatResult, (cause) => new ThinkingCommandResponseError({ cause })),
-      () => undefined,
-    ),
+  return Result.map(
+    Result.mapError(sent, (cause) => new ThinkingCommandResponseError({ cause })),
+    () => undefined,
   );
 }
 
@@ -204,15 +199,10 @@ function toTextInput(message: ThinkingActionMessage): ChatTextInput {
 async function respondToThinkingAction(
   respond: () => Promise<BetterResult<unknown, unknown>>,
 ): Promise<BetterResult<void, ThinkingCommandResponseError>> {
-  const responded = await Result.tryPromise({
-    try: respond,
-    catch: (cause) => new ThinkingCommandResponseError({ cause }),
-  });
+  const responded = await respond();
 
-  return Result.andThen(responded, (chatResult) =>
-    Result.map(
-      Result.mapError(chatResult, (cause) => new ThinkingCommandResponseError({ cause })),
-      () => undefined,
-    ),
+  return Result.map(
+    Result.mapError(responded, (cause) => new ThinkingCommandResponseError({ cause })),
+    () => undefined,
   );
 }
