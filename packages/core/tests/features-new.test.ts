@@ -71,6 +71,18 @@ describe("/new command", () => {
                   adapterData: {},
                 });
               },
+              async sendAction(input) {
+                return Result.ok({
+                  chatId: input.chatId,
+                  conversationId: input.conversationId,
+                  messageId: "action-1",
+                  text: input.text,
+                  adapterData: {},
+                });
+              },
+              async respondToAction() {
+                return Result.ok();
+              },
               async reply(input) {
                 replies.push(input.text);
                 return Result.ok({
@@ -192,6 +204,18 @@ describe("/new command", () => {
                   format: input.format,
                   adapterData: {},
                 });
+              },
+              async sendAction(input) {
+                return Result.ok({
+                  chatId: input.chatId,
+                  conversationId: input.conversationId,
+                  messageId: "action-1",
+                  text: input.text,
+                  adapterData: {},
+                });
+              },
+              async respondToAction() {
+                return Result.ok();
               },
               async reply(input) {
                 replies.push(input.text);

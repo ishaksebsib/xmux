@@ -405,6 +405,18 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
                 sentMessage({ text: messageInput.text, format: messageInput.format }),
               );
             },
+            async sendAction(input) {
+              return Result.ok({
+                chatId: input.chatId,
+                conversationId: input.conversationId,
+                messageId: "action-1",
+                text: input.text,
+                adapterData: {},
+              });
+            },
+            async respondToAction() {
+              return Result.ok();
+            },
             async reply(replyInput) {
               replies.push(replyInput.text);
               return Result.ok(sentMessage({ text: replyInput.text, format: replyInput.format }));

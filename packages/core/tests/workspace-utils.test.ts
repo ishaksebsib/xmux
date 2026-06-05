@@ -137,6 +137,16 @@ function createTestXmux(input: { readonly defaultWorkingDirectory: string }) {
                 format: messageInput.format,
                 adapterData: {},
               }),
+            sendAction: async (actionInput) =>
+              Result.ok({
+                chatId: "telegram",
+                conversationId: actionInput.conversationId,
+                messageId: "action-1",
+                text: actionInput.text,
+                format: actionInput.format,
+                adapterData: {},
+              }),
+            respondToAction: async () => Result.ok(),
             reply: async (replyInput) =>
               Result.ok({
                 chatId: "telegram",

@@ -226,6 +226,18 @@ function createTestXmux(input: {
                 adapterData: {},
               });
             },
+            async sendAction(input) {
+              return Result.ok({
+                chatId: input.chatId,
+                conversationId: input.conversationId,
+                messageId: "action-1",
+                text: input.text,
+                adapterData: {},
+              });
+            },
+            async respondToAction() {
+              return Result.ok();
+            },
             async reply(replyInput) {
               input.replies.push(replyInput.text);
               return Result.ok({

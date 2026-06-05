@@ -159,6 +159,18 @@ function createChats(input: {
           async sendMessage(message) {
             return Result.ok(sentMessage(message.text));
           },
+          async sendAction(input) {
+            return Result.ok({
+              chatId: input.chatId,
+              conversationId: input.conversationId,
+              messageId: "action-1",
+              text: input.text,
+              adapterData: {},
+            });
+          },
+          async respondToAction() {
+            return Result.ok();
+          },
           async reply(message) {
             input.replies.push(message.text);
             return Result.ok(sentMessage(message.text));

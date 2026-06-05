@@ -448,6 +448,18 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
             async sendMessage(message) {
               return Result.ok(sentMessage({ text: message.text, format: message.format }));
             },
+            async sendAction(input) {
+              return Result.ok({
+                chatId: input.chatId,
+                conversationId: input.conversationId,
+                messageId: "action-1",
+                text: input.text,
+                adapterData: {},
+              });
+            },
+            async respondToAction() {
+              return Result.ok();
+            },
             async reply(message) {
               replies.push(message.text);
               return Result.ok(sentMessage({ text: message.text, format: message.format }));
@@ -495,6 +507,18 @@ async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
             },
             async sendMessage(message) {
               return Result.ok(sentMessage({ text: message.text, format: message.format }));
+            },
+            async sendAction(input) {
+              return Result.ok({
+                chatId: input.chatId,
+                conversationId: input.conversationId,
+                messageId: "action-1",
+                text: input.text,
+                adapterData: {},
+              });
+            },
+            async respondToAction() {
+              return Result.ok();
             },
             async reply(message) {
               return Result.ok(sentMessage({ text: message.text, format: message.format }));
