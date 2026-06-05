@@ -5,7 +5,12 @@ import type { Context } from "../../ctx";
 import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
 import { actorFromChatActor, replyToInvalidCommandUsage, type InvalidCommandEvent } from "../utils";
 import { ModelCommandResponseError } from "./errors";
-import { handleModelCommand, type ModelCommandEvent } from "./handler";
+import {
+  handleModelAction,
+  handleModelCommand,
+  type ModelActionEvent,
+  type ModelCommandEvent,
+} from "./handler";
 import { formatModelCommandUsage } from "./response";
 
 /** Registers chat routes owned by the `/model` feature. */
@@ -27,6 +32,26 @@ export function registerModelRoute<
         handleModelCommand({
           ctx: handlerCtx,
           event: modelCommandEvent,
+        }),
+    });
+
+    if (handled.isErr()) {
+      // TODO: report handler errors through diagnostics/observability.
+      return;
+    }
+  });
+
+  const unsubscribeModelAction = ctx.chat.on("action", "model", async (event) => {
+    const modelActionEvent = event as ModelActionEvent<Extract<keyof TChats, string>>;
+    const handled = await runXmuxHandler({
+      app: ctx,
+      event,
+      middleware,
+      actor: actorFromChatActor(modelActionEvent.actor),
+      handler: (handlerCtx) =>
+        handleModelAction({
+          ctx: handlerCtx,
+          event: modelActionEvent,
         }),
     });
 
@@ -67,6 +92,7 @@ export function registerModelRoute<
 
   return () => {
     unsubscribeModelCommand();
+    unsubscribeModelAction();
     unsubscribeInvalidCommand();
   };
 }

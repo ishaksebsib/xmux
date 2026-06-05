@@ -1,19 +1,46 @@
-import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
+import type {
+  ChatActionEvent,
+  ChatActor,
+  ChatConversationRef,
+  ChatSendActionInput,
+  ChatTextInput,
+} from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import { Result, type Result as BetterResult } from "better-result";
+import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import { replyToChatEvent, threadFromChatEvent } from "../utils";
 import { ModelCommandResponseError } from "./errors";
-import { formatModelFailure, formatModelOutput } from "./response";
-import { modelSessionCommand } from "./service";
+import {
+  formatModelActionMessage,
+  formatModelAvailableOutput,
+  formatModelFailure,
+  formatModelOutput,
+  type ModelActionMessage,
+} from "./response";
+import {
+  modelAvailableCommand,
+  modelSessionCommand,
+  type ModelCommandError,
+  type ModelCommandOutput,
+  type ModelShownOutput,
+} from "./service";
 
 export interface HandleModelCommandInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ModelCommandEvent;
+  readonly event: ModelCommandEvent<Extract<keyof TChats, string>>;
+}
+
+export interface HandleModelActionInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+> {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly event: ModelActionEvent<Extract<keyof TChats, string>>;
 }
 
 export interface ModelCommandEvent<TChatId extends string = string> {
@@ -30,6 +57,13 @@ export interface ModelCommandEvent<TChatId extends string = string> {
   readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
 }
 
+export type ModelActionEvent<TChatId extends string = string> = ChatActionEvent<
+  Actions,
+  "model",
+  TChatId,
+  BetterResult<unknown, unknown>
+>;
+
 /** Handles `/model [providerId/modelId]` from any configured chat adapter. */
 export async function handleModelCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -43,15 +77,123 @@ export async function handleModelCommand<
     selector: input.event.command.options.selector,
   });
 
-  const response = selected.isOk()
-    ? formatModelOutput(selected.value)
-    : formatModelFailure(selected.error, {
-        maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
-      });
+  if (
+    input.event.command.options.selector === undefined &&
+    selected.isOk() &&
+    selected.value.status === "shown"
+  ) {
+    return sendModelPicker({ ctx: input.ctx, event: input.event, output: selected.value });
+  }
 
+  return replyModelCommand({
+    event: input.event,
+    message: formatModelResult({
+      result: selected,
+      maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
+    }),
+  });
+}
+
+/** Handles a model action button press from a `/model` action message. */
+export async function handleModelAction<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: HandleModelActionInput<TAdapters, TChats>,
+): Promise<BetterResult<void, ModelCommandResponseError>> {
+  const acknowledged = await respondToModelAction(() => input.event.ack());
+  if (acknowledged.isErr()) return Result.err(acknowledged.error);
+
+  const available = await modelAvailableCommand({
+    ctx: input.ctx,
+    thread: threadFromChatEvent(input.event),
+  });
+
+  return respondToModelAction(() =>
+    input.event.reply(
+      available.isOk()
+        ? formatModelAvailableOutput(available.value)
+        : formatModelFailure(available.error, {
+            maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
+          }),
+    ),
+  );
+}
+
+function formatModelResult(input: {
+  readonly result: BetterResult<ModelCommandOutput, ModelCommandError>;
+  readonly maxSuggestions: number;
+}): ChatTextInput {
+  return input.result.isOk()
+    ? formatModelOutput(input.result.value)
+    : formatModelFailure(input.result.error, { maxSuggestions: input.maxSuggestions });
+}
+
+function replyModelCommand(input: {
+  readonly event: ModelCommandEvent;
+  readonly message: ChatTextInput;
+}): Promise<BetterResult<void, ModelCommandResponseError>> {
   return replyToChatEvent({
     event: input.event,
-    message: response,
+    message: input.message,
     onError: (cause) => new ModelCommandResponseError({ cause }),
   });
+}
+
+async function sendModelPicker<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly event: ModelCommandEvent<Extract<keyof TChats, string>>;
+  readonly output: ModelShownOutput;
+}): Promise<BetterResult<void, ModelCommandResponseError>> {
+  const message = formatModelActionMessage(input.output);
+  const sent = await Result.tryPromise({
+    try: () => input.ctx.app.chat.sendAction(toSendActionInput(input, message)),
+    catch: (cause) => new ModelCommandResponseError({ cause }),
+  });
+
+  return Result.andThen(sent, (chatResult) =>
+    Result.map(
+      Result.mapError(chatResult, (cause) => new ModelCommandResponseError({ cause })),
+      () => undefined,
+    ),
+  );
+}
+
+function toSendActionInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: {
+    readonly ctx: HandlerContext<TAdapters, TChats>;
+    readonly event: ModelCommandEvent<Extract<keyof TChats, string>>;
+  },
+  message: ModelActionMessage,
+): ChatSendActionInput<TChats, Actions> {
+  return {
+    chatId: input.event.chatId,
+    conversationId: input.event.conversation.conversationId,
+    text: message.text,
+    format: message.format,
+    buttons: message.buttons,
+    signal: input.ctx.signal,
+  } as ChatSendActionInput<TChats, Actions>;
+}
+
+async function respondToModelAction(
+  respond: () => Promise<BetterResult<unknown, unknown>>,
+): Promise<BetterResult<void, ModelCommandResponseError>> {
+  const responded = await Result.tryPromise({
+    try: respond,
+    catch: (cause) => new ModelCommandResponseError({ cause }),
+  });
+
+  return Result.andThen(responded, (chatResult) =>
+    Result.map(
+      Result.mapError(chatResult, (cause) => new ModelCommandResponseError({ cause })),
+      () => undefined,
+    ),
+  );
 }

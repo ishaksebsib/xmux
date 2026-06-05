@@ -33,12 +33,18 @@ export type ModelCommandError =
 
 export type ModelCommandOutput = ModelShownOutput | ModelUpdatedOutput;
 
-export interface ModelShownOutput {
-  readonly status: "shown";
+export interface ModelAvailableOutput {
+  readonly status: "available";
   readonly session: SessionRecord;
   readonly current: HarnessSelectedModel;
   readonly models: readonly HarnessModelInfo[];
   readonly maxModelsPerProvider: number;
+}
+
+export interface ModelShownOutput {
+  readonly status: "shown";
+  readonly session: SessionRecord;
+  readonly current: HarnessSelectedModel;
 }
 
 export interface ModelUpdatedOutput {
@@ -69,16 +75,6 @@ export async function modelSessionCommand<
     return Result.err(session.error);
   }
 
-  const models = await input.ctx.app.harness.listModels({
-    harnessId: session.value.ref.harnessId,
-    cwd: session.value.cwd,
-    signal: input.ctx.signal,
-  } as ListModelsInput<TAdapters>);
-
-  if (models.isErr()) {
-    return Result.err(models.error);
-  }
-
   const selector = input.selector?.trim();
 
   if (!selector) {
@@ -95,9 +91,13 @@ export async function modelSessionCommand<
       status: "shown",
       session: session.value,
       current: current.value as HarnessSelectedModel,
-      models: models.value as readonly HarnessModelInfo[],
-      maxModelsPerProvider: input.ctx.app.config.model.maxModelsPerProvider,
     });
+  }
+
+  const models = await listSessionModels({ ctx: input.ctx, session: session.value });
+
+  if (models.isErr()) {
+    return Result.err(models.error);
   }
 
   const resolved = resolveModelSelector({
@@ -124,6 +124,56 @@ export async function modelSessionCommand<
     session: session.value,
     selected: selected.value as HarnessSelectedModel,
   });
+}
+
+export async function modelAvailableCommand<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: Omit<ModelSessionCommandInput<TAdapters, TChats>, "selector">,
+): Promise<Result<ModelAvailableOutput, ModelCommandError>> {
+  const session = await getModelSessionForThread({ ctx: input.ctx, thread: input.thread });
+
+  if (session.isErr()) {
+    return Result.err(session.error);
+  }
+
+  const models = await listSessionModels({ ctx: input.ctx, session: session.value });
+
+  if (models.isErr()) {
+    return Result.err(models.error);
+  }
+
+  const current = await input.ctx.app.harness.getModel({
+    target: { type: "session", ref: session.value.ref },
+    signal: input.ctx.signal,
+  } as GetModelInput<TAdapters>);
+
+  if (current.isErr()) {
+    return Result.err(current.error);
+  }
+
+  return Result.ok({
+    status: "available",
+    session: session.value,
+    current: current.value as HarnessSelectedModel,
+    models: models.value as readonly HarnessModelInfo[],
+    maxModelsPerProvider: input.ctx.app.config.model.maxModelsPerProvider,
+  });
+}
+
+function listSessionModels<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly session: SessionRecord;
+}): Promise<Result<readonly HarnessModelInfo[], ListModelsError>> {
+  return input.ctx.app.harness.listModels({
+    harnessId: input.session.ref.harnessId,
+    cwd: input.session.cwd,
+    signal: input.ctx.signal,
+  } as ListModelsInput<TAdapters>) as Promise<Result<readonly HarnessModelInfo[], ListModelsError>>;
 }
 
 interface GetModelSessionForThreadInput<

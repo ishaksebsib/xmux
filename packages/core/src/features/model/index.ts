@@ -7,16 +7,29 @@ export {
   ModelSessionClosedError,
   ModelSessionRecordMissingError,
 } from "./errors";
-export { handleModelCommand, type ModelCommandEvent } from "./handler";
-export { formatModelCommandUsage, formatModelFailure, formatModelOutput } from "./response";
+export {
+  handleModelAction,
+  handleModelCommand,
+  type ModelActionEvent,
+  type ModelCommandEvent,
+} from "./handler";
+export {
+  formatModelActionMessage,
+  formatModelAvailableOutput,
+  formatModelCommandUsage,
+  formatModelFailure,
+  formatModelOutput,
+  type ModelActionMessage,
+} from "./response";
 export { registerModelRoute } from "./route";
 export {
   formatModelSelector,
   resolveModelSelector,
   type ResolveModelSelectorError,
 } from "./selector";
-export { modelSessionCommand } from "./service";
+export { modelAvailableCommand, modelSessionCommand } from "./service";
 export type {
+  ModelAvailableOutput,
   ModelCommandError,
   ModelCommandOutput,
   ModelSessionCommandInput,

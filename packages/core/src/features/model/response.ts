@@ -1,5 +1,7 @@
-import type { ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
 import { HarnessAdapterModelUnsupportedError, type HarnessModelInfo } from "@xmux/harness-core";
+import type { Actions } from "../../actions";
+import { modelActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
@@ -15,8 +17,19 @@ import {
   ModelSessionClosedError,
   ModelSessionRecordMissingError,
 } from "./errors";
-import type { ModelCommandError, ModelCommandOutput, ModelShownOutput } from "./service";
+import type {
+  ModelAvailableOutput,
+  ModelCommandError,
+  ModelCommandOutput,
+  ModelShownOutput,
+} from "./service";
 import { formatModelSelector } from "./selector";
+
+export interface ModelActionMessage {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
+}
 
 export interface ModelFailureFormatOptions {
   readonly maxSuggestions: number;
@@ -24,6 +37,23 @@ export interface ModelFailureFormatOptions {
 
 export function formatModelOutput(output: ModelCommandOutput): ChatTextInput {
   return output.status === "updated" ? formatModelUpdated(output) : formatModelShown(output);
+}
+
+export function formatModelActionMessage(output: ModelShownOutput): ModelActionMessage {
+  return {
+    ...normalizeTextInput(formatModelShown(output)),
+    buttons: [[formatAvailableModelsButton()]],
+  };
+}
+
+export function formatModelAvailableOutput(output: ModelAvailableOutput): ChatTextInput {
+  return markdown({
+    text: formatAvailableModels({
+      models: output.models,
+      current: output.current.model,
+      maxModelsPerProvider: output.maxModelsPerProvider,
+    }).join("\n"),
+  });
 }
 
 export function formatModelFailure(
@@ -123,21 +153,25 @@ export function formatModelCommandUsage(): ChatTextInput {
 
 function formatModelShown(output: ModelShownOutput): ChatTextInput {
   const lines = [
-    "**Model**",
+    `**Model: ${formatCurrentModel(output.current.model)}**`,
     "",
     `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
     `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
     `- Current: ${formatCurrentModel(output.current.model)}`,
     `- Source: ${markdownText(output.current.source)}`,
-    "",
-    ...formatAvailableModels({
-      models: output.models,
-      current: output.current.model,
-      maxModelsPerProvider: output.maxModelsPerProvider,
-    }),
   ];
 
   return markdown({ text: lines.join("\n") });
+}
+
+function formatAvailableModelsButton(): ChatButtonInput<Actions> {
+  return {
+    id: "model-available",
+    label: "See available models",
+    actionId: modelActionId,
+    value: "available",
+    style: "secondary",
+  };
 }
 
 function formatModelUpdated(
@@ -316,4 +350,11 @@ function formatSelectorList(input: {
       ? [`_And ${input.selectors.length - input.maxSuggestions} more models._`]
       : []),
   ];
+}
+
+function normalizeTextInput(input: ChatTextInput): {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+} {
+  return typeof input === "string" ? { text: input } : input;
 }
