@@ -21,4 +21,14 @@ export const telegramAdapterCapabilities = {
     receive: false,
     send: false,
   },
+  actions: {
+    send: true,
+    receive: true,
+    ack: true,
+    reply: true,
+    update: true,
+    urlButtons: true,
+    maxButtonsPerMessage: 100,
+    maxButtonsPerRow: 8,
+  },
 } as const satisfies ChatAdapterCapabilities;

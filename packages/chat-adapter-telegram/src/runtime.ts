@@ -1,6 +1,8 @@
 import { Result } from "better-result";
 import type {
   ChatAdapterReplyInput,
+  ChatAdapterRespondToActionInput,
+  ChatAdapterSendActionInput,
   ChatAdapterSendMessageInput,
   ChatAdapterSendTypingInput,
   ChatAdapterStartContext,
@@ -18,9 +20,12 @@ import {
 } from "./client";
 import { parseTelegramBotToken } from "./config";
 import {
+  TelegramActionResponseError,
+  type TelegramAdapterError,
   TelegramCommandRegistrationError,
   TelegramConfigurationError,
   TelegramReplyError,
+  TelegramSendActionError,
   TelegramSendMessageError,
   TelegramSendTypingError,
   TelegramStartError,
@@ -30,7 +35,9 @@ import {
 } from "./errors";
 import { registerInboundHandlers } from "./handlers/inbound";
 import { registerCommands } from "./handlers/register-commands";
+import { respondToAction as handleRespondToAction } from "./handlers/respond-action";
 import { reply as handleReply } from "./handlers/reply";
+import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { initializeBot, startPolling } from "./handlers/start-polling";
@@ -62,7 +69,8 @@ export function openTelegramRuntime<TChatId extends string>(args: {
     TChatId,
     TelegramAdapterOptions,
     TelegramAdapterData,
-    typeof telegramAdapterCapabilities
+    typeof telegramAdapterCapabilities,
+    TelegramAdapterError
   >,
   TelegramConfigurationError
 > {
@@ -91,7 +99,8 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
   TChatId,
   TelegramAdapterOptions,
   TelegramAdapterData,
-  typeof telegramAdapterCapabilities
+  typeof telegramAdapterCapabilities,
+  TelegramAdapterError
 > {
   readonly capabilities = telegramAdapterCapabilities;
   readonly id: TChatId;
@@ -179,6 +188,18 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     input: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendMessageError>> {
     return handleSendMessage({ chatId: this.id, bot: this.bot, input });
+  }
+
+  async sendAction(
+    input: ChatAdapterSendActionInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendActionError>> {
+    return handleSendAction({ chatId: this.id, bot: this.bot, input });
+  }
+
+  async respondToAction(
+    input: ChatAdapterRespondToActionInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<void, TelegramActionResponseError>> {
+    return handleRespondToAction({ bot: this.bot, input });
   }
 
   async reply(

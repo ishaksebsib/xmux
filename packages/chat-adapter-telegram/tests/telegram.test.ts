@@ -15,7 +15,7 @@ import {
   TelegramStreamReplyError,
   TelegramWebhookModeUnsupportedError,
 } from "../src/errors";
-import type { TelegramTextMessageContext } from "../src/client";
+import type { TelegramCallbackQueryDataContext, TelegramTextMessageContext } from "../src/client";
 import { openTelegramRuntime } from "../src/runtime";
 import {
   booleanOption,
@@ -65,11 +65,14 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly stopMock: ReturnType<typeof vi.fn>;
   readonly catchMock: ReturnType<typeof vi.fn>;
   readonly getBotInfoMock: ReturnType<typeof vi.fn>;
+  readonly answerCallbackQueryMock: ReturnType<typeof vi.fn>;
+  readonly onCallbackQueryDataMock: ReturnType<typeof vi.fn>;
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly sendMessageMock: ReturnType<typeof vi.fn>;
   readonly sendChatActionMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
   readonly streamMessageMock: ReturnType<typeof vi.fn>;
+  readonly emitCallbackQueryData: (context: TelegramCallbackQueryDataContext) => Promise<void>;
   readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
   readonly rejectPolling: (cause: unknown) => void;
 };
@@ -125,12 +128,21 @@ function createFakeTelegramBot(
   }));
   const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> =
     [];
+  const callbackQueryDataHandlers: Array<
+    (context: TelegramCallbackQueryDataContext) => void | Promise<void>
+  > = [];
+  const answerCallbackQueryMock = vi.fn(async () => true);
   const editMessageTextMock = vi.fn(
     async (_input: {
       readonly chatId: string | number;
       readonly messageId: number;
       readonly text: string;
     }) => true,
+  );
+  const onCallbackQueryDataMock = vi.fn(
+    (handler: (context: TelegramCallbackQueryDataContext) => void | Promise<void>) => {
+      callbackQueryDataHandlers.push(handler);
+    },
   );
   const onTextMessageMock = vi.fn(
     (handler: (context: TelegramTextMessageContext) => void | Promise<void>) => {
@@ -190,12 +202,14 @@ function createFakeTelegramBot(
 
   return {
     catch: catchMock,
+    answerCallbackQuery: answerCallbackQueryMock,
     editMessageText: editMessageTextMock,
     getBotInfo: getBotInfoMock,
     init: initMock,
     isRunning: () => running,
     start: startMock,
     stop: stopMock,
+    onCallbackQueryData: onCallbackQueryDataMock,
     onTextMessage: onTextMessageMock,
     sendMessage: sendMessageMock,
     sendChatAction: sendChatActionMock,
@@ -206,12 +220,19 @@ function createFakeTelegramBot(
     stopMock,
     catchMock,
     getBotInfoMock,
+    answerCallbackQueryMock,
+    onCallbackQueryDataMock,
     onTextMessageMock,
     sendMessageMock,
     sendChatActionMock,
     setMyCommandsMock,
     streamMessageMock,
     editMessageTextMock,
+    emitCallbackQueryData: async (context) => {
+      for (const handler of callbackQueryDataHandlers) {
+        await handler(context);
+      }
+    },
     emitTextMessage: async (context) => {
       for (const handler of textMessageHandlers) {
         await handler(context);
@@ -827,6 +848,136 @@ describe("createTelegramAdapter", () => {
     );
 
     expect(events).toEqual([]);
+  });
+
+  test("sendAction sends Telegram inline keyboard buttons", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const sent = await opened.value.sendAction({
+      chatId: "telegram",
+      conversationId: "42",
+      text: "Deploy?",
+      format: "markdown",
+      buttons: [
+        [
+          {
+            id: "approve",
+            label: "Approve",
+            actionId: "d",
+            value: "a",
+            payload: { id: "1" },
+          },
+          { kind: "url", id: "docs", label: "Docs", url: "https://example.com" },
+        ],
+      ],
+      adapterOptions: {},
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: "42",
+        text: "Deploy?",
+        options: expect.objectContaining({
+          reply_markup: {
+            inline_keyboard: [
+              [
+                {
+                  text: "Approve",
+                  callback_data: '{"actionId":"d","value":"a","payload":{"id":"1"}}',
+                },
+                { text: "Docs", url: "https://example.com" },
+              ],
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  test("respondToAction acknowledges, replies, and updates Telegram actions", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const base = {
+      chatId: "telegram" as const,
+      conversationId: "42",
+      interactionId: "callback-1",
+      message: { chatId: "telegram" as const, conversationId: "42", messageId: "123" },
+      adapterOptions: {},
+    };
+
+    expect(
+      (await opened.value.respondToAction({ ...base, response: { kind: "ack" } })).isOk(),
+    ).toBe(true);
+    expect(
+      (
+        await opened.value.respondToAction({
+          ...base,
+          response: { kind: "reply", message: "Done" },
+        })
+      ).isOk(),
+    ).toBe(true);
+    expect(
+      (
+        await opened.value.respondToAction({
+          ...base,
+          response: { kind: "update", message: "Approved", buttons: [] },
+        })
+      ).isOk(),
+    ).toBe(true);
+
+    expect(bot.answerCallbackQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ callbackQueryId: "callback-1" }),
+    );
+    expect(bot.sendMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "42", text: "Done" }),
+    );
+    expect(bot.editMessageTextMock).toHaveBeenCalledWith(
+      expect.objectContaining({ chatId: "42", messageId: 123, text: "Approved" }),
+    );
+  });
+
+  test("callback query data emits normalized action events", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    await bot.emitCallbackQueryData({
+      callbackQuery: {
+        id: "callback-1",
+        data: '{"actionId":"deployment","value":"approve","payload":{"deploymentId":"dep1"}}',
+        message: { message_id: 123, chat: { id: 42, type: "private", first_name: "Alice" } },
+      },
+      chat: { id: 42, type: "private", first_name: "Alice" },
+      from: { id: 7, is_bot: false, first_name: "Bob" },
+      update: { update_id: 99 },
+    } as unknown as TelegramCallbackQueryDataContext);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "action",
+        chatId: "telegram",
+        interactionId: "callback-1",
+        actionId: "deployment",
+        value: "approve",
+        payload: { deploymentId: "dep1" },
+      }),
+    );
   });
 
   test("sendMessage sends text with format and adapter options", async () => {

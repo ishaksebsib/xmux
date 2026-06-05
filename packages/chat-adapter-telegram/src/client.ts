@@ -12,6 +12,7 @@ type BotStart = Bot["start"];
 type EditMessageText = GrammyBotApi["editMessageText"];
 type SendMessage = GrammyBotApi["sendMessage"];
 type SendChatAction = GrammyBotApi["sendChatAction"];
+type AnswerCallbackQuery = GrammyBotApi["answerCallbackQuery"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
 
 export type TelegramEditedTextMessage = Awaited<ReturnType<EditMessageText>>;
@@ -19,13 +20,22 @@ export type TelegramSentTextMessage = Awaited<ReturnType<SendMessage>>;
 export type TelegramStreamedTextMessages = Message.TextMessage[];
 
 export type TelegramTextMessageContext = Filter<Context, "message:text">;
+export type TelegramCallbackQueryDataContext = Filter<Context, "callback_query:data">;
 
 export type TelegramTextMessageHandler = (
   context: TelegramTextMessageContext,
 ) => void | Promise<void>;
+export type TelegramCallbackQueryDataHandler = (
+  context: TelegramCallbackQueryDataContext,
+) => void | Promise<void>;
 
 export interface TelegramBotClient {
   catch(handler: Parameters<BotCatch>[0]): ReturnType<BotCatch>;
+  answerCallbackQuery(args: {
+    readonly callbackQueryId: Parameters<AnswerCallbackQuery>[0];
+    readonly options?: Parameters<AnswerCallbackQuery>[1];
+    readonly signal?: AbortSignal;
+  }): ReturnType<AnswerCallbackQuery>;
   editMessageText(args: {
     readonly chatId: Parameters<EditMessageText>[0];
     readonly messageId: Parameters<EditMessageText>[1];
@@ -36,6 +46,7 @@ export interface TelegramBotClient {
   getBotInfo(): UserFromGetMe;
   init(signal?: AbortSignal): ReturnType<BotInit>;
   isRunning(): boolean;
+  onCallbackQueryData(handler: TelegramCallbackQueryDataHandler): void;
   onTextMessage(handler: TelegramTextMessageHandler): void;
   sendMessage(args: {
     readonly chatId: Parameters<SendMessage>[0];
@@ -80,6 +91,12 @@ export function createTelegramBotClient(args: {
 
   return {
     catch: bot.catch.bind(bot),
+    answerCallbackQuery: (input) =>
+      bot.api.answerCallbackQuery(
+        input.callbackQueryId,
+        input.options,
+        input.signal as Parameters<AnswerCallbackQuery>[2],
+      ),
     editMessageText: (input) =>
       bot.api.editMessageText(
         input.chatId,
@@ -91,6 +108,9 @@ export function createTelegramBotClient(args: {
     getBotInfo: () => bot.botInfo,
     init: (signal) => bot.init(signal as Parameters<BotInit>[0]),
     isRunning: bot.isRunning.bind(bot),
+    onCallbackQueryData: (handler) => {
+      bot.on("callback_query:data", handler);
+    },
     onTextMessage: (handler) => {
       bot.on("message:text", handler);
     },

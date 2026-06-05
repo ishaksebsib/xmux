@@ -93,6 +93,32 @@ export class TelegramStreamMessageError extends TaggedError("TelegramStreamMessa
   }
 }
 
+/** Telegram sendAction failed. */
+export class TelegramSendActionError extends TaggedError("TelegramSendActionError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Telegram sendAction failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Telegram action response failed. */
+export class TelegramActionResponseError extends TaggedError("TelegramActionResponseError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Telegram action response failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Telegram sendMessage failed. */
 export class TelegramSendMessageError extends TaggedError("TelegramSendMessageError")<{
   readonly message: string;
@@ -120,6 +146,19 @@ export class TelegramSendTypingError extends TaggedError("TelegramSendTypingErro
 }
 
 /** Webhook delivery is reserved for the future webhook runtime path. */
+export type TelegramAdapterError =
+  | TelegramActionResponseError
+  | TelegramCommandRegistrationError
+  | TelegramConfigurationError
+  | TelegramReplyError
+  | TelegramSendActionError
+  | TelegramSendMessageError
+  | TelegramSendTypingError
+  | TelegramStartError
+  | TelegramStreamMessageError
+  | TelegramStreamReplyError
+  | TelegramWebhookModeUnsupportedError;
+
 export class TelegramWebhookModeUnsupportedError extends TaggedError(
   "TelegramWebhookModeUnsupportedError",
 )<{

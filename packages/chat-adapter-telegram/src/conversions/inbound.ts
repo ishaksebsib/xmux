@@ -1,17 +1,19 @@
 import type {
   ChatActor,
   ChatAdapterDiagnosticInput,
+  ChatAdapterActionEvent,
   ChatAdapterEvent,
   ChatAdapterMessageEvent,
   ChatCommandRegistry,
 } from "@xmux/chat-core";
-import type { TelegramTextMessageContext } from "../client";
+import type { TelegramCallbackQueryDataContext, TelegramTextMessageContext } from "../client";
 import { createTelegramCommandEvent, parseTelegramCommand } from "../commands";
+import { decodeTelegramActionCallbackData } from "./actions";
 import type { TelegramAdapterData } from "../types";
 
 export type TelegramInboundDecodeResult<TEvent> =
   | { readonly status: "event"; readonly event: TEvent }
-  | { readonly status: "ignored"; readonly reason: "self_message" };
+  | { readonly status: "ignored"; readonly reason: "self_message" | "unsupported_action" };
 
 export function decodeTelegramTextUpdate<
   TCommands extends ChatCommandRegistry,
@@ -96,6 +98,48 @@ export function decodeTelegramTextUpdate<
   };
 }
 
+export function decodeTelegramActionUpdate<TChatId extends string>(args: {
+  readonly chatId: TChatId;
+  readonly context: TelegramCallbackQueryDataContext;
+}): TelegramInboundDecodeResult<ChatAdapterActionEvent<TChatId>> {
+  const decoded = decodeTelegramActionCallbackData(args.context.callbackQuery.data);
+  const message = args.context.callbackQuery.message;
+  const chat = message?.chat ?? args.context.chat;
+
+  if (decoded === undefined || message === undefined || chat === undefined) {
+    return { status: "ignored", reason: "unsupported_action" };
+  }
+
+  const adapterData = decodeTelegramAdapterData({
+    chatId: chat.id,
+    messageId: message.message_id,
+    raw: args.context.callbackQuery,
+    updateId: args.context.update.update_id,
+  });
+  const conversation = {
+    chatId: args.chatId,
+    conversationId: String(chat.id),
+  };
+
+  return {
+    status: "event",
+    event: {
+      type: "action",
+      chatId: args.chatId,
+      conversation,
+      message: {
+        ...conversation,
+        messageId: String(message.message_id),
+      },
+      interactionId: args.context.callbackQuery.id,
+      actor: decodeTelegramActor({ chat, from: args.context.from, adapterData }),
+      actionId: decoded.actionId,
+      value: decoded.value,
+      ...(decoded.payload === undefined ? {} : { payload: decoded.payload }),
+    },
+  };
+}
+
 function decodeTelegramTextMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly context: TelegramTextMessageContext;
@@ -152,9 +196,19 @@ function decodeTelegramAdapterData(args: {
   };
 }
 
+type TelegramActorChat = {
+  readonly id: number | string;
+  readonly title?: string;
+  readonly first_name?: string;
+  readonly last_name?: string;
+  readonly username?: string;
+};
+
+type TelegramActorUser = TelegramTextMessageContext["from"];
+
 function decodeTelegramActor(args: {
-  readonly chat: TelegramTextMessageContext["message"]["chat"];
-  readonly from: TelegramTextMessageContext["from"];
+  readonly chat: TelegramActorChat;
+  readonly from: TelegramActorUser;
   readonly adapterData: TelegramAdapterData;
 }): ChatActor {
   if (args.from === undefined) {
@@ -174,18 +228,14 @@ function decodeTelegramActor(args: {
   };
 }
 
-function formatTelegramDisplayName(from: NonNullable<TelegramTextMessageContext["from"]>): string {
+function formatTelegramDisplayName(from: NonNullable<TelegramActorUser>): string {
   return (
     [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || String(from.id)
   );
 }
 
-function formatTelegramChatName(
-  chat: TelegramTextMessageContext["message"]["chat"],
-): string | undefined {
-  return "title" in chat
-    ? chat.title
-    : "first_name" in chat
-      ? [chat.first_name, chat.last_name].filter(Boolean).join(" ") || chat.username
-      : undefined;
+function formatTelegramChatName(chat: TelegramActorChat): string | undefined {
+  return (
+    chat.title ?? ([chat.first_name, chat.last_name].filter(Boolean).join(" ") || chat.username)
+  );
 }
