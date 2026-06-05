@@ -1,8 +1,10 @@
-import type { ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
 import {
   HarnessAdapterThinkingUnsupportedError,
   type HarnessThinkingLevel,
 } from "@xmux/harness-core";
+import type { Actions } from "../../actions";
+import { thinkingActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
@@ -28,6 +30,12 @@ import type {
 } from "./service";
 import { thinkingLevels } from "./selector";
 
+export interface ThinkingActionMessage {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
+}
+
 export function formatThinkingOutput(output: ThinkingCommandOutput): ChatTextInput {
   switch (output.status) {
     case "shown":
@@ -37,6 +45,19 @@ export function formatThinkingOutput(output: ThinkingCommandOutput): ChatTextInp
     case "cleared":
       return formatThinkingCleared(output);
   }
+}
+
+export function formatThinkingActionMessage(output: ThinkingCommandOutput): ThinkingActionMessage {
+  const message = normalizeTextInput(formatThinkingActionText(output));
+  const selection = output.status === "shown" ? output.current : output.selected;
+
+  return {
+    ...message,
+    buttons: formatThinkingButtons({
+      supportedLevels: selection.supportedLevels,
+      current: selection.level,
+    }),
+  };
 }
 
 export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInput {
@@ -148,6 +169,12 @@ export function formatThinkingCommandUsage(): ChatTextInput {
   });
 }
 
+function formatThinkingActionText(output: ThinkingCommandOutput): ChatTextInput {
+  return output.status === "shown"
+    ? formatThinkingActionShown(output)
+    : formatThinkingOutput(output);
+}
+
 function formatThinkingShown(output: ThinkingShownOutput): ChatTextInput {
   const lines = [
     "**Thinking Level**",
@@ -164,6 +191,19 @@ function formatThinkingShown(output: ThinkingShownOutput): ChatTextInput {
   ];
 
   return markdown({ text: lines.join("\n") });
+}
+
+function formatThinkingActionShown(output: ThinkingShownOutput): ChatTextInput {
+  return markdown({
+    text: [
+      "**Thinking Level**",
+      "",
+      `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
+      `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
+      `- **Current Level:** ${formatCurrentLevel(output.current.level)}`,
+      `- **Source:** ${formatSource(output.current.source)}`,
+    ].join("\n"),
+  });
 }
 
 function formatThinkingUpdated(output: ThinkingUpdatedOutput): ChatTextInput {
@@ -242,6 +282,52 @@ function formatSupportedLevels(input: {
 function formatLevelList(levels: readonly HarnessThinkingLevel[]): readonly string[] {
   const listed = levels.length === 0 ? thinkingLevels : levels;
   return listed.map((level) => `- ${inlineCode(level)}`);
+}
+
+function formatThinkingButtons(input: {
+  readonly supportedLevels?: readonly HarnessThinkingLevel[];
+  readonly current?: HarnessThinkingLevel;
+}): readonly (readonly ChatButtonInput<Actions>[])[] {
+  const levels = input.supportedLevels ?? thinkingLevels;
+  const buttons = levels.map((level) => formatThinkingButton({ level, current: input.current }));
+  return chunkButtons(buttons, 3);
+}
+
+function formatThinkingButton(input: {
+  readonly level: HarnessThinkingLevel;
+  readonly current?: HarnessThinkingLevel;
+}): ChatButtonInput<Actions> {
+  return {
+    id: `thinking-level-${input.level}`,
+    label: `${input.level === input.current ? "✓ " : ""}${formatButtonLabel(input.level)}`,
+    actionId: thinkingActionId,
+    value: input.level,
+    style: input.level === input.current ? "primary" : "secondary",
+  } as ChatButtonInput<Actions>;
+}
+
+function chunkButtons(
+  buttons: readonly ChatButtonInput<Actions>[],
+  size: number,
+): readonly (readonly ChatButtonInput<Actions>[])[] {
+  const rows: ChatButtonInput<Actions>[][] = [];
+
+  for (let index = 0; index < buttons.length; index += size) {
+    rows.push(buttons.slice(index, index + size));
+  }
+
+  return rows;
+}
+
+function formatButtonLabel(level: HarnessThinkingLevel): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+function normalizeTextInput(input: ChatTextInput): {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+} {
+  return typeof input === "string" ? { text: input } : input;
 }
 
 function formatModelRef(ref: {

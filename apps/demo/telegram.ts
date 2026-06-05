@@ -36,7 +36,7 @@ export async function runTelegramDemo() {
     adapters: {
       telegram: createTelegramAdapter({
         token,
-        mode: { type: "polling", dropPendingUpdates: true, allowedUpdates: ["message"] },
+        mode: { type: "polling", dropPendingUpdates: true },
       }),
     },
     commands,

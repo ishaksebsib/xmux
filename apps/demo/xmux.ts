@@ -19,7 +19,7 @@ export async function runXmuxDemo() {
     chats: {
       telegram: createTelegramAdapter({
         token,
-        mode: { type: "polling", dropPendingUpdates: true, allowedUpdates: ["message"] },
+        mode: { type: "polling", dropPendingUpdates: true },
       }),
     },
     config: {

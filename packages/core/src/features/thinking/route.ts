@@ -5,7 +5,12 @@ import type { Context } from "../../ctx";
 import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
 import { actorFromChatActor, replyToInvalidCommandUsage, type InvalidCommandEvent } from "../utils";
 import { ThinkingCommandResponseError } from "./errors";
-import { handleThinkingCommand, type ThinkingCommandEvent } from "./handler";
+import {
+  handleThinkingAction,
+  handleThinkingCommand,
+  type ThinkingActionEvent,
+  type ThinkingCommandEvent,
+} from "./handler";
 import { formatThinkingCommandUsage } from "./response";
 
 /** Registers chat routes owned by the `/thinking` feature. */
@@ -27,6 +32,26 @@ export function registerThinkingRoute<
         handleThinkingCommand({
           ctx: handlerCtx,
           event: thinkingCommandEvent,
+        }),
+    });
+
+    if (handled.isErr()) {
+      // TODO: report handler errors through diagnostics/observability.
+      return;
+    }
+  });
+
+  const unsubscribeThinkingAction = ctx.chat.on("action", "thinking", async (event) => {
+    const thinkingActionEvent = event as ThinkingActionEvent<Extract<keyof TChats, string>>;
+    const handled = await runXmuxHandler({
+      app: ctx,
+      event,
+      middleware,
+      actor: actorFromChatActor(thinkingActionEvent.actor),
+      handler: (handlerCtx) =>
+        handleThinkingAction({
+          ctx: handlerCtx,
+          event: thinkingActionEvent,
         }),
     });
 
@@ -67,6 +92,7 @@ export function registerThinkingRoute<
 
   return () => {
     unsubscribeThinkingCommand();
+    unsubscribeThinkingAction();
     unsubscribeInvalidCommand();
   };
 }

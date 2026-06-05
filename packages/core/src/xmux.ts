@@ -6,6 +6,7 @@ import {
   type HarnessAdapterDefinitions,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
+import { actions } from "./actions";
 import { commands } from "./commands";
 import { XmuxCloseError, XmuxInitializeError } from "./errors";
 import { normalizeConfig, type Config } from "./config";
@@ -61,6 +62,7 @@ export function createXmux<
   const chat = createChat({
     adapters: options.chats,
     commands,
+    actions,
   });
 
   const ctx: Context<TAdapters, TChats> = Object.freeze({

@@ -150,10 +150,16 @@ export async function thinkingSessionCommand<
     return Result.err(selected.error);
   }
 
+  const selectedThinking = selected.value as HarnessSelectedThinking;
+  const selectedWithSupportedLevels =
+    selectedThinking.supportedLevels === undefined && thinking.value.supportedLevels !== undefined
+      ? { ...selectedThinking, supportedLevels: thinking.value.supportedLevels }
+      : selectedThinking;
+
   return Result.ok({
     status: parsed.value.type === "clear" ? "cleared" : "updated",
     session: session.value,
-    selected: selected.value as HarnessSelectedThinking,
+    selected: selectedWithSupportedLevels,
   });
 }
 

@@ -45,35 +45,81 @@ describe("/thinking command", () => {
     await xmux.shutdown();
   });
 
-  test("shows the current thinking level for the active session", async () => {
-    const { emitCommand, replies, getInputs, xmux } = await initializeXmux();
+  test("shows the current thinking level with level buttons for the active session", async () => {
+    const { emitCommand, replies, sentActions, getInputs, xmux } = await initializeXmux();
     await bindSession({ xmux });
 
     emitCommand(commandEvent({ level: undefined }));
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => sentActions.length === 1);
 
+    expect(replies).toHaveLength(0);
     expect(getInputs).toEqual([{ target: { type: "session", ref: sessionRef } }]);
-    expect(replies[0]).toContain("**Thinking Level**");
-    expect(replies[0]).toContain("- **Harness:** `opencode`");
-    expect(replies[0]).toContain("- **Session ID:** `session-1`");
-    expect(replies[0]).toContain("- **Current Level:** **`medium`**");
-    expect(replies[0]).toContain("- **Source:** **session**");
-    expect(replies[0]).toContain("**Supported levels** (6)");
-    expect(replies[0]).toContain("- **`medium`** — current");
-    expect(replies[0]).toContain("- `xhigh`");
+    expect(sentActions[0]?.text).toContain("**Thinking Level**");
+    expect(sentActions[0]?.text).toContain("- **Harness:** `opencode`");
+    expect(sentActions[0]?.text).toContain("- **Session ID:** `session-1`");
+    expect(sentActions[0]?.text).toContain("- **Current Level:** **`medium`**");
+    expect(sentActions[0]?.text).toContain("- **Source:** **session**");
+    expect(sentActions[0]?.text).not.toContain("**Supported levels**");
+    expect(sentActions[0]?.text).not.toContain("- **`medium`** — current");
+    expect(sentActions[0]?.text).not.toContain("- `xhigh`");
+    expect(sentActions[0]?.buttons.flat().map((button) => button.value)).toEqual([
+      "off",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(sentActions[0]?.buttons.flat().find((button) => button.value === "medium")?.label).toBe(
+      "✓ Medium",
+    );
+
+    await xmux.shutdown();
+  });
+
+  test("sets a thinking level when a level button is pressed", async () => {
+    const { emitCommand, emitAction, sentActions, actionResponses, setInputs, xmux } =
+      await initializeXmux();
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ level: undefined }));
+
+    await eventually(() => sentActions.length === 1);
+
+    emitAction(actionEvent({ value: "high" }));
+
+    await eventually(() => actionResponses.length === 2);
+
+    expect(setInputs).toEqual([
+      {
+        target: { type: "session", ref: sessionRef },
+        update: { type: "set", level: "high" },
+      },
+    ]);
+    expect(actionResponses[0]?.response.kind).toBe("ack");
+    expect(actionResponses[1]?.response.kind).toBe("update");
+    expect(actionResponses[1]?.response.message).toEqual({
+      text: "**Thinking level updated**\n\n- **Thinking Level:** **`high`**\n- **Source:** **session**\n- **Harness:** `opencode`\n- **Session ID:** `session-1`\n\nThis thinking level is now selected for the current session.",
+      format: "markdown",
+    });
+    const updatedButtons = actionResponses[1]?.response.buttons as
+      | (typeof sentActions)[number]["buttons"]
+      | undefined;
+    expect(updatedButtons?.flat().find((button) => button.value === "high")?.label).toBe("✓ High");
 
     await xmux.shutdown();
   });
 
   test("sets a thinking level for the active session", async () => {
-    const { emitCommand, replies, setInputs, xmux } = await initializeXmux();
+    const { emitCommand, replies, sentActions, setInputs, xmux } = await initializeXmux();
     await bindSession({ xmux });
 
     emitCommand(commandEvent({ level: "xhigh" }));
 
     await eventually(() => replies.length === 1);
 
+    expect(sentActions).toHaveLength(0);
     expect(setInputs).toEqual([
       {
         target: { type: "session", ref: sessionRef },
@@ -265,6 +311,24 @@ interface InitializeXmuxInput {
 
 async function initializeXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
+  const sentActions: {
+    readonly text: string;
+    readonly format?: "plain" | "markdown" | "html";
+    readonly buttons: readonly (readonly {
+      readonly id: string;
+      readonly label: string;
+      readonly actionId?: string;
+      readonly value?: string;
+    }[])[];
+  }[] = [];
+  const actionResponses: {
+    readonly interactionId: string;
+    readonly response: {
+      readonly kind: string;
+      readonly message?: unknown;
+      readonly buttons?: unknown;
+    };
+  }[] = [];
   const getInputs: { readonly target: HarnessThinkingTarget<"opencode"> }[] = [];
   const modelGetInputs: { readonly target: HarnessModelTarget<"opencode"> }[] = [];
   const setInputs: {
@@ -281,7 +345,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
           providerId: "openai",
           modelId: "gpt-4.1",
         });
-  let emitCommand: ((event: unknown) => void) | undefined;
+  let emitEvent: ((event: unknown) => void) | undefined;
 
   const xmux = createXmux({
     harnesses: {
@@ -397,7 +461,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
           return Result.ok({
             id: "telegram",
             async start(context) {
-              emitCommand = context.emit as (event: unknown) => void;
+              emitEvent = context.emit as (event: unknown) => void;
               return Result.ok();
             },
             async sendMessage(messageInput) {
@@ -406,6 +470,11 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
               );
             },
             async sendAction(input) {
+              sentActions.push({
+                text: input.text,
+                format: input.format,
+                buttons: input.buttons,
+              });
               return Result.ok({
                 chatId: input.chatId,
                 conversationId: input.conversationId,
@@ -414,7 +483,11 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
                 adapterData: {},
               });
             },
-            async respondToAction() {
+            async respondToAction(input) {
+              actionResponses.push({
+                interactionId: input.interactionId,
+                response: input.response,
+              });
               return Result.ok();
             },
             async reply(replyInput) {
@@ -434,14 +507,17 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
   });
 
   expect((await xmux.initialize()).isOk()).toBe(true);
-  expect(emitCommand).toBeDefined();
+  expect(emitEvent).toBeDefined();
 
   return {
     replies,
+    sentActions,
+    actionResponses,
     getInputs,
     modelGetInputs,
     setInputs,
-    emitCommand: emitCommand as (event: unknown) => void,
+    emitCommand: emitEvent as (event: unknown) => void,
+    emitAction: emitEvent as (event: unknown) => void,
     xmux,
   };
 }
@@ -505,6 +581,19 @@ function commandEvent(input: { readonly level?: string }) {
       name: "thinking",
       options: { level: input.level },
     },
+  };
+}
+
+function actionEvent(input: { readonly value: HarnessThinkingLevel }) {
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "action-1" },
+    interactionId: "interaction-1",
+    actionId: "thinking",
+    value: input.value,
   };
 }
 
