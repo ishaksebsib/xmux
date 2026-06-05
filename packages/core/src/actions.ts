@@ -2,17 +2,21 @@ import { actionValue, defineChatAction, defineChatActions } from "@xmux/chat-cor
 
 export const thinkingActionId = "thinking" as const;
 
+function actionWithoutPayload() {
+  return actionValue<undefined>();
+}
+
 /** Built-in button actions registered with every chat adapter. */
 export const actions = defineChatActions({
   [thinkingActionId]: defineChatAction({
     values: {
-      off: actionValue(),
-      minimal: actionValue(),
-      low: actionValue(),
-      medium: actionValue(),
-      high: actionValue(),
-      xhigh: actionValue(),
-      max: actionValue(),
+      off: actionWithoutPayload(),
+      minimal: actionWithoutPayload(),
+      low: actionWithoutPayload(),
+      medium: actionWithoutPayload(),
+      high: actionWithoutPayload(),
+      xhigh: actionWithoutPayload(),
+      max: actionWithoutPayload(),
     },
   }),
 });

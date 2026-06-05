@@ -48,8 +48,10 @@ export function formatThinkingOutput(output: ThinkingCommandOutput): ChatTextInp
 }
 
 export function formatThinkingActionMessage(output: ThinkingCommandOutput): ThinkingActionMessage {
-  const message = normalizeTextInput(formatThinkingActionText(output));
   const selection = output.status === "shown" ? output.current : output.selected;
+  const message = normalizeTextInput(
+    output.status === "shown" ? formatThinkingPickerShown(output) : formatThinkingOutput(output),
+  );
 
   return {
     ...message,
@@ -169,41 +171,21 @@ export function formatThinkingCommandUsage(): ChatTextInput {
   });
 }
 
-function formatThinkingActionText(output: ThinkingCommandOutput): ChatTextInput {
-  return output.status === "shown"
-    ? formatThinkingActionShown(output)
-    : formatThinkingOutput(output);
-}
-
 function formatThinkingShown(output: ThinkingShownOutput): ChatTextInput {
-  const lines = [
-    "**Thinking Level**",
-    "",
-    `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
-    `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
-    `- **Current Level:** ${formatCurrentLevel(output.current.level)}`,
-    `- **Source:** ${formatSource(output.current.source)}`,
-    "",
-    ...formatSupportedLevels({
-      supportedLevels: output.current.supportedLevels,
-      current: output.current.level,
-    }),
-  ];
-
-  return markdown({ text: lines.join("\n") });
-}
-
-function formatThinkingActionShown(output: ThinkingShownOutput): ChatTextInput {
   return markdown({
     text: [
-      "**Thinking Level**",
+      ...formatThinkingDetailsLines(output),
       "",
-      `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
-      `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
-      `- **Current Level:** ${formatCurrentLevel(output.current.level)}`,
-      `- **Source:** ${formatSource(output.current.source)}`,
+      ...formatSupportedLevels({
+        supportedLevels: output.current.supportedLevels,
+        current: output.current.level,
+      }),
     ].join("\n"),
   });
+}
+
+function formatThinkingPickerShown(output: ThinkingShownOutput): ChatTextInput {
+  return markdown({ text: formatThinkingDetailsLines(output).join("\n") });
 }
 
 function formatThinkingUpdated(output: ThinkingUpdatedOutput): ChatTextInput {
@@ -232,6 +214,17 @@ function formatThinkingCleared(output: ThinkingClearedOutput): ChatTextInput {
       `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
     ].join("\n"),
   });
+}
+
+function formatThinkingDetailsLines(output: ThinkingShownOutput): readonly string[] {
+  return [
+    `**Thinking Level (${formatHeadingLevel(output.current.level)})**`,
+    "",
+    `- **Harness:** ${inlineCode(output.session.ref.harnessId)}`,
+    `- **Session ID:** ${inlineCode(output.session.ref.sessionId)}`,
+    `- **Current Level:** ${formatCurrentLevel(output.current.level)}`,
+    `- **Source:** ${formatSource(output.current.source)}`,
+  ];
 }
 
 function formatCurrentLevel(level: HarnessThinkingLevel | undefined): string {
@@ -289,21 +282,77 @@ function formatThinkingButtons(input: {
   readonly current?: HarnessThinkingLevel;
 }): readonly (readonly ChatButtonInput<Actions>[])[] {
   const levels = input.supportedLevels ?? thinkingLevels;
-  const buttons = levels.map((level) => formatThinkingButton({ level, current: input.current }));
-  return chunkButtons(buttons, 3);
+  return chunkButtons(
+    levels.map((level) => formatThinkingButton({ level, current: input.current })),
+    3,
+  );
 }
 
 function formatThinkingButton(input: {
   readonly level: HarnessThinkingLevel;
   readonly current?: HarnessThinkingLevel;
 }): ChatButtonInput<Actions> {
+  switch (input.level) {
+    case "off":
+      return {
+        ...thinkingButtonView("off", input.current),
+        actionId: thinkingActionId,
+        value: "off",
+      };
+    case "minimal":
+      return {
+        ...thinkingButtonView("minimal", input.current),
+        actionId: thinkingActionId,
+        value: "minimal",
+      };
+    case "low":
+      return {
+        ...thinkingButtonView("low", input.current),
+        actionId: thinkingActionId,
+        value: "low",
+      };
+    case "medium":
+      return {
+        ...thinkingButtonView("medium", input.current),
+        actionId: thinkingActionId,
+        value: "medium",
+      };
+    case "high":
+      return {
+        ...thinkingButtonView("high", input.current),
+        actionId: thinkingActionId,
+        value: "high",
+      };
+    case "xhigh":
+      return {
+        ...thinkingButtonView("xhigh", input.current),
+        actionId: thinkingActionId,
+        value: "xhigh",
+      };
+    case "max":
+      return {
+        ...thinkingButtonView("max", input.current),
+        actionId: thinkingActionId,
+        value: "max",
+      };
+  }
+}
+
+function thinkingButtonView(
+  level: HarnessThinkingLevel,
+  current: HarnessThinkingLevel | undefined,
+): {
+  readonly id: string;
+  readonly label: string;
+  readonly style: "primary" | "secondary";
+} {
+  const selected = level === current;
+
   return {
-    id: `thinking-level-${input.level}`,
-    label: `${input.level === input.current ? "✓ " : ""}${formatButtonLabel(input.level)}`,
-    actionId: thinkingActionId,
-    value: input.level,
-    style: input.level === input.current ? "primary" : "secondary",
-  } as ChatButtonInput<Actions>;
+    id: `thinking-level-${level}`,
+    label: `${selected ? "✓ " : ""}${formatButtonLabel(level)}`,
+    style: selected ? "primary" : "secondary",
+  };
 }
 
 function chunkButtons(
@@ -321,6 +370,10 @@ function chunkButtons(
 
 function formatButtonLabel(level: HarnessThinkingLevel): string {
   return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+function formatHeadingLevel(level: HarnessThinkingLevel | undefined): string {
+  return level === undefined ? "Unset" : formatButtonLabel(level);
 }
 
 function normalizeTextInput(input: ChatTextInput): {

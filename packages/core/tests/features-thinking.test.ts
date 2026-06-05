@@ -55,7 +55,7 @@ describe("/thinking command", () => {
 
     expect(replies).toHaveLength(0);
     expect(getInputs).toEqual([{ target: { type: "session", ref: sessionRef } }]);
-    expect(sentActions[0]?.text).toContain("**Thinking Level**");
+    expect(sentActions[0]?.text).toContain("**Thinking Level (Medium)**");
     expect(sentActions[0]?.text).toContain("- **Harness:** `opencode`");
     expect(sentActions[0]?.text).toContain("- **Session ID:** `session-1`");
     expect(sentActions[0]?.text).toContain("- **Current Level:** **`medium`**");

@@ -10,14 +10,20 @@ import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result, type Result as BetterResult } from "better-result";
 import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
+import type { ChatThreadRef } from "../../store";
 import { replyToChatEvent, threadFromChatEvent } from "../utils";
 import { ThinkingCommandResponseError } from "./errors";
 import {
   formatThinkingActionMessage,
   formatThinkingFailure,
   formatThinkingOutput,
+  type ThinkingActionMessage,
 } from "./response";
-import { thinkingSessionCommand } from "./service";
+import {
+  thinkingSessionCommand,
+  type ThinkingCommandError,
+  type ThinkingCommandOutput,
+} from "./service";
 
 export interface HandleThinkingCommandInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -63,32 +69,20 @@ export async function handleThinkingCommand<
 >(
   input: HandleThinkingCommandInput<TAdapters, TChats>,
 ): Promise<BetterResult<void, ThinkingCommandResponseError>> {
-  const selected = await thinkingSessionCommand({
+  const level = input.event.command.options.level;
+  const result = await selectThinking({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
-    level: input.event.command.options.level,
+    level,
   });
 
-  if (
-    selected.isOk() &&
-    selected.value.status === "shown" &&
-    input.event.command.options.level === undefined
-  ) {
-    return sendThinkingActionMessage({
-      ctx: input.ctx,
-      event: input.event,
-      message: formatThinkingActionMessage(selected.value),
-    });
+  if (level === undefined && result.isOk()) {
+    return sendThinkingPicker({ ctx: input.ctx, event: input.event, output: result.value });
   }
 
-  const response = selected.isOk()
-    ? formatThinkingOutput(selected.value)
-    : formatThinkingFailure(selected.error);
-
-  return replyToChatEvent({
+  return replyThinkingCommand({
     event: input.event,
-    message: response,
-    onError: (cause) => new ThinkingCommandResponseError({ cause }),
+    message: formatThinkingResult(result),
   });
 }
 
@@ -99,87 +93,124 @@ export async function handleThinkingAction<
 >(
   input: HandleThinkingActionInput<TAdapters, TChats>,
 ): Promise<BetterResult<void, ThinkingCommandResponseError>> {
-  const acknowledged = await respondToThinkingAction({
-    respond: () => input.event.ack(),
-    onError: (cause) => new ThinkingCommandResponseError({ cause }),
-  });
+  const acknowledged = await respondToThinkingAction(() => input.event.ack());
+  if (acknowledged.isErr()) return Result.err(acknowledged.error);
 
-  if (acknowledged.isErr()) {
-    return Result.err(acknowledged.error);
-  }
-
-  const selected = await thinkingSessionCommand({
+  const result = await selectThinking({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
     level: input.event.value,
   });
 
-  if (selected.isErr()) {
-    return respondToThinkingAction({
-      respond: () => input.event.reply(formatThinkingFailure(selected.error)),
-      onError: (cause) => new ThinkingCommandResponseError({ cause }),
-    });
+  if (result.isErr()) {
+    return respondToThinkingAction(() => input.event.reply(formatThinkingFailure(result.error)));
   }
 
-  const message = formatThinkingActionMessage(selected.value);
+  return updateThinkingPicker({ event: input.event, output: result.value });
+}
 
-  return respondToThinkingAction({
-    respond: () =>
-      input.event.update({
-        message: { text: message.text, format: message.format },
-        buttons: message.buttons,
-      }),
+function selectThinking<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly thread: ChatThreadRef;
+  readonly level?: string;
+}): Promise<BetterResult<ThinkingCommandOutput, ThinkingCommandError>> {
+  return thinkingSessionCommand(input);
+}
+
+function formatThinkingResult(
+  result: BetterResult<ThinkingCommandOutput, ThinkingCommandError>,
+): ChatTextInput {
+  return result.isOk() ? formatThinkingOutput(result.value) : formatThinkingFailure(result.error);
+}
+
+function replyThinkingCommand(input: {
+  readonly event: ThinkingCommandEvent;
+  readonly message: ChatTextInput;
+}): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+  return replyToChatEvent({
+    event: input.event,
+    message: input.message,
     onError: (cause) => new ThinkingCommandResponseError({ cause }),
   });
 }
 
-async function sendThinkingActionMessage<
+async function sendThinkingPicker<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly event: ThinkingCommandEvent<Extract<keyof TChats, string>>;
-  readonly message: ReturnType<typeof formatThinkingActionMessage>;
+  readonly output: ThinkingCommandOutput;
 }): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+  const message = formatThinkingActionMessage(input.output);
   const sent = await Result.tryPromise({
-    try: () =>
-      input.ctx.app.chat.sendAction({
-        chatId: input.event.chatId,
-        conversationId: input.event.conversation.conversationId,
-        text: input.message.text,
-        format: input.message.format,
-        buttons: input.message.buttons,
-        signal: input.ctx.signal,
-      } as ChatSendActionInput<TChats, Actions>),
+    try: () => input.ctx.app.chat.sendAction(toSendActionInput(input, message)),
     catch: (cause) => new ThinkingCommandResponseError({ cause }),
   });
 
-  if (sent.isErr()) {
-    return Result.err(sent.error);
-  }
-
-  if (sent.value.isErr()) {
-    return Result.err(new ThinkingCommandResponseError({ cause: sent.value.error }));
-  }
-
-  return Result.ok();
+  return unwrapChatResult(sent);
 }
 
-async function respondToThinkingAction<TError>(input: {
-  readonly respond: () => Promise<BetterResult<unknown, unknown>>;
-  readonly onError: (cause: unknown) => TError;
-}): Promise<BetterResult<void, TError>> {
+function updateThinkingPicker(input: {
+  readonly event: ThinkingActionEvent;
+  readonly output: ThinkingCommandOutput;
+}): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+  const message = formatThinkingActionMessage(input.output);
+
+  return respondToThinkingAction(() =>
+    input.event.update({
+      message: toTextInput(message),
+      buttons: message.buttons,
+    }),
+  );
+}
+
+function toSendActionInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: {
+    readonly ctx: HandlerContext<TAdapters, TChats>;
+    readonly event: ThinkingCommandEvent<Extract<keyof TChats, string>>;
+  },
+  message: ThinkingActionMessage,
+): ChatSendActionInput<TChats, Actions> {
+  return {
+    chatId: input.event.chatId,
+    conversationId: input.event.conversation.conversationId,
+    text: message.text,
+    format: message.format,
+    buttons: message.buttons,
+    signal: input.ctx.signal,
+  } as ChatSendActionInput<TChats, Actions>;
+}
+
+function toTextInput(message: ThinkingActionMessage): ChatTextInput {
+  return message.format === undefined
+    ? { text: message.text }
+    : { text: message.text, format: message.format };
+}
+
+async function respondToThinkingAction(
+  respond: () => Promise<BetterResult<unknown, unknown>>,
+): Promise<BetterResult<void, ThinkingCommandResponseError>> {
   const responded = await Result.tryPromise({
-    try: input.respond,
-    catch: input.onError,
+    try: respond,
+    catch: (cause) => new ThinkingCommandResponseError({ cause }),
   });
 
-  if (responded.isErr()) {
-    return Result.err(responded.error);
-  }
+  return unwrapChatResult(responded);
+}
 
-  if (responded.value.isErr()) {
-    return Result.err(input.onError(responded.value.error));
+function unwrapChatResult<T>(
+  result: BetterResult<BetterResult<T, unknown>, ThinkingCommandResponseError>,
+): BetterResult<void, ThinkingCommandResponseError> {
+  if (result.isErr()) return Result.err(result.error);
+  if (result.value.isErr()) {
+    return Result.err(new ThinkingCommandResponseError({ cause: result.value.error }));
   }
 
   return Result.ok();
