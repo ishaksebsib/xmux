@@ -1,11 +1,13 @@
 import { Result } from "better-result";
 import type {
+  ChatAdapterSendActionInput,
   ChatAdapterSendMessageInput,
   ChatAdapterSendTypingInput,
   ChatAdapterStartContext,
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
 } from "../adapter";
+import type { ChatActionRegistry } from "../actions";
 import type { ChatCommandRegistry } from "../commands";
 import type {
   ChatAdapterObject,
@@ -20,6 +22,7 @@ import type {
   AdapterOptionsFor,
   ChatAdapterDefinitions,
   ChatReplyInput,
+  ChatSendActionInput,
   ChatSendMessageInput,
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
@@ -93,18 +96,21 @@ export async function startChatAdapter<
     : Result.ok();
 }
 
-export function commandNameFor(event: {
+export function handlerKeyFor(event: {
   readonly type: ChatEventType;
   readonly command?: { readonly name: string };
   readonly commandName?: string;
+  readonly actionId?: string;
 }): string | undefined {
   if (event.type === "command") {
     return event.command?.name;
   }
 
-  return event.type === "command.invalid" || event.type === "command.unknown"
-    ? event.commandName
-    : undefined;
+  if (event.type === "command.invalid" || event.type === "command.unknown") {
+    return event.commandName;
+  }
+
+  return event.type === "action" ? event.actionId : undefined;
 }
 
 export function normalizeChatTextInput(message: ChatTextInput): ChatTextContent {
@@ -126,6 +132,22 @@ export function createAdapterSendMessageInput<
     TInput["chatId"],
     AdapterOptionsFor<TAdapters, TInput["chatId"]>
   >;
+}
+
+export function createAdapterSendActionInput<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+  TActions extends ChatActionRegistry,
+  TInput extends ChatSendActionInput<TAdapters, TActions>,
+>(input: TInput) {
+  return {
+    chatId: input.chatId,
+    conversationId: input.conversationId,
+    text: input.text,
+    format: input.format,
+    buttons: input.buttons,
+    adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
+    signal: input.signal,
+  } as ChatAdapterSendActionInput<TInput["chatId"], AdapterOptionsFor<TAdapters, TInput["chatId"]>>;
 }
 
 export function createAdapterTypingIndicatorInput<

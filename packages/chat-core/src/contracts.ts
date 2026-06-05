@@ -57,6 +57,51 @@ export interface ChatTextContent {
 /** Convenience input accepted by send/reply APIs. */
 export type ChatTextInput = string | ChatTextContent;
 
+/** JSON-like payload that can be carried by a chat action button. */
+export type ChatActionPayload =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly ChatActionPayload[]
+  | { readonly [key: string]: ChatActionPayload };
+
+/** Cross-platform visual intent for native buttons; adapters may downgrade unsupported styles. */
+export type ChatActionButtonStyle = "primary" | "secondary" | "success" | "danger";
+
+/** Button that dispatches a typed chat action when pressed. */
+export interface ChatActionButton<
+  TActionId extends string = string,
+  TValue extends string = string,
+  TPayload extends ChatActionPayload | undefined = ChatActionPayload | undefined,
+> {
+  readonly kind?: "action";
+  readonly id: string;
+  readonly label: string;
+  readonly actionId: TActionId;
+  readonly value: TValue;
+  readonly payload?: TPayload;
+  readonly style?: ChatActionButtonStyle;
+  readonly disabled?: boolean;
+}
+
+/** Button that opens an external URL and does not emit an action event. */
+export interface ChatUrlButton {
+  readonly kind: "url";
+  readonly id: string;
+  readonly label: string;
+  readonly url: string;
+  readonly disabled?: boolean;
+}
+
+/** Any cross-platform button accepted by action messages. */
+export type ChatButton = ChatActionButton | ChatUrlButton;
+
+/** Text plus button layout shared by action send/update APIs. */
+export interface ChatActionContent extends ChatTextContent {
+  readonly buttons: readonly (readonly ChatButton[])[];
+}
+
 /** Text stream event consumed by streaming send/reply APIs. */
 export type ChatTextStreamChunk =
   | { readonly type: "delta"; readonly delta: string }

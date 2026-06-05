@@ -9,6 +9,7 @@ export type ChatLifecycleOperation =
   | "start"
   | "close"
   | "sendMessage"
+  | "sendAction"
   | "reply"
   | "streamMessage"
   | "streamReply"
@@ -66,6 +67,34 @@ export class ChatSendMessageError extends TaggedError("ChatSendMessageError")<{
     super({
       ...args,
       message: `Failed to send chat message with "${args.chatId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Wraps adapter send action failures while preserving the original cause. */
+export class ChatSendActionError extends TaggedError("ChatSendActionError")<{
+  readonly chatId: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to send chat action with "${args.chatId}": ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Wraps adapter action response failures while preserving the original cause. */
+export class ChatActionResponseError extends TaggedError("ChatActionResponseError")<{
+  readonly chatId: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to respond to chat action with "${args.chatId}": ${describeCause(args.cause)}`,
     });
   }
 }
@@ -210,6 +239,18 @@ export type ChatSendMessageFailure =
   | UnknownChatAdapterError
   | ChatLifecycleError
   | ChatSendMessageError;
+
+/** Errors returned by `chat.sendAction()`. */
+export type ChatSendActionFailure =
+  | UnknownChatAdapterError
+  | ChatLifecycleError
+  | ChatSendActionError;
+
+/** Errors returned by action event ack/reply/update helpers. */
+export type ChatActionResponseFailure =
+  | UnknownChatAdapterError
+  | ChatLifecycleError
+  | ChatActionResponseError;
 
 /** Errors returned by `chat.reply()` and event reply helpers. */
 export type ChatReplyFailure =

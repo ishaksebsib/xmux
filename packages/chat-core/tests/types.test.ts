@@ -1,8 +1,11 @@
 import { Result } from "better-result";
 import { expectTypeOf, test } from "vitest";
 import {
+  actionValue,
   booleanOption,
   createChat,
+  defineChatAction,
+  defineChatActions,
   defineChatAdapter,
   defineChatCommand,
   defineChatCommands,
@@ -10,6 +13,7 @@ import {
   stringOption,
   type AdapterDataFor,
   type AdapterOptionsFor,
+  type ChatActionValues,
   type ChatAdapterDefinitions,
   type ChatCommandValues,
   type ChatOn,
@@ -77,6 +81,27 @@ test("command options infer required, optional, and choice values", () => {
   expectTypeOf<keyof CloseCommand["options"]>().toEqualTypeOf<never>();
 });
 
+test("action values infer typed payloads", () => {
+  const actions = defineChatActions({
+    deployment: defineChatAction({
+      values: {
+        approve: actionValue<{ readonly deploymentId: string }>(),
+        reject: actionValue<{ readonly deploymentId: string; readonly reason?: string }>(),
+      },
+    }),
+  });
+
+  type Action = ChatActionValues<typeof actions>;
+  type Approve = Extract<Action, { readonly actionId: "deployment"; readonly value: "approve" }>;
+  type Reject = Extract<Action, { readonly actionId: "deployment"; readonly value: "reject" }>;
+
+  expectTypeOf({} as Approve["payload"]).toEqualTypeOf<{ readonly deploymentId: string }>();
+  expectTypeOf({} as Reject["payload"]).toEqualTypeOf<{
+    readonly deploymentId: string;
+    readonly reason?: string;
+  }>();
+});
+
 test("adapter helper preserves id, option, and data types", () => {
   const discord = defineChatAdapter<
     "discord",
@@ -100,6 +125,18 @@ test("adapter helper preserves id, option, and data types", () => {
             format: input.format,
             adapterData: { nativeMessageId: "native-1" },
           });
+        },
+        async sendAction(input) {
+          return Result.ok({
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: "action-1",
+            text: input.text,
+            adapterData: {} as never,
+          });
+        },
+        async respondToAction() {
+          return Result.ok();
         },
         async close() {
           return undefined;
@@ -143,6 +180,18 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
             adapterData: { nativeMessageId: "native-1" },
           });
         },
+        async sendAction(input) {
+          return Result.ok({
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: "action-1",
+            text: input.text,
+            adapterData: {} as never,
+          });
+        },
+        async respondToAction() {
+          return Result.ok();
+        },
         async close() {
           return undefined;
         },
@@ -171,6 +220,18 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
             text: input.text,
             adapterData: { mode: input.adapterOptions.mode ?? "safe" },
           });
+        },
+        async sendAction(input) {
+          return Result.ok({
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: "action-1",
+            text: input.text,
+            adapterData: {} as never,
+          });
+        },
+        async respondToAction() {
+          return Result.ok();
         },
         async close() {
           return undefined;
@@ -253,6 +314,18 @@ test("sendMessage narrows adapter options and returned adapter data", () => {
                   adapterData: {},
                 });
               },
+              async sendAction(input) {
+                return Result.ok({
+                  chatId: input.chatId,
+                  conversationId: input.conversationId,
+                  messageId: "action-1",
+                  text: input.text,
+                  adapterData: {},
+                });
+              },
+              async respondToAction() {
+                return Result.ok();
+              },
               async close() {
                 return undefined;
               },
@@ -305,6 +378,18 @@ test("message events preserve adapter data and event.reply adapter options", () 
             text: input.text,
             adapterData: { nativeMessageId: "native-1" },
           });
+        },
+        async sendAction(input) {
+          return Result.ok({
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: "action-1",
+            text: input.text,
+            adapterData: {} as never,
+          });
+        },
+        async respondToAction() {
+          return Result.ok();
         },
         async close() {
           return undefined;
@@ -362,6 +447,18 @@ test("stream fallback is typed from adapter capabilities", () => {
             adapterData: {},
           });
         },
+        async sendAction(input) {
+          return Result.ok({
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: "action-1",
+            text: input.text,
+            adapterData: {} as never,
+          });
+        },
+        async respondToAction() {
+          return Result.ok();
+        },
         async close() {
           return undefined;
         },
@@ -410,6 +507,18 @@ test("stream fallback is typed from adapter capabilities", () => {
             text: "streamed",
             adapterData: {},
           });
+        },
+        async sendAction(input) {
+          return Result.ok({
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: "action-1",
+            text: input.text,
+            adapterData: {} as never,
+          });
+        },
+        async respondToAction() {
+          return Result.ok();
         },
         async close() {
           return undefined;

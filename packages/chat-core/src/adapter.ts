@@ -1,11 +1,14 @@
 import type { Result } from "better-result";
 import type { ChatCommandRegistry } from "./commands";
 import type {
+  ChatActionContent,
+  ChatButton,
   ChatConversationRef,
   ChatAdapterObject,
   ChatMessageRef,
   ChatSentMessage,
   ChatTextContent,
+  ChatTextInput,
   ChatTextStreamContent,
 } from "./contracts";
 import type { ChatAdapterEvent, ChatDiagnosticEvent } from "./events";
@@ -17,9 +20,16 @@ export function defineChatAdapter<
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
   const TCapabilities extends ChatAdapterCapabilities = ChatAdapterCapabilities,
+  TAdapterError = unknown,
 >(
-  adapter: ChatAdapterDefinition<TChatId, TAdapterOptions, TAdapterData, TCapabilities>,
-): ChatAdapterDefinition<TChatId, TAdapterOptions, TAdapterData, TCapabilities> {
+  adapter: ChatAdapterDefinition<
+    TChatId,
+    TAdapterOptions,
+    TAdapterData,
+    TCapabilities,
+    TAdapterError
+  >,
+): ChatAdapterDefinition<TChatId, TAdapterOptions, TAdapterData, TCapabilities, TAdapterError> {
   return adapter;
 }
 
@@ -28,22 +38,29 @@ export interface OpenedChatAdapterBase<
   TChatId extends string,
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
+  TAdapterError = unknown,
   TCapabilities extends ChatAdapterCapabilities = ChatAdapterCapabilities,
 > {
   readonly id: TChatId;
   readonly capabilities?: TCapabilities;
   start<TCommands extends ChatCommandRegistry>(
     context: ChatAdapterStartContext<TCommands, TChatId, TAdapterData>,
-  ): Promise<Result<void, unknown>>;
+  ): Promise<Result<void, TAdapterError>>;
   sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TAdapterOptions>,
-  ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, unknown>>;
+  ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
+  sendAction(
+    input: ChatAdapterSendActionInput<TChatId, TAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
+  respondToAction(
+    input: ChatAdapterRespondToActionInput<TChatId, TAdapterOptions>,
+  ): Promise<Result<void, TAdapterError>>;
   reply?(
     input: ChatAdapterReplyInput<TChatId, TAdapterOptions>,
-  ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, unknown>>;
+  ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
   sendTyping?(
     input: ChatAdapterSendTypingInput<TChatId, TAdapterOptions>,
-  ): Promise<Result<void, unknown>>;
+  ): Promise<Result<void, TAdapterError>>;
   close(): Promise<void>;
 }
 
@@ -52,19 +69,20 @@ export type ChatAdapterStreamMethodsFor<
   TChatId extends string,
   TAdapterOptions extends ChatAdapterObject,
   TAdapterData extends ChatAdapterObject,
+  TAdapterError,
   TCapabilities extends ChatAdapterCapabilities,
 > = (TCapabilities["messages"] extends { readonly stream: { readonly send: true } }
   ? {
       streamMessage(
         input: ChatAdapterStreamMessageInput<TChatId, TAdapterOptions>,
-      ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, unknown>>;
+      ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
     }
   : Record<never, never>) &
   (TCapabilities["messages"] extends { readonly stream: { readonly reply: true } }
     ? {
         streamReply(
           input: ChatAdapterStreamReplyInput<TChatId, TAdapterOptions>,
-        ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, unknown>>;
+        ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
       }
     : Record<never, never>);
 
@@ -74,8 +92,9 @@ export type OpenedChatAdapter<
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
   TCapabilities extends ChatAdapterCapabilities = ChatAdapterCapabilities,
-> = OpenedChatAdapterBase<TChatId, TAdapterOptions, TAdapterData, TCapabilities> &
-  ChatAdapterStreamMethodsFor<TChatId, TAdapterOptions, TAdapterData, TCapabilities>;
+  TAdapterError = unknown,
+> = OpenedChatAdapterBase<TChatId, TAdapterOptions, TAdapterData, TAdapterError, TCapabilities> &
+  ChatAdapterStreamMethodsFor<TChatId, TAdapterOptions, TAdapterData, TAdapterError, TCapabilities>;
 
 /** Adapter factory implemented by platform packages such as Discord or Telegram. */
 export interface ChatAdapterDefinition<
@@ -83,13 +102,17 @@ export interface ChatAdapterDefinition<
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
   TCapabilities extends ChatAdapterCapabilities = ChatAdapterCapabilities,
+  TAdapterError = unknown,
 > {
   readonly id: TChatId;
   readonly capabilities: TCapabilities;
   open(
     context: OpenChatAdapterContext,
   ): Promise<
-    Result<OpenedChatAdapter<TChatId, TAdapterOptions, TAdapterData, TCapabilities>, unknown>
+    Result<
+      OpenedChatAdapter<TChatId, TAdapterOptions, TAdapterData, TCapabilities, TAdapterError>,
+      TAdapterError
+    >
   >;
 }
 
@@ -118,6 +141,16 @@ export interface ChatAdapterCapabilities {
   readonly reactions?: {
     readonly receive: boolean;
     readonly send: boolean;
+  };
+  readonly actions?: {
+    readonly send: boolean;
+    readonly receive: boolean;
+    readonly ack: boolean;
+    readonly reply: boolean;
+    readonly update: boolean;
+    readonly urlButtons: boolean;
+    readonly maxButtonsPerMessage?: number;
+    readonly maxButtonsPerRow?: number;
   };
 }
 
@@ -159,6 +192,44 @@ export interface ChatAdapterSendMessageInput<
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
 >
   extends ChatConversationRef<TChatId>, ChatTextContent {
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+/** Outbound action message input every adapter receives. */
+export interface ChatAdapterSendActionInput<
+  TChatId extends string = string,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+>
+  extends ChatConversationRef<TChatId>, ChatActionContent {
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
+export type ChatAdapterActionResponse =
+  | {
+      readonly kind: "ack";
+      readonly text?: string;
+      readonly showAlert?: boolean;
+    }
+  | {
+      readonly kind: "reply";
+      readonly message: ChatTextInput;
+    }
+  | {
+      readonly kind: "update";
+      readonly message?: ChatTextInput;
+      readonly buttons?: readonly (readonly ChatButton[])[];
+    };
+
+/** Adapter-owned response to one previously received action click. */
+export interface ChatAdapterRespondToActionInput<
+  TChatId extends string = string,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+> extends ChatConversationRef<TChatId> {
+  readonly interactionId: string;
+  readonly message: ChatMessageRef<TChatId>;
+  readonly response: ChatAdapterActionResponse;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }

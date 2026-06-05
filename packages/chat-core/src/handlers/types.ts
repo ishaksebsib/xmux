@@ -10,6 +10,7 @@ import type { ChatAdapterObject, ChatSentMessage } from "../contracts";
 import type {
   ChatLifecycleError,
   ChatReplyFailure,
+  ChatSendActionFailure,
   ChatSendMessageFailure,
   ChatStreamMessageFailure,
   ChatStreamReplyFailure,
@@ -17,10 +18,13 @@ import type {
   UnknownChatAdapterError,
 } from "../errors";
 import type {
+  AdapterCapabilitiesFor,
   AdapterDataFor,
+  AdapterErrorFor,
   AdapterOptionsFor,
   ChatAdapterDefinitions,
   ChatReplyInput,
+  ChatSendActionInput,
   ChatSendMessageInput,
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
@@ -50,7 +54,8 @@ export type OpenedRuntime = OpenedChatAdapter<
   string,
   ChatAdapterObject,
   ChatAdapterObject,
-  ChatAdapterCapabilities
+  ChatAdapterCapabilities,
+  unknown
 >;
 
 export type StreamMessageRuntime = {
@@ -67,6 +72,7 @@ export type StreamReplyRuntime = {
 
 export type ChatRuntimeOperation =
   | "sendMessage"
+  | "sendAction"
   | "reply"
   | "streamMessage"
   | "streamReply"
@@ -85,6 +91,13 @@ export type SendMessageHandler<TAdapters extends ChatAdapterDefinitions<TAdapter
 >(
   input: TInput,
 ) => Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>>;
+
+export type SendActionHandler<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+  TActions extends import("../actions").ChatActionRegistry,
+> = <TInput extends ChatSendActionInput<TAdapters, TActions>>(
+  input: TInput,
+) => Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendActionFailure>>;
 
 export type ReplyHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>> = <
   TInput extends ChatReplyInput<TAdapters>,
@@ -120,7 +133,9 @@ export type GetStartedRuntime<TAdapters extends ChatAdapterDefinitions<TAdapters
     OpenedChatAdapter<
       Extract<TChatId, string>,
       AdapterOptionsFor<TAdapters, TChatId>,
-      AdapterDataFor<TAdapters, TChatId>
+      AdapterDataFor<TAdapters, TChatId>,
+      AdapterCapabilitiesFor<TAdapters, TChatId>,
+      AdapterErrorFor<TAdapters, TChatId>
     >,
     UnknownChatAdapterError | ChatLifecycleError
   >

@@ -1,11 +1,16 @@
 import { Result } from "better-result";
-import type { ChatAdapterStartContext, OpenedChatAdapter } from "./adapter";
+import type {
+  ChatAdapterRespondToActionInput,
+  ChatAdapterStartContext,
+  OpenedChatAdapter,
+} from "./adapter";
 import type {
   ChatAdapterObject,
   ChatStreamFallback,
   ChatTextInput,
   ChatTextStreamContent,
 } from "./contracts";
+import type { ChatActionRegistry } from "./actions";
 import type { ChatCommandRegistry } from "./commands";
 import type {
   AdapterDataByChatId,
@@ -17,6 +22,7 @@ import type {
   ChatEventAdapterOptions,
   ChatReplyInput,
   ChatReplyMode,
+  ChatSendActionInput,
   ChatSendMessageInput,
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
@@ -35,12 +41,15 @@ import type {
   Unsubscribe,
 } from "./events";
 import {
+  ChatActionResponseError,
   ChatAdapterOpenError,
   ChatCloseError,
   UnknownChatAdapterError,
+  type ChatActionResponseFailure,
   type ChatCloseFailure,
   type ChatLifecycleError,
   type ChatReplyFailure,
+  type ChatSendActionFailure,
   type ChatSendMessageFailure,
   type ChatStartError,
   type ChatStreamMessageFailure,
@@ -48,6 +57,7 @@ import {
   type ChatTypingIndicatorFailure,
 } from "./errors";
 import { createReplyHandler } from "./handlers/reply";
+import { createSendActionHandler } from "./handlers/send-action";
 import { createSendMessageHandler } from "./handlers/send-message";
 import { createStreamMessageHandler } from "./handlers/stream-message";
 import { createStreamReplyHandler } from "./handlers/stream-reply";
@@ -55,7 +65,7 @@ import { createTypingIndicatorHandler } from "./handlers/typing-indicator";
 import type { OpenedRuntime } from "./handlers/types";
 import {
   adapterForChatId,
-  commandNameFor,
+  handlerKeyFor,
   normalizeChatTextInput,
   openChatAdapter,
   startChatAdapter,
@@ -72,26 +82,32 @@ import {
 export interface Chat<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
   TCommands extends ChatCommandRegistry,
+  TActions extends ChatActionRegistry = Record<never, never>,
 > {
   readonly chatIds: readonly Extract<keyof TAdapters, string>[];
   start(): Promise<Result<void, ChatStartError>>;
   close(): Promise<Result<void, ChatCloseFailure>>;
   readonly on: ChatOn<
     TCommands,
+    TActions,
     Extract<keyof TAdapters, string>,
-    Result<
-      ChatSentMessageFromInput<
-        TAdapters,
-        ChatReplyInput<TAdapters> | ChatStreamReplyInput<TAdapters>
-      >,
-      ChatReplyFailure | ChatStreamReplyFailure
-    >,
+    | Result<
+        ChatSentMessageFromInput<
+          TAdapters,
+          ChatReplyInput<TAdapters> | ChatStreamReplyInput<TAdapters>
+        >,
+        ChatReplyFailure | ChatStreamReplyFailure
+      >
+    | Result<void, ChatActionResponseFailure>,
     AdapterDataByChatId<TAdapters>,
     AdapterOptionsByChatId<TAdapters>
   >;
   sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>>;
+  sendAction<TInput extends ChatSendActionInput<TAdapters, TActions>>(
+    input: TInput,
+  ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendActionFailure>>;
   reply<TInput extends ChatReplyInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>>;
@@ -110,7 +126,10 @@ export interface Chat<
 export function createChat<
   const TAdapters extends ChatAdapterDefinitions<TAdapters>,
   const TCommands extends ChatCommandRegistry,
->(options: CreateChatOptions<TAdapters, TCommands>): Chat<TAdapters, TCommands> {
+  const TActions extends ChatActionRegistry = Record<never, never>,
+>(
+  options: CreateChatOptions<TAdapters, TCommands, TActions>,
+): Chat<TAdapters, TCommands, TActions> {
   type TChatId = Extract<keyof TAdapters, string>;
   type TAdapterDataByChatId = AdapterDataByChatId<TAdapters>;
   type TAdapterOptionsByChatId = AdapterOptionsByChatId<TAdapters>;
@@ -121,10 +140,19 @@ export function createChat<
     >,
     ChatReplyFailure | ChatStreamReplyFailure
   >;
+  type TActionResponseResult = Result<void, ChatActionResponseFailure>;
+  type TEventResult = TReplyResult | TActionResponseResult;
 
   const chatIds = Object.freeze(Object.keys(options.adapters) as TChatId[]);
   const handlers = new Set<
-    StoredHandler<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+    StoredHandler<
+      TCommands,
+      TActions,
+      TChatId,
+      TEventResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
+    >
   >();
   const openedRuntimes = new Map<string, OpenedRuntime>();
   const pendingStartupEvents: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>[] = [];
@@ -134,8 +162,9 @@ export function createChat<
   function reportHandlerError(
     event: ChatEvent<
       TCommands,
+      TActions,
       TChatId,
-      TReplyResult,
+      TEventResult,
       TAdapterDataByChatId,
       TAdapterOptionsByChatId
     >,
@@ -147,8 +176,9 @@ export function createChat<
 
     dispatch({ type: "error", chatId: event.chatId, error: cause } as ChatEvent<
       TCommands,
+      TActions,
       TChatId,
-      TReplyResult,
+      TEventResult,
       TAdapterDataByChatId,
       TAdapterOptionsByChatId
     >);
@@ -157,20 +187,21 @@ export function createChat<
   function dispatch(
     event: ChatEvent<
       TCommands,
+      TActions,
       TChatId,
-      TReplyResult,
+      TEventResult,
       TAdapterDataByChatId,
       TAdapterOptionsByChatId
     >,
   ) {
-    const commandName = commandNameFor(event);
+    const handlerKey = handlerKeyFor(event);
 
     for (const subscription of handlers) {
       if (subscription.type !== event.type) {
         continue;
       }
 
-      if (subscription.commandName !== undefined && subscription.commandName !== commandName) {
+      if (subscription.key !== undefined && subscription.key !== handlerKey) {
         continue;
       }
 
@@ -186,7 +217,73 @@ export function createChat<
 
   function bindEvent(
     event: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>,
-  ): ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId> {
+  ): ChatEvent<
+    TCommands,
+    TActions,
+    TChatId,
+    TEventResult,
+    TAdapterDataByChatId,
+    TAdapterOptionsByChatId
+  > {
+    if (event.type === "action") {
+      return {
+        ...event,
+        ack: async (actionOptions?: {
+          readonly text?: string;
+          readonly showAlert?: boolean;
+          readonly adapterOptions?: ChatAdapterObject;
+        }) =>
+          respondToAction({
+            chatId: event.chatId,
+            conversationId: event.conversation.conversationId,
+            interactionId: event.interactionId,
+            message: event.message,
+            response: {
+              kind: "ack",
+              text: actionOptions?.text,
+              showAlert: actionOptions?.showAlert,
+            },
+            adapterOptions: actionOptions?.adapterOptions,
+          }),
+        reply: async (
+          message: ChatTextInput,
+          actionOptions?: { readonly adapterOptions?: ChatAdapterObject },
+        ) =>
+          respondToAction({
+            chatId: event.chatId,
+            conversationId: event.conversation.conversationId,
+            interactionId: event.interactionId,
+            message: event.message,
+            response: { kind: "reply", message },
+            adapterOptions: actionOptions?.adapterOptions,
+          }),
+        update: async (actionOptions?: {
+          readonly message?: ChatTextInput;
+          readonly buttons?: readonly (readonly import("./contracts").ChatButton[])[];
+          readonly adapterOptions?: ChatAdapterObject;
+        }) =>
+          respondToAction({
+            chatId: event.chatId,
+            conversationId: event.conversation.conversationId,
+            interactionId: event.interactionId,
+            message: event.message,
+            response: {
+              kind: "update",
+              message: actionOptions?.message,
+              buttons: actionOptions?.buttons,
+            },
+            adapterOptions: actionOptions?.adapterOptions,
+          }),
+      } as unknown as ChatEvent<
+        TCommands,
+        TActions,
+        TChatId,
+        TEventResult,
+        TAdapterDataByChatId,
+        TAdapterOptionsByChatId
+      >;
+    }
+
     if (
       event.type !== "message" &&
       event.type !== "command" &&
@@ -195,8 +292,9 @@ export function createChat<
     ) {
       return event as ChatEvent<
         TCommands,
+        TActions,
         TChatId,
-        TReplyResult,
+        TEventResult,
         TAdapterDataByChatId,
         TAdapterOptionsByChatId
       >;
@@ -266,7 +364,14 @@ export function createChat<
           ...(adapterOptions === undefined ? {} : { adapterOptions }),
         } as ChatTypingIndicatorInput<TAdapters>);
       },
-    } as ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>;
+    } as ChatEvent<
+      TCommands,
+      TActions,
+      TChatId,
+      TEventResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
+    >;
   }
 
   function emit(event: ChatAdapterEvent<TCommands, TChatId, TAdapterDataByChatId>) {
@@ -284,14 +389,28 @@ export function createChat<
       | string
       | ChatEventHandler<ChatCommandEvent<TCommands, keyof TCommands, TChatId>>
       | ChatEventHandler<
-          ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+          ChatEvent<
+            TCommands,
+            TActions,
+            TChatId,
+            TEventResult,
+            TAdapterDataByChatId,
+            TAdapterOptionsByChatId
+          >
         >,
     maybeHandler?: ChatEventHandler<ChatCommandEvent<TCommands, keyof TCommands, TChatId>>,
   ): Unsubscribe => {
-    const commandName = typeof commandOrHandler === "string" ? commandOrHandler : undefined;
+    const key = typeof commandOrHandler === "string" ? commandOrHandler : undefined;
     const handler = (typeof commandOrHandler === "string" ? maybeHandler : commandOrHandler) as
       | ChatEventHandler<
-          ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+          ChatEvent<
+            TCommands,
+            TActions,
+            TChatId,
+            TEventResult,
+            TAdapterDataByChatId,
+            TAdapterOptionsByChatId
+          >
         >
       | undefined;
 
@@ -299,10 +418,11 @@ export function createChat<
       throw new TypeError("chat.on requires an event handler");
     }
 
-    const subscription = { type, commandName, handler } satisfies StoredHandler<
+    const subscription = { type, key, handler } satisfies StoredHandler<
       TCommands,
+      TActions,
       TChatId,
-      TReplyResult,
+      TEventResult,
       TAdapterDataByChatId,
       TAdapterOptionsByChatId
     >;
@@ -311,7 +431,14 @@ export function createChat<
     return () => {
       handlers.delete(subscription);
     };
-  }) as ChatOn<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>;
+  }) as ChatOn<
+    TCommands,
+    TActions,
+    TChatId,
+    TEventResult,
+    TAdapterDataByChatId,
+    TAdapterOptionsByChatId
+  >;
 
   async function start() {
     const canStart = ensureCanStart(lifecycle);
@@ -368,8 +495,9 @@ export function createChat<
 
       dispatch({ type: "ready", chatId } as ChatEvent<
         TCommands,
+        TActions,
         TChatId,
-        TReplyResult,
+        TEventResult,
         TAdapterDataByChatId,
         TAdapterOptionsByChatId
       >);
@@ -414,6 +542,7 @@ export function createChat<
     readonly chatId: TChatId;
     readonly operation:
       | "sendMessage"
+      | "sendAction"
       | "reply"
       | "streamMessage"
       | "streamReply"
@@ -423,7 +552,9 @@ export function createChat<
       OpenedChatAdapter<
         Extract<TChatId, string>,
         AdapterOptionsFor<TAdapters, TChatId>,
-        AdapterDataFor<TAdapters, TChatId>
+        AdapterDataFor<TAdapters, TChatId>,
+        import("./types").AdapterCapabilitiesFor<TAdapters, TChatId>,
+        import("./types").AdapterErrorFor<TAdapters, TChatId>
       >,
       UnknownChatAdapterError | ChatLifecycleError
     >
@@ -447,12 +578,57 @@ export function createChat<
       runtime as OpenedChatAdapter<
         Extract<TChatId, string>,
         AdapterOptionsFor<TAdapters, TChatId>,
-        AdapterDataFor<TAdapters, TChatId>
+        AdapterDataFor<TAdapters, TChatId>,
+        import("./types").AdapterCapabilitiesFor<TAdapters, TChatId>,
+        import("./types").AdapterErrorFor<TAdapters, TChatId>
       >,
     );
   }
 
+  async function respondToAction(
+    args: Omit<
+      ChatAdapterRespondToActionInput<TChatId, ChatAdapterObject>,
+      "adapterOptions" | "signal"
+    > & {
+      readonly adapterOptions?: ChatAdapterObject;
+      readonly signal?: AbortSignal;
+    },
+  ): Promise<TActionResponseResult> {
+    return Result.gen(async function* () {
+      const runtime = yield* Result.await(
+        getStartedRuntime({ chatId: args.chatId, operation: "sendAction" }),
+      );
+      const responseResult = yield* Result.await(
+        Result.tryPromise({
+          try: async () =>
+            runtime.respondToAction({
+              chatId: args.chatId,
+              conversationId: args.conversationId,
+              interactionId: args.interactionId,
+              message: args.message,
+              response: args.response,
+              adapterOptions: (args.adapterOptions ?? {}) as AdapterOptionsFor<
+                TAdapters,
+                typeof args.chatId
+              >,
+              signal: args.signal,
+            }),
+          catch: (cause) => new ChatActionResponseError({ chatId: args.chatId, cause }),
+        }),
+      );
+
+      if (responseResult.isErr()) {
+        return Result.err(
+          new ChatActionResponseError({ chatId: args.chatId, cause: responseResult.error }),
+        );
+      }
+
+      return Result.ok();
+    });
+  }
+
   const sendMessage = createSendMessageHandler<TAdapters>({ getStartedRuntime });
+  const sendAction = createSendActionHandler<TAdapters, TActions>({ getStartedRuntime });
   const reply = createReplyHandler<TAdapters>({ getStartedRuntime });
   const streamMessage = createStreamMessageHandler<TAdapters>({
     getStartedRuntime,
@@ -505,6 +681,7 @@ export function createChat<
     close,
     on,
     sendMessage,
+    sendAction,
     reply,
     streamMessage,
     streamReply,
@@ -516,21 +693,31 @@ export function createChat<
 export interface CreateChatOptions<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
   TCommands extends ChatCommandRegistry,
+  TActions extends ChatActionRegistry = Record<never, never>,
 > {
   readonly adapters: TAdapters;
   readonly commands: TCommands;
+  readonly actions?: TActions;
 }
 
 type StoredHandler<
   TCommands extends ChatCommandRegistry,
+  TActions extends ChatActionRegistry,
   TChatId extends string,
-  TReplyResult,
+  TEventResult,
   TAdapterDataByChatId extends ChatEventAdapterData<TChatId>,
   TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId>,
 > = {
   readonly type: ChatEventType;
-  readonly commandName?: string;
+  readonly key?: string;
   readonly handler: ChatEventHandler<
-    ChatEvent<TCommands, TChatId, TReplyResult, TAdapterDataByChatId, TAdapterOptionsByChatId>
+    ChatEvent<
+      TCommands,
+      TActions,
+      TChatId,
+      TEventResult,
+      TAdapterDataByChatId,
+      TAdapterOptionsByChatId
+    >
   >;
 };

@@ -9,7 +9,10 @@ import {
   ChatTypingIndicatorError,
   UnknownChatAdapterError,
   UnsupportedChatOperationError,
+  actionValue,
   createChat,
+  defineChatAction,
+  defineChatActions,
   defineChatAdapter,
   defineChatCommand,
   defineChatCommands,
@@ -95,6 +98,16 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
     readonly conversationId: string;
     readonly text: string;
   }) => void;
+  readonly onSendAction?: (input: {
+    readonly adapterOptions: Record<never, never>;
+    readonly conversationId: string;
+    readonly text: string;
+    readonly buttons: readonly (readonly unknown[])[];
+  }) => void;
+  readonly onRespondToAction?: (input: {
+    readonly interactionId: string;
+    readonly response: { readonly kind: string };
+  }) => void;
   readonly onReply?: (input: {
     readonly message?: { readonly messageId: string };
     readonly mode?: string;
@@ -162,6 +175,21 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
             format: input.format,
             adapterData: {},
           });
+        },
+        async sendAction(input) {
+          args.onSendAction?.(input);
+          return Result.ok({
+            chatId: args.id,
+            conversationId: input.conversationId,
+            messageId: `${args.id}-action`,
+            text: input.text,
+            format: input.format,
+            adapterData: {},
+          });
+        },
+        async respondToAction(input) {
+          args.onRespondToAction?.(input);
+          return Result.ok();
         },
         reply: args.nativeReply
           ? async (input) => {
@@ -504,6 +532,84 @@ describe("createChat lifecycle", () => {
       expect(sent.value.messageId).toBe("alpha-message");
       expect(sent.value.adapterData).toEqual({});
     }
+  });
+
+  test("sends typed action messages and binds action response helpers", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
+    const sentActions: unknown[] = [];
+    const responses: string[] = [];
+    const actions = defineChatActions({
+      deployment: defineChatAction({
+        values: {
+          approve: actionValue<{ readonly deploymentId: string }>(),
+          reject: actionValue<{ readonly deploymentId: string; readonly reason?: string }>(),
+        },
+      }),
+    });
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onStart: (context) => {
+            startContext = context;
+          },
+          onSendAction: (input) => {
+            sentActions.push(input);
+          },
+          onRespondToAction: (input) => {
+            responses.push(`${input.interactionId}:${input.response.kind}`);
+          },
+        }),
+      },
+      commands,
+      actions,
+    });
+
+    chat.on("action", "deployment", async (event) => {
+      if (event.value === "approve") {
+        expect(event.payload.deploymentId).toBe("dep-1");
+        await event.ack({ text: "approved" });
+        await event.update({ message: "Approved ✅", buttons: [] });
+      }
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const sent = await chat.sendAction({
+      chatId: "alpha",
+      conversationId: "conversation",
+      text: "Deploy?",
+      buttons: [
+        [
+          {
+            id: "approve",
+            label: "Approve",
+            actionId: "deployment",
+            value: "approve",
+            payload: { deploymentId: "dep-1" },
+          },
+        ],
+      ],
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(sentActions).toHaveLength(1);
+
+    startContext?.emit({
+      type: "action",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: { chatId: "alpha", conversationId: "conversation", messageId: "message" },
+      interactionId: "interaction-1",
+      actionId: "deployment",
+      value: "approve",
+      payload: { deploymentId: "dep-1" },
+    });
+
+    await vi.waitFor(() => {
+      expect(responses).toEqual(["interaction-1:ack", "interaction-1:update"]);
+    });
   });
 
   test("sendMessage returns typed errors for unknown ids, lifecycle, and adapter failures", async () => {
