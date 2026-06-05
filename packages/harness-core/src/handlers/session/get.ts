@@ -31,28 +31,27 @@ export async function handleGetSession<
       }),
     );
 
-    if (found.isErr()) {
-      return Result.err(
-        new HarnessAdapterGetSessionError({
-          harnessId: args.input.ref.harnessId,
-          cause: found.error,
-        }),
-      );
-    }
+    const session = yield* Result.await(
+      Result.andThenAsync(
+        Result.mapError(
+          found,
+          (cause) =>
+            new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
+        ),
+        async (adapterSession) => {
+          const created = await createHarnessSessionInfo({
+            harnessId: args.input.ref.harnessId,
+            adapterSession,
+          });
+          return Result.mapError(
+            created,
+            (cause) =>
+              new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
+          );
+        },
+      ),
+    );
 
-    const session = await createHarnessSessionInfo({
-      harnessId: args.input.ref.harnessId,
-      adapterSession: found.value,
-    });
-    if (session.isErr()) {
-      return Result.err(
-        new HarnessAdapterGetSessionError({
-          harnessId: args.input.ref.harnessId,
-          cause: session.error,
-        }),
-      );
-    }
-
-    return Result.ok(session.value as GetSessionResultFromInput<TAdapters, TInput>);
+    return Result.ok(session as GetSessionResultFromInput<TAdapters, TInput>);
   });
 }

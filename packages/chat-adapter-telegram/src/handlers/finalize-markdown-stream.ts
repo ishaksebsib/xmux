@@ -8,7 +8,7 @@ export async function finalizeMarkdownStream<TError>(args: {
   readonly signal?: AbortSignal;
   readonly createError: (cause: unknown) => TError;
 }): Promise<Result<void, TError>> {
-  const finalized = await Result.tryPromise({
+  return Result.tryPromise({
     try: async () => {
       for (const message of args.telegramMessages) {
         const text = encodeTelegramMarkdownText(message.text);
@@ -27,6 +27,4 @@ export async function finalizeMarkdownStream<TError>(args: {
     },
     catch: args.createError,
   });
-
-  return finalized.isErr() ? Result.err(finalized.error) : Result.ok();
 }

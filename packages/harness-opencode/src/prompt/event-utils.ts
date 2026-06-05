@@ -86,12 +86,13 @@ export function toToolOutputContent(
 }
 
 export function parseToolInput(text: string): unknown {
-  const parsed = Result.try({
-    try: () => JSON.parse(text) as unknown,
-    catch: () => text,
-  });
-
-  return parsed.isOk() ? parsed.value : text;
+  return Result.unwrapOr(
+    Result.try({
+      try: () => JSON.parse(text) as unknown,
+      catch: () => text,
+    }),
+    text,
+  );
 }
 
 export function isAbortError(error: unknown): boolean {

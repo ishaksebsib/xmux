@@ -62,11 +62,10 @@ export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAda
           );
         }
 
-        if (replyResult.isErr()) {
-          return Result.err(new ChatReplyError({ chatId: input.chatId, cause: replyResult.error }));
-        }
-
-        return Result.ok(replyResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
+        return Result.mapError(
+          replyResult,
+          (cause) => new ChatReplyError({ chatId: input.chatId, cause }),
+        ) as Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>;
       }
 
       if (mode !== "auto" && mode !== "conversation") {
@@ -79,7 +78,7 @@ export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAda
         );
       }
 
-      const sentResult = yield* Result.await(
+      const sent = yield* Result.await(
         Result.tryPromise({
           try: async () =>
             runtime.sendMessage(createAdapterSendMessageInput<TAdapters, TInput>(input)),
@@ -87,13 +86,10 @@ export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAda
         }),
       );
 
-      if (sentResult.isErr()) {
-        return Result.err(
-          new ChatSendMessageError({ chatId: input.chatId, cause: sentResult.error }),
-        );
-      }
-
-      return Result.ok(sentResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
+      return Result.mapError(
+        sent,
+        (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
+      ) as Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>;
     });
   };
 }

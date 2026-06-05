@@ -75,9 +75,10 @@ export function createTypingIndicatorHandler<
 
     if (mode === "pulse") {
       const pulse = await sendTypingPulse({ runtime, input });
-      return pulse.isErr()
-        ? Result.err(pulse.error)
-        : Result.ok(undefined as ChatTypingIndicatorResult<TInput>);
+      return Result.map(pulse, () => undefined) as Result<
+        ChatTypingIndicatorResult<TInput>,
+        ChatTypingIndicatorFailure
+      >;
     }
 
     const timing = normalizeManagedTypingTiming({
@@ -97,7 +98,7 @@ export function createTypingIndicatorHandler<
       input,
       timeoutMs: timing.value.timeoutMs,
       refreshIntervalMs: timing.value.refreshIntervalMs,
-      sendPulse: async () => sendTypingPulse({ runtime, input }),
+      sendPulse: () => sendTypingPulse({ runtime, input }),
       emit: args.emit,
       lifecycleSignal: args.getLifecycleSignal(),
     });
@@ -136,11 +137,10 @@ async function sendTypingPulse<
     );
   }
 
-  return sent.value.isErr()
-    ? Result.err(
-        new ChatTypingIndicatorError({ chatId: args.input.chatId, cause: sent.value.error }),
-      )
-    : Result.ok();
+  return Result.mapError(
+    sent.value,
+    (cause) => new ChatTypingIndicatorError({ chatId: args.input.chatId, cause }),
+  );
 }
 
 function normalizeManagedTypingTiming(input: {

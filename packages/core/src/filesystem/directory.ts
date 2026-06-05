@@ -15,19 +15,13 @@ export async function resolveDirectory(
   input: ResolveDirectoryInput,
 ): Promise<Result<string, ResolveDirectoryError>> {
   const resolved = input.fs.resolvePath({ baseCwd: input.baseCwd, inputPath: input.inputPath });
-  const real = await input.fs.realpath({ path: resolved });
 
-  if (real.isErr()) {
-    return Result.err(real.error);
-  }
+  return Result.gen(async function* () {
+    const real = yield* Result.await(input.fs.realpath({ path: resolved }));
+    const stat = yield* Result.await(input.fs.stat({ path: real }));
 
-  const stats = await input.fs.stat({ path: real.value });
-
-  if (stats.isErr()) {
-    return Result.err(stats.error);
-  }
-
-  return stats.value.type === "directory"
-    ? Result.ok(real.value)
-    : Result.err(new InvalidDirectoryError({ path: real.value, reason: "not_directory" }));
+    return stat.type === "directory"
+      ? Result.ok(real)
+      : Result.err(new InvalidDirectoryError({ path: real, reason: "not_directory" }));
+  });
 }

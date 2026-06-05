@@ -41,63 +41,51 @@ export async function createSessionForThread<
 >(
   input: CreateSessionForThreadInput<TAdapters, TChats>,
 ): Promise<Result<SessionRecord, CreateSessionForThreadError>> {
-  const harnessId = requireConfiguredHarnessId({
-    harnessId: input.harnessId,
-    availableHarnessIds: input.ctx.app.harnessIds,
-    onMissing: (args) => new NewCommandHarnessNotConfiguredError(args),
+  return Result.gen(async function* () {
+    const harnessId = yield* requireConfiguredHarnessId({
+      harnessId: input.harnessId,
+      availableHarnessIds: input.ctx.app.harnessIds,
+      onMissing: (args) => new NewCommandHarnessNotConfiguredError(args),
+    });
+
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
+
+    const created = yield* Result.await(
+      input.ctx.app.harness.createSession(
+        createHarnessSessionInput({
+          harnessId,
+          cwd,
+          title: input.title,
+          signal: input.ctx.signal,
+        }) as CreateSessionInput<TAdapters>,
+      ),
+    );
+
+    const now = input.ctx.app.services.now().toISOString();
+    const record = createSessionRecord({
+      origin: input.thread,
+      requester: input.ctx.actor ?? UNKNOWN_ACTOR,
+      cwd: created.cwd,
+      deliveryMode: input.ctx.app.config.deliveryMode,
+      ref: created.ref,
+      title: created.title,
+      now,
+    });
+
+    const stored = yield* Result.await(input.ctx.app.store.sessions.create(record));
+
+    const binding = createThreadBinding({
+      thread: input.thread,
+      sessionRef: stored.ref,
+      now,
+    });
+
+    yield* Result.await(input.ctx.app.store.threadBindings.bind(binding));
+
+    return Result.ok(stored);
   });
-
-  if (harnessId.isErr()) {
-    return Result.err(harnessId.error);
-  }
-
-  const cwd = await getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread });
-
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  const created = await input.ctx.app.harness.createSession(
-    createHarnessSessionInput({
-      harnessId: harnessId.value,
-      cwd: cwd.value,
-      title: input.title,
-      signal: input.ctx.signal,
-    }) as CreateSessionInput<TAdapters>,
-  );
-
-  if (created.isErr()) {
-    return Result.err(created.error);
-  }
-
-  const now = input.ctx.app.services.now().toISOString();
-  const record = createSessionRecord({
-    origin: input.thread,
-    requester: input.ctx.actor ?? UNKNOWN_ACTOR,
-    cwd: created.value.cwd,
-    deliveryMode: input.ctx.app.config.deliveryMode,
-    ref: created.value.ref,
-    title: created.value.title,
-    now,
-  });
-
-  const stored = await input.ctx.app.store.sessions.create(record);
-  if (stored.isErr()) {
-    return Result.err(stored.error);
-  }
-
-  const binding = createThreadBinding({
-    thread: input.thread,
-    sessionRef: stored.value.ref,
-    now,
-  });
-
-  const bound = await input.ctx.app.store.threadBindings.bind(binding);
-  if (bound.isErr()) {
-    return Result.err(bound.error);
-  }
-
-  return Result.ok(stored.value);
 }
 
 const UNKNOWN_ACTOR = { userId: "unknown" } satisfies ActorRef;

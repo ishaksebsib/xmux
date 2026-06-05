@@ -7,6 +7,7 @@ import type {
   HarnessAdapterDefinitions,
   HarnessModelInfo,
   HarnessModelRef,
+  HarnessSelectedModel,
   HarnessSelectedThinking,
   HarnessThinkingLevel,
   ListModelsError,
@@ -83,83 +84,60 @@ export async function thinkingSessionCommand<
 >(
   input: ThinkingSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<ThinkingCommandOutput, ThinkingCommandError>> {
-  const session = await getThinkingSessionForThread({ ctx: input.ctx, thread: input.thread });
+  return Result.gen(async function* () {
+    const session = yield* Result.await(
+      getThinkingSessionForThread({ ctx: input.ctx, thread: input.thread }),
+    );
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    const parsed = yield* parseThinkingSelector(input.level);
 
-  const parsed = parseThinkingSelector(input.level);
+    const model = yield* Result.await(getSessionModel({ ctx: input.ctx, session }));
 
-  if (parsed.isErr()) {
-    return Result.err(parsed.error);
-  }
+    const current = yield* Result.await(getSessionThinking({ ctx: input.ctx, session }));
 
-  const model = await getSessionModel({ ctx: input.ctx, session: session.value });
+    const thinking = yield* Result.await(
+      enrichThinkingWithModelCapabilities({
+        ctx: input.ctx,
+        session,
+        current,
+        model,
+      }),
+    );
 
-  if (model.isErr()) {
-    return Result.err(model.error);
-  }
-
-  const current = await getSessionThinking({ ctx: input.ctx, session: session.value });
-
-  if (current.isErr()) {
-    return Result.err(current.error);
-  }
-
-  const thinking = await enrichThinkingWithModelCapabilities({
-    ctx: input.ctx,
-    session: session.value,
-    current: current.value,
-    model: model.value,
-  });
-
-  if (thinking.isErr()) {
-    return Result.err(thinking.error);
-  }
-
-  if (isThinkingUnsupportedForModel(thinking.value.supportedLevels)) {
-    return Result.err(new ThinkingModelThinkingUnsupportedError({ model: model.value }));
-  }
-
-  if (parsed.value.type === "show") {
-    return Result.ok({ status: "shown", session: session.value, current: thinking.value });
-  }
-
-  if (parsed.value.type === "set") {
-    const supported = ensureSupportedThinkingLevel({
-      supportedLevels: thinking.value.supportedLevels,
-      level: parsed.value.level,
-    });
-
-    if (supported.isErr()) {
-      return Result.err(supported.error);
+    if (isThinkingUnsupportedForModel(thinking.supportedLevels)) {
+      return Result.err(new ThinkingModelThinkingUnsupportedError({ model }));
     }
-  }
 
-  const selected = await input.ctx.app.harness.setThinking({
-    target: { type: "session", ref: session.value.ref },
-    update:
-      parsed.value.type === "clear"
-        ? { type: "clear" }
-        : { type: "set", level: parsed.value.level },
-    signal: input.ctx.signal,
-  } as SetThinkingInput<TAdapters>);
+    if (parsed.type === "show") {
+      return Result.ok({ status: "shown" as const, session, current: thinking });
+    }
 
-  if (selected.isErr()) {
-    return Result.err(selected.error);
-  }
+    if (parsed.type === "set") {
+      yield* ensureSupportedThinkingLevel({
+        supportedLevels: thinking.supportedLevels,
+        level: parsed.level,
+      });
+    }
 
-  const selectedThinking = selected.value as HarnessSelectedThinking;
-  const selectedWithSupportedLevels =
-    selectedThinking.supportedLevels === undefined && thinking.value.supportedLevels !== undefined
-      ? { ...selectedThinking, supportedLevels: thinking.value.supportedLevels }
-      : selectedThinking;
+    const selected = yield* Result.await(
+      input.ctx.app.harness.setThinking({
+        target: { type: "session", ref: session.ref },
+        update: parsed.type === "clear" ? { type: "clear" } : { type: "set", level: parsed.level },
+        signal: input.ctx.signal,
+      } as SetThinkingInput<TAdapters>),
+    );
 
-  return Result.ok({
-    status: parsed.value.type === "clear" ? "cleared" : "updated",
-    session: session.value,
-    selected: selectedWithSupportedLevels,
+    const selectedThinking = selected as HarnessSelectedThinking;
+    const selectedWithSupportedLevels =
+      selectedThinking.supportedLevels === undefined && thinking.supportedLevels !== undefined
+        ? { ...selectedThinking, supportedLevels: thinking.supportedLevels }
+        : selectedThinking;
+
+    return Result.ok({
+      status: (parsed.type === "clear" ? "cleared" : "updated") as "cleared" | "updated",
+      session,
+      selected: selectedWithSupportedLevels,
+    });
   });
 }
 
@@ -185,33 +163,25 @@ async function getThinkingSessionForThread<
     | ThinkingSessionClosedError
   >
 > {
-  const binding = await input.ctx.app.store.threadBindings.get(input.thread);
+  return Result.gen(async function* () {
+    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
-  if (binding.isErr()) {
-    return Result.err(binding.error);
-  }
+    if (!binding) {
+      return Result.err(new ThinkingNoActiveSessionError({ thread: input.thread }));
+    }
 
-  if (!binding.value) {
-    return Result.err(new ThinkingNoActiveSessionError({ thread: input.thread }));
-  }
+    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
 
-  const session = await input.ctx.app.store.sessions.get(binding.value.sessionRef);
+    if (!session) {
+      return Result.err(new ThinkingSessionRecordMissingError({ sessionRef: binding.sessionRef }));
+    }
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    if (session.status !== "open") {
+      return Result.err(new ThinkingSessionClosedError({ sessionRef: session.ref }));
+    }
 
-  if (!session.value) {
-    return Result.err(
-      new ThinkingSessionRecordMissingError({ sessionRef: binding.value.sessionRef }),
-    );
-  }
-
-  if (session.value.status !== "open") {
-    return Result.err(new ThinkingSessionClosedError({ sessionRef: session.value.ref }));
-  }
-
-  return Result.ok(session.value);
+    return Result.ok(session);
+  });
 }
 
 async function getSessionThinking<
@@ -221,14 +191,16 @@ async function getSessionThinking<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
 }): Promise<Result<HarnessSelectedThinking, GetThinkingError>> {
-  const current = await input.ctx.app.harness.getThinking({
-    target: { type: "session", ref: input.session.ref },
-    signal: input.ctx.signal,
-  } as GetThinkingInput<TAdapters>);
+  return Result.gen(async function* () {
+    const current = yield* Result.await(
+      input.ctx.app.harness.getThinking({
+        target: { type: "session", ref: input.session.ref },
+        signal: input.ctx.signal,
+      } as GetThinkingInput<TAdapters>),
+    );
 
-  return current.isErr()
-    ? Result.err(current.error)
-    : Result.ok(current.value as HarnessSelectedThinking);
+    return Result.ok(current as HarnessSelectedThinking);
+  });
 }
 
 async function getSessionModel<
@@ -238,22 +210,20 @@ async function getSessionModel<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
 }): Promise<Result<HarnessModelRef | undefined, GetModelError | ThinkingModelUnsetError>> {
-  const selected = await input.ctx.app.harness.getModel({
-    target: { type: "session", ref: input.session.ref },
-    signal: input.ctx.signal,
-  } as GetModelInput<TAdapters>);
+  return Result.gen(async function* () {
+    const selected = yield* recoverUnsupportedModelManagement(
+      (await input.ctx.app.harness.getModel({
+        target: { type: "session", ref: input.session.ref },
+        signal: input.ctx.signal,
+      } as GetModelInput<TAdapters>)) as Result<HarnessSelectedModel | undefined, GetModelError>,
+    );
 
-  if (selected.isErr()) {
-    if (HarnessAdapterModelUnsupportedError.is(selected.error)) {
-      return Result.ok(undefined);
-    }
+    if (selected === undefined) return Result.ok(undefined);
 
-    return Result.err(selected.error);
-  }
-
-  return selected.value.model === undefined
-    ? Result.err(new ThinkingModelUnsetError({ sessionRef: input.session.ref }))
-    : Result.ok(selected.value.model);
+    return selected.model === undefined
+      ? Result.err(new ThinkingModelUnsetError({ sessionRef: input.session.ref }))
+      : Result.ok(selected.model);
+  });
 }
 
 async function enrichThinkingWithModelCapabilities<
@@ -269,29 +239,56 @@ async function enrichThinkingWithModelCapabilities<
     return Result.ok(input.current);
   }
 
-  const models = await input.ctx.app.harness.listModels({
-    harnessId: input.session.ref.harnessId,
-    cwd: input.session.cwd,
-    signal: input.ctx.signal,
-  } as ListModelsInput<TAdapters>);
+  const modelRef: HarnessModelRef = input.model;
 
-  if (models.isErr()) {
-    if (HarnessAdapterModelUnsupportedError.is(models.error)) {
-      return Result.ok(input.current);
-    }
+  return Result.gen(async function* () {
+    const models = yield* recoverUnsupportedListModels(
+      (await input.ctx.app.harness.listModels({
+        harnessId: input.session.ref.harnessId,
+        cwd: input.session.cwd,
+        signal: input.ctx.signal,
+      } as ListModelsInput<TAdapters>)) as Result<
+        readonly HarnessModelInfo[] | undefined,
+        ListModelsError
+      >,
+    );
 
-    return Result.err(models.error);
-  }
+    if (models === undefined) return Result.ok(input.current);
 
-  const model = findModelInfo({
-    model: input.model,
-    models: models.value as readonly HarnessModelInfo[],
+    const model = findModelInfo({
+      model: modelRef,
+      models,
+    });
+    const supportedLevels = model?.capabilities?.thinking?.supportedLevels;
+
+    return supportedLevels === undefined
+      ? Result.ok(input.current)
+      : Result.ok({ ...input.current, supportedLevels });
   });
-  const supportedLevels = model?.capabilities?.thinking?.supportedLevels;
+}
 
-  return supportedLevels === undefined
-    ? Result.ok(input.current)
-    : Result.ok({ ...input.current, supportedLevels });
+function recoverUnsupportedModelManagement(
+  result: Result<HarnessSelectedModel | undefined, GetModelError>,
+): Result<HarnessSelectedModel | undefined, GetModelError> {
+  return Result.match(result, {
+    ok: (value) => Result.ok(value),
+    err: (error): Result<HarnessSelectedModel | undefined, GetModelError> => {
+      if (HarnessAdapterModelUnsupportedError.is(error)) return Result.ok(undefined);
+      return Result.err(error);
+    },
+  });
+}
+
+function recoverUnsupportedListModels(
+  result: Result<readonly HarnessModelInfo[] | undefined, ListModelsError>,
+): Result<readonly HarnessModelInfo[] | undefined, ListModelsError> {
+  return Result.match(result, {
+    ok: (value) => Result.ok(value),
+    err: (error): Result<readonly HarnessModelInfo[] | undefined, ListModelsError> => {
+      if (HarnessAdapterModelUnsupportedError.is(error)) return Result.ok(undefined);
+      return Result.err(error);
+    },
+  });
 }
 
 function ensureSupportedThinkingLevel(input: {

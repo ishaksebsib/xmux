@@ -1,7 +1,7 @@
 import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import { Result, type Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import { replyToChatEvent, threadFromChatEvent } from "../utils";
 import { CancelCommandResponseError } from "./errors";
@@ -40,9 +40,10 @@ export async function handleCancelCommand<
     thread: threadFromChatEvent(input.event),
   });
 
-  const response = cancelled.isOk()
-    ? formatCancelOutput(cancelled.value)
-    : formatCancelFailure(cancelled.error);
+  const response = Result.match(cancelled, {
+    ok: (value) => formatCancelOutput(value),
+    err: (error) => formatCancelFailure(error),
+  });
 
   return replyToChatEvent({
     event: input.event,

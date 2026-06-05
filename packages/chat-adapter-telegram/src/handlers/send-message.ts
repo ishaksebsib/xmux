@@ -10,22 +10,23 @@ export async function sendMessage<TChatId extends string>(args: {
   readonly bot: TelegramBotClient;
   readonly input: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>;
 }): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendMessageError>> {
-  const request = encodeTelegramSendMessage(args.input);
-  const sent = await Result.tryPromise({
-    try: async () => args.bot.sendMessage({ ...request, signal: args.input.signal }),
-    catch: (cause) => new TelegramSendMessageError({ cause }),
-  });
-  if (sent.isErr()) {
-    return Result.err(sent.error);
-  }
+  return Result.gen(async function* () {
+    const request = encodeTelegramSendMessage(args.input);
+    const telegramMessage = yield* Result.await(
+      Result.tryPromise({
+        try: async () => args.bot.sendMessage({ ...request, signal: args.input.signal }),
+        catch: (cause) => new TelegramSendMessageError({ cause }),
+      }),
+    );
 
-  return Result.ok(
-    encodeTelegramSentMessage({
-      chatId: args.chatId,
-      conversationId: args.input.conversationId,
-      text: args.input.text,
-      format: args.input.format,
-      telegramMessage: sent.value,
-    }),
-  );
+    return Result.ok(
+      encodeTelegramSentMessage({
+        chatId: args.chatId,
+        conversationId: args.input.conversationId,
+        text: args.input.text,
+        format: args.input.format,
+        telegramMessage,
+      }),
+    );
+  });
 }

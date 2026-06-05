@@ -87,43 +87,44 @@ export async function respondToCurrentInteractionForThread<
     );
   }
 
-  const response = createHarnessInteractionResponse({
-    session: session.value,
-    interaction: selected.interaction,
-    action: input.action,
-  });
+  return Result.gen(async function* () {
+    const response = yield* createHarnessInteractionResponse({
+      session: session.value,
+      interaction: selected.interaction,
+      action: input.action,
+    });
 
-  if (response.isErr()) {
-    return Result.err(response.error);
-  }
+    run.markInteractionResponding(selected.interaction.requestId);
 
-  run.markInteractionResponding(selected.interaction.requestId);
+    const respondedResult = await input.ctx.app.harness.respondInteraction({
+      ref: session.value.ref,
+      cwd: session.value.cwd,
+      response,
+      signal: input.ctx.signal,
+    } as unknown as RespondInteractionInput<TAdapters>);
 
-  const responded = await input.ctx.app.harness.respondInteraction({
-    ref: session.value.ref,
-    cwd: session.value.cwd,
-    response: response.value,
-    signal: input.ctx.signal,
-  } as unknown as RespondInteractionInput<TAdapters>);
+    if (respondedResult.isErr()) {
+      run.markInteractionPending(selected.interaction.requestId);
+      return Result.err(
+        new PromptInteractionResponseError({
+          sessionRef: session.value.ref,
+          cause: respondedResult.error,
+        }),
+      );
+    }
 
-  if (responded.isErr()) {
-    run.markInteractionPending(selected.interaction.requestId);
-    return Result.err(
-      new PromptInteractionResponseError({ sessionRef: session.value.ref, cause: responded.error }),
-    );
-  }
+    const resolvedStatus = input.action.type === "reject" ? "rejected" : "answered";
+    run.markInteractionResolved(selected.interaction.requestId, resolvedStatus);
 
-  const resolvedStatus = input.action.type === "reject" ? "rejected" : "answered";
-  run.markInteractionResolved(selected.interaction.requestId, resolvedStatus);
-
-  return Result.ok({
-    status: "responded",
-    action: outputAction(input.action),
-    session: session.value,
-    interaction: selected.interaction,
-    remainingPendingCount: run.pendingInteractions.filter(
-      (interaction) => interaction.status === "pending",
-    ).length,
+    return Result.ok({
+      status: "responded" as const,
+      action: outputAction(input.action),
+      session: session.value,
+      interaction: selected.interaction,
+      remainingPendingCount: run.pendingInteractions.filter(
+        (interaction) => interaction.status === "pending",
+      ).length,
+    });
   });
 }
 

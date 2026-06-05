@@ -43,62 +43,68 @@ export function validateOpenAICompatibleTranscribeInput(input: {
     return Result.err(new SpeechToTextInputError({ reason: "model must not be empty" }));
   }
 
-  const audio = validateAudioInput(input.input.audio);
-  if (audio.isErr()) return Result.err(audio.error);
-
-  const responseFormat = input.input.responseFormat ?? "json";
-  if (!responseFormats.has(responseFormat)) {
-    return Result.err(
-      new SpeechToTextInputError({
-        reason: `unsupported responseFormat: ${String(responseFormat)}`,
-      }),
-    );
-  }
-
-  if (
-    input.input.temperature !== undefined &&
-    (!Number.isFinite(input.input.temperature) ||
-      input.input.temperature < 0 ||
-      input.input.temperature > 1)
-  ) {
-    return Result.err(
-      new SpeechToTextInputError({ reason: "temperature must be a number between 0 and 1" }),
-    );
-  }
-
-  for (const granularity of input.input.timestampGranularities ?? []) {
-    if (!timestampGranularities.has(granularity)) {
+  return Result.andThen(validateAudioInput(input.input.audio), () => {
+    const responseFormat = input.input.responseFormat ?? "json";
+    if (!responseFormats.has(responseFormat)) {
       return Result.err(
         new SpeechToTextInputError({
-          reason: `unsupported timestamp granularity: ${String(granularity)}`,
+          reason: `unsupported responseFormat: ${String(responseFormat)}`,
         }),
       );
     }
-  }
 
-  if ((input.input.timestampGranularities?.length ?? 0) > 0 && responseFormat !== "verbose_json") {
-    return Result.err(
-      new SpeechToTextInputError({
-        reason: "timestampGranularities require responseFormat to be verbose_json",
-      }),
-    );
-  }
-
-  for (const [name, value] of Object.entries(input.input.extraBody ?? {})) {
-    if (reservedExtraBodyFields.has(name)) {
+    if (
+      input.input.temperature !== undefined &&
+      (!Number.isFinite(input.input.temperature) ||
+        input.input.temperature < 0 ||
+        input.input.temperature > 1)
+    ) {
       return Result.err(
-        new SpeechToTextInputError({ reason: `extraBody cannot override reserved field: ${name}` }),
+        new SpeechToTextInputError({ reason: "temperature must be a number between 0 and 1" }),
       );
     }
 
-    if (!isFormValue(value)) {
+    for (const granularity of input.input.timestampGranularities ?? []) {
+      if (!timestampGranularities.has(granularity)) {
+        return Result.err(
+          new SpeechToTextInputError({
+            reason: `unsupported timestamp granularity: ${String(granularity)}`,
+          }),
+        );
+      }
+    }
+
+    if (
+      (input.input.timestampGranularities?.length ?? 0) > 0 &&
+      responseFormat !== "verbose_json"
+    ) {
       return Result.err(
-        new SpeechToTextInputError({ reason: `extraBody field ${name} has an unsupported value` }),
+        new SpeechToTextInputError({
+          reason: "timestampGranularities require responseFormat to be verbose_json",
+        }),
       );
     }
-  }
 
-  return Result.ok({ input: input.input, model, responseFormat });
+    for (const [name, value] of Object.entries(input.input.extraBody ?? {})) {
+      if (reservedExtraBodyFields.has(name)) {
+        return Result.err(
+          new SpeechToTextInputError({
+            reason: `extraBody cannot override reserved field: ${name}`,
+          }),
+        );
+      }
+
+      if (!isFormValue(value)) {
+        return Result.err(
+          new SpeechToTextInputError({
+            reason: `extraBody field ${name} has an unsupported value`,
+          }),
+        );
+      }
+    }
+
+    return Result.ok({ input: input.input, model, responseFormat });
+  });
 }
 
 function validateAudioInput(

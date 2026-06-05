@@ -1,7 +1,7 @@
 import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import { Result, type Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../../ctx";
 import { replyToChatEvent, threadFromChatEvent } from "../../utils";
 import { PwdCommandResponseError } from "./errors";
@@ -40,7 +40,10 @@ export async function handlePwdCommand<
     thread: threadFromChatEvent(input.event),
   });
 
-  const response = pwd.isOk() ? formatPwdSuccess(pwd.value) : formatPwdFailure(pwd.error);
+  const response = Result.match(pwd, {
+    ok: (value) => formatPwdSuccess(value),
+    err: (error) => formatPwdFailure(error),
+  });
 
   return replyToChatEvent({
     event: input.event,

@@ -31,13 +31,12 @@ export async function deleteSession(
       missingReason: "OpenCode session delete returned no success confirmation",
     });
 
-    const confirmed = expectTrueResponse({
+    yield* expectTrueResponse({
       value: deleted,
       status: response.response?.status ?? 0,
       reason: "OpenCode session delete returned no success confirmation",
       toError: toSessionResponseError,
     });
-    if (confirmed.isErr()) return Result.err(confirmed.error);
 
     runtime.sessionModels.delete(input.ref.sessionId);
     runtime.sessionThinking?.delete(input.ref.sessionId);

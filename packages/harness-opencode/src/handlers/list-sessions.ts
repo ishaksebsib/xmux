@@ -29,7 +29,7 @@ async function toListedSession(args: {
 
   return {
     ...adapterSession,
-    cwd: cwd.isOk() ? cwd.value : undefined,
+    cwd: Result.match(cwd, { ok: (v) => v, err: () => undefined }),
   };
 }
 

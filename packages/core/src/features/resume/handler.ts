@@ -1,7 +1,7 @@
 import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import { Result, type Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import { replyToChatEvent, threadFromChatEvent } from "../utils";
 import { ResumeCommandResponseError } from "./errors";
@@ -45,9 +45,10 @@ export async function handleResumeCommand<
     shortId: input.event.command.options.shortId,
   });
 
-  const response = resumed.isOk()
-    ? formatResumeOutput(resumed.value)
-    : formatResumeFailure(resumed.error);
+  const response = Result.match(resumed, {
+    ok: (value) => formatResumeOutput(value),
+    err: (error) => formatResumeFailure(error),
+  });
 
   return replyToChatEvent({
     event: input.event,

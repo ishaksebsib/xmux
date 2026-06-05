@@ -48,13 +48,10 @@ export function createStreamReplyHandler<
           }),
         );
 
-        if (streamResult.isErr()) {
-          return Result.err(
-            new ChatStreamReplyError({ chatId: input.chatId, cause: streamResult.error }),
-          );
-        }
-
-        return Result.ok(streamResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
+        return Result.mapError(
+          streamResult,
+          (cause) => new ChatStreamReplyError({ chatId: input.chatId, cause }),
+        ) as Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamReplyFailure>;
       }
 
       if (fallback === "error") {
@@ -85,18 +82,19 @@ async function collectStreamForReply<
     try: async () => collectChatTextStream(args.input.content.chunks),
     catch: (cause) => new ChatStreamReplyError({ chatId: args.input.chatId, cause }),
   });
-  if (collected.isErr()) {
-    return Result.err(collected.error);
-  }
 
-  return Result.ok({
-    chatId: args.input.chatId,
-    conversationId: args.input.conversationId,
-    messageId: args.input.messageId,
-    text: collected.value,
-    format: args.input.content.format,
-    mode: args.input.mode,
-    adapterOptions: "adapterOptions" in args.input ? args.input.adapterOptions : {},
-    signal: args.input.signal,
-  } as ReplyInputForStream<TAdapters, TInput>);
+  return Result.map(
+    collected,
+    (text) =>
+      ({
+        chatId: args.input.chatId,
+        conversationId: args.input.conversationId,
+        messageId: args.input.messageId,
+        text,
+        format: args.input.content.format,
+        mode: args.input.mode,
+        adapterOptions: "adapterOptions" in args.input ? args.input.adapterOptions : {},
+        signal: args.input.signal,
+      }) as ReplyInputForStream<TAdapters, TInput>,
+  );
 }

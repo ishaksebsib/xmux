@@ -12,6 +12,11 @@ import { TelegramStreamReplyError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 import { finalizeMarkdownStream } from "./finalize-markdown-stream";
 
+type TelegramStreamMessageOk = Extract<
+  ReturnType<typeof encodeTelegramStreamReplyMessage>,
+  { readonly status: "ok" }
+>["value"];
+
 export async function streamReply<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly bot: TelegramBotClient;
@@ -26,61 +31,86 @@ export async function streamReply<TChatId extends string>(args: {
     );
   }
 
-  const request = encodeTelegramStreamReplyMessage(args.input);
-  if (request.isErr()) {
-    return Result.err(request.error);
-  }
-
-  let text = "";
-  const streamed = await Result.tryPromise({
-    try: async () =>
-      args.bot.streamMessage({
-        ...request.value,
+  return Result.gen(async function* () {
+    const request = yield* encodeTelegramStreamReplyMessage(args.input);
+    const captured = yield* Result.await(
+      captureStreamedText({
+        bot: args.bot,
+        request,
         chatId,
-        stream: captureStreamText(request.value.stream, (nextText) => {
-          text = nextText;
-        }),
         signal: args.input.signal,
-      }),
-    catch: (cause) => new TelegramStreamReplyError({ cause }),
-  });
-  if (streamed.isErr()) {
-    return Result.err(streamed.error);
-  }
-
-  if (
-    shouldFinalizeTelegramMarkdownStream({
-      format: args.input.content.format,
-      adapterOptions: args.input.adapterOptions,
-    })
-  ) {
-    const finalized = await finalizeMarkdownStream({
-      bot: args.bot,
-      telegramMessages: streamed.value,
-      signal: args.input.signal,
-      createError: (cause) => new TelegramStreamReplyError({ cause }),
-    });
-    if (finalized.isErr()) {
-      return Result.err(finalized.error);
-    }
-  }
-
-  const sent = Result.try({
-    try: () =>
-      encodeTelegramStreamedMessage({
-        chatId: args.chatId,
-        conversationId: args.input.conversationId,
-        text,
         format: args.input.content.format,
-        telegramMessages: streamed.value,
+        adapterOptions: args.input.adapterOptions,
       }),
-    catch: (cause) => new TelegramStreamReplyError({ cause }),
-  });
-  if (sent.isErr()) {
-    return Result.err(sent.error);
-  }
+    );
 
-  return Result.ok(sent.value);
+    const sent = yield* Result.try({
+      try: () =>
+        encodeTelegramStreamedMessage({
+          chatId: args.chatId,
+          conversationId: args.input.conversationId,
+          text: captured.text,
+          format: args.input.content.format,
+          telegramMessages: captured.telegramMessages,
+        }),
+      catch: (cause) => new TelegramStreamReplyError({ cause }),
+    });
+
+    return Result.ok(sent);
+  });
+}
+
+function captureStreamedText(args: {
+  readonly bot: TelegramBotClient;
+  readonly request: TelegramStreamMessageOk;
+  readonly chatId: number;
+  readonly signal?: AbortSignal;
+  readonly format: ChatAdapterStreamReplyInput<string, TelegramAdapterOptions>["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): Promise<
+  Result<
+    {
+      readonly text: string;
+      readonly telegramMessages: Awaited<ReturnType<TelegramBotClient["streamMessage"]>>;
+    },
+    TelegramStreamReplyError
+  >
+> {
+  return Result.gen(async function* () {
+    let text = "";
+    const telegramMessages = yield* Result.await(
+      Result.tryPromise({
+        try: async () =>
+          args.bot.streamMessage({
+            ...args.request,
+            chatId: args.chatId,
+            stream: captureStreamText(args.request.stream, (nextText) => {
+              text = nextText;
+            }),
+            signal: args.signal,
+          }),
+        catch: (cause) => new TelegramStreamReplyError({ cause }),
+      }),
+    );
+
+    if (
+      shouldFinalizeTelegramMarkdownStream({
+        format: args.format,
+        adapterOptions: args.adapterOptions,
+      })
+    ) {
+      yield* Result.await(
+        finalizeMarkdownStream({
+          bot: args.bot,
+          telegramMessages,
+          signal: args.signal,
+          createError: (cause) => new TelegramStreamReplyError({ cause }),
+        }),
+      );
+    }
+
+    return Result.ok({ text, telegramMessages });
+  });
 }
 
 async function* captureStreamText(

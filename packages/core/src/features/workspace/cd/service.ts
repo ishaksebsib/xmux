@@ -25,26 +25,21 @@ export async function changeDirectoryForThread<
 >(
   input: ChangeDirectoryForThreadInput<TAdapters, TChats>,
 ): Promise<Result<ThreadWorkspace, ChangeDirectoryForThreadError>> {
-  const cwd = await resolveDirectoryForThread({
-    ctx: input.ctx.app,
-    thread: input.thread,
-    path: input.path,
+  return Result.gen(async function* () {
+    const cwd = yield* Result.await(
+      resolveDirectoryForThread({
+        ctx: input.ctx.app,
+        thread: input.thread,
+        path: input.path,
+      }),
+    );
+    const existing = yield* Result.await(input.ctx.app.store.workspaces.get(input.thread));
+
+    const now = input.ctx.app.services.now().toISOString();
+    const workspace = existing
+      ? { ...existing, cwd, updatedAt: now }
+      : createThreadWorkspace({ thread: input.thread, cwd, now });
+
+    return Result.ok(yield* Result.await(input.ctx.app.store.workspaces.set(workspace)));
   });
-
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  const existing = await input.ctx.app.store.workspaces.get(input.thread);
-
-  if (existing.isErr()) {
-    return Result.err(existing.error);
-  }
-
-  const now = input.ctx.app.services.now().toISOString();
-  const workspace = existing.value
-    ? { ...existing.value, cwd: cwd.value, updatedAt: now }
-    : createThreadWorkspace({ thread: input.thread, cwd: cwd.value, now });
-
-  return input.ctx.app.store.workspaces.set(workspace);
 }

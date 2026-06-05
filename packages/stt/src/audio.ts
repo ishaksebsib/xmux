@@ -21,14 +21,12 @@ export async function createSpeechToTextAudioFromFile(
     catch: (cause) => new SpeechToTextFileReadError({ path: normalized.path, cause }),
   });
 
-  return audio.isOk()
-    ? Result.ok({
-        source: "bytes",
-        data: audio.value,
-        filename: normalized.filename ?? basename(normalized.path),
-        mimeType: normalized.mimeType,
-      })
-    : Result.err(audio.error);
+  return Result.map(audio, (data) => ({
+    source: "bytes" as const,
+    data,
+    filename: normalized.filename ?? basename(normalized.path),
+    mimeType: normalized.mimeType,
+  }));
 }
 
 export const audioFromFile = createSpeechToTextAudioFromFile;

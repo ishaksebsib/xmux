@@ -29,27 +29,22 @@ export async function handleSetModel<
       );
     }
 
-    const selected = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          setModel({
-            target: args.input.target as unknown as HarnessModelTarget<Extract<THarnessId, string>>,
-            update: args.input.update,
-            adapterOptions: adapterOptionsFromInput<TAdapters, THarnessId>(args.input),
-            signal: args.input.signal,
-          }),
-        catch: (cause) =>
-          new HarnessAdapterSetModelError({ harnessId: harnessId as string, cause }),
-      }),
-    );
+    const outer = await Result.tryPromise({
+      try: async () =>
+        setModel({
+          target: args.input.target as unknown as HarnessModelTarget<Extract<THarnessId, string>>,
+          update: args.input.update,
+          adapterOptions: adapterOptionsFromInput<TAdapters, THarnessId>(args.input),
+          signal: args.input.signal,
+        }),
+      catch: (cause) => new HarnessAdapterSetModelError({ harnessId: harnessId as string, cause }),
+    });
 
-    return selected.isErr()
-      ? Result.err(
-          new HarnessAdapterSetModelError({
-            harnessId: harnessId as string,
-            cause: selected.error,
-          }),
-        )
-      : Result.ok(selected.value as unknown as SetModelResultFromInput<TAdapters, TInput>);
+    return Result.andThen(outer, (adapterResult) =>
+      Result.mapError(
+        adapterResult,
+        (cause) => new HarnessAdapterSetModelError({ harnessId: harnessId as string, cause }),
+      ),
+    ).map((value) => value as unknown as SetModelResultFromInput<TAdapters, TInput>);
   });
 }

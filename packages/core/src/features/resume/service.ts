@@ -81,28 +81,28 @@ export async function resumeSessionCommand<
 >(
   input: ResumeSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<ResumeCommandOutput, ResumeCommandError>> {
-  const target = parseResumeTarget({ harnessId: input.harnessId, shortId: input.shortId });
+  return Result.gen(async function* () {
+    const target = yield* parseResumeTarget({ harnessId: input.harnessId, shortId: input.shortId });
 
-  if (target.isErr()) {
-    return Result.err(target.error);
-  }
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
 
-  const cwd = await getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread });
+    if (target.status === "list") {
+      return Result.ok(yield* Result.await(listResumeSessions({ ctx: input.ctx, cwd })));
+    }
 
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  if (target.value.status === "list") {
-    return listResumeSessions({ ctx: input.ctx, cwd: cwd.value });
-  }
-
-  return resumeSelectedSession({
-    ctx: input.ctx,
-    thread: input.thread,
-    cwd: cwd.value,
-    harnessId: target.value.harnessId,
-    shortId: target.value.shortId,
+    return Result.ok(
+      yield* Result.await(
+        resumeSelectedSession({
+          ctx: input.ctx,
+          thread: input.thread,
+          cwd,
+          harnessId: target.harnessId,
+          shortId: target.shortId,
+        }),
+      ),
+    );
   });
 }
 
@@ -168,97 +168,87 @@ async function resumeSelectedSession<
   readonly harnessId: string;
   readonly shortId: string;
 }): Promise<Result<ResumeActivatedOutput, ResumeCommandError>> {
-  const harnessId = requireConfiguredHarnessId({
-    harnessId: input.harnessId,
-    availableHarnessIds: input.ctx.app.harnessIds,
-    onMissing: (args) => new ResumeCommandHarnessNotConfiguredError(args),
-  });
+  return Result.gen(async function* () {
+    const harnessId = yield* requireConfiguredHarnessId({
+      harnessId: input.harnessId,
+      availableHarnessIds: input.ctx.app.harnessIds,
+      onMissing: (args) => new ResumeCommandHarnessNotConfiguredError(args),
+    });
 
-  if (harnessId.isErr()) {
-    return Result.err(harnessId.error);
-  }
-
-  const listed = await listHarnessSelectableSessions({
-    ctx: input.ctx,
-    harnessId: harnessId.value,
-    cwd: input.cwd,
-  });
-
-  if (listed.isErr()) {
-    return Result.err(listed.error);
-  }
-
-  const matches = findSessionsByShortId({
-    sessions: listed.value.sessions,
-    shortId: input.shortId,
-  });
-
-  if (matches.length === 0) {
-    return Result.err(
-      new ResumeSessionShortIdNotFoundError({
-        harnessId: harnessId.value,
-        shortId: input.shortId,
+    const listed = yield* Result.await(
+      listHarnessSelectableSessions({
+        ctx: input.ctx,
+        harnessId,
         cwd: input.cwd,
       }),
     );
-  }
 
-  if (matches.length > 1) {
-    return Result.err(
-      new ResumeSessionShortIdAmbiguousError({
-        harnessId: harnessId.value,
-        shortId: input.shortId,
-        cwd: input.cwd,
-        matchingSessionIds: matches.map((session) => session.sessionId),
+    const matches = findSessionsByShortId({
+      sessions: listed.sessions,
+      shortId: input.shortId,
+    });
+
+    if (matches.length === 0) {
+      return Result.err(
+        new ResumeSessionShortIdNotFoundError({
+          harnessId,
+          shortId: input.shortId,
+          cwd: input.cwd,
+        }),
+      );
+    }
+
+    if (matches.length > 1) {
+      return Result.err(
+        new ResumeSessionShortIdAmbiguousError({
+          harnessId,
+          shortId: input.shortId,
+          cwd: input.cwd,
+          matchingSessionIds: matches.map((session) => session.sessionId),
+        }),
+      );
+    }
+
+    const selected = matches[0];
+    if (!selected) {
+      return Result.err(
+        new ResumeSessionShortIdNotFoundError({
+          harnessId,
+          shortId: input.shortId,
+          cwd: input.cwd,
+        }),
+      );
+    }
+
+    const resumed = yield* Result.await(
+      input.ctx.app.harness.resumeSession(
+        createHarnessResumeInput({
+          harnessId,
+          sessionId: selected.sessionId,
+          cwd: input.cwd,
+          signal: input.ctx.signal,
+        }) as ResumeSessionInput<TAdapters>,
+      ),
+    );
+
+    const stored = yield* Result.await(
+      upsertResumedSessionRecord({
+        ctx: input.ctx,
+        thread: input.thread,
+        cwd: resumed.cwd ?? input.cwd,
+        session: resumed,
       }),
     );
-  }
 
-  const selected = matches[0];
-  if (!selected) {
-    return Result.err(
-      new ResumeSessionShortIdNotFoundError({
-        harnessId: harnessId.value,
-        shortId: input.shortId,
-        cwd: input.cwd,
-      }),
+    const now = input.ctx.app.services.now().toISOString();
+    yield* Result.await(
+      input.ctx.app.store.threadBindings.bind(
+        createThreadBinding({ thread: input.thread, sessionRef: stored.ref, now }),
+      ),
     );
-  }
 
-  const resumed = await input.ctx.app.harness.resumeSession(
-    createHarnessResumeInput({
-      harnessId: harnessId.value,
-      sessionId: selected.sessionId,
-      cwd: input.cwd,
-      signal: input.ctx.signal,
-    }) as ResumeSessionInput<TAdapters>,
-  );
-
-  if (resumed.isErr()) {
-    return Result.err(resumed.error);
-  }
-
-  const stored = await upsertResumedSessionRecord({
-    ctx: input.ctx,
-    thread: input.thread,
-    cwd: resumed.value.cwd ?? input.cwd,
-    session: resumed.value,
+    return Result.ok({ status: "resumed" as const, session: stored, shortId: input.shortId });
   });
-
-  if (stored.isErr()) {
-    return Result.err(stored.error);
-  }
-
-  const now = input.ctx.app.services.now().toISOString();
-  const bound = await input.ctx.app.store.threadBindings.bind(
-    createThreadBinding({ thread: input.thread, sessionRef: stored.value.ref, now }),
-  );
-
-  if (bound.isErr()) {
-    return Result.err(bound.error);
-  }
-
-  return Result.ok({ status: "resumed", session: stored.value, shortId: input.shortId });
 }
 
 async function upsertResumedSessionRecord<
@@ -270,35 +260,41 @@ async function upsertResumedSessionRecord<
   readonly cwd: string;
   readonly session: HarnessSessionInfo;
 }): Promise<Result<SessionRecord, StoreError>> {
-  const existing = await input.ctx.app.store.sessions.get(input.session.ref);
+  return Result.gen(async function* () {
+    const existing = yield* Result.await(input.ctx.app.store.sessions.get(input.session.ref));
 
-  if (existing.isErr()) {
-    return Result.err(existing.error);
-  }
+    const now = input.ctx.app.services.now().toISOString();
 
-  const now = input.ctx.app.services.now().toISOString();
+    if (existing) {
+      return Result.ok(
+        yield* Result.await(
+          input.ctx.app.store.sessions.update(input.session.ref, {
+            status: "open",
+            deliveryMode: input.ctx.app.config.deliveryMode,
+            updatedAt: now,
+            closedAt: undefined,
+            ...(input.session.title === undefined ? {} : { title: input.session.title }),
+          }),
+        ),
+      );
+    }
 
-  if (existing.value) {
-    return input.ctx.app.store.sessions.update(input.session.ref, {
-      status: "open",
-      deliveryMode: input.ctx.app.config.deliveryMode,
-      updatedAt: now,
-      closedAt: undefined,
-      ...(input.session.title === undefined ? {} : { title: input.session.title }),
-    });
-  }
-
-  return input.ctx.app.store.sessions.create(
-    createSessionRecord({
-      ref: input.session.ref,
-      origin: input.thread,
-      requester: input.ctx.actor ?? UNKNOWN_ACTOR,
-      cwd: input.cwd,
-      deliveryMode: input.ctx.app.config.deliveryMode,
-      title: input.session.title,
-      now,
-    }),
-  );
+    return Result.ok(
+      yield* Result.await(
+        input.ctx.app.store.sessions.create(
+          createSessionRecord({
+            ref: input.session.ref,
+            origin: input.thread,
+            requester: input.ctx.actor ?? UNKNOWN_ACTOR,
+            cwd: input.cwd,
+            deliveryMode: input.ctx.app.config.deliveryMode,
+            title: input.session.title,
+            now,
+          }),
+        ),
+      ),
+    );
+  });
 }
 
 const UNKNOWN_ACTOR = { userId: "unknown" } satisfies ActorRef;

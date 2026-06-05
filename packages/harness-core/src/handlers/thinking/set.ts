@@ -32,29 +32,25 @@ export async function handleSetThinking<
       );
     }
 
-    const selected = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          setThinking({
-            target: args.input.target as unknown as HarnessThinkingTarget<
-              Extract<THarnessId, string>
-            >,
-            update: args.input.update,
-            adapterOptions: adapterOptionsFromInput<TAdapters, THarnessId>(args.input),
-            signal: args.input.signal,
-          }),
-        catch: (cause) =>
-          new HarnessAdapterSetThinkingError({ harnessId: harnessId as string, cause }),
-      }),
-    );
+    const outer = await Result.tryPromise({
+      try: async () =>
+        setThinking({
+          target: args.input.target as unknown as HarnessThinkingTarget<
+            Extract<THarnessId, string>
+          >,
+          update: args.input.update,
+          adapterOptions: adapterOptionsFromInput<TAdapters, THarnessId>(args.input),
+          signal: args.input.signal,
+        }),
+      catch: (cause) =>
+        new HarnessAdapterSetThinkingError({ harnessId: harnessId as string, cause }),
+    });
 
-    return selected.isErr()
-      ? Result.err(
-          new HarnessAdapterSetThinkingError({
-            harnessId: harnessId as string,
-            cause: selected.error,
-          }),
-        )
-      : Result.ok(selected.value as unknown as SetThinkingResultFromInput<TAdapters, TInput>);
+    return Result.andThen(outer, (adapterResult) =>
+      Result.mapError(
+        adapterResult,
+        (cause) => new HarnessAdapterSetThinkingError({ harnessId: harnessId as string, cause }),
+      ),
+    ).map((value) => value as unknown as SetThinkingResultFromInput<TAdapters, TInput>);
   });
 }

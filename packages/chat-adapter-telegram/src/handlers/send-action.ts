@@ -11,30 +11,28 @@ export async function sendAction<TChatId extends string>(args: {
   readonly bot: TelegramBotClient;
   readonly input: ChatAdapterSendActionInput<TChatId, TelegramAdapterOptions>;
 }): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendActionError>> {
-  const request = Result.try({
-    try: () => encodeTelegramSendAction(args.input),
-    catch: (cause) =>
-      TelegramSendActionError.is(cause) ? cause : new TelegramSendActionError({ cause }),
-  });
-  if (request.isErr()) {
-    return Result.err(request.error);
-  }
+  return Result.gen(async function* () {
+    const request = yield* Result.try({
+      try: () => encodeTelegramSendAction(args.input),
+      catch: (cause) =>
+        TelegramSendActionError.is(cause) ? cause : new TelegramSendActionError({ cause }),
+    });
 
-  const sent = await Result.tryPromise({
-    try: () => args.bot.sendMessage(request.value),
-    catch: (cause) => new TelegramSendActionError({ cause }),
-  });
-  if (sent.isErr()) {
-    return Result.err(sent.error);
-  }
+    const telegramMessage = yield* Result.await(
+      Result.tryPromise({
+        try: () => args.bot.sendMessage(request),
+        catch: (cause) => new TelegramSendActionError({ cause }),
+      }),
+    );
 
-  return Result.ok(
-    encodeTelegramSentMessage({
-      chatId: args.chatId,
-      conversationId: args.input.conversationId,
-      text: args.input.text,
-      format: args.input.format,
-      telegramMessage: sent.value,
-    }),
-  );
+    return Result.ok(
+      encodeTelegramSentMessage({
+        chatId: args.chatId,
+        conversationId: args.input.conversationId,
+        text: args.input.text,
+        format: args.input.format,
+        telegramMessage,
+      }),
+    );
+  });
 }

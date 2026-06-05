@@ -61,14 +61,17 @@ export function applyThinkingToModel(args: {
 }): ResultType<HarnessModelRef | undefined, OpenCodeModelSelectionError> {
   if (!args.level) return Result.ok(args.model);
 
-  const variant = thinkingVariantForLevel({ runtime: args.runtime, level: args.level });
-  if (variant.isErr()) return Result.err(variant.error);
-  if (!args.model) return Result.ok(args.model);
+  return Result.andThen(
+    thinkingVariantForLevel({ runtime: args.runtime, level: args.level }),
+    (variantValue) => {
+      if (!args.model) return Result.ok(args.model);
 
-  return Result.ok({
-    ...args.model,
-    ...(variant.value === undefined ? { variant: undefined } : { variant: variant.value }),
-  });
+      return Result.ok({
+        ...args.model,
+        ...(variantValue === undefined ? { variant: undefined } : { variant: variantValue }),
+      });
+    },
+  );
 }
 
 function thinkingLevelForVariant(args: {
@@ -139,32 +142,33 @@ export async function setThinking(
   runtime: OpenCodeRuntime,
   input: HarnessAdapterSetThinkingInput<"opencode", OpenCodeCreateOptions>,
 ): Promise<ResultType<HarnessSelectedThinking<"opencode">, OpenCodeModelSelectionError>> {
-  if (input.update.type === "set") {
-    const variant = thinkingVariantForLevel({ runtime, level: input.update.level });
-    if (variant.isErr()) return Result.err(variant.error);
+  if (input.update.type !== "set") {
+    if (input.target.type === "harness") {
+      runtime.defaultThinking = undefined;
+    } else {
+      runtime.sessionThinking.delete(input.target.ref.sessionId);
+    }
+    return Result.ok(getEffectiveThinking({ runtime, target: input.target }));
+  }
+
+  const update = input.update;
+  return Result.gen(async function* () {
+    const variantValue = yield* thinkingVariantForLevel({ runtime, level: update.level });
 
     if (input.target.type === "harness") {
-      runtime.defaultThinking = input.update.level;
+      runtime.defaultThinking = update.level;
     } else {
-      runtime.sessionThinking.set(input.target.ref.sessionId, input.update.level);
+      runtime.sessionThinking.set(input.target.ref.sessionId, update.level);
 
       const model = runtime.sessionModels.get(input.target.ref.sessionId);
       if (model) {
         runtime.sessionModels.set(input.target.ref.sessionId, {
           ...model,
-          ...(variant.value === undefined ? { variant: undefined } : { variant: variant.value }),
+          ...(variantValue === undefined ? { variant: undefined } : { variant: variantValue }),
         });
       }
     }
 
     return Result.ok(getEffectiveThinking({ runtime, target: input.target }));
-  }
-
-  if (input.target.type === "harness") {
-    runtime.defaultThinking = undefined;
-  } else {
-    runtime.sessionThinking.delete(input.target.ref.sessionId);
-  }
-
-  return Result.ok(getEffectiveThinking({ runtime, target: input.target }));
+  });
 }

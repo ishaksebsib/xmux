@@ -22,10 +22,9 @@ export function createSpeechToTextClient(
     );
   }
 
-  const normalized = normalizeOpenAICompatibleSpeechToTextConfig(config);
-  return normalized.isOk()
-    ? Result.ok(createOpenAICompatibleSpeechToTextClient(normalized.value))
-    : Result.err(normalized.error);
+  return Result.map(normalizeOpenAICompatibleSpeechToTextConfig(config), (normalized) =>
+    createOpenAICompatibleSpeechToTextClient(normalized),
+  );
 }
 
 export const createSttClient = createSpeechToTextClient;

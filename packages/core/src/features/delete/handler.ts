@@ -1,7 +1,7 @@
 import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import { Result, type Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import { replyToChatEvent, threadFromChatEvent } from "../utils";
 import { DeleteCommandResponseError } from "./errors";
@@ -45,9 +45,10 @@ export async function handleDeleteCommand<
     shortId: input.event.command.options.shortId,
   });
 
-  const response = deleted.isOk()
-    ? formatDeleteOutput(deleted.value)
-    : formatDeleteFailure(deleted.error);
+  const response = Result.match(deleted, {
+    ok: (value) => formatDeleteOutput(value),
+    err: (error) => formatDeleteFailure(error),
+  });
 
   return replyToChatEvent({
     event: input.event,

@@ -123,11 +123,10 @@ export async function openHarnessAdapter<
     HarnessAdapterOpenError
   >
 > {
-  const opened = await args.adapter.open({ signal: args.signal });
-
-  return opened.isErr()
-    ? Result.err(new HarnessAdapterOpenError({ harnessId: args.harnessId, cause: opened.error }))
-    : Result.ok(opened.value);
+  return Result.mapError(
+    await args.adapter.open({ signal: args.signal }),
+    (cause) => new HarnessAdapterOpenError({ harnessId: args.harnessId, cause }),
+  );
 }
 
 export async function createAdapterSession<
@@ -141,16 +140,10 @@ export async function createAdapterSession<
 }): Promise<
   Result<HarnessAdapterCreateSessionResult<TAdapterSession>, HarnessAdapterCreateSessionError>
 > {
-  const created = await args.runtime.createSession(args.input);
-
-  return created.isErr()
-    ? Result.err(
-        new HarnessAdapterCreateSessionError({
-          harnessId: args.harnessId,
-          cause: created.error,
-        }),
-      )
-    : Result.ok(created.value);
+  return Result.mapError(
+    await args.runtime.createSession(args.input),
+    (cause) => new HarnessAdapterCreateSessionError({ harnessId: args.harnessId, cause }),
+  );
 }
 
 export async function createHarnessSessionInfo<
@@ -160,31 +153,22 @@ export async function createHarnessSessionInfo<
   readonly harnessId: THarnessId;
   readonly adapterSession: HarnessAdapterSessionInfo<TAdapterSession>;
 }): Promise<Result<HarnessSessionInfo<THarnessId, TAdapterSession>, InvalidWorkingDirectoryError>> {
-  if (args.adapterSession.cwd === undefined) {
-    return Result.ok({
-      ref: {
-        harnessId: args.harnessId,
-        sessionId: args.adapterSession.sessionId,
-      },
-      title: args.adapterSession.title,
-      model: args.adapterSession.model,
-      adapterData: args.adapterSession.adapterData,
-    });
-  }
-
-  const cwd = await createWorkingDirectoryPath(args.adapterSession.cwd);
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  return Result.ok({
+  const baseSessionInfo = {
     ref: {
       harnessId: args.harnessId,
       sessionId: args.adapterSession.sessionId,
     },
-    cwd: cwd.value,
     title: args.adapterSession.title,
     model: args.adapterSession.model,
     adapterData: args.adapterSession.adapterData,
-  });
+  } as const;
+
+  if (args.adapterSession.cwd === undefined) {
+    return Result.ok(baseSessionInfo);
+  }
+
+  return Result.map(await createWorkingDirectoryPath(args.adapterSession.cwd), (cwd) => ({
+    ...baseSessionInfo,
+    cwd,
+  }));
 }

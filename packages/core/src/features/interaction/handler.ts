@@ -75,9 +75,10 @@ export async function handleInteractionCommand<
     return Result.ok();
   }
 
-  const response = responded.isOk()
-    ? formatInteractionOutput(responded.value)
-    : formatInteractionFailure(responded.error);
+  const response = Result.match(responded, {
+    ok: (value) => formatInteractionOutput(value),
+    err: (error) => formatInteractionFailure(error),
+  });
 
   return replyToChatEvent({
     event: input.event,

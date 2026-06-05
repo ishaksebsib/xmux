@@ -230,38 +230,34 @@ export async function handlePrompt<
     const runtime = yield* Result.await(
       args.getRuntime(args.input.ref.harnessId, args.input.signal),
     );
-    const prompted = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          runtime.prompt({
-            ref: args.input.ref,
-            cwd,
-            content: normalizePromptContent(args.input.content),
-            model: args.input.model,
-            thinking: args.input.thinking,
-            adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
-              args.input,
-            ),
-            signal: args.input.signal,
-          }),
-        catch: (cause) =>
-          new HarnessAdapterPromptError({ harnessId: args.input.ref.harnessId, cause }),
-      }),
-    );
-
-    if (prompted.isErr()) {
-      return Result.err(
-        new HarnessAdapterPromptError({
-          harnessId: args.input.ref.harnessId,
-          cause: prompted.error,
+    const outer = await Result.tryPromise({
+      try: async () =>
+        runtime.prompt({
+          ref: args.input.ref,
+          cwd,
+          content: normalizePromptContent(args.input.content),
+          model: args.input.model,
+          thinking: args.input.thinking,
+          adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
+            args.input,
+          ),
+          signal: args.input.signal,
         }),
-      );
-    }
+      catch: (cause) =>
+        new HarnessAdapterPromptError({ harnessId: args.input.ref.harnessId, cause }),
+    });
+
+    const adapterResult = yield* Result.andThen(outer, (adapterResult) =>
+      Result.mapError(
+        adapterResult,
+        (cause) => new HarnessAdapterPromptError({ harnessId: args.input.ref.harnessId, cause }),
+      ),
+    );
 
     return Result.ok(
       supervisePromptStream({
         ref: args.input.ref,
-        events: prompted.value,
+        events: adapterResult,
         signal: args.input.signal,
       }) as PromptResultFromInput<TAdapters, TInput>,
     );

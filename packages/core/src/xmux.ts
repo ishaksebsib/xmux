@@ -87,16 +87,7 @@ export function createXmux<
     ctx,
 
     async initialize() {
-      const started = await Result.tryPromise({
-        try: () => chat.start(),
-        catch: (cause) => new XmuxInitializeError({ cause }),
-      });
-
-      return Result.flatten(
-        Result.map(started, (chatStarted) =>
-          Result.mapError(chatStarted, (cause) => new XmuxInitializeError({ cause })),
-        ),
-      );
+      return Result.mapError(await chat.start(), (cause) => new XmuxInitializeError({ cause }));
     },
 
     async shutdown() {
@@ -105,24 +96,15 @@ export function createXmux<
         unsubscribe();
       }
 
-      const chatClose = Result.flatten(
-        await Result.tryPromise({
-          try: () => chat.close(),
-          catch: (cause) => cause,
-        }),
-      );
+      const chatClose = await chat.close();
       const harnessClose = await harness.close();
 
-      if (chatClose.isOk() && harnessClose.isOk()) {
-        return Result.ok();
-      }
+      const chatError = chatClose.isErr() ? chatClose.error : undefined;
+      const harnessError = harnessClose.isErr() ? harnessClose.error : undefined;
 
-      return Result.err(
-        new XmuxCloseError({
-          chat: chatClose.isErr() ? chatClose.error : undefined,
-          harness: harnessClose.isErr() ? harnessClose.error : undefined,
-        }),
-      );
+      return chatError === undefined && harnessError === undefined
+        ? Result.ok()
+        : Result.err(new XmuxCloseError({ chat: chatError, harness: harnessError }));
     },
   };
 }

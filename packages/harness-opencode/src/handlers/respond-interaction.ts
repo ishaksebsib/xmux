@@ -48,10 +48,10 @@ async function sendInteractionResponse(
   runtime: OpenCodeRuntime,
   input: HarnessAdapterRespondInteractionInput<"opencode", OpenCodeCreateOptions>,
 ): Promise<ResultType<OpenCodeInteractionSdkResponse, OpenCodeInteractionRequestError>> {
-  try {
-    if (input.response.kind === "permission") {
-      return Result.ok(
-        await runtime.client.permission.reply(
+  return Result.tryPromise({
+    try: async () => {
+      if (input.response.kind === "permission") {
+        return await runtime.client.permission.reply(
           {
             requestID: input.response.requestId,
             directory: input.cwd,
@@ -60,25 +60,21 @@ async function sendInteractionResponse(
             message: input.response.message,
           },
           { signal: input.signal },
-        ),
-      );
-    }
+        );
+      }
 
-    if (input.response.reject === true) {
-      return Result.ok(
-        await runtime.client.question.reject(
+      if (input.response.reject === true) {
+        return await runtime.client.question.reject(
           {
             requestID: input.response.requestId,
             directory: input.cwd,
             workspace: input.adapterOptions.workspace,
           },
           { signal: input.signal },
-        ),
-      );
-    }
+        );
+      }
 
-    return Result.ok(
-      await runtime.client.question.reply(
+      return await runtime.client.question.reply(
         {
           requestID: input.response.requestId,
           directory: input.cwd,
@@ -86,11 +82,10 @@ async function sendInteractionResponse(
           answers: input.response.answers?.map((answer) => [...answer]) ?? [],
         },
         { signal: input.signal },
-      ),
-    );
-  } catch (cause) {
-    return Result.err(new OpenCodeInteractionRequestError({ cause }));
-  }
+      );
+    },
+    catch: (cause) => new OpenCodeInteractionRequestError({ cause }),
+  });
 }
 
 /** Responds to an OpenCode permission/question request. */

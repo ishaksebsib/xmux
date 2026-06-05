@@ -51,21 +51,20 @@ export function normalizeOpenAICompatibleSpeechToTextConfig(
     return Result.err(new SpeechToTextConfigError({ reason: "fetch implementation is required" }));
   }
 
-  const url = createEndpointUrl({
-    baseUrl: config.baseUrl ?? defaultBaseUrl,
-    endpointPath: config.endpointPath ?? defaultEndpointPath,
-  });
-  if (url.isErr()) return Result.err(url.error);
+  return Result.gen(function* () {
+    const url = yield* createEndpointUrl({
+      baseUrl: config.baseUrl ?? defaultBaseUrl,
+      endpointPath: config.endpointPath ?? defaultEndpointPath,
+    });
+    const headers = yield* createBaseHeaders(config);
 
-  const headers = createBaseHeaders(config);
-  if (headers.isErr()) return Result.err(headers.error);
-
-  return Result.ok({
-    url: url.value,
-    model: config.model,
-    headers: headers.value,
-    fetch: fetchImplementation,
-    timeoutMs: config.timeoutMs,
+    return Result.ok({
+      url,
+      model: config.model,
+      headers,
+      fetch: fetchImplementation,
+      timeoutMs: config.timeoutMs,
+    });
   });
 }
 

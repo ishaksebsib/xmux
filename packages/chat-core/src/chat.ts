@@ -43,6 +43,7 @@ import type {
 import {
   ChatActionResponseError,
   ChatAdapterOpenError,
+  ChatAdapterStartError,
   ChatCloseError,
   UnknownChatAdapterError,
   type ChatActionResponseFailure,
@@ -460,10 +461,7 @@ export function createChat<
           });
 
       if (runtimeResult.isErr()) {
-        pendingStartupEvents.length = 0;
-        await cleanupOpenedRuntimes({ reason: "start_failed" });
-        lifecycle = { status: "created" };
-        return Result.err(runtimeResult.error);
+        return await failStart(runtimeResult.error);
       }
 
       const runtime = runtimeResult.value;
@@ -487,10 +485,7 @@ export function createChat<
       });
 
       if (started.isErr()) {
-        pendingStartupEvents.length = 0;
-        await cleanupOpenedRuntimes({ reason: "start_failed" });
-        lifecycle = { status: "created" };
-        return Result.err(started.error);
+        return await failStart(started.error);
       }
 
       dispatch({ type: "ready", chatId } as ChatEvent<
@@ -510,18 +505,24 @@ export function createChat<
     return Result.ok();
   }
 
+  async function failStart(
+    error: ChatAdapterOpenError | ChatAdapterStartError,
+  ): Promise<Result<void, ChatStartError>> {
+    pendingStartupEvents.length = 0;
+    await cleanupOpenedRuntimes({ reason: "start_failed" });
+    lifecycle = { status: "created" };
+    return Result.err(error);
+  }
+
   async function cleanupOpenedRuntimes(args: { readonly reason: string }) {
     const cleanupResults = await Promise.all(
       [...openedRuntimes.entries()].map(async ([chatId, runtime]) => {
-        try {
-          await runtime.close();
-        } catch (cause) {
-          return Result.err({ chatId, cause });
-        } finally {
-          openedRuntimes.delete(chatId);
-        }
-
-        return Result.ok();
+        const cleanup = await Result.tryPromise({
+          try: async () => runtime.close(),
+          catch: (cause) => ({ chatId, cause }),
+        });
+        openedRuntimes.delete(chatId);
+        return Result.map(cleanup, () => undefined);
       }),
     );
     const [, failures] = Result.partition(cleanupResults);
@@ -564,25 +565,22 @@ export function createChat<
       return Result.err(new UnknownChatAdapterError({ chatId: key, availableChatIds: chatIds }));
     }
 
-    const canRun = ensureStarted({ state: lifecycle, operation: args.operation });
-    if (canRun.isErr()) {
-      return Result.err(canRun.error);
-    }
+    return Result.andThen(ensureStarted({ state: lifecycle, operation: args.operation }), () => {
+      const runtime = openedRuntimes.get(key);
+      if (!runtime) {
+        return Result.err(new UnknownChatAdapterError({ chatId: key, availableChatIds: chatIds }));
+      }
 
-    const runtime = openedRuntimes.get(key);
-    if (!runtime) {
-      return Result.err(new UnknownChatAdapterError({ chatId: key, availableChatIds: chatIds }));
-    }
-
-    return Result.ok(
-      runtime as OpenedChatAdapter<
-        Extract<TChatId, string>,
-        AdapterOptionsFor<TAdapters, TChatId>,
-        AdapterDataFor<TAdapters, TChatId>,
-        import("./types").AdapterCapabilitiesFor<TAdapters, TChatId>,
-        import("./types").AdapterErrorFor<TAdapters, TChatId>
-      >,
-    );
+      return Result.ok(
+        runtime as OpenedChatAdapter<
+          Extract<TChatId, string>,
+          AdapterOptionsFor<TAdapters, TChatId>,
+          AdapterDataFor<TAdapters, TChatId>,
+          import("./types").AdapterCapabilitiesFor<TAdapters, TChatId>,
+          import("./types").AdapterErrorFor<TAdapters, TChatId>
+        >,
+      );
+    });
   }
 
   async function respondToAction(
@@ -617,13 +615,13 @@ export function createChat<
         }),
       );
 
-      if (responseResult.isErr()) {
-        return Result.err(
-          new ChatActionResponseError({ chatId: args.chatId, cause: responseResult.error }),
-        );
-      }
-
-      return Result.ok();
+      return Result.map(
+        Result.mapError(
+          responseResult,
+          (cause) => new ChatActionResponseError({ chatId: args.chatId, cause }),
+        ),
+        () => undefined,
+      );
     });
   }
 

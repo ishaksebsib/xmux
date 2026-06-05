@@ -102,11 +102,10 @@ export async function handleThinkingAction<
     level: input.event.value,
   });
 
-  if (result.isErr()) {
-    return respondToThinkingAction(() => input.event.reply(formatThinkingFailure(result.error)));
-  }
-
-  return updateThinkingPicker({ event: input.event, output: result.value });
+  return Result.match(result, {
+    ok: (value) => updateThinkingPicker({ event: input.event, output: value }),
+    err: (error) => respondToThinkingAction(() => input.event.reply(formatThinkingFailure(error))),
+  });
 }
 
 function selectThinking<
@@ -123,7 +122,10 @@ function selectThinking<
 function formatThinkingResult(
   result: BetterResult<ThinkingCommandOutput, ThinkingCommandError>,
 ): ChatTextInput {
-  return result.isOk() ? formatThinkingOutput(result.value) : formatThinkingFailure(result.error);
+  return Result.match(result, {
+    ok: (value) => formatThinkingOutput(value),
+    err: (error) => formatThinkingFailure(error),
+  });
 }
 
 function replyThinkingCommand(input: {

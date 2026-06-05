@@ -220,23 +220,24 @@ export async function prompt(
     OpenCodeModelSelectionError | OpenCodeSessionRequestError | OpenCodeSessionResponseError
   >
 > {
-  const selectedThinking =
-    input.thinking ?? runtime.sessionThinking?.get(input.ref.sessionId) ?? runtime.defaultThinking;
-  const selectedModel = applyThinkingToModel({
-    runtime,
-    model: input.model ?? runtime.sessionModels.get(input.ref.sessionId) ?? runtime.defaultModel,
-    level: selectedThinking,
+  return Result.gen(async function* () {
+    const selectedThinking =
+      input.thinking ??
+      runtime.sessionThinking?.get(input.ref.sessionId) ??
+      runtime.defaultThinking;
+    const selectedModelValue = yield* applyThinkingToModel({
+      runtime,
+      model: input.model ?? runtime.sessionModels.get(input.ref.sessionId) ?? runtime.defaultModel,
+      level: selectedThinking,
+    });
+
+    const model = selectedModelValue
+      ? yield* normalizeOpenCodeModelRef(selectedModelValue)
+      : undefined;
+    if (selectedModelValue) runtime.sessionModels.set(input.ref.sessionId, selectedModelValue);
+    if (input.thinking) runtime.sessionThinking?.set(input.ref.sessionId, input.thinking);
+
+    const parts = toPromptParts(input.content);
+    return Result.ok(createPromptEventStream({ runtime, input, parts, model }));
   });
-  if (selectedModel.isErr()) return Result.err(selectedModel.error);
-
-  const normalizedModel = selectedModel.value
-    ? normalizeOpenCodeModelRef(selectedModel.value)
-    : undefined;
-  if (normalizedModel?.isErr()) return Result.err(normalizedModel.error);
-  if (selectedModel.value) runtime.sessionModels.set(input.ref.sessionId, selectedModel.value);
-  if (input.thinking) runtime.sessionThinking?.set(input.ref.sessionId, input.thinking);
-
-  const parts = toPromptParts(input.content);
-  const model = normalizedModel?.isOk() ? normalizedModel.value : undefined;
-  return Result.ok(createPromptEventStream({ runtime, input, parts, model }));
 }

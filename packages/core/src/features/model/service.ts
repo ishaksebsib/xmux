@@ -69,60 +69,48 @@ export async function modelSessionCommand<
 >(
   input: ModelSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<ModelCommandOutput, ModelCommandError>> {
-  const session = await getModelSessionForThread({ ctx: input.ctx, thread: input.thread });
+  return Result.gen(async function* () {
+    const session = yield* Result.await(
+      getModelSessionForThread({ ctx: input.ctx, thread: input.thread }),
+    );
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    const selector = input.selector?.trim();
 
-  const selector = input.selector?.trim();
+    if (!selector) {
+      const current = yield* Result.await(
+        input.ctx.app.harness.getModel({
+          target: { type: "session", ref: session.ref },
+          signal: input.ctx.signal,
+        } as GetModelInput<TAdapters>),
+      );
 
-  if (!selector) {
-    const current = await input.ctx.app.harness.getModel({
-      target: { type: "session", ref: session.value.ref },
-      signal: input.ctx.signal,
-    } as GetModelInput<TAdapters>);
-
-    if (current.isErr()) {
-      return Result.err(current.error);
+      return Result.ok({
+        status: "shown" as const,
+        session,
+        current: current as HarnessSelectedModel,
+      });
     }
 
-    return Result.ok({
-      status: "shown",
-      session: session.value,
-      current: current.value as HarnessSelectedModel,
+    const models = yield* Result.await(listSessionModels({ ctx: input.ctx, session }));
+
+    const resolved = yield* resolveModelSelector({
+      selector,
+      models: models as readonly HarnessModelInfo[],
     });
-  }
 
-  const models = await listSessionModels({ ctx: input.ctx, session: session.value });
+    const selected = yield* Result.await(
+      input.ctx.app.harness.setModel({
+        target: { type: "session", ref: session.ref },
+        update: { type: "set", model: resolved.ref },
+        signal: input.ctx.signal,
+      } as SetModelInput<TAdapters>),
+    );
 
-  if (models.isErr()) {
-    return Result.err(models.error);
-  }
-
-  const resolved = resolveModelSelector({
-    selector,
-    models: models.value as readonly HarnessModelInfo[],
-  });
-
-  if (resolved.isErr()) {
-    return Result.err(resolved.error);
-  }
-
-  const selected = await input.ctx.app.harness.setModel({
-    target: { type: "session", ref: session.value.ref },
-    update: { type: "set", model: resolved.value.ref },
-    signal: input.ctx.signal,
-  } as SetModelInput<TAdapters>);
-
-  if (selected.isErr()) {
-    return Result.err(selected.error);
-  }
-
-  return Result.ok({
-    status: "updated",
-    session: session.value,
-    selected: selected.value as HarnessSelectedModel,
+    return Result.ok({
+      status: "updated" as const,
+      session,
+      selected: selected as HarnessSelectedModel,
+    });
   });
 }
 
@@ -132,33 +120,27 @@ export async function modelAvailableCommand<
 >(
   input: Omit<ModelSessionCommandInput<TAdapters, TChats>, "selector">,
 ): Promise<Result<ModelAvailableOutput, ModelCommandError>> {
-  const session = await getModelSessionForThread({ ctx: input.ctx, thread: input.thread });
+  return Result.gen(async function* () {
+    const session = yield* Result.await(
+      getModelSessionForThread({ ctx: input.ctx, thread: input.thread }),
+    );
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    const models = yield* Result.await(listSessionModels({ ctx: input.ctx, session }));
 
-  const models = await listSessionModels({ ctx: input.ctx, session: session.value });
+    const current = yield* Result.await(
+      input.ctx.app.harness.getModel({
+        target: { type: "session", ref: session.ref },
+        signal: input.ctx.signal,
+      } as GetModelInput<TAdapters>),
+    );
 
-  if (models.isErr()) {
-    return Result.err(models.error);
-  }
-
-  const current = await input.ctx.app.harness.getModel({
-    target: { type: "session", ref: session.value.ref },
-    signal: input.ctx.signal,
-  } as GetModelInput<TAdapters>);
-
-  if (current.isErr()) {
-    return Result.err(current.error);
-  }
-
-  return Result.ok({
-    status: "available",
-    session: session.value,
-    current: current.value as HarnessSelectedModel,
-    models: models.value as readonly HarnessModelInfo[],
-    maxModelsPerProvider: input.ctx.app.config.model.maxModelsPerProvider,
+    return Result.ok({
+      status: "available" as const,
+      session,
+      current: current as HarnessSelectedModel,
+      models: models as readonly HarnessModelInfo[],
+      maxModelsPerProvider: input.ctx.app.config.model.maxModelsPerProvider,
+    });
   });
 }
 
@@ -198,29 +180,23 @@ async function getModelSessionForThread<
     | ModelSessionClosedError
   >
 > {
-  const binding = await input.ctx.app.store.threadBindings.get(input.thread);
+  return Result.gen(async function* () {
+    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
-  if (binding.isErr()) {
-    return Result.err(binding.error);
-  }
+    if (!binding) {
+      return Result.err(new ModelNoActiveSessionError({ thread: input.thread }));
+    }
 
-  if (!binding.value) {
-    return Result.err(new ModelNoActiveSessionError({ thread: input.thread }));
-  }
+    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
 
-  const session = await input.ctx.app.store.sessions.get(binding.value.sessionRef);
+    if (!session) {
+      return Result.err(new ModelSessionRecordMissingError({ sessionRef: binding.sessionRef }));
+    }
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    if (session.status !== "open") {
+      return Result.err(new ModelSessionClosedError({ sessionRef: session.ref }));
+    }
 
-  if (!session.value) {
-    return Result.err(new ModelSessionRecordMissingError({ sessionRef: binding.value.sessionRef }));
-  }
-
-  if (session.value.status !== "open") {
-    return Result.err(new ModelSessionClosedError({ sessionRef: session.value.ref }));
-  }
-
-  return Result.ok(session.value);
+    return Result.ok(session);
+  });
 }

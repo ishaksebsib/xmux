@@ -24,27 +24,23 @@ export async function handleListModels<
       );
     }
 
-    const listed = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          listModels({
-            cwd: args.input.cwd,
-            includeUnavailable: args.input.includeUnavailable,
-            adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
-            signal: args.input.signal,
-          }),
-        catch: (cause) =>
-          new HarnessAdapterListModelsError({ harnessId: args.input.harnessId, cause }),
-      }),
-    );
+    const outer = await Result.tryPromise({
+      try: async () =>
+        listModels({
+          cwd: args.input.cwd,
+          includeUnavailable: args.input.includeUnavailable,
+          adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
+          signal: args.input.signal,
+        }),
+      catch: (cause) =>
+        new HarnessAdapterListModelsError({ harnessId: args.input.harnessId, cause }),
+    });
 
-    return listed.isErr()
-      ? Result.err(
-          new HarnessAdapterListModelsError({
-            harnessId: args.input.harnessId,
-            cause: listed.error,
-          }),
-        )
-      : Result.ok(listed.value as ListModelsResultFromInput<TAdapters, TInput>);
+    return Result.andThen(outer, (adapterResult) =>
+      Result.mapError(
+        adapterResult,
+        (cause) => new HarnessAdapterListModelsError({ harnessId: args.input.harnessId, cause }),
+      ),
+    ).map((value) => value as ListModelsResultFromInput<TAdapters, TInput>);
   });
 }

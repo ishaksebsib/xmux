@@ -74,25 +74,19 @@ export function openTelegramRuntime<TChatId extends string>(args: {
   >,
   TelegramConfigurationError
 > {
-  const token = parseTelegramBotToken(args.options.token);
-  if (token.isErr()) {
-    return Result.err(token.error);
-  }
+  return Result.gen(function* () {
+    const token = yield* parseTelegramBotToken(args.options.token);
+    const bot = yield* Result.try({
+      try: () =>
+        (args.createBot ?? createTelegramBotClient)({
+          token,
+          options: args.options.botOptions,
+        }),
+      catch: (cause) => new TelegramConfigurationError({ field: "token", cause }),
+    });
 
-  const createBot = args.createBot ?? createTelegramBotClient;
-  const bot = Result.try({
-    try: () => createBot({ token: token.value, options: args.options.botOptions }),
-    catch: (cause) =>
-      new TelegramConfigurationError({
-        field: "token",
-        cause,
-      }),
+    return Result.ok(new TelegramRuntime({ chatId: args.chatId, bot, mode: args.mode }));
   });
-  if (bot.isErr()) {
-    return Result.err(bot.error);
-  }
-
-  return Result.ok(new TelegramRuntime({ chatId: args.chatId, bot: bot.value, mode: args.mode }));
 }
 
 class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
@@ -139,22 +133,19 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
 
     registerInboundHandlers({ chatId: this.id, bot: this.bot, context });
 
-    const initialized = await initializeBot({ bot: this.bot, signal: context.signal });
-    if (initialized.isErr()) {
-      return Result.err(initialized.error);
-    }
-
-    const registered = await registerCommands({
-      bot: this.bot,
-      commands: context.commands,
-      diagnostic: context.diagnostic,
-      signal: context.signal,
-    });
-    if (registered.isErr()) {
-      return Result.err(registered.error);
-    }
-
-    const started = startPolling({ bot: this.bot, mode });
+    const started = await Result.gen(async function* () {
+      yield* Result.await(initializeBot({ bot: this.bot, signal: context.signal }));
+      yield* Result.await(
+        registerCommands({
+          bot: this.bot,
+          commands: context.commands,
+          diagnostic: context.diagnostic,
+          signal: context.signal,
+        }),
+      );
+      const polling = yield* startPolling({ bot: this.bot, mode });
+      return Result.ok(polling);
+    }, this);
     if (started.isErr()) {
       return Result.err(started.error);
     }

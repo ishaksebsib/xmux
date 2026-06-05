@@ -25,23 +25,24 @@ export function createNodeFileSystemHost(): FileSystemHost {
     },
 
     async stat(input) {
-      const result = await Result.tryPromise({
-        try: () => stat(input.path),
-        catch: (cause) => toFileSystemHostError({ operation: "stat", path: input.path, cause }),
-      });
-
-      return result.isOk() ? Result.ok(toFileSystemStat(result.value)) : Result.err(result.error);
+      return Result.map(
+        await Result.tryPromise({
+          try: () => stat(input.path),
+          catch: (cause) => toFileSystemHostError({ operation: "stat", path: input.path, cause }),
+        }),
+        toFileSystemStat,
+      );
     },
 
     async readdir(input) {
-      const result = await Result.tryPromise({
-        try: () => readdir(input.path, { withFileTypes: true }),
-        catch: (cause) => toFileSystemHostError({ operation: "readdir", path: input.path, cause }),
-      });
-
-      return result.isOk()
-        ? Result.ok(result.value.map((entry) => ({ name: entry.name, type: entryType(entry) })))
-        : Result.err(result.error);
+      return Result.map(
+        await Result.tryPromise({
+          try: () => readdir(input.path, { withFileTypes: true }),
+          catch: (cause) =>
+            toFileSystemHostError({ operation: "readdir", path: input.path, cause }),
+        }),
+        (entries) => entries.map((entry) => ({ name: entry.name, type: entryType(entry) })),
+      );
     },
   };
 }

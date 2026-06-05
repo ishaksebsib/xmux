@@ -1,7 +1,7 @@
 import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import { Result, type Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../../ctx";
 import { replyToChatEvent, threadFromChatEvent } from "../../utils";
 import { CdCommandResponseError } from "./errors";
@@ -43,7 +43,10 @@ export async function handleCdCommand<
     path: input.event.command.options.path,
   });
 
-  const response = changed.isOk() ? formatCdSuccess(changed.value) : formatCdFailure(changed.error);
+  const response = Result.match(changed, {
+    ok: (value) => formatCdSuccess(value),
+    err: (error) => formatCdFailure(error),
+  });
 
   return replyToChatEvent({
     event: input.event,

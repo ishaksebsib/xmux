@@ -20,20 +20,17 @@ export function createSendMessageHandler<
       );
       const adapterInput = createAdapterSendMessageInput<TAdapters, TInput>(input);
 
-      const sentResult = yield* Result.await(
+      const sent = yield* Result.await(
         Result.tryPromise({
           try: async () => runtime.sendMessage(adapterInput),
           catch: (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
         }),
       );
 
-      if (sentResult.isErr()) {
-        return Result.err(
-          new ChatSendMessageError({ chatId: input.chatId, cause: sentResult.error }),
-        );
-      }
-
-      return Result.ok(sentResult.value as ChatSentMessageFromInput<TAdapters, TInput>);
+      return Result.mapError(
+        sent,
+        (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
+      ) as Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendMessageFailure>;
     });
   };
 }

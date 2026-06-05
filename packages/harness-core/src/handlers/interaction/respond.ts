@@ -34,33 +34,33 @@ export async function handleRespondInteraction<
       ? yield* Result.await(createWorkingDirectoryPath(args.input.cwd))
       : undefined;
 
-    const responded = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          respondInteraction({
-            ref: args.input.ref,
-            cwd,
-            response: args.input.response,
-            adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
-              args.input,
-            ),
-            signal: args.input.signal,
-          }),
-        catch: (cause) =>
+    const outer = await Result.tryPromise({
+      try: async () =>
+        respondInteraction({
+          ref: args.input.ref,
+          cwd,
+          response: args.input.response,
+          adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
+            args.input,
+          ),
+          signal: args.input.signal,
+        }),
+      catch: (cause) =>
+        new HarnessAdapterRespondInteractionError({
+          harnessId: args.input.ref.harnessId,
+          cause,
+        }),
+    });
+
+    return Result.andThen(outer, (adapterResult) =>
+      Result.mapError(
+        adapterResult,
+        (cause) =>
           new HarnessAdapterRespondInteractionError({
             harnessId: args.input.ref.harnessId,
             cause,
           }),
-      }),
-    );
-
-    return responded.isErr()
-      ? Result.err(
-          new HarnessAdapterRespondInteractionError({
-            harnessId: args.input.ref.harnessId,
-            cause: responded.error,
-          }),
-        )
-      : Result.ok(undefined as RespondInteractionResult);
+      ),
+    ).map(() => undefined as RespondInteractionResult);
   });
 }

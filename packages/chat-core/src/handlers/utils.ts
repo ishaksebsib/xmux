@@ -58,17 +58,16 @@ export async function openChatAdapter(args: {
   readonly signal?: AbortSignal;
 }): Promise<Result<OpenedRuntime, ChatAdapterOpenError>> {
   const opened = await Result.tryPromise({
-    try: async () => args.adapter.open({ signal: args.signal }),
+    try: () => args.adapter.open({ signal: args.signal }),
     catch: (cause) => new ChatAdapterOpenError({ chatId: args.chatId, cause }),
   });
 
-  if (opened.isErr()) {
-    return Result.err(opened.error);
-  }
-
-  return opened.value.isErr()
-    ? Result.err(new ChatAdapterOpenError({ chatId: args.chatId, cause: opened.value.error }))
-    : Result.ok(opened.value.value);
+  return Result.andThen(opened, (adapterResult) =>
+    Result.mapError(
+      adapterResult,
+      (cause) => new ChatAdapterOpenError({ chatId: args.chatId, cause }),
+    ),
+  );
 }
 
 export async function startChatAdapter<
@@ -80,20 +79,22 @@ export async function startChatAdapter<
   readonly context: ChatAdapterStartContext<TCommands, TChatId, ChatAdapterObject>;
 }): Promise<Result<void, ChatAdapterStartError>> {
   const started = await Result.tryPromise({
-    try: async () =>
+    try: () =>
       args.runtime.start(
         args.context as ChatAdapterStartContext<TCommands, string, ChatAdapterObject>,
       ),
     catch: (cause) => new ChatAdapterStartError({ chatId: args.chatId, cause }),
   });
 
-  if (started.isErr()) {
-    return Result.err(started.error);
-  }
-
-  return started.value.isErr()
-    ? Result.err(new ChatAdapterStartError({ chatId: args.chatId, cause: started.value.error }))
-    : Result.ok();
+  return Result.andThen(started, (adapterResult) =>
+    Result.map(
+      Result.mapError(
+        adapterResult,
+        (cause) => new ChatAdapterStartError({ chatId: args.chatId, cause }),
+      ),
+      () => undefined,
+    ),
+  );
 }
 
 export function handlerKeyFor(event: {

@@ -1,6 +1,10 @@
 import { Result } from "better-result";
 import { SpeechToTextRequestError, SpeechToTextResponseError } from "../../errors";
-import type { SpeechToTextClient } from "../../types";
+import type {
+  SpeechToTextClient,
+  SpeechToTextClientError,
+  SpeechToTextTranscript,
+} from "../../types";
 import type { NormalizedOpenAICompatibleConfig } from "./config";
 import { createTranscriptionFormData } from "./form-data";
 import { parseTranscriptionResponse } from "./parse";
@@ -11,11 +15,12 @@ export function createOpenAICompatibleSpeechToTextClient(
   config: NormalizedOpenAICompatibleConfig,
 ): SpeechToTextClient {
   return {
-    async transcribe(input) {
+    async transcribe(input): Promise<Result<SpeechToTextTranscript, SpeechToTextClientError>> {
       const validated = validateOpenAICompatibleTranscribeInput({
         input,
         defaultModel: config.model,
       });
+
       if (validated.isErr()) return Result.err(validated.error);
 
       const body = createTranscriptionFormData(validated.value);

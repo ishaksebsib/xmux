@@ -32,34 +32,21 @@ export async function exitActiveSessionForThread<
 >(
   input: ExitActiveSessionForThreadInput<TAdapters, TChats>,
 ): Promise<Result<ExitActiveSessionOutput, ExitActiveSessionError>> {
-  const binding = await input.ctx.app.store.threadBindings.get(input.thread);
+  return Result.gen(async function* () {
+    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
-  if (binding.isErr()) {
-    return Result.err(binding.error);
-  }
+    if (!binding) return Result.ok({ status: "not_active" } as const);
 
-  if (!binding.value) {
-    return Result.ok({ status: "not_active" });
-  }
+    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
+    yield* Result.await(input.ctx.app.store.threadBindings.delete(input.thread));
 
-  const session = await input.ctx.app.store.sessions.get(binding.value.sessionRef);
-
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
-
-  const deleted = await input.ctx.app.store.threadBindings.delete(input.thread);
-
-  if (deleted.isErr()) {
-    return Result.err(deleted.error);
-  }
-
-  return Result.ok({
-    status: "exited",
-    session: {
-      ref: binding.value.sessionRef,
-      ...(session.value?.title === undefined ? {} : { title: session.value.title }),
-      ...(session.value?.cwd === undefined ? {} : { cwd: session.value.cwd }),
-    },
+    return Result.ok({
+      status: "exited" as const,
+      session: {
+        ref: binding.sessionRef,
+        ...(session?.title === undefined ? {} : { title: session.title }),
+        ...(session?.cwd === undefined ? {} : { cwd: session.cwd }),
+      },
+    });
   });
 }

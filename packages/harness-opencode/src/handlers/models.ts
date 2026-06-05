@@ -243,28 +243,29 @@ export async function setModel(
   input: HarnessAdapterSetModelInput<"opencode", OpenCodeCreateOptions>,
 ): Promise<ResultType<HarnessSelectedModel<"opencode">, OpenCodeModelSelectionError>> {
   if (input.update.type === "set") {
-    const thinking =
-      input.target.type === "harness"
-        ? runtime.defaultThinking
-        : (runtime.sessionThinking?.get(input.target.ref.sessionId) ?? runtime.defaultThinking);
-    const selectedModel = applyThinkingToModel({
-      runtime,
-      model: input.update.model,
-      level: thinking,
+    const update = input.update;
+    return Result.gen(async function* () {
+      const thinking =
+        input.target.type === "harness"
+          ? runtime.defaultThinking
+          : (runtime.sessionThinking?.get(input.target.ref.sessionId) ?? runtime.defaultThinking);
+      const selectedModel = yield* applyThinkingToModel({
+        runtime,
+        model: update.model,
+        level: thinking,
+      });
+
+      const model = selectedModel ?? update.model;
+      yield* normalizeOpenCodeModelRef(model);
+
+      if (input.target.type === "harness") {
+        runtime.defaultModel = model;
+      } else {
+        runtime.sessionModels.set(input.target.ref.sessionId, model);
+      }
+
+      return Result.ok(getEffectiveModel({ runtime, target: input.target }));
     });
-    if (selectedModel.isErr()) return Result.err(selectedModel.error);
-
-    const model = selectedModel.value ?? input.update.model;
-    const normalized = normalizeOpenCodeModelRef(model);
-    if (normalized.isErr()) return Result.err(normalized.error);
-
-    if (input.target.type === "harness") {
-      runtime.defaultModel = model;
-    } else {
-      runtime.sessionModels.set(input.target.ref.sessionId, model);
-    }
-
-    return Result.ok(getEffectiveModel({ runtime, target: input.target }));
   }
 
   if (input.target.type === "harness") {

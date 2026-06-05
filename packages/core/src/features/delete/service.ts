@@ -78,28 +78,28 @@ export async function deleteSessionCommand<
 >(
   input: DeleteSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<DeleteCommandOutput, DeleteCommandError>> {
-  const target = parseDeleteTarget({ harnessId: input.harnessId, shortId: input.shortId });
+  return Result.gen(async function* () {
+    const target = yield* parseDeleteTarget({ harnessId: input.harnessId, shortId: input.shortId });
 
-  if (target.isErr()) {
-    return Result.err(target.error);
-  }
+    if (target.status === "active_or_list") {
+      return Result.ok(yield* Result.await(deleteActiveSessionOrList(input)));
+    }
 
-  if (target.value.status === "active_or_list") {
-    return deleteActiveSessionOrList(input);
-  }
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
 
-  const cwd = await getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread });
-
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  return deleteSelectedSession({
-    ctx: input.ctx,
-    thread: input.thread,
-    cwd: cwd.value,
-    harnessId: target.value.harnessId,
-    shortId: target.value.shortId,
+    return Result.ok(
+      yield* Result.await(
+        deleteSelectedSession({
+          ctx: input.ctx,
+          thread: input.thread,
+          cwd,
+          harnessId: target.harnessId,
+          shortId: target.shortId,
+        }),
+      ),
+    );
   });
 }
 
@@ -136,32 +136,34 @@ async function deleteActiveSessionOrList<
 >(
   input: DeleteSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<DeleteCommandOutput, DeleteCommandError>> {
-  const active = await getBoundSessionRecord({ ctx: input.ctx, thread: input.thread });
+  return Result.gen(async function* () {
+    const active = yield* Result.await(
+      getBoundSessionRecord({ ctx: input.ctx, thread: input.thread }),
+    );
 
-  if (active.isErr()) {
-    return Result.err(active.error);
-  }
+    if (active) {
+      return Result.ok(
+        yield* Result.await(
+          deleteSessionEverywhere({
+            ctx: input.ctx,
+            thread: input.thread,
+            session: {
+              ref: active.ref,
+              shortId: active.ref.sessionId,
+              cwd: active.cwd,
+              title: active.title,
+            },
+          }),
+        ),
+      );
+    }
 
-  if (active.value) {
-    return deleteSessionEverywhere({
-      ctx: input.ctx,
-      thread: input.thread,
-      session: {
-        ref: active.value.ref,
-        shortId: active.value.ref.sessionId,
-        cwd: active.value.cwd,
-        title: active.value.title,
-      },
-    });
-  }
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
 
-  const cwd = await getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread });
-
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  return listDeleteSessions({ ctx: input.ctx, cwd: cwd.value });
+    return Result.ok(yield* Result.await(listDeleteSessions({ ctx: input.ctx, cwd })));
+  });
 }
 
 async function listDeleteSessions<
@@ -199,46 +201,42 @@ async function deleteSelectedSession<
   readonly harnessId: string;
   readonly shortId: string;
 }): Promise<Result<DeleteSessionOutput, DeleteCommandError>> {
-  const harnessId = requireConfiguredHarnessId({
-    harnessId: input.harnessId,
-    availableHarnessIds: input.ctx.app.harnessIds,
-    onMissing: (args) => new DeleteCommandHarnessNotConfiguredError(args),
-  });
+  return Result.gen(async function* () {
+    const harnessId = yield* requireConfiguredHarnessId({
+      harnessId: input.harnessId,
+      availableHarnessIds: input.ctx.app.harnessIds,
+      onMissing: (args) => new DeleteCommandHarnessNotConfiguredError(args),
+    });
 
-  if (harnessId.isErr()) {
-    return Result.err(harnessId.error);
-  }
+    const listed = yield* Result.await(
+      listHarnessSelectableSessions({
+        ctx: input.ctx,
+        harnessId,
+        cwd: input.cwd,
+      }),
+    );
 
-  const listed = await listHarnessSelectableSessions({
-    ctx: input.ctx,
-    harnessId: harnessId.value,
-    cwd: input.cwd,
-  });
-
-  if (listed.isErr()) {
-    return Result.err(listed.error);
-  }
-
-  const selected = resolveSelectedSession({
-    harnessId: harnessId.value,
-    shortId: input.shortId,
-    cwd: input.cwd,
-    sessions: listed.value.sessions,
-  });
-
-  if (selected.isErr()) {
-    return Result.err(selected.error);
-  }
-
-  return deleteSessionEverywhere({
-    ctx: input.ctx,
-    thread: input.thread,
-    session: {
-      ref: { harnessId: harnessId.value, sessionId: selected.value.sessionId },
+    const selected = yield* resolveSelectedSession({
+      harnessId,
       shortId: input.shortId,
-      cwd: selected.value.cwd ?? input.cwd,
-      title: selected.value.title,
-    },
+      cwd: input.cwd,
+      sessions: listed.sessions,
+    });
+
+    return Result.ok(
+      yield* Result.await(
+        deleteSessionEverywhere({
+          ctx: input.ctx,
+          thread: input.thread,
+          session: {
+            ref: { harnessId, sessionId: selected.sessionId },
+            shortId: input.shortId,
+            cwd: selected.cwd ?? input.cwd,
+            title: selected.title,
+          },
+        }),
+      ),
+    );
   });
 }
 
@@ -294,28 +292,26 @@ async function deleteSessionEverywhere<
   readonly thread: ChatThreadRef;
   readonly session: DeletedSessionSummary;
 }): Promise<Result<DeleteSessionOutput, DeleteCommandError>> {
-  const deleted = await input.ctx.app.harness.deleteSession(
-    createHarnessDeleteInput({
-      ref: input.session.ref,
-      signal: input.ctx.signal,
-    }) as DeleteSessionInput<TAdapters>,
-  );
+  return Result.gen(async function* () {
+    yield* Result.await(
+      input.ctx.app.harness.deleteSession(
+        createHarnessDeleteInput({
+          ref: input.session.ref,
+          signal: input.ctx.signal,
+        }) as DeleteSessionInput<TAdapters>,
+      ),
+    );
 
-  if (deleted.isErr()) {
-    return Result.err(deleted.error);
-  }
+    yield* Result.await(
+      cleanupDeletedSession({
+        ctx: input.ctx,
+        thread: input.thread,
+        ref: input.session.ref,
+      }),
+    );
 
-  const cleaned = await cleanupDeletedSession({
-    ctx: input.ctx,
-    thread: input.thread,
-    ref: input.session.ref,
+    return Result.ok({ status: "deleted" as const, session: input.session });
   });
-
-  if (cleaned.isErr()) {
-    return Result.err(cleaned.error);
-  }
-
-  return Result.ok({ status: "deleted", session: input.session });
 }
 
 async function getBoundSessionRecord<
@@ -325,28 +321,22 @@ async function getBoundSessionRecord<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly thread: ChatThreadRef;
 }): Promise<Result<SessionRecord | null, StoreError>> {
-  const binding = await input.ctx.app.store.threadBindings.get(input.thread);
+  return Result.gen(async function* () {
+    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
-  if (binding.isErr()) {
-    return Result.err(binding.error);
-  }
+    if (!binding) {
+      return Result.ok(null);
+    }
 
-  if (!binding.value) {
-    return Result.ok(null);
-  }
+    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
 
-  const session = await input.ctx.app.store.sessions.get(binding.value.sessionRef);
+    if (!session) {
+      yield* Result.await(input.ctx.app.store.threadBindings.delete(input.thread));
+      return Result.ok(null);
+    }
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
-
-  if (!session.value) {
-    const deleted = await input.ctx.app.store.threadBindings.delete(input.thread);
-    return deleted.isErr() ? Result.err(deleted.error) : Result.ok(null);
-  }
-
-  return Result.ok(session.value);
+    return Result.ok(session);
+  });
 }
 
 async function cleanupDeletedSession<
@@ -357,23 +347,19 @@ async function cleanupDeletedSession<
   readonly thread: ChatThreadRef;
   readonly ref: SessionRef;
 }): Promise<Result<void, StoreError>> {
-  const removedSession = await input.ctx.app.store.sessions.delete(input.ref);
+  return Result.gen(async function* () {
+    yield* Result.await(input.ctx.app.store.sessions.delete(input.ref));
 
-  if (removedSession.isErr()) {
-    return Result.err(removedSession.error);
-  }
+    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
-  const binding = await input.ctx.app.store.threadBindings.get(input.thread);
+    if (binding && sameSessionRef(binding.sessionRef, input.ref)) {
+      return Result.ok(
+        yield* Result.await(input.ctx.app.store.threadBindings.delete(input.thread)),
+      );
+    }
 
-  if (binding.isErr()) {
-    return Result.err(binding.error);
-  }
-
-  if (binding.value && sameSessionRef(binding.value.sessionRef, input.ref)) {
-    return input.ctx.app.store.threadBindings.delete(input.thread);
-  }
-
-  return Result.ok();
+    return Result.ok();
+  });
 }
 
 function sameSessionRef(left: SessionRef, right: SessionRef): boolean {

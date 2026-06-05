@@ -111,11 +111,13 @@ export async function handleModelAction<
 
   return respondToModelAction(() =>
     input.event.reply(
-      available.isOk()
-        ? formatModelAvailableOutput(available.value)
-        : formatModelFailure(available.error, {
+      Result.match(available, {
+        ok: (value) => formatModelAvailableOutput(value),
+        err: (error) =>
+          formatModelFailure(error, {
             maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
           }),
+      }),
     ),
   );
 }
@@ -124,9 +126,10 @@ function formatModelResult(input: {
   readonly result: BetterResult<ModelCommandOutput, ModelCommandError>;
   readonly maxSuggestions: number;
 }): ChatTextInput {
-  return input.result.isOk()
-    ? formatModelOutput(input.result.value)
-    : formatModelFailure(input.result.error, { maxSuggestions: input.maxSuggestions });
+  return Result.match(input.result, {
+    ok: (value) => formatModelOutput(value),
+    err: (error) => formatModelFailure(error, { maxSuggestions: input.maxSuggestions }),
+  });
 }
 
 function replyModelCommand(input: {

@@ -13,14 +13,14 @@ export async function parseTranscriptionResponse(input: {
   readonly url: string;
 }): Promise<ResultType<SpeechToTextTranscript, SpeechToTextParseError>> {
   if (input.format === "text" || input.format === "srt" || input.format === "vtt") {
-    const text = await Result.tryPromise({
-      try: () => input.response.text(),
-      catch: (cause) => new SpeechToTextParseError({ url: input.url, format: input.format, cause }),
-    });
-
-    return text.isOk()
-      ? Result.ok({ text: text.value, raw: text.value, format: input.format })
-      : Result.err(text.error);
+    return Result.map(
+      await Result.tryPromise({
+        try: () => input.response.text(),
+        catch: (cause) =>
+          new SpeechToTextParseError({ url: input.url, format: input.format, cause }),
+      }),
+      (text) => ({ text, raw: text, format: input.format }),
+    );
   }
 
   const json = await Result.tryPromise({
@@ -28,19 +28,20 @@ export async function parseTranscriptionResponse(input: {
     catch: (cause) => new SpeechToTextParseError({ url: input.url, format: input.format, cause }),
   });
 
-  if (json.isErr()) return Result.err(json.error);
-  if (!isRecord(json.value) || typeof json.value.text !== "string") {
-    return Result.err(new SpeechToTextParseError({ url: input.url, format: input.format }));
-  }
+  return Result.andThen(json, (value) => {
+    if (!isRecord(value) || typeof value.text !== "string") {
+      return Result.err(new SpeechToTextParseError({ url: input.url, format: input.format }));
+    }
 
-  return Result.ok({
-    text: json.value.text,
-    language: getString(json.value.language),
-    duration: getNumber(json.value.duration),
-    segments: toSegments(json.value.segments),
-    words: toWords(json.value.words),
-    raw: json.value,
-    format: input.format,
+    return Result.ok({
+      text: value.text,
+      language: getString(value.language),
+      duration: getNumber(value.duration),
+      segments: toSegments(value.segments),
+      words: toWords(value.words),
+      raw: value,
+      format: input.format,
+    });
   });
 }
 

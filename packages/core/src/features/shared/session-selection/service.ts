@@ -74,29 +74,28 @@ export async function listHarnessSelectableSessions<
   readonly cwd: string;
   readonly maxSessions?: number;
 }): Promise<Result<SessionSelectionGroup, ListSessionsError>> {
-  const listed = await input.ctx.app.harness.listSessions(
-    createHarnessListInput({
-      harnessId: input.harnessId,
-      cwd: input.cwd,
-      signal: input.ctx.signal,
-    }) as unknown as ListSessionsInput<TAdapters>,
+  return Result.map(
+    await input.ctx.app.harness.listSessions(
+      createHarnessListInput({
+        harnessId: input.harnessId,
+        cwd: input.cwd,
+        signal: input.ctx.signal,
+      }) as unknown as ListSessionsInput<TAdapters>,
+    ),
+    (sessions) => {
+      const listing = toSessionSelectionListing({
+        harnessId: input.harnessId,
+        sessions,
+        maxSessions: input.maxSessions,
+      });
+
+      return {
+        harnessId: input.harnessId,
+        sessions: listing.sessions,
+        totalSessionCount: listing.totalSessionCount,
+      };
+    },
   );
-
-  if (listed.isErr()) {
-    return Result.err(listed.error);
-  }
-
-  const listing = toSessionSelectionListing({
-    harnessId: input.harnessId,
-    sessions: listed.value,
-    maxSessions: input.maxSessions,
-  });
-
-  return Result.ok({
-    harnessId: input.harnessId,
-    sessions: listing.sessions,
-    totalSessionCount: listing.totalSessionCount,
-  });
 }
 
 export function allHarnessesFailed(input: {

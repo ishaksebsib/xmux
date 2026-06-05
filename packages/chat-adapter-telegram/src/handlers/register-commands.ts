@@ -13,7 +13,7 @@ export async function registerCommands<
   readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
   readonly signal?: AbortSignal;
 }): Promise<Result<void, TelegramCommandRegistrationError>> {
-  const registered = await Result.tryPromise({
+  return Result.tryPromise({
     try: async () => {
       const commands = createTelegramCommandRegistration({
         commands: args.commands,
@@ -26,9 +26,4 @@ export async function registerCommands<
     },
     catch: (cause) => new TelegramCommandRegistrationError({ cause }),
   });
-  if (registered.isErr()) {
-    return Result.err(registered.error);
-  }
-
-  return Result.ok();
 }

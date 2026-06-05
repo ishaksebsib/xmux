@@ -31,34 +31,29 @@ export async function listDirectoryForThread<
 >(
   input: ListDirectoryForThreadInput<TAdapters, TChats>,
 ): Promise<Result<ListDirectoryForThreadOutput, ListDirectoryForThreadError>> {
-  const target = await resolveDirectoryForThread({
-    ctx: input.ctx.app,
-    thread: input.thread,
-    path: input.path?.trim() || ".",
-  });
+  return Result.gen(async function* () {
+    const target = yield* Result.await(
+      resolveDirectoryForThread({
+        ctx: input.ctx.app,
+        thread: input.thread,
+        path: input.path?.trim() || ".",
+      }),
+    );
+    const entries = yield* Result.await(input.ctx.app.fs.readdir({ path: target }));
 
-  if (target.isErr()) {
-    return Result.err(target.error);
-  }
+    const visibleEntries = input.ctx.app.config.workspace.showHiddenFiles
+      ? entries
+      : entries.filter((entry) => !entry.name.startsWith("."));
+    const sortedEntries = [...visibleEntries].sort(compareDirectoryEntry);
+    const maxEntries = input.ctx.app.config.workspace.maxListEntries;
+    const limitedEntries = sortedEntries.slice(0, maxEntries);
 
-  const entries = await input.ctx.app.fs.readdir({ path: target.value });
-
-  if (entries.isErr()) {
-    return Result.err(entries.error);
-  }
-
-  const visibleEntries = input.ctx.app.config.workspace.showHiddenFiles
-    ? entries.value
-    : entries.value.filter((entry) => !entry.name.startsWith("."));
-  const sortedEntries = [...visibleEntries].sort(compareDirectoryEntry);
-  const maxEntries = input.ctx.app.config.workspace.maxListEntries;
-  const limitedEntries = sortedEntries.slice(0, maxEntries);
-
-  return Result.ok({
-    cwd: target.value,
-    entries: limitedEntries,
-    totalEntryCount: sortedEntries.length,
-    truncated: sortedEntries.length > limitedEntries.length,
+    return Result.ok({
+      cwd: target,
+      entries: limitedEntries,
+      totalEntryCount: sortedEntries.length,
+      truncated: sortedEntries.length > limitedEntries.length,
+    });
   });
 }
 

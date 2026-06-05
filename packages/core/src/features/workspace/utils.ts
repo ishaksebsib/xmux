@@ -31,13 +31,10 @@ export async function getCurrentWorkspaceCwd<
 >(
   input: GetCurrentWorkspaceCwdInput<TAdapters, TChats>,
 ): Promise<Result<string, GetCurrentWorkspaceCwdError>> {
-  const workspace = await input.ctx.store.workspaces.get(input.thread);
-
-  if (workspace.isErr()) {
-    return Result.err(workspace.error);
-  }
-
-  return Result.ok(workspace.value?.cwd ?? input.ctx.config.defaultWorkingDirectory);
+  return Result.map(
+    await input.ctx.store.workspaces.get(input.thread),
+    (workspace) => workspace?.cwd ?? input.ctx.config.defaultWorkingDirectory,
+  );
 }
 
 /** Resolves a path from the current thread cwd and verifies it is a directory. */
@@ -47,11 +44,11 @@ export async function resolveDirectoryForThread<
 >(
   input: ResolveDirectoryForThreadInput<TAdapters, TChats>,
 ): Promise<Result<string, ResolveDirectoryForThreadError>> {
-  const cwd = await getCurrentWorkspaceCwd(input);
-
-  if (cwd.isErr()) {
-    return Result.err(cwd.error);
-  }
-
-  return resolveDirectory({ fs: input.ctx.fs, baseCwd: cwd.value, inputPath: input.path });
+  return Result.gen(async function* () {
+    const cwd = yield* Result.await(getCurrentWorkspaceCwd(input));
+    const resolved = yield* Result.await(
+      resolveDirectory({ fs: input.ctx.fs, baseCwd: cwd, inputPath: input.path }),
+    );
+    return Result.ok(resolved);
+  });
 }

@@ -12,28 +12,25 @@ export async function handleDeleteSession<
     const runtime = yield* Result.await(
       args.getRuntime(args.input.ref.harnessId, args.input.signal),
     );
-    const deleted = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          runtime.deleteSession({
-            ref: args.input.ref,
-            adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
-              args.input,
-            ),
-            signal: args.input.signal,
-          }),
-        catch: (cause) =>
-          new HarnessAdapterDeleteSessionError({ harnessId: args.input.ref.harnessId, cause }),
-      }),
-    );
+    const outer = await Result.tryPromise({
+      try: async () =>
+        runtime.deleteSession({
+          ref: args.input.ref,
+          adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
+            args.input,
+          ),
+          signal: args.input.signal,
+        }),
+      catch: (cause) =>
+        new HarnessAdapterDeleteSessionError({ harnessId: args.input.ref.harnessId, cause }),
+    });
 
-    return deleted.isErr()
-      ? Result.err(
-          new HarnessAdapterDeleteSessionError({
-            harnessId: args.input.ref.harnessId,
-            cause: deleted.error,
-          }),
-        )
-      : Result.ok();
+    return Result.andThen(outer, (adapterResult) =>
+      Result.mapError(
+        adapterResult,
+        (cause) =>
+          new HarnessAdapterDeleteSessionError({ harnessId: args.input.ref.harnessId, cause }),
+      ),
+    ).map(() => undefined);
   });
 }

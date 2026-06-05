@@ -48,49 +48,47 @@ export async function promptSessionForThread<
 >(
   input: PromptSessionForThreadInput<TAdapters, TChats>,
 ): Promise<Result<PromptSessionForThreadOutput, PromptSessionForThreadError>> {
-  const session = await getPromptSessionForThread({ ctx: input.ctx, thread: input.thread });
+  return Result.gen(async function* () {
+    const session = yield* Result.await(
+      getPromptSessionForThread({ ctx: input.ctx, thread: input.thread }),
+    );
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    const run = yield* input.ctx.app.services.promptRuns.tryStart({
+      sessionRef: session.ref,
+      requestId: input.ctx.requestId,
+      now: input.ctx.app.services.now().toISOString(),
+    });
 
-  const run = input.ctx.app.services.promptRuns.tryStart({
-    sessionRef: session.value.ref,
-    requestId: input.ctx.requestId,
-    now: input.ctx.app.services.now().toISOString(),
-  });
+    const signal = composeAbortSignals([input.ctx.signal, run.signal]);
+    const promptedResult = await input.ctx.app.harness.prompt(
+      createHarnessPromptInput({
+        ref: session.ref,
+        cwd: session.cwd,
+        text: input.text,
+        signal,
+      }) as unknown as PromptInput<TAdapters>,
+    );
 
-  if (run.isErr()) {
-    return Result.err(run.error);
-  }
+    if (promptedResult.isErr()) {
+      run.release();
+      return Result.err(promptedResult.error);
+    }
 
-  const signal = composeAbortSignals([input.ctx.signal, run.value.signal]);
-  const prompted = await input.ctx.app.harness.prompt(
-    createHarnessPromptInput({
-      ref: session.value.ref,
-      cwd: session.value.cwd,
-      text: input.text,
-      signal,
-    }) as unknown as PromptInput<TAdapters>,
-  );
+    const prompted = promptedResult.value;
 
-  if (prompted.isErr()) {
-    run.value.release();
-    return Result.err(prompted.error);
-  }
-
-  return Result.ok({
-    session: session.value,
-    events: observePromptRunEvents({ events: prompted.value, run: run.value }),
-    cancel(reason?: unknown) {
-      run.value.markCancelling();
-      if (!run.value.signal.aborted) {
-        run.value.controller.abort(reason);
-      }
-    },
-    release() {
-      run.value.release();
-    },
+    return Result.ok({
+      session,
+      events: observePromptRunEvents({ events: prompted, run }),
+      cancel(reason?: unknown) {
+        run.markCancelling();
+        if (!run.signal.aborted) {
+          run.controller.abort(reason);
+        }
+      },
+      release() {
+        run.release();
+      },
+    });
   });
 }
 
@@ -117,33 +115,25 @@ export async function getPromptSessionForThread<
     | PromptSessionClosedError
   >
 > {
-  const binding = await input.ctx.app.store.threadBindings.get(input.thread);
+  return Result.gen(async function* () {
+    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
-  if (binding.isErr()) {
-    return Result.err(binding.error);
-  }
+    if (!binding) {
+      return Result.err(new PromptNoActiveSessionError({ thread: input.thread }));
+    }
 
-  if (!binding.value) {
-    return Result.err(new PromptNoActiveSessionError({ thread: input.thread }));
-  }
+    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
 
-  const session = await input.ctx.app.store.sessions.get(binding.value.sessionRef);
+    if (!session) {
+      return Result.err(new PromptSessionRecordMissingError({ sessionRef: binding.sessionRef }));
+    }
 
-  if (session.isErr()) {
-    return Result.err(session.error);
-  }
+    if (session.status !== "open") {
+      return Result.err(new PromptSessionClosedError({ sessionRef: session.ref }));
+    }
 
-  if (!session.value) {
-    return Result.err(
-      new PromptSessionRecordMissingError({ sessionRef: binding.value.sessionRef }),
-    );
-  }
-
-  if (session.value.status !== "open") {
-    return Result.err(new PromptSessionClosedError({ sessionRef: session.value.ref }));
-  }
-
-  return Result.ok(session.value);
+    return Result.ok(session);
+  });
 }
 
 export function composeAbortSignals(signals: readonly AbortSignal[]): AbortSignal {
