@@ -12,10 +12,7 @@ import type {
   SendMessageInputForStream,
   StreamFallbackDiagnosticEmit,
 } from "./types";
-import {
-  createAdapterStreamMessageInput,
-  sentMessageFromSameChatInput,
-} from "./adapter-inputs";
+import { createAdapterStreamMessageInput, sentMessageFromSameChatInput } from "./adapter-inputs";
 import {
   collectChatTextStream,
   emitStreamFallbackDiagnostic,

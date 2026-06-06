@@ -61,6 +61,7 @@ function keyFor(event: {
   readonly actionId?: string;
 }): string | undefined {
   if (event.type === "command") return event.command?.name;
-  if (event.type === "command.invalid" || event.type === "command.unknown") return event.commandName;
+  if (event.type === "command.invalid" || event.type === "command.unknown")
+    return event.commandName;
   return event.type === "action" ? event.actionId : undefined;
 }

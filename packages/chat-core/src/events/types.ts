@@ -13,10 +13,7 @@ import type {
   ChatTextInput,
   ChatTextStreamContent,
 } from "../contracts";
-import type {
-  ChatEventAdapterData,
-  ChatEventAdapterOptions,
-} from "../adapter/registry";
+import type { ChatEventAdapterData, ChatEventAdapterOptions } from "../adapter/registry";
 import type {
   ChatTypingIndicatorBehavior,
   ChatTypingIndicatorFallback,

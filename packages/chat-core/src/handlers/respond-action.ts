@@ -2,10 +2,7 @@ import { Result } from "better-result";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import { ChatActionResponseError, type ChatActionResponseFailure } from "../errors";
 import type { GetStartedRuntime } from "./types";
-import {
-  createAdapterRespondToActionInput,
-  type RespondToActionInput,
-} from "./adapter-inputs";
+import { createAdapterRespondToActionInput, type RespondToActionInput } from "./adapter-inputs";
 
 export function createRespondToActionHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,

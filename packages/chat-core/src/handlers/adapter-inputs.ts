@@ -8,10 +8,7 @@ import type {
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
 } from "../adapter/io";
-import type {
-  ChatAdapterDefinitions,
-  AdapterOptionsFor,
-} from "../adapter/registry";
+import type { ChatAdapterDefinitions, AdapterOptionsFor } from "../adapter/registry";
 import type { ChatAdapterObject, ChatMessageRef, ChatSentMessage } from "../contracts";
 import type {
   ChatReplyInput,

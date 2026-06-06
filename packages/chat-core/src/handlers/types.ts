@@ -1,13 +1,7 @@
 import type { Result } from "better-result";
 import type { ChatAdapterCapabilities } from "../capabilities";
-import type {
-  ChatAdapterDefinition,
-  OpenedChatAdapter,
-} from "../adapter/definition";
-import type {
-  ChatAdapterStreamMessageInput,
-  ChatAdapterStreamReplyInput,
-} from "../adapter/io";
+import type { ChatAdapterDefinition, OpenedChatAdapter } from "../adapter/definition";
+import type { ChatAdapterStreamMessageInput, ChatAdapterStreamReplyInput } from "../adapter/io";
 import type { ChatActionRegistry } from "../registry/actions";
 import type { ChatAdapterObject, ChatSentMessage } from "../contracts";
 import type {

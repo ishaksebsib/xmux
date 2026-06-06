@@ -65,11 +65,7 @@ import { createStreamReplyHandler } from "../handlers/stream-reply";
 import { createTypingIndicatorHandler } from "../handlers/typing-indicator";
 import type { ChatRuntimeOperation, OpenedRuntime } from "../handlers/types";
 import { adapterForChatId } from "../handlers/adapter-inputs";
-import {
-  normalizeChatTextInput,
-  openChatAdapter,
-  startChatAdapter,
-} from "../handlers/utils";
+import { normalizeChatTextInput, openChatAdapter, startChatAdapter } from "../handlers/utils";
 import {
   ensureCanClose,
   ensureCanStart,
@@ -184,7 +180,10 @@ export function createChat<
           },
           adapterOptions: actionOptions?.adapterOptions,
         }),
-      reply: (message: ChatTextInput, actionOptions?: { readonly adapterOptions?: ChatAdapterObject }) =>
+      reply: (
+        message: ChatTextInput,
+        actionOptions?: { readonly adapterOptions?: ChatAdapterObject },
+      ) =>
         respondToAction({
           chatId: event.chatId,
           conversationId: event.conversation.conversationId,
@@ -220,7 +219,10 @@ export function createChat<
       ...event,
       reply: (
         message: ChatTextInput,
-        replyOptions?: { readonly mode?: ChatReplyMode; readonly adapterOptions?: ChatAdapterObject },
+        replyOptions?: {
+          readonly mode?: ChatReplyMode;
+          readonly adapterOptions?: ChatAdapterObject;
+        },
       ) => {
         const content = normalizeChatTextInput(message);
         return reply({
@@ -332,7 +334,11 @@ export function createChat<
   const sendAction = createSendActionHandler<TAdapters, TActions>({ getStartedRuntime });
   const reply = createReplyHandler<TAdapters>({ getStartedRuntime });
   const respondToAction = createRespondToActionHandler<TAdapters>({ getStartedRuntime });
-  const streamMessage = createStreamMessageHandler<TAdapters>({ getStartedRuntime, emit, sendMessage });
+  const streamMessage = createStreamMessageHandler<TAdapters>({
+    getStartedRuntime,
+    emit,
+    sendMessage,
+  });
   const streamReply = createStreamReplyHandler<TAdapters>({ getStartedRuntime, emit, reply });
   const typingIndicator = createTypingIndicatorHandler<TAdapters>({
     getStartedRuntime,

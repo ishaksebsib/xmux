@@ -1,11 +1,7 @@
 import type { ChatActionPayloadFor, ChatActionRegistry } from "./registry/actions";
 import type { ChatAdapterDefinition } from "./adapter/definition";
 import type { ChatAdapterCapabilities } from "./capabilities";
-import type {
-  AdapterCapabilitiesFor,
-  AdapterDataFor,
-  AdapterOptionsFor,
-} from "./adapter/registry";
+import type { AdapterCapabilitiesFor, AdapterDataFor, AdapterOptionsFor } from "./adapter/registry";
 import type {
   ChatActionButton,
   ChatAdapterObject,

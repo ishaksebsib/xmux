@@ -1,8 +1,5 @@
 import type { Result } from "better-result";
-import type {
-  AdapterDataByChatId,
-  ChatAdapterDefinitions,
-} from "../adapter/registry";
+import type { AdapterDataByChatId, ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatCommandRegistry } from "../registry/commands";
 import type {
   ChatActionResponseFailure,
