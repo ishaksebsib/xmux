@@ -4,6 +4,12 @@ export type ChatAdapterObject = Record<string, unknown>;
 /** Text rendering intent; adapters may downgrade unsupported formats. */
 export type ChatMessageFormat = "plain" | "markdown" | "html";
 
+/** Reply intent used by event helpers and facade replies. */
+export type ChatReplyMode = "auto" | "thread" | "quote" | "conversation";
+
+/** Typing/status action adapters can expose as a platform-native indicator. */
+export type ChatTypingAction = "typing";
+
 /** Normalized destination identity shared by every chat adapter. */
 export interface ChatConversationRef<TChatId extends string = string> {
   readonly chatId: TChatId;

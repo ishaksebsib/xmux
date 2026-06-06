@@ -10,10 +10,85 @@ export type ChatLifecycleOperation =
   | "close"
   | "sendMessage"
   | "sendAction"
+  | "respondToAction"
   | "reply"
   | "streamMessage"
   | "streamReply"
   | "typingIndicator";
+
+/**
+ * Builds a tagged error class for the common `{ chatId, cause }` adapter failure
+ * shape. Each call produces a distinct tag, so `instanceof` and `.is()` stay
+ * unique per operation while the constructor/message boilerplate is shared.
+ */
+function chatCauseError<const TTag extends string>(
+  tag: TTag,
+  describe: (chatId: string) => string,
+) {
+  return class extends TaggedError(tag)<{
+    readonly chatId: string;
+    readonly cause: unknown;
+    readonly message: string;
+  }>() {
+    constructor(args: { readonly chatId: string; readonly cause: unknown }) {
+      super({ ...args, message: `${describe(args.chatId)}: ${describeCause(args.cause)}` });
+    }
+  };
+}
+
+/** Wraps adapter open failures while preserving the original cause. */
+export class ChatAdapterOpenError extends chatCauseError(
+  "ChatAdapterOpenError",
+  (chatId) => `Failed to open chat adapter "${chatId}"`,
+) {}
+
+/** Wraps adapter start failures while preserving the original cause. */
+export class ChatAdapterStartError extends chatCauseError(
+  "ChatAdapterStartError",
+  (chatId) => `Failed to start chat adapter "${chatId}"`,
+) {}
+
+/** Wraps adapter send failures while preserving the original cause. */
+export class ChatSendMessageError extends chatCauseError(
+  "ChatSendMessageError",
+  (chatId) => `Failed to send chat message with "${chatId}"`,
+) {}
+
+/** Wraps adapter send action failures while preserving the original cause. */
+export class ChatSendActionError extends chatCauseError(
+  "ChatSendActionError",
+  (chatId) => `Failed to send chat action with "${chatId}"`,
+) {}
+
+/** Wraps adapter action response failures while preserving the original cause. */
+export class ChatActionResponseError extends chatCauseError(
+  "ChatActionResponseError",
+  (chatId) => `Failed to respond to chat action with "${chatId}"`,
+) {}
+
+/** Wraps adapter reply failures while preserving the original cause. */
+export class ChatReplyError extends chatCauseError(
+  "ChatReplyError",
+  (chatId) => `Failed to reply with chat adapter "${chatId}"`,
+) {}
+
+/** Wraps adapter stream send failures while preserving the original cause. */
+export class ChatStreamMessageError extends chatCauseError(
+  "ChatStreamMessageError",
+  (chatId) => `Failed to stream chat message with "${chatId}"`,
+) {}
+
+/** Wraps adapter stream reply failures while preserving the original cause. */
+export class ChatStreamReplyError extends chatCauseError(
+  "ChatStreamReplyError",
+  (chatId) => `Failed to stream reply with chat adapter "${chatId}"`,
+) {}
+
+/** Wraps adapter typing indicator failures while preserving the original cause. */
+export class ChatTypingIndicatorError extends chatCauseError(
+  "ChatTypingIndicatorError",
+  (chatId) => `Failed to send typing indicator with chat adapter "${chatId}"`,
+) {}
 
 /** Returned when a caller targets an adapter id that was not registered. */
 export class UnknownChatAdapterError extends TaggedError("UnknownChatAdapterError")<{
@@ -25,132 +100,6 @@ export class UnknownChatAdapterError extends TaggedError("UnknownChatAdapterErro
     super({
       ...args,
       message: `Unknown chat adapter "${args.chatId}". Available adapters: ${args.availableChatIds.join(", ") || "(none)"}`,
-    });
-  }
-}
-
-/** Wraps adapter open failures while preserving the original cause. */
-export class ChatAdapterOpenError extends TaggedError("ChatAdapterOpenError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to open chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter start failures while preserving the original cause. */
-export class ChatAdapterStartError extends TaggedError("ChatAdapterStartError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to start chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter send failures while preserving the original cause. */
-export class ChatSendMessageError extends TaggedError("ChatSendMessageError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to send chat message with "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter send action failures while preserving the original cause. */
-export class ChatSendActionError extends TaggedError("ChatSendActionError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to send chat action with "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter action response failures while preserving the original cause. */
-export class ChatActionResponseError extends TaggedError("ChatActionResponseError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to respond to chat action with "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter reply failures while preserving the original cause. */
-export class ChatReplyError extends TaggedError("ChatReplyError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to reply with chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter stream send failures while preserving the original cause. */
-export class ChatStreamMessageError extends TaggedError("ChatStreamMessageError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to stream chat message with "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter stream reply failures while preserving the original cause. */
-export class ChatStreamReplyError extends TaggedError("ChatStreamReplyError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to stream reply with chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
-    });
-  }
-}
-
-/** Wraps adapter typing indicator failures while preserving the original cause. */
-export class ChatTypingIndicatorError extends TaggedError("ChatTypingIndicatorError")<{
-  readonly chatId: string;
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly chatId: string; readonly cause: unknown }) {
-    super({
-      ...args,
-      message: `Failed to send typing indicator with chat adapter "${args.chatId}": ${describeCause(args.cause)}`,
     });
   }
 }

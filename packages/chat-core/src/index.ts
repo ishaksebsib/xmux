@@ -1,13 +1,13 @@
-export { actionValue, defineChatAction, defineChatActions } from "./actions";
+export { actionValue, defineChatAction, defineChatActions } from "./registry/actions";
 export {
   booleanOption,
   defineChatCommand,
   defineChatCommands,
   numberOption,
   stringOption,
-} from "./commands";
+} from "./registry/commands";
 export { defineChatAdapter } from "./adapter";
-export { createChat } from "./chat";
+export { createChat } from "./runtime/create-chat";
 export {
   ChatAdapterOpenError,
   ChatAdapterStartError,
@@ -57,6 +57,7 @@ export type {
   ChatMessage,
   ChatMessageFormat,
   ChatMessageRef,
+  ChatReplyMode,
   ChatSentMessage,
   ChatStreamFallback,
   ChatSystemActor,
@@ -64,6 +65,7 @@ export type {
   ChatTextInput,
   ChatTextStreamChunk,
   ChatTextStreamContent,
+  ChatTypingAction,
   ChatUserActor,
 } from "./contracts";
 export type {
@@ -78,7 +80,7 @@ export type {
   ChatCommandValues,
   ChatNumberOption,
   ChatStringOption,
-} from "./commands";
+} from "./registry/commands";
 export type {
   AdapterCapabilitiesFor,
   AdapterDataFor,
@@ -86,19 +88,20 @@ export type {
   AdapterDataFromSentMessage,
   AdapterOptionsFor,
   AdapterErrorFor,
-  ChatActionButtonInput,
-  ChatActionButtonInputFor,
   ChatAdapterDefinitions,
-  ChatButtonInput,
   ChatEventAdapterData,
   ChatEventAdapterOptions,
   ChatIdFromConversation,
   ChatIdFromMessageRef,
+} from "./adapter/registry";
+export type {
+  ChatActionButtonInput,
+  ChatActionButtonInputFor,
+  ChatButtonInput,
   ChatReplyInput,
   ChatReplyInputFor,
   ChatSendActionInput,
   ChatSendActionInputFor,
-  ChatReplyMode,
   ChatSendMessageInput,
   ChatSendMessageInputFor,
   ChatSentMessageFor,
@@ -108,7 +111,6 @@ export type {
   ChatStreamMessageInputFor,
   ChatStreamReplyInput,
   ChatStreamReplyInputFor,
-  ChatTypingAction,
   ChatTypingIndicatorBehavior,
   ChatTypingIndicatorFallback,
   ChatTypingIndicatorHandle,
@@ -116,7 +118,7 @@ export type {
   ChatTypingIndicatorInputFor,
   ChatTypingIndicatorMode,
   ChatTypingIndicatorResult,
-} from "./types";
+} from "./inputs";
 export type {
   ChatActionDefinition,
   ChatActionPayloadFor,
@@ -126,8 +128,8 @@ export type {
   ChatActionValues,
   ChatActionValuesDefinition,
   ChatActionValuesFor,
-} from "./actions";
-export type { Chat, CreateChatOptions } from "./chat";
+} from "./registry/actions";
+export type { Chat, CreateChatOptions } from "./runtime/create-chat";
 export type {
   ChatActionResponseFailure,
   ChatCloseFailure,

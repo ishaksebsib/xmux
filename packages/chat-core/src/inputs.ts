@@ -1,50 +1,25 @@
-import type { ChatAdapterDefinition } from "./adapter";
-import type { ChatActionPayloadFor, ChatActionRegistry } from "./actions";
+import type { ChatActionPayloadFor, ChatActionRegistry } from "./registry/actions";
+import type { ChatAdapterDefinition } from "./adapter/definition";
+import type { ChatAdapterCapabilities } from "./capabilities";
+import type {
+  AdapterCapabilitiesFor,
+  AdapterDataFor,
+  AdapterOptionsFor,
+} from "./adapter/registry";
 import type {
   ChatActionButton,
   ChatAdapterObject,
-  ChatConversationRef,
-  ChatMessage,
   ChatMessageFormat,
-  ChatMessageRef,
+  ChatReplyMode,
   ChatSentMessage,
   ChatStreamFallback,
   ChatTextStreamContent,
+  ChatTypingAction,
   ChatUrlButton,
 } from "./contracts";
-import type { ChatAdapterCapabilities } from "./adapter";
+import type { AdapterOptionsProp } from "./type-utils";
 
-type AnyChatAdapterDefinition = ChatAdapterDefinition<
-  string,
-  ChatAdapterObject,
-  ChatAdapterObject,
-  ChatAdapterCapabilities,
-  unknown
->;
-
-export type RequiredKeys<TValue extends ChatAdapterObject> = {
-  [TKey in keyof TValue]-?: {} extends Pick<TValue, TKey> ? never : TKey;
-}[keyof TValue];
-
-export type AdapterOptionsProp<TAdapterOptions extends ChatAdapterObject> = [
-  RequiredKeys<TAdapterOptions>,
-] extends [never]
-  ? { readonly adapterOptions?: TAdapterOptions }
-  : { readonly adapterOptions: TAdapterOptions };
-
-/** Reply intent used by event helpers and facade replies. */
-export type ChatReplyMode = "auto" | "thread" | "quote" | "conversation";
-
-/** Typing/status action adapters can expose as a platform-native indicator. */
-export type ChatTypingAction = "typing";
-
-/**
- * Public typing indicator behavior.
- *
- * `pulse` sends one short-lived platform typing action and returns after that
- * adapter call. `managed` sends an initial pulse, refreshes it until stopped,
- * and returns a handle whose `stop()` method cancels future refreshes.
- */
+/** `pulse` sends one short-lived typing action; `managed` refreshes until stopped. */
 export type ChatTypingIndicatorMode = "pulse" | "managed";
 
 /** Behavior when a typing indicator is not supported by the selected adapter. */
@@ -52,7 +27,6 @@ export type ChatTypingIndicatorFallback = "error" | "ignore";
 
 /** Handle returned by managed typing indicators. */
 export interface ChatTypingIndicatorHandle {
-  /** Stops refreshing future typing pulses. The current platform pulse expires naturally. */
   stop(): void;
 }
 
@@ -62,131 +36,20 @@ export type ChatTypingIndicatorResult<TInput> = TInput extends { readonly mode: 
 
 /** Shared pulse-vs-managed behavior for facade and event typing helpers. */
 export type ChatTypingIndicatorBehavior =
+  | { readonly mode?: "pulse" }
   | {
-      /**
-       * Sends exactly one typing indicator pulse.
-       *
-       * Use this when the caller owns its own refresh timing or only needs a
-       * short-lived indicator. The visible duration is platform-specific; for
-       * example, Telegram expires a typing pulse after roughly five seconds.
-       */
-      readonly mode?: "pulse";
-    }
-  | {
-      /**
-       * Sends an initial pulse and keeps refreshing until stopped or timed out.
-       *
-       * `stop()` cancels future refresh pulses, but most platforms do not offer
-       * a native "clear typing now" API; the last sent pulse expires naturally.
-       */
       readonly mode: "managed";
-      /** Optional safety cutoff for the refresh loop. Call `stop()` when the request finishes. */
       readonly timeoutMs?: number;
-      /** Delay between refresh pulses. Keep below the platform pulse TTL. */
       readonly refreshIntervalMs?: number;
     };
 
-/** Adapter data map keyed by registered chat id. */
-export type ChatEventAdapterData<TChatId extends string = string> = {
-  readonly [TCurrentChatId in TChatId]: ChatAdapterObject;
-};
-
-/** Adapter options map keyed by registered chat id. */
-export type ChatEventAdapterOptions<TChatId extends string = string> = {
-  readonly [TCurrentChatId in TChatId]: ChatAdapterObject;
-};
-
-export type AdapterDataByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
-  readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterDataFor<TAdapters, TChatId>;
-};
-
-export type AdapterOptionsByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
-  readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterOptionsFor<TAdapters, TChatId>;
-};
-
-/** Extracts the chat id from a normalized conversation reference. */
-export type ChatIdFromConversation<TConversation extends ChatConversationRef> =
-  TConversation["chatId"];
-
-/** Extracts the chat id from a normalized message reference. */
-export type ChatIdFromMessageRef<TMessageRef extends ChatMessageRef> = TMessageRef["chatId"];
-
-/** Extracts adapter metadata from a received message. */
-export type AdapterDataFromMessage<TMessage extends ChatMessage> = TMessage["adapterData"];
-
-/** Extracts adapter metadata from a sent message. */
-export type AdapterDataFromSentMessage<TMessage extends ChatSentMessage> = TMessage["adapterData"];
-
-/** Adapter-specific send/reply options selected by registered chat id. */
-export type AdapterOptionsFor<
-  TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
-> =
-  TAdapters[TChatId] extends ChatAdapterDefinition<
-    string,
-    infer TAdapterOptions extends ChatAdapterObject,
-    ChatAdapterObject,
-    ChatAdapterCapabilities,
-    unknown
-  >
-    ? TAdapterOptions
-    : never;
-
-/** Adapter-specific data returned by send/reply for a registered chat id. */
-export type AdapterDataFor<
-  TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
-> =
-  TAdapters[TChatId] extends ChatAdapterDefinition<
-    string,
-    ChatAdapterObject,
-    infer TAdapterData extends ChatAdapterObject,
-    ChatAdapterCapabilities,
-    unknown
-  >
-    ? TAdapterData
-    : never;
-
-/** Static capabilities declared by a registered chat adapter. */
-export type AdapterCapabilitiesFor<
-  TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
-> =
-  TAdapters[TChatId] extends ChatAdapterDefinition<
-    string,
-    ChatAdapterObject,
-    ChatAdapterObject,
-    infer TCapabilities extends ChatAdapterCapabilities,
-    unknown
-  >
-    ? TCapabilities
-    : never;
-
-/** Adapter registry whose object key must match each adapter's own id. */
-export type ChatAdapterDefinitions<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatAdapterDefinition<
-    Extract<TChatId, string>,
-    AdapterOptionsFor<TAdapters, TChatId>,
-    AdapterDataFor<TAdapters, TChatId>,
-    AdapterCapabilitiesFor<TAdapters, TChatId>,
-    AdapterErrorFor<TAdapters, TChatId>
-  >;
-};
-
-/** Adapter-specific error returned by a registered chat id. */
-export type AdapterErrorFor<
-  TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
-> =
-  TAdapters[TChatId] extends ChatAdapterDefinition<
-    string,
-    ChatAdapterObject,
-    ChatAdapterObject,
-    ChatAdapterCapabilities,
-    infer TAdapterError
-  >
-    ? TAdapterError
-    : never;
+type AnyChatAdapterDefinition = ChatAdapterDefinition<
+  string,
+  ChatAdapterObject,
+  ChatAdapterObject,
+  ChatAdapterCapabilities,
+  unknown
+>;
 
 /** Send input narrowed to one registered chat adapter. */
 export type ChatSendMessageInputFor<

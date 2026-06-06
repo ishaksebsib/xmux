@@ -31,7 +31,13 @@ export function ensureStarted(args: {
   readonly state: ChatLifecycleState;
   readonly operation: Extract<
     ChatLifecycleOperation,
-    "sendMessage" | "sendAction" | "reply" | "streamMessage" | "streamReply" | "typingIndicator"
+    | "sendMessage"
+    | "sendAction"
+    | "respondToAction"
+    | "reply"
+    | "streamMessage"
+    | "streamReply"
+    | "typingIndicator"
   >;
 }): Result<void, ChatLifecycleError> {
   return args.state.status === "started"

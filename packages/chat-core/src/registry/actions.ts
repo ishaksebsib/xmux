@@ -62,3 +62,25 @@ export type ChatActionValuesFor<
 export type ChatActionValues<TActions extends ChatActionRegistry> = {
   readonly [TActionId in keyof TActions]: ChatActionValuesFor<TActions, TActionId>;
 }[keyof TActions];
+
+/** Defines the action registry used to type interactive button actions. */
+export function defineChatActions<const TActions extends ChatActionRegistry>(
+  actions: TActions,
+): TActions {
+  return actions;
+}
+
+/** Defines one action id and its allowed values. */
+export function defineChatAction<const TValues extends ChatActionValuesDefinition>(action: {
+  readonly description?: string;
+  readonly values: TValues;
+}): ChatActionDefinition<TValues> {
+  return action;
+}
+
+/** Defines one action value and preserves its payload type for sends and handlers. */
+export function actionValue<
+  TPayload extends ChatActionPayload | undefined = undefined,
+>(): ChatActionValueDefinition<TPayload> {
+  return {} as ChatActionValueDefinition<TPayload>;
+}

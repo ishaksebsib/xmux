@@ -1,19 +1,15 @@
 import { Result } from "better-result";
-import type { ChatAdapterReplyInput } from "../adapter";
+import type { ChatAdapterReplyInput } from "../adapter/io";
 import {
   ChatReplyError,
   ChatSendMessageError,
   UnsupportedChatOperationError,
   type ChatReplyFailure,
 } from "../errors";
-import type {
-  AdapterOptionsFor,
-  ChatAdapterDefinitions,
-  ChatReplyInput,
-  ChatSentMessageFromInput,
-} from "../types";
+import type { AdapterOptionsFor, ChatAdapterDefinitions } from "../adapter/registry";
+import type { ChatReplyInput, ChatSentMessageFromInput } from "../inputs";
 import type { GetStartedRuntime } from "./types";
-import { createAdapterSendMessageInput } from "./utils";
+import { createAdapterSendMessageInput } from "./adapter-inputs";
 
 export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>>(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;

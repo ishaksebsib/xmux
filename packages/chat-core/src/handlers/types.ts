@@ -1,11 +1,14 @@
 import type { Result } from "better-result";
+import type { ChatAdapterCapabilities } from "../capabilities";
 import type {
   ChatAdapterDefinition,
+  OpenedChatAdapter,
+} from "../adapter/definition";
+import type {
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
-  ChatAdapterCapabilities,
-  OpenedChatAdapter,
-} from "../adapter";
+} from "../adapter/io";
+import type { ChatActionRegistry } from "../registry/actions";
 import type { ChatAdapterObject, ChatSentMessage } from "../contracts";
 import type {
   ChatLifecycleError,
@@ -23,6 +26,8 @@ import type {
   AdapterErrorFor,
   AdapterOptionsFor,
   ChatAdapterDefinitions,
+} from "../adapter/registry";
+import type {
   ChatReplyInput,
   ChatSendActionInput,
   ChatSendMessageInput,
@@ -31,7 +36,7 @@ import type {
   ChatStreamReplyInput,
   ChatTypingIndicatorInput,
   ChatTypingIndicatorResult,
-} from "../types";
+} from "../inputs";
 
 export type SendMessageInputForStream<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
@@ -73,6 +78,7 @@ export type StreamReplyRuntime = {
 export type ChatRuntimeOperation =
   | "sendMessage"
   | "sendAction"
+  | "respondToAction"
   | "reply"
   | "streamMessage"
   | "streamReply"
@@ -94,7 +100,7 @@ export type SendMessageHandler<TAdapters extends ChatAdapterDefinitions<TAdapter
 
 export type SendActionHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TActions extends import("../actions").ChatActionRegistry,
+  TActions extends ChatActionRegistry,
 > = <TInput extends ChatSendActionInput<TAdapters, TActions>>(
   input: TInput,
 ) => Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendActionFailure>>;

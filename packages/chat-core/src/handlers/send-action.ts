@@ -1,13 +1,10 @@
 import { Result } from "better-result";
 import { ChatSendActionError, type ChatSendActionFailure } from "../errors";
-import type { ChatActionRegistry } from "../actions";
-import type {
-  ChatAdapterDefinitions,
-  ChatSendActionInput,
-  ChatSentMessageFromInput,
-} from "../types";
+import type { ChatActionRegistry } from "../registry/actions";
+import type { ChatAdapterDefinitions } from "../adapter/registry";
+import type { ChatSendActionInput, ChatSentMessageFromInput } from "../inputs";
 import type { GetStartedRuntime } from "./types";
-import { createAdapterSendActionInput } from "./utils";
+import { createAdapterSendActionInput } from "./adapter-inputs";
 
 export function createSendActionHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,

@@ -5,14 +5,14 @@ import {
   UnsupportedChatOperationError,
   type ChatTypingIndicatorFailure,
 } from "../errors";
+import type { ChatAdapterDefinitions } from "../adapter/registry";
 import type {
-  ChatAdapterDefinitions,
   ChatTypingIndicatorHandle,
   ChatTypingIndicatorInput,
   ChatTypingIndicatorResult,
-} from "../types";
+} from "../inputs";
 import type { GetStartedRuntime } from "./types";
-import { createAdapterTypingIndicatorInput } from "./utils";
+import { createAdapterTypingIndicatorInput } from "./adapter-inputs";
 
 const defaultTypingIndicatorRefreshIntervalMs = 4_000;
 

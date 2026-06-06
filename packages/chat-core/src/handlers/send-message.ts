@@ -1,12 +1,9 @@
 import { Result } from "better-result";
 import { ChatSendMessageError, type ChatSendMessageFailure } from "../errors";
-import type {
-  ChatAdapterDefinitions,
-  ChatSendMessageInput,
-  ChatSentMessageFromInput,
-} from "../types";
+import type { ChatAdapterDefinitions } from "../adapter/registry";
+import type { ChatSendMessageInput, ChatSentMessageFromInput } from "../inputs";
 import type { GetStartedRuntime } from "./types";
-import { createAdapterSendMessageInput } from "./utils";
+import { createAdapterSendMessageInput } from "./adapter-inputs";
 
 export function createSendMessageHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,

@@ -1,6 +1,6 @@
 import type { Result } from "better-result";
-import type { ChatActionRegistry, ChatActionValuesFor } from "./actions";
-import type { ChatCommandRegistry, ChatCommandValueFor } from "./commands";
+import type { ChatActionRegistry, ChatActionValuesFor } from "../registry/actions";
+import type { ChatCommandRegistry, ChatCommandValueFor } from "../registry/commands";
 import type {
   ChatActor,
   ChatAdapterObject,
@@ -8,21 +8,22 @@ import type {
   ChatConversationRef,
   ChatMessage,
   ChatMessageRef,
+  ChatReplyMode,
   ChatStreamFallback,
   ChatTextInput,
   ChatTextStreamContent,
-} from "./contracts";
+} from "../contracts";
 import type {
-  AdapterOptionsProp,
   ChatEventAdapterData,
   ChatEventAdapterOptions,
-  ChatReplyMode,
+} from "../adapter/registry";
+import type {
   ChatTypingIndicatorBehavior,
   ChatTypingIndicatorFallback,
   ChatTypingIndicatorHandle,
-  RequiredKeys,
-} from "./types";
-import type { ChatTypingIndicatorFailure } from "./errors";
+} from "../inputs";
+import type { AdapterOptionsProp, RequiredKeys } from "../type-utils";
+import type { ChatTypingIndicatorFailure } from "../errors";
 
 /** Typed subscription API exposed by the chat facade. */
 export interface ChatOn<

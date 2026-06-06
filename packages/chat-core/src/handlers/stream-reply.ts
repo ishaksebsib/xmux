@@ -4,11 +4,8 @@ import {
   UnsupportedChatOperationError,
   type ChatStreamReplyFailure,
 } from "../errors";
-import type {
-  ChatAdapterDefinitions,
-  ChatSentMessageFromInput,
-  ChatStreamReplyInput,
-} from "../types";
+import type { ChatAdapterDefinitions } from "../adapter/registry";
+import type { ChatSentMessageFromInput, ChatStreamReplyInput } from "../inputs";
 import type {
   GetStartedRuntime,
   ReplyHandler,
@@ -16,12 +13,14 @@ import type {
   StreamFallbackDiagnosticEmit,
 } from "./types";
 import {
-  collectChatTextStream,
   createAdapterStreamReplyInput,
+  sentMessageFromSameChatInput,
+} from "./adapter-inputs";
+import {
+  collectChatTextStream,
   emitStreamFallbackDiagnostic,
   hasStreamReplyRuntime,
-  sentMessageFromSameChatInput,
-} from "./utils";
+} from "./stream";
 
 export function createStreamReplyHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
