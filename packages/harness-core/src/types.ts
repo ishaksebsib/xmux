@@ -64,66 +64,6 @@ export type AdapterModelFor<
     ? TAdapterModel
     : never;
 
-export type AdapterResumeOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterListOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterGetOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterPromptOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterListModelsOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterGetModelOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterSetModelOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterGetThinkingOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterSetThinkingOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterDeleteOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterAbortOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
-export type AdapterRespondInteractionOptionsFor<
-  TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  THarnessId extends keyof TAdapters,
-> = AdapterOptionsFor<TAdapters, THarnessId>;
-
 type RequiredKeys<TValue extends HarnessAdapterObject> = {
   [TKey in keyof TValue]-?: {} extends Pick<TValue, TKey> ? never : TKey;
 }[keyof TValue];
@@ -235,10 +175,8 @@ export type ListSessionsResultFor<
 
 export type ListSessionsResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
-  TInput,
-> = TInput extends { readonly harnessId: infer THarnessId extends keyof TAdapters }
-  ? ListSessionsResultFor<TAdapters, THarnessId>
-  : never;
+  TInput extends { readonly harnessId: keyof TAdapters },
+> = ListSessionsResultFor<TAdapters, TInput["harnessId"]>;
 
 export type ListModelsInputFor<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
@@ -327,7 +265,7 @@ export type PromptResultFromInput<
   ? PromptResultFor<TAdapters, THarnessId>
   : never;
 
-export type ModelTargetHarnessId<TTarget> = TTarget extends {
+export type TargetHarnessId<TTarget> = TTarget extends {
   readonly type: "harness";
   readonly harnessId: infer THarnessId extends string;
 }
@@ -360,7 +298,7 @@ export type GetModelResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   TInput,
 > =
-  ModelTargetHarnessId<
+  TargetHarnessId<
     TInput extends { readonly target: infer TTarget } ? TTarget : never
   > extends infer THarnessId extends keyof TAdapters
     ? GetModelResultFor<TAdapters, THarnessId>
@@ -388,22 +326,10 @@ export type SetModelResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   TInput,
 > =
-  ModelTargetHarnessId<
+  TargetHarnessId<
     TInput extends { readonly target: infer TTarget } ? TTarget : never
   > extends infer THarnessId extends keyof TAdapters
     ? SetModelResultFor<TAdapters, THarnessId>
-    : never;
-
-export type ThinkingTargetHarnessId<TTarget> = TTarget extends {
-  readonly type: "harness";
-  readonly harnessId: infer THarnessId extends string;
-}
-  ? THarnessId
-  : TTarget extends {
-        readonly type: "session";
-        readonly ref: { readonly harnessId: infer THarnessId extends string };
-      }
-    ? THarnessId
     : never;
 
 export type GetThinkingInputFor<
@@ -427,7 +353,7 @@ export type GetThinkingResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   TInput,
 > =
-  ThinkingTargetHarnessId<
+  TargetHarnessId<
     TInput extends { readonly target: infer TTarget } ? TTarget : never
   > extends infer THarnessId extends keyof TAdapters
     ? GetThinkingResultFor<TAdapters, THarnessId>
@@ -455,7 +381,7 @@ export type SetThinkingResultFromInput<
   TAdapters extends Record<string, AnyHarnessAdapterDefinition>,
   TInput,
 > =
-  ThinkingTargetHarnessId<
+  TargetHarnessId<
     TInput extends { readonly target: infer TTarget } ? TTarget : never
   > extends infer THarnessId extends keyof TAdapters
     ? SetThinkingResultFor<TAdapters, THarnessId>

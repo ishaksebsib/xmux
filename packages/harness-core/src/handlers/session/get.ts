@@ -6,7 +6,7 @@ import type {
   HarnessAdapterDefinitions,
 } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, createHarnessSessionInfo } from "../utils";
+import { adapterOptionsFromInput, createHarnessSessionInfo, invokeAdapter } from "../utils";
 
 export async function handleGetSession<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -16,9 +16,9 @@ export async function handleGetSession<
     const runtime = yield* Result.await(
       args.getRuntime(args.input.ref.harnessId, args.input.signal),
     );
-    const found = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
+    const adapterSession = yield* Result.await(
+      invokeAdapter({
+        run: () =>
           runtime.getSession({
             ref: args.input.ref,
             adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
@@ -26,30 +26,18 @@ export async function handleGetSession<
             ),
             signal: args.input.signal,
           }),
-        catch: (cause) =>
+        mapError: (cause) =>
           new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
       }),
     );
 
-    const session = yield* Result.await(
-      Result.andThenAsync(
-        Result.mapError(
-          found,
-          (cause) =>
-            new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
-        ),
-        async (adapterSession) => {
-          const created = await createHarnessSessionInfo({
-            harnessId: args.input.ref.harnessId,
-            adapterSession,
-          });
-          return Result.mapError(
-            created,
-            (cause) =>
-              new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
-          );
-        },
-      ),
+    const created = await createHarnessSessionInfo({
+      harnessId: args.input.ref.harnessId,
+      adapterSession,
+    });
+    const session = yield* Result.mapError(
+      created,
+      (cause) => new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
     );
 
     return Result.ok(session as GetSessionResultFromInput<TAdapters, TInput>);

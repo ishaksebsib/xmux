@@ -1,14 +1,9 @@
 import { Result } from "better-result";
 import { HarnessAdapterListSessionsError } from "../../errors";
 import type { HarnessAdapterObject, HarnessSessionInfo } from "../../contracts";
-import type {
-  AdapterSessionFor,
-  HarnessAdapterDefinitions,
-  ListSessionsInput,
-  ListSessionsResultFromInput,
-} from "../../types";
+import type { AdapterSessionFor, HarnessAdapterDefinitions, ListSessionsInput } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, createHarnessSessionInfo } from "../utils";
+import { adapterOptionsFromInput, createHarnessSessionInfo, invokeAdapter } from "../utils";
 
 export async function handleListSessions<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -16,26 +11,21 @@ export async function handleListSessions<
 >(args: { readonly input: TInput; readonly getRuntime: HarnessRuntimeGetter<TAdapters> }) {
   return Result.gen(async function* () {
     const runtime = yield* Result.await(args.getRuntime(args.input.harnessId, args.input.signal));
-    const outer = await Result.tryPromise({
-      try: async () =>
-        runtime.listSessions({
-          cwd: args.input.cwd,
-          adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
-          signal: args.input.signal,
-        }),
-      catch: (cause) =>
-        new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
-    });
-
-    const adapterSessions = yield* Result.andThen(outer, (adapterResult) =>
-      Result.mapError(
-        adapterResult,
-        (cause) => new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
-      ),
+    const adapterSessions = yield* Result.await(
+      invokeAdapter({
+        run: () =>
+          runtime.listSessions({
+            cwd: args.input.cwd,
+            adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
+            signal: args.input.signal,
+          }),
+        mapError: (cause) =>
+          new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
+      }),
     );
 
     const sessions = [] as HarnessSessionInfo<
-      TInput["harnessId"],
+      Extract<TInput["harnessId"], string>,
       AdapterSessionFor<TAdapters, TInput["harnessId"]>
     >[];
     for (const adapterSession of adapterSessions) {
@@ -52,6 +42,6 @@ export async function handleListSessions<
       sessions.push(session as (typeof sessions)[number]);
     }
 
-    return Result.ok(sessions as unknown as ListSessionsResultFromInput<TAdapters, TInput>);
+    return Result.ok(sessions);
   });
 }

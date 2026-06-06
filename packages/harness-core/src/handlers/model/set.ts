@@ -1,50 +1,45 @@
 import { Result } from "better-result";
 import { HarnessAdapterModelUnsupportedError, HarnessAdapterSetModelError } from "../../errors";
-import type { HarnessModelTarget } from "../../contracts";
 import type {
   HarnessAdapterDefinitions,
-  ModelTargetHarnessId,
   SetModelInput,
   SetModelResultFromInput,
 } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, modelTargetHarnessId } from "../utils";
+import {
+  adapterOptionsFromInput,
+  invokeAdapter,
+  requireCapability,
+  targetHarnessId,
+} from "../utils";
 
 export async function handleSetModel<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TInput extends SetModelInput<TAdapters>,
 >(args: { readonly input: TInput; readonly getRuntime: HarnessRuntimeGetter<TAdapters> }) {
-  type THarnessId = ModelTargetHarnessId<TInput["target"]> & keyof TAdapters;
-
   return Result.gen(async function* () {
-    const harnessId = modelTargetHarnessId(args.input.target) as unknown as THarnessId;
+    const harnessId = targetHarnessId(args.input.target);
     const runtime = yield* Result.await(args.getRuntime(harnessId, args.input.signal));
-    const setModel = runtime.setModel;
-    if (!setModel) {
-      return Result.err(
-        new HarnessAdapterModelUnsupportedError({
-          harnessId: harnessId as string,
-          operation: "setModel",
-        }),
-      );
-    }
+    const setModel = yield* requireCapability(
+      runtime.setModel,
+      new HarnessAdapterModelUnsupportedError({
+        harnessId,
+        operation: "setModel",
+      }),
+    );
+    const model = yield* Result.await(
+      invokeAdapter({
+        run: () =>
+          setModel({
+            target: args.input.target,
+            update: args.input.update,
+            adapterOptions: adapterOptionsFromInput<TAdapters, typeof harnessId>(args.input),
+            signal: args.input.signal,
+          }),
+        mapError: (cause) => new HarnessAdapterSetModelError({ harnessId, cause }),
+      }),
+    );
 
-    const outer = await Result.tryPromise({
-      try: async () =>
-        setModel({
-          target: args.input.target as unknown as HarnessModelTarget<Extract<THarnessId, string>>,
-          update: args.input.update,
-          adapterOptions: adapterOptionsFromInput<TAdapters, THarnessId>(args.input),
-          signal: args.input.signal,
-        }),
-      catch: (cause) => new HarnessAdapterSetModelError({ harnessId: harnessId as string, cause }),
-    });
-
-    return Result.andThen(outer, (adapterResult) =>
-      Result.mapError(
-        adapterResult,
-        (cause) => new HarnessAdapterSetModelError({ harnessId: harnessId as string, cause }),
-      ),
-    ).map((value) => value as unknown as SetModelResultFromInput<TAdapters, TInput>);
+    return Result.ok(model as SetModelResultFromInput<TAdapters, TInput>);
   });
 }

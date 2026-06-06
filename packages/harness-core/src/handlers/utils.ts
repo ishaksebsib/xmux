@@ -1,6 +1,6 @@
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
-import { Result } from "better-result";
+import { Result, type Result as ResultType } from "better-result";
 import {
   HarnessAdapterCreateSessionError,
   HarnessAdapterOpenError,
@@ -24,7 +24,7 @@ import type {
   AdapterOptionsFor,
   AdapterSessionFor,
   HarnessAdapterDefinitions,
-  ModelTargetHarnessId,
+  TargetHarnessId,
 } from "../types";
 
 export type HarnessRuntimeGetter<TAdapters extends HarnessAdapterDefinitions<TAdapters>> = <
@@ -59,6 +59,25 @@ export function adapterOptionsFromInput<
   return normalizeAdapterOptions("adapterOptions" in input ? input.adapterOptions : undefined);
 }
 
+export async function invokeAdapter<TValue, TError>(args: {
+  readonly run: () => Promise<ResultType<TValue, unknown>>;
+  readonly mapError: (cause: unknown) => TError;
+}): Promise<ResultType<TValue, TError>> {
+  const outer = await Result.tryPromise({
+    try: args.run,
+    catch: args.mapError,
+  });
+
+  return Result.andThen(outer, (adapterResult) => Result.mapError(adapterResult, args.mapError));
+}
+
+export function requireCapability<TMethod, TError>(
+  method: TMethod | undefined,
+  error: TError,
+): ResultType<TMethod, TError> {
+  return method === undefined ? Result.err(error) : Result.ok(method);
+}
+
 export function normalizePromptContent(
   content: HarnessPromptContent | readonly HarnessPromptContent[],
 ): readonly HarnessPromptContent[] {
@@ -67,12 +86,12 @@ export function normalizePromptContent(
     : [content as HarnessPromptContent];
 }
 
-export function modelTargetHarnessId<TTarget extends HarnessModelTarget>(
+export function targetHarnessId<TTarget extends HarnessModelTarget>(
   target: TTarget,
-): ModelTargetHarnessId<TTarget> {
+): TargetHarnessId<TTarget> {
   return (
     target.type === "harness" ? target.harnessId : target.ref.harnessId
-  ) as ModelTargetHarnessId<TTarget>;
+  ) as TargetHarnessId<TTarget>;
 }
 
 export async function createWorkingDirectoryPath(

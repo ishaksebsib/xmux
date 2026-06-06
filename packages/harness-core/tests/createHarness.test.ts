@@ -5,6 +5,7 @@ import {
   HarnessAdapterOpenError,
   InvalidWorkingDirectoryError,
   createHarness,
+  defineHarnessAdapter,
 } from "../src";
 import { createTestAdapter, type PiAdapterInput, type PiAdapterSession } from "./test-utils";
 
@@ -71,6 +72,155 @@ describe("createHarness", () => {
     expect(first.isOk()).toBe(true);
     expect(second.isOk()).toBe(true);
     expect(handles.opens).toEqual(["opencode"]);
+  });
+
+  test("deduplicates concurrent first runtime opens", async () => {
+    let opens = 0;
+    let closes = 0;
+    let releaseOpen!: () => void;
+    const canOpen = new Promise<void>((resolve) => {
+      releaseOpen = resolve;
+    });
+
+    const harness = createHarness({
+      adapters: {
+        pi: defineHarnessAdapter<"pi", Record<never, never>, Record<never, never>>({
+          id: "pi",
+          async open() {
+            opens += 1;
+            await canOpen;
+
+            return Result.ok({
+              id: "pi" as const,
+              async createSession() {
+                return Result.ok({ sessionId: "pi-1", adapterData: {} });
+              },
+              async resumeSession(input) {
+                return Result.ok({ sessionId: input.sessionId, adapterData: {} });
+              },
+              async listSessions() {
+                return Result.ok([]);
+              },
+              async getSession(input) {
+                return Result.ok({ sessionId: input.ref.sessionId, adapterData: {} });
+              },
+              async prompt(input) {
+                return Result.ok(
+                  (async function* () {
+                    yield { type: "run", phase: "started", ref: input.ref } as const;
+                    yield {
+                      type: "run",
+                      phase: "completed",
+                      ref: input.ref,
+                      reason: "stop",
+                    } as const;
+                  })(),
+                );
+              },
+              async deleteSession() {
+                return Result.ok();
+              },
+              async abort() {
+                return Result.ok();
+              },
+              async close() {
+                closes += 1;
+              },
+            });
+          },
+        }),
+      },
+    });
+
+    const listed = harness.listSessions({ harnessId: "pi" });
+    const got = harness.getSession({ ref: { harnessId: "pi", sessionId: "session-1" } });
+
+    await Promise.resolve();
+    expect(opens).toBe(1);
+
+    releaseOpen();
+    const [listedResult, gotResult] = await Promise.all([listed, got]);
+
+    expect(listedResult.isOk()).toBe(true);
+    expect(gotResult.isOk()).toBe(true);
+    expect(opens).toBe(1);
+
+    await harness.close();
+    expect(closes).toBe(1);
+  });
+
+  test("close waits for in-flight runtime opens", async () => {
+    let opens = 0;
+    let closes = 0;
+    let releaseOpen!: () => void;
+    const canOpen = new Promise<void>((resolve) => {
+      releaseOpen = resolve;
+    });
+
+    const harness = createHarness({
+      adapters: {
+        pi: defineHarnessAdapter<"pi", Record<never, never>, Record<never, never>>({
+          id: "pi",
+          async open() {
+            opens += 1;
+            await canOpen;
+
+            return Result.ok({
+              id: "pi" as const,
+              async createSession() {
+                return Result.ok({ sessionId: "pi-1", adapterData: {} });
+              },
+              async resumeSession(input) {
+                return Result.ok({ sessionId: input.sessionId, adapterData: {} });
+              },
+              async listSessions() {
+                return Result.ok([]);
+              },
+              async getSession(input) {
+                return Result.ok({ sessionId: input.ref.sessionId, adapterData: {} });
+              },
+              async prompt(input) {
+                return Result.ok(
+                  (async function* () {
+                    yield { type: "run", phase: "started", ref: input.ref } as const;
+                    yield {
+                      type: "run",
+                      phase: "completed",
+                      ref: input.ref,
+                      reason: "stop",
+                    } as const;
+                  })(),
+                );
+              },
+              async deleteSession() {
+                return Result.ok();
+              },
+              async abort() {
+                return Result.ok();
+              },
+              async close() {
+                closes += 1;
+              },
+            });
+          },
+        }),
+      },
+    });
+
+    const listed = harness.listSessions({ harnessId: "pi" });
+    await Promise.resolve();
+    expect(opens).toBe(1);
+
+    const closed = harness.close();
+    await Promise.resolve();
+    expect(closes).toBe(0);
+
+    releaseOpen();
+    const [listedResult, closedResult] = await Promise.all([listed, closed]);
+
+    expect(listedResult.isOk()).toBe(true);
+    expect(closedResult.isOk()).toBe(true);
+    expect(closes).toBe(1);
   });
 
   test("rejects invalid working directories before opening an adapter", async () => {

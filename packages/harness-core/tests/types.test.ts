@@ -3,16 +3,7 @@ import { expectTypeOf, test } from "vitest";
 import {
   createHarness,
   defineHarnessAdapter,
-  type AdapterAbortOptionsFor,
-  type AdapterDeleteOptionsFor,
-  type AdapterGetModelOptionsFor,
-  type AdapterGetOptionsFor,
-  type AdapterListModelsOptionsFor,
-  type AdapterListOptionsFor,
   type AdapterModelFor,
-  type AdapterPromptOptionsFor,
-  type AdapterResumeOptionsFor,
-  type AdapterSetModelOptionsFor,
   type AbortInput,
   type CreatedSessionFor,
   type DeleteSessionInput,
@@ -330,28 +321,6 @@ test("adapter session-control methods reuse createSession adapter options", () =
     adapterOptions: { mode: "memory" },
   });
 
-  expectTypeOf<
-    AdapterResumeOptionsFor<typeof adapters, "opencode">
-  >().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<
-    AdapterListOptionsFor<typeof adapters, "opencode">
-  >().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<
-    AdapterGetOptionsFor<typeof adapters, "opencode">
-  >().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<
-    AdapterPromptOptionsFor<typeof adapters, "opencode">
-  >().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<
-    AdapterDeleteOptionsFor<typeof adapters, "opencode">
-  >().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<
-    AdapterAbortOptionsFor<typeof adapters, "opencode">
-  >().toEqualTypeOf<OpenCodeOptions>();
-  expectTypeOf<AdapterPromptOptionsFor<typeof adapters, "pi">>().toEqualTypeOf<{
-    readonly mode: "memory";
-  }>();
-
   const adapterInfo = {
     sessionId: "native-session-1",
     cwd: process.cwd(),
@@ -613,15 +582,6 @@ test("model management input and output types narrow by harness id", () => {
   void harness.setModel(set);
 
   expectTypeOf<AdapterModelFor<typeof adapters, "opencode">>().toEqualTypeOf<OpenCodeModel>();
-  expectTypeOf<AdapterListModelsOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<{
-    readonly workspaceId: string;
-  }>();
-  expectTypeOf<AdapterGetModelOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<{
-    readonly workspaceId: string;
-  }>();
-  expectTypeOf<AdapterSetModelOptionsFor<typeof adapters, "opencode">>().toEqualTypeOf<{
-    readonly workspaceId: string;
-  }>();
   expectTypeOf<
     ListModelsResultFromInput<typeof adapters, typeof listed>[number]["adapterData"]
   >().toEqualTypeOf<OpenCodeModel>();

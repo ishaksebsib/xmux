@@ -69,6 +69,20 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
     string,
     OpenedHarnessAdapter<string, HarnessAdapterObject, HarnessAdapterObject, HarnessAdapterObject>
   >();
+  const openingRuntimes = new Map<
+    string,
+    Promise<
+      Result<
+        OpenedHarnessAdapter<
+          string,
+          HarnessAdapterObject,
+          HarnessAdapterObject,
+          HarnessAdapterObject
+        >,
+        HarnessAdapterOpenError
+      >
+    >
+  >();
 
   async function getRuntime<THarnessId extends keyof TAdapters>(
     harnessId: THarnessId,
@@ -97,6 +111,20 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       );
     }
 
+    const opening = openingRuntimes.get(key);
+    if (opening) {
+      return Result.map(
+        await opening,
+        (runtime) =>
+          runtime as OpenedHarnessAdapter<
+            Extract<THarnessId, string>,
+            AdapterOptionsFor<TAdapters, THarnessId>,
+            AdapterSessionFor<TAdapters, THarnessId>,
+            AdapterModelFor<TAdapters, THarnessId>
+          >,
+      );
+    }
+
     const adapter = options.adapters[harnessId];
     if (!adapter) {
       return Result.err(
@@ -114,7 +142,7 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       AdapterModelFor<TAdapters, THarnessId>
     >;
 
-    return Result.gen(async function* () {
+    const openingRuntime = Result.gen(async function* () {
       const runtime = yield* Result.await(
         openHarnessAdapter({
           adapter: selectedAdapter,
@@ -135,13 +163,28 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
 
       return Result.ok(
         runtime as OpenedHarnessAdapter<
+          string,
+          HarnessAdapterObject,
+          HarnessAdapterObject,
+          HarnessAdapterObject
+        >,
+      );
+    });
+
+    openingRuntimes.set(key, openingRuntime);
+    const runtime = await openingRuntime;
+    openingRuntimes.delete(key);
+
+    return Result.map(
+      runtime,
+      (opened) =>
+        opened as OpenedHarnessAdapter<
           Extract<THarnessId, string>,
           AdapterOptionsFor<TAdapters, THarnessId>,
           AdapterSessionFor<TAdapters, THarnessId>,
           AdapterModelFor<TAdapters, THarnessId>
         >,
-      );
-    });
+    );
   }
 
   return {
@@ -200,6 +243,8 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
     },
 
     async close() {
+      await Promise.all(openingRuntimes.values());
+
       const closeResults = await Promise.all(
         [...openedRuntimes.entries()].map(async ([harnessId, runtime]) => {
           return Result.tryPromise({

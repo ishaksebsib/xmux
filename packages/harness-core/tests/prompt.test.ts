@@ -349,4 +349,46 @@ describe("prompt", () => {
     const done = await iterator.next();
     expect(done.done).toBe(true);
   });
+
+  test("does not return an adapter iterator while next is in flight", async () => {
+    const controller = new AbortController();
+    const cause = new Error("abort with pending next");
+    let returns = 0;
+    let resolveNext!: (value: IteratorResult<HarnessPromptEvent<"pi">>) => void;
+    const { harness } = createPromptHarness({
+      events: () => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return new Promise<IteratorResult<HarnessPromptEvent<"pi">>>((resolve) => {
+                resolveNext = resolve;
+              });
+            },
+            async return() {
+              returns += 1;
+              return { done: true, value: undefined } as IteratorReturnResult<undefined>;
+            },
+          };
+        },
+      }),
+    });
+
+    const stream = await promptEvents({ harness, signal: controller.signal });
+    const iterator = stream[Symbol.asyncIterator]();
+    const first = iterator.next();
+
+    controller.abort(cause);
+
+    const started = await first;
+    expect(started.value).toMatchObject({ type: "run", phase: "started" });
+    expect(returns).toBe(0);
+
+    const aborted = await iterator.next();
+    expect(aborted.value).toMatchObject({ type: "run", phase: "aborted", reason: "aborted" });
+    expect(returns).toBe(0);
+
+    resolveNext({ done: true, value: undefined as never });
+    await Promise.resolve();
+    expect(returns).toBe(1);
+  });
 });
