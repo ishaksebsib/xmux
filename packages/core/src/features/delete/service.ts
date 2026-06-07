@@ -19,10 +19,10 @@ import {
   type SessionSelectionGroup,
   type SessionSelectionListFailure,
 } from "../shared/session-selection";
+import { CommandHarnessNotConfiguredError } from "../errors";
 import { requireConfiguredHarnessId } from "../utils";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
 import {
-  DeleteCommandHarnessNotConfiguredError,
   DeleteCommandIncompleteTargetError,
   DeleteSessionListAllFailedError,
   DeleteSessionShortIdAmbiguousError,
@@ -34,7 +34,7 @@ export type DeleteCommandError =
   | GetCurrentWorkspaceCwdError
   | ListSessionsError
   | DeleteSessionError
-  | DeleteCommandHarnessNotConfiguredError
+  | CommandHarnessNotConfiguredError
   | DeleteCommandIncompleteTargetError
   | DeleteSessionListAllFailedError
   | DeleteSessionShortIdNotFoundError
@@ -205,7 +205,7 @@ async function deleteSelectedSession<
     const harnessId = yield* requireConfiguredHarnessId({
       harnessId: input.harnessId,
       availableHarnessIds: input.ctx.app.harnessIds,
-      onMissing: (args) => new DeleteCommandHarnessNotConfiguredError(args),
+      onMissing: (args) => new CommandHarnessNotConfiguredError(args),
     });
 
     const listed = yield* Result.await(

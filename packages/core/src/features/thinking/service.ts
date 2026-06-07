@@ -21,6 +21,7 @@ import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { isSameModel } from "../utils";
 import {
   ThinkingLevelInvalidError,
   ThinkingLevelUnsupportedError,
@@ -271,12 +272,4 @@ function findModelInfo(input: {
   readonly models: readonly HarnessModelInfo[];
 }): HarnessModelInfo | undefined {
   return input.models.find((model) => isSameModel(model.ref, input.model));
-}
-
-function isSameModel(left: HarnessModelRef, right: HarnessModelRef): boolean {
-  return (
-    left.providerId === right.providerId &&
-    left.modelId === right.modelId &&
-    left.variant === right.variant
-  );
 }

@@ -14,12 +14,9 @@ export {
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
   PromptNoActiveRunError,
-  PromptNoActiveSessionError,
   PromptNoPendingInteractionError,
   PromptResponseError,
   PromptRunCancellationError,
-  PromptSessionClosedError,
-  PromptSessionRecordMissingError,
 } from "./errors";
 export {
   createPromptRunRegistry,

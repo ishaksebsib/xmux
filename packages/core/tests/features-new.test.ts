@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { defineChatAdapter } from "@xmux/chat-core";
 import { defineHarnessAdapter } from "@xmux/harness-core";
 import { createXmux } from "../src";
-import { NewCommandHarnessNotConfiguredError } from "../src/features/new";
+import { CommandHarnessNotConfiguredError } from "../src/features/errors";
 
 const capabilities = {
   messages: {
@@ -258,8 +258,8 @@ describe("/new command", () => {
     expect(createCalls).toBe(0);
     expect(replies[0]).toBe("**Error:** Unknown harness `missing`\n\nAvailable harnesses\n- `pi`");
     expect(
-      NewCommandHarnessNotConfiguredError.is(
-        new NewCommandHarnessNotConfiguredError({
+      CommandHarnessNotConfiguredError.is(
+        new CommandHarnessNotConfiguredError({
           harnessId: "missing",
           availableHarnessIds: ["pi"],
         }),

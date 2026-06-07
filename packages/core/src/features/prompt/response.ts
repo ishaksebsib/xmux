@@ -1,22 +1,18 @@
 import type { ChatTextInput } from "@xmux/chat-core";
 import { formatNoActiveSessionMessage, inlineCode, markdown, markdownText } from "../../components";
-import {
-  PromptAlreadyRunningError,
-  PromptNoActiveSessionError,
-  PromptSessionClosedError,
-  PromptSessionRecordMissingError,
-} from "./errors";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { PromptAlreadyRunningError } from "./errors";
 import type { PromptSessionForThreadError } from "./service";
 
 export function formatPromptFailure(error: PromptSessionForThreadError): ChatTextInput {
-  if (PromptNoActiveSessionError.is(error)) {
+  if (NoActiveSessionError.is(error)) {
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before sending a prompt.",
       nextStep: "continue conversation.",
     });
   }
 
-  if (PromptSessionClosedError.is(error)) {
+  if (SessionClosedError.is(error)) {
     return markdown({
       text: [
         "**Session is closed**",
@@ -36,7 +32,7 @@ export function formatPromptFailure(error: PromptSessionForThreadError): ChatTex
     });
   }
 
-  if (PromptSessionRecordMissingError.is(error)) {
+  if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route prompt**", "", markdownText(error.message)].join("\n"),
     });

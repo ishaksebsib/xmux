@@ -4,13 +4,8 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import {
-  getPromptSessionForThread,
-  PromptNoActiveSessionError,
-  PromptRunCancellationError,
-  PromptSessionClosedError,
-  PromptSessionRecordMissingError,
-} from "../prompt";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { getPromptSessionForThread, PromptRunCancellationError } from "../prompt";
 
 export interface CancelActivePromptForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -27,8 +22,8 @@ export type CancelActivePromptOutput =
 
 export type CancelActivePromptError =
   | StoreError
-  | PromptSessionRecordMissingError
-  | PromptSessionClosedError
+  | SessionRecordMissingError
+  | SessionClosedError
   | PromptRunCancellationError;
 
 /** Cancels the active prompt generation for the session bound to a chat thread. */
@@ -41,7 +36,7 @@ export async function cancelActivePromptForThread<
   const session = await getPromptSessionForThread({ ctx: input.ctx, thread: input.thread });
 
   if (session.isErr()) {
-    if (PromptNoActiveSessionError.is(session.error)) {
+    if (NoActiveSessionError.is(session.error)) {
       return Result.ok({ status: "not_active" });
     }
 

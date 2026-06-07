@@ -1,27 +1,6 @@
 import { TaggedError } from "better-result";
 import type { SessionSelectionListFailure } from "../shared/session-selection";
 
-/** Returned when `/delete` targets a harness that is not configured. */
-export class DeleteCommandHarnessNotConfiguredError extends TaggedError(
-  "DeleteCommandHarnessNotConfiguredError",
-)<{
-  readonly harnessId: string;
-  readonly availableHarnessIds: readonly string[];
-  readonly message: string;
-}>() {
-  constructor(args: {
-    readonly harnessId: string;
-    readonly availableHarnessIds: readonly string[];
-  }) {
-    super({
-      ...args,
-      message: `Unknown harness '${args.harnessId}'. Available harnesses: ${
-        args.availableHarnessIds.join(", ") || "none"
-      }`,
-    });
-  }
-}
-
 /** Returned when `/delete` receives only one half of a delete target. */
 export class DeleteCommandIncompleteTargetError extends TaggedError(
   "DeleteCommandIncompleteTargetError",

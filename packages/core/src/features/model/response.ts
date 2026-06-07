@@ -15,6 +15,7 @@ import {
   ModelSelectorNotFoundError,
 } from "./errors";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { isSameModel, normalizeTextInput } from "../utils";
 import type {
   ModelAvailableOutput,
   ModelCommandError,
@@ -312,19 +313,6 @@ interface ModelProviderGroup {
   readonly models: HarnessModelInfo[];
 }
 
-function isSameModel(
-  left: ModelShownOutput["current"]["model"],
-  right: ModelShownOutput["current"]["model"],
-): boolean {
-  return (
-    left !== undefined &&
-    right !== undefined &&
-    left.providerId === right.providerId &&
-    left.modelId === right.modelId &&
-    left.variant === right.variant
-  );
-}
-
 function formatSelectorSuggestions(input: {
   readonly selectors: readonly string[];
   readonly maxSuggestions: number;
@@ -348,11 +336,4 @@ function formatSelectorList(input: {
       ? [`_And ${input.selectors.length - input.maxSuggestions} more models._`]
       : []),
   ];
-}
-
-function normalizeTextInput(input: ChatTextInput): {
-  readonly text: string;
-  readonly format?: ChatMessageFormat;
-} {
-  return typeof input === "string" ? { text: input } : input;
 }

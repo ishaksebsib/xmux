@@ -1,9 +1,11 @@
 import type {
   ChatActor,
   ChatConversationRef,
+  ChatMessageFormat,
   ChatTextInput,
   ChatTextStreamContent,
 } from "@xmux/chat-core";
+import type { HarnessModelRef } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { Actor } from "../ctx";
 import type { ChatThreadRef } from "../store";
@@ -152,4 +154,24 @@ export async function replyWithResult<TValue, TError>(input: {
     message,
     onError: (cause) => new CommandResponseError({ command: input.command, cause }),
   });
+}
+
+export function normalizeTextInput(input: ChatTextInput): {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+} {
+  return typeof input === "string" ? { text: input } : input;
+}
+
+export function isSameModel(
+  left: HarnessModelRef | undefined,
+  right: HarnessModelRef | undefined,
+): boolean {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.providerId === right.providerId &&
+    left.modelId === right.modelId &&
+    left.variant === right.variant
+  );
 }

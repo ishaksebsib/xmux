@@ -19,6 +19,8 @@ import {
   ThinkingModelUnsetError,
 } from "./errors";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { normalizeTextInput } from "../utils";
+import { formatModelSelector } from "../model/selector";
 import type {
   ThinkingClearedOutput,
   ThinkingCommandError,
@@ -105,7 +107,7 @@ export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInpu
         "",
         ...(error.model === undefined
           ? []
-          : [`- **Model:** ${inlineCode(formatModelRef(error.model))}`]),
+          : [`- **Model:** ${inlineCode(formatModelSelector(error.model))}`]),
         `- **Next:** choose a reasoning-capable model with ${inlineCode("/model")}.`,
       ].join("\n"),
     });
@@ -368,20 +370,4 @@ function formatButtonLabel(level: HarnessThinkingLevel): string {
 
 function formatHeadingLevel(level: HarnessThinkingLevel | undefined): string {
   return level === undefined ? "Unset" : formatButtonLabel(level);
-}
-
-function normalizeTextInput(input: ChatTextInput): {
-  readonly text: string;
-  readonly format?: ChatMessageFormat;
-} {
-  return typeof input === "string" ? { text: input } : input;
-}
-
-function formatModelRef(ref: {
-  readonly providerId?: string;
-  readonly modelId: string;
-  readonly variant?: string;
-}): string {
-  const base = ref.providerId === undefined ? ref.modelId : `${ref.providerId}/${ref.modelId}`;
-  return ref.variant === undefined ? base : `${base}@${ref.variant}`;
 }

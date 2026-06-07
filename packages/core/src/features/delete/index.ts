@@ -1,5 +1,4 @@
 export {
-  DeleteCommandHarnessNotConfiguredError,
   DeleteCommandIncompleteTargetError,
   DeleteSessionShortIdNotFoundError,
   DeleteSessionShortIdAmbiguousError,

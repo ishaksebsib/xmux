@@ -17,10 +17,10 @@ import {
 } from "../../store";
 import { requireConfiguredHarnessId } from "../utils";
 import { getCurrentWorkspaceCwd } from "../workspace";
-import { NewCommandHarnessNotConfiguredError } from "./errors";
+import { CommandHarnessNotConfiguredError } from "../errors";
 
 export type CreateSessionForThreadError =
-  | NewCommandHarnessNotConfiguredError
+  | CommandHarnessNotConfiguredError
   | CreateSessionError
   | StoreError;
 
@@ -45,7 +45,7 @@ export async function createSessionForThread<
     const harnessId = yield* requireConfiguredHarnessId({
       harnessId: input.harnessId,
       availableHarnessIds: input.ctx.app.harnessIds,
-      onMissing: (args) => new NewCommandHarnessNotConfiguredError(args),
+      onMissing: (args) => new CommandHarnessNotConfiguredError(args),
     });
 
     const cwd = yield* Result.await(

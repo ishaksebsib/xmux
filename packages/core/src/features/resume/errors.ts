@@ -1,27 +1,6 @@
 import { TaggedError } from "better-result";
 import type { ListSessionsError } from "@xmux/harness-core";
 
-/** Returned when `/resume` targets a harness that is not configured. */
-export class ResumeCommandHarnessNotConfiguredError extends TaggedError(
-  "ResumeCommandHarnessNotConfiguredError",
-)<{
-  readonly harnessId: string;
-  readonly availableHarnessIds: readonly string[];
-  readonly message: string;
-}>() {
-  constructor(args: {
-    readonly harnessId: string;
-    readonly availableHarnessIds: readonly string[];
-  }) {
-    super({
-      ...args,
-      message: `Unknown harness '${args.harnessId}'. Available harnesses: ${
-        args.availableHarnessIds.join(", ") || "none"
-      }`,
-    });
-  }
-}
-
 /** Returned when `/resume` receives only one half of a resume target. */
 export class ResumeCommandIncompleteTargetError extends TaggedError(
   "ResumeCommandIncompleteTargetError",

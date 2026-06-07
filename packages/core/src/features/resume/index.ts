@@ -1,5 +1,4 @@
 export {
-  ResumeCommandHarnessNotConfiguredError,
   ResumeCommandIncompleteTargetError,
   ResumeSessionShortIdNotFoundError,
   ResumeSessionShortIdAmbiguousError,

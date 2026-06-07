@@ -12,19 +12,15 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import {
-  PromptAlreadyRunningError,
-  PromptNoActiveSessionError,
-  PromptSessionClosedError,
-  PromptSessionRecordMissingError,
-} from "./errors";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { PromptAlreadyRunningError } from "./errors";
 import type { ActivePromptRun } from "./run-registry";
 
 export type PromptSessionForThreadError =
   | StoreError
-  | PromptNoActiveSessionError
-  | PromptSessionRecordMissingError
-  | PromptSessionClosedError
+  | NoActiveSessionError
+  | SessionRecordMissingError
+  | SessionClosedError
   | PromptAlreadyRunningError
   | PromptError;
 
@@ -113,27 +109,24 @@ export async function getPromptSessionForThread<
 ): Promise<
   Result<
     SessionRecord,
-    | StoreError
-    | PromptNoActiveSessionError
-    | PromptSessionRecordMissingError
-    | PromptSessionClosedError
+    StoreError | NoActiveSessionError | SessionRecordMissingError | SessionClosedError
   >
 > {
   return Result.gen(async function* () {
     const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
     if (!binding) {
-      return Result.err(new PromptNoActiveSessionError({ thread: input.thread }));
+      return Result.err(new NoActiveSessionError({ thread: input.thread }));
     }
 
     const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
 
     if (!session) {
-      return Result.err(new PromptSessionRecordMissingError({ sessionRef: binding.sessionRef }));
+      return Result.err(new SessionRecordMissingError({ sessionRef: binding.sessionRef }));
     }
 
     if (session.status !== "open") {
-      return Result.err(new PromptSessionClosedError({ sessionRef: session.ref }));
+      return Result.err(new SessionClosedError({ sessionRef: session.ref }));
     }
 
     return Result.ok(session);

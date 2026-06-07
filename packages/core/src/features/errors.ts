@@ -63,3 +63,24 @@ export type ActiveSessionError =
   | NoActiveSessionError
   | SessionRecordMissingError
   | SessionClosedError;
+
+/** Returned when a command targets a harness that is not configured. */
+export class CommandHarnessNotConfiguredError extends TaggedError(
+  "CommandHarnessNotConfiguredError",
+)<{
+  readonly harnessId: string;
+  readonly availableHarnessIds: readonly string[];
+  readonly message: string;
+}>() {
+  constructor(args: {
+    readonly harnessId: string;
+    readonly availableHarnessIds: readonly string[];
+  }) {
+    super({
+      ...args,
+      message: `Unknown harness '${args.harnessId}'. Available harnesses: ${
+        args.availableHarnessIds.join(", ") || "none"
+      }`,
+    });
+  }
+}

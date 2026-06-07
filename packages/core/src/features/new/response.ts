@@ -1,7 +1,7 @@
 import type { ChatTextInput } from "@xmux/chat-core";
 import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
 import type { SessionRecord } from "../../store";
-import { NewCommandHarnessNotConfiguredError } from "./errors";
+import { CommandHarnessNotConfiguredError } from "../errors";
 import type { CreateSessionForThreadError } from "./service";
 
 export function formatNewSessionSuccess(record: SessionRecord): ChatTextInput {
@@ -29,7 +29,7 @@ export function formatNewSessionSuccess(record: SessionRecord): ChatTextInput {
 }
 
 export function formatNewSessionFailure(error: CreateSessionForThreadError): ChatTextInput {
-  if (NewCommandHarnessNotConfiguredError.is(error)) {
+  if (CommandHarnessNotConfiguredError.is(error)) {
     const available =
       error.availableHarnessIds.length > 0
         ? error.availableHarnessIds.map(inlineCode).join("\n - ")

@@ -1,8 +1,8 @@
 import type { ChatTextInput } from "@xmux/chat-core";
 import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
 import { formatSessionSelectionList } from "../shared/session-selection";
+import { CommandHarnessNotConfiguredError } from "../errors";
 import {
-  DeleteCommandHarnessNotConfiguredError,
   DeleteCommandIncompleteTargetError,
   DeleteSessionListAllFailedError,
   DeleteSessionShortIdAmbiguousError,
@@ -36,7 +36,7 @@ export function formatDeleteFailure(error: DeleteCommandError): ChatTextInput {
     });
   }
 
-  if (DeleteCommandHarnessNotConfiguredError.is(error)) {
+  if (CommandHarnessNotConfiguredError.is(error)) {
     const available =
       error.availableHarnessIds.length > 0
         ? error.availableHarnessIds.map(inlineCode).join("\n- ")

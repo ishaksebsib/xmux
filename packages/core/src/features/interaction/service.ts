@@ -11,14 +11,12 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
 import {
   getPromptSessionForThread,
   PromptInteractionAlreadyRespondingError,
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
-  PromptNoActiveSessionError,
-  PromptSessionClosedError,
-  PromptSessionRecordMissingError,
 } from "../prompt";
 import type { ActivePromptRun, PendingPromptInteraction } from "../prompt";
 
@@ -40,8 +38,8 @@ export type RespondToCurrentInteractionOutput =
 
 export type RespondToCurrentInteractionError =
   | StoreError
-  | PromptSessionRecordMissingError
-  | PromptSessionClosedError
+  | SessionRecordMissingError
+  | SessionClosedError
   | PromptInteractionUnsupportedError
   | PromptInteractionAlreadyRespondingError
   | PromptInteractionResponseError;
@@ -65,7 +63,7 @@ export async function respondToCurrentInteractionForThread<
   const session = await getPromptSessionForThread({ ctx: input.ctx, thread: input.thread });
 
   if (session.isErr()) {
-    if (PromptNoActiveSessionError.is(session.error)) {
+    if (NoActiveSessionError.is(session.error)) {
       return Result.ok({ status: "not_active" });
     }
 

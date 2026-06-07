@@ -26,8 +26,8 @@ import {
 } from "../shared/session-selection";
 import { requireConfiguredHarnessId } from "../utils";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
+import { CommandHarnessNotConfiguredError } from "../errors";
 import {
-  ResumeCommandHarnessNotConfiguredError,
   ResumeCommandIncompleteTargetError,
   ResumeSessionListAllFailedError,
   ResumeSessionShortIdAmbiguousError,
@@ -40,7 +40,7 @@ export type ResumeCommandError =
   | GetCurrentWorkspaceCwdError
   | ListSessionsError
   | ResumeSessionError
-  | ResumeCommandHarnessNotConfiguredError
+  | CommandHarnessNotConfiguredError
   | ResumeCommandIncompleteTargetError
   | ResumeSessionListAllFailedError
   | ResumeSessionShortIdNotFoundError
@@ -172,7 +172,7 @@ async function resumeSelectedSession<
     const harnessId = yield* requireConfiguredHarnessId({
       harnessId: input.harnessId,
       availableHarnessIds: input.ctx.app.harnessIds,
-      onMissing: (args) => new ResumeCommandHarnessNotConfiguredError(args),
+      onMissing: (args) => new CommandHarnessNotConfiguredError(args),
     });
 
     const listed = yield* Result.await(
