@@ -1,8 +1,8 @@
 import type { ChatAdapterDefinitions, ChatConversationRef, ChatEventType } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import { createHandlerContext, type Actor, type Context, type HandlerContext } from "./ctx";
-import { XmuxMiddlewareExecutionError, XmuxMiddlewareNextAlreadyCalledError } from "./errors";
+import { XmuxMiddlewareNextAlreadyCalledError } from "./errors";
 
 /** Chat event shape routed through xmux request middleware. */
 export interface XmuxRoutedChatEvent<TChatId extends string = string> {
@@ -31,7 +31,7 @@ export interface XmuxMiddlewareContext<
   readonly route: XmuxRouteDescriptor<TEvent>;
 }
 
-export type XmuxMiddlewareNext = () => Promise<BetterResult<void, unknown>>;
+export type XmuxMiddlewareNext = () => Promise<Result<void, unknown>>;
 
 export type XmuxMiddleware<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -39,7 +39,7 @@ export type XmuxMiddleware<
 > = (
   ctx: XmuxMiddlewareContext<TAdapters, TChats>,
   next: XmuxMiddlewareNext,
-) => Promise<BetterResult<void, unknown>>;
+) => Promise<Result<void, unknown>>;
 
 export interface RunXmuxHandlerInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -54,7 +54,7 @@ export interface RunXmuxHandlerInput<
   readonly actor?: Actor;
   readonly handler: (
     ctx: HandlerContext<TAdapters, TChats, TEvent["chatId"]>,
-  ) => Promise<BetterResult<unknown, TError>>;
+  ) => Promise<Result<unknown, TError>>;
 }
 
 /** Runs one routed chat handler through xmux middleware using Koa-style composition. */
@@ -63,9 +63,7 @@ export async function runXmuxHandler<
   TChats extends ChatAdapterDefinitions<TChats>,
   TEvent extends XmuxRoutedChatEvent<Extract<keyof TChats, string>>,
   TError,
->(
-  input: RunXmuxHandlerInput<TAdapters, TChats, TEvent, TError>,
-): Promise<BetterResult<void, unknown>> {
+>(input: RunXmuxHandlerInput<TAdapters, TChats, TEvent, TError>): Promise<Result<void, unknown>> {
   const handler = createHandlerContext({
     app: input.app,
     chatId: input.event.chatId,
@@ -83,7 +81,7 @@ export async function runXmuxHandler<
   };
   let index = -1;
 
-  async function dispatch(nextIndex: number): Promise<BetterResult<void, unknown>> {
+  async function dispatch(nextIndex: number): Promise<Result<void, unknown>> {
     if (nextIndex <= index) {
       return Result.err(new XmuxMiddlewareNextAlreadyCalledError({ routeName }));
     }
@@ -92,20 +90,10 @@ export async function runXmuxHandler<
     const middleware = input.middleware[nextIndex];
 
     if (middleware === undefined) {
-      const handled = await Result.tryPromise({
-        try: () => input.handler(handler),
-        catch: (cause) => new XmuxMiddlewareExecutionError({ routeName, cause }),
-      });
-
-      return Result.map(Result.flatten(handled), () => undefined);
+      return (await input.handler(handler)).map(() => undefined);
     }
 
-    const result = await Result.tryPromise({
-      try: () => middleware(ctx, () => dispatch(nextIndex + 1)),
-      catch: (cause) => new XmuxMiddlewareExecutionError({ routeName, cause }),
-    });
-
-    return Result.flatten(result);
+    return await middleware(ctx, () => dispatch(nextIndex + 1));
   }
 
   return dispatch(0);

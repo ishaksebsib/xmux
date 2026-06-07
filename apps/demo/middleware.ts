@@ -1,5 +1,5 @@
 import type { XmuxRoutedChatEvent } from "@xmux/core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 
 const restrictedResponse = (userId: string) =>
   `🪿 his demo bot is restricted to configured Telegram user ids.\n Add your user id to the list of allowed user ids in the demo bot's config. User ID: ${userId}`;
@@ -17,8 +17,8 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
       readonly event: XmuxRoutedChatEvent;
       readonly handler: { readonly actor?: { readonly userId: string } };
     },
-    next: () => Promise<BetterResult<void, unknown>>,
-  ): Promise<BetterResult<void, unknown>> => {
+    next: () => Promise<Result<void, unknown>>,
+  ): Promise<Result<void, unknown>> => {
     const actorId = ctx.handler.actor?.userId;
     if (ctx.event.chatId !== "telegram" || (actorId !== undefined && allowedUserIds.has(actorId))) {
       return next();
@@ -34,14 +34,14 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
 export function createTelegramTypingIndicatorMiddleware() {
   return async (
     ctx: { readonly event: XmuxRoutedChatEvent },
-    next: () => Promise<BetterResult<void, unknown>>,
-  ): Promise<BetterResult<void, unknown>> => {
+    next: () => Promise<Result<void, unknown>>,
+  ): Promise<Result<void, unknown>> => {
     const typingIndicator = (
       ctx.event as {
         readonly typingIndicator?: (options: {
           readonly mode: "managed";
           readonly fallback: "ignore";
-        }) => Promise<BetterResult<{ stop(): void }, unknown>>;
+        }) => Promise<Result<{ stop(): void }, unknown>>;
       }
     ).typingIndicator;
     const indicator =

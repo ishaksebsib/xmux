@@ -1,6 +1,6 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import { CommandResponseError } from "../errors";
 import { replyWithResult, threadFromChatEvent, type CommandEvent } from "../utils";
@@ -32,7 +32,7 @@ export async function handleInteractionCommand<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleInteractionCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+): Promise<Result<void, CommandResponseError>> {
   const responded = await respondToCurrentInteractionForThread({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),

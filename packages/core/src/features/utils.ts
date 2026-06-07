@@ -4,7 +4,7 @@ import type {
   ChatTextInput,
   ChatTextStreamContent,
 } from "@xmux/chat-core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import type { Actor } from "../ctx";
 import type { ChatThreadRef } from "../store";
 import { CommandResponseError } from "./errors";
@@ -15,14 +15,14 @@ export interface ChatEventWithConversation<TChatId extends string = string> {
 }
 
 export interface ChatEventWithReply {
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+  readonly reply: (message: ChatTextInput) => Promise<Result<unknown, unknown>>;
 }
 
 export interface ChatEventWithStreamReply {
   readonly replyStream: (
     content: ChatTextStreamContent,
     options?: { readonly mode?: "auto" | "thread" | "quote" | "conversation" },
-  ) => Promise<BetterResult<unknown, unknown>>;
+  ) => Promise<Result<unknown, unknown>>;
 }
 
 export interface InvalidCommandEvent extends ChatEventWithReply {
@@ -79,7 +79,7 @@ export function requireConfiguredHarnessId<THarnessId extends string, TError>(in
     readonly harnessId: string;
     readonly availableHarnessIds: readonly THarnessId[];
   }) => TError;
-}): BetterResult<THarnessId, TError> {
+}): Result<THarnessId, TError> {
   return input.availableHarnessIds.includes(input.harnessId as THarnessId)
     ? Result.ok(input.harnessId as THarnessId)
     : Result.err(
@@ -94,7 +94,7 @@ export async function replyToChatEvent<TError>(input: {
   readonly event: ChatEventWithReply;
   readonly message: ChatTextInput;
   readonly onError: (cause: unknown) => TError;
-}): Promise<BetterResult<void, TError>> {
+}): Promise<Result<void, TError>> {
   const replied = await input.event.reply(input.message);
 
   return Result.map(Result.mapError(replied, input.onError), () => undefined);
@@ -105,7 +105,7 @@ export async function streamReplyToChatEvent<TError>(input: {
   readonly content: ChatTextStreamContent;
   readonly mode?: "auto" | "thread" | "quote" | "conversation";
   readonly onError: (cause: unknown) => TError;
-}): Promise<BetterResult<void, TError>> {
+}): Promise<Result<void, TError>> {
   const replied = await input.event.replyStream(
     input.content,
     input.mode === undefined ? undefined : { mode: input.mode },
@@ -119,7 +119,7 @@ export async function replyToInvalidCommandUsage<TError>(input: {
   readonly commandName: string;
   readonly usage: ChatTextInput;
   readonly onError: (cause: unknown) => TError;
-}): Promise<BetterResult<InvalidCommandUsageReplyStatus, TError>> {
+}): Promise<Result<InvalidCommandUsageReplyStatus, TError>> {
   if (input.event.commandName !== input.commandName) {
     return Result.ok("ignored");
   }
@@ -141,10 +141,10 @@ export async function replyToInvalidCommandUsage<TError>(input: {
 export async function replyWithResult<TValue, TError>(input: {
   readonly event: ChatEventWithReply;
   readonly command: string;
-  readonly result: BetterResult<TValue, TError>;
+  readonly result: Result<TValue, TError>;
   readonly ok: (value: TValue) => ChatTextInput;
   readonly err: (error: TError) => ChatTextInput;
-}): Promise<BetterResult<void, CommandResponseError>> {
+}): Promise<Result<void, CommandResponseError>> {
   const message = Result.match(input.result, { ok: input.ok, err: input.err });
 
   return replyToChatEvent({

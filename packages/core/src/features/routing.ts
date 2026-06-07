@@ -5,7 +5,7 @@ import type {
   Unsubscribe,
 } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import type { Result } from "better-result";
 import type { Context, HandlerContext } from "../ctx";
 import { runXmuxHandler, type XmuxMiddleware, type XmuxRoutedChatEvent } from "../middleware";
 import { CommandResponseError } from "./errors";
@@ -24,7 +24,7 @@ export interface DispatchInput<
   readonly routeName?: string;
   readonly handler: (
     handlerCtx: HandlerContext<TAdapters, TChats, TEvent["chatId"]>,
-  ) => Promise<BetterResult<unknown, TError>>;
+  ) => Promise<Result<unknown, TError>>;
 }
 
 /**

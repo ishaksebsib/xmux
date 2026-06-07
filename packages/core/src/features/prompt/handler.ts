@@ -8,7 +8,7 @@ import type {
 } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions, HarnessPromptEvent } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
 import { PromptResponseError } from "./errors";
@@ -29,20 +29,18 @@ export interface PromptMessageEvent<TChatId extends string = string> {
   readonly chatId: TChatId;
   readonly conversation: ChatConversationRef<TChatId>;
   readonly message: ChatMessage<TChatId>;
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+  readonly reply: (message: ChatTextInput) => Promise<Result<unknown, unknown>>;
   readonly replyStream: (
     content: ChatTextStreamContent,
     options?: { readonly mode?: "auto" | "thread" | "quote" | "conversation" },
-  ) => Promise<BetterResult<unknown, unknown>>;
+  ) => Promise<Result<unknown, unknown>>;
 }
 
 /** Handles normal chat messages as prompts for the active session. */
 export async function handlePromptMessage<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: HandlePromptMessageInput<TAdapters, TChats>,
-): Promise<BetterResult<void, PromptResponseError>> {
+>(input: HandlePromptMessageInput<TAdapters, TChats>): Promise<Result<void, PromptResponseError>> {
   const prompted = await promptSessionForThread({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
@@ -77,12 +75,12 @@ interface StreamPromptReplyInput {
 
 interface ActiveChatStream {
   readonly chunks: ChatTextStreamQueue;
-  readonly result: Promise<BetterResult<void, PromptResponseError>>;
+  readonly result: Promise<Result<void, PromptResponseError>>;
 }
 
 async function streamPromptReplyInMessages(
   input: StreamPromptReplyInput,
-): Promise<BetterResult<void, PromptResponseError>> {
+): Promise<Result<void, PromptResponseError>> {
   const renderer = createPromptEventRenderer();
   let activeStream: ActiveChatStream | undefined;
 
@@ -106,7 +104,7 @@ async function streamPromptReplyInMessages(
     activeStream.chunks.push({ type: "delta", delta });
   };
 
-  const completeActiveStream = async (): Promise<BetterResult<void, PromptResponseError>> => {
+  const completeActiveStream = async (): Promise<Result<void, PromptResponseError>> => {
     if (!activeStream) return Result.ok();
 
     const stream = activeStream;

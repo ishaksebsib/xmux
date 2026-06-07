@@ -1,4 +1,4 @@
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import type { HarnessPromptEvent, SessionRef } from "@xmux/harness-core";
 import { PromptAlreadyRunningError, PromptNoActiveRunError } from "./errors";
 
@@ -38,9 +38,9 @@ export interface ActivePromptRun {
 }
 
 export interface PromptRunRegistry {
-  tryStart(input: PromptRunStartInput): BetterResult<ActivePromptRun, PromptAlreadyRunningError>;
+  tryStart(input: PromptRunStartInput): Result<ActivePromptRun, PromptAlreadyRunningError>;
   get(sessionRef: SessionRef): ActivePromptRun | undefined;
-  cancel(input: PromptRunCancelInput): BetterResult<ActivePromptRun, PromptNoActiveRunError>;
+  cancel(input: PromptRunCancelInput): Result<ActivePromptRun, PromptNoActiveRunError>;
 }
 
 export interface PromptRunStartInput {

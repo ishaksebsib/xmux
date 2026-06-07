@@ -5,7 +5,7 @@ import type {
   ChatTextInput,
 } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import type { ChatThreadRef } from "../../store";
@@ -44,7 +44,7 @@ export interface HandleThinkingActionInput<
     Actions,
     "thinking",
     Extract<keyof TChats, string>,
-    BetterResult<unknown, unknown>
+    Result<unknown, unknown>
   >;
 }
 
@@ -53,7 +53,7 @@ export async function handleThinkingCommand<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleThinkingCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+): Promise<Result<void, CommandResponseError>> {
   const level = input.event.command.options.level;
   const result = await selectThinking({
     ctx: input.ctx,
@@ -76,7 +76,7 @@ export async function handleThinkingAction<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleThinkingActionInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+): Promise<Result<void, CommandResponseError>> {
   const acknowledged = await respondToThinkingAction(() => input.event.ack());
   if (acknowledged.isErr()) return Result.err(acknowledged.error);
 
@@ -99,12 +99,12 @@ function selectThinking<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly thread: ChatThreadRef;
   readonly level?: string;
-}): Promise<BetterResult<ThinkingCommandOutput, ThinkingCommandError>> {
+}): Promise<Result<ThinkingCommandOutput, ThinkingCommandError>> {
   return thinkingSessionCommand(input);
 }
 
 function formatThinkingResult(
-  result: BetterResult<ThinkingCommandOutput, ThinkingCommandError>,
+  result: Result<ThinkingCommandOutput, ThinkingCommandError>,
 ): ChatTextInput {
   return Result.match(result, {
     ok: (value) => formatThinkingOutput(value),
@@ -115,7 +115,7 @@ function formatThinkingResult(
 function replyThinkingCommand(input: {
   readonly event: ChatEventWithReply;
   readonly message: ChatTextInput;
-}): Promise<BetterResult<void, CommandResponseError>> {
+}): Promise<Result<void, CommandResponseError>> {
   return replyToChatEvent({
     event: input.event,
     message: input.message,
@@ -130,7 +130,7 @@ async function sendThinkingPicker<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly event: CommandEvent<Extract<keyof TChats, string>, "thinking">;
   readonly output: ThinkingCommandOutput;
-}): Promise<BetterResult<void, CommandResponseError>> {
+}): Promise<Result<void, CommandResponseError>> {
   const message = formatThinkingActionMessage(input.output);
   const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, message));
 
@@ -141,9 +141,9 @@ async function sendThinkingPicker<
 }
 
 function updateThinkingPicker(input: {
-  readonly event: ChatActionEvent<Actions, "thinking", string, BetterResult<unknown, unknown>>;
+  readonly event: ChatActionEvent<Actions, "thinking", string, Result<unknown, unknown>>;
   readonly output: ThinkingCommandOutput;
-}): Promise<BetterResult<void, CommandResponseError>> {
+}): Promise<Result<void, CommandResponseError>> {
   const message = formatThinkingActionMessage(input.output);
 
   return respondToThinkingAction(() =>
@@ -181,8 +181,8 @@ function toTextInput(message: ThinkingActionMessage): ChatTextInput {
 }
 
 async function respondToThinkingAction(
-  respond: () => Promise<BetterResult<unknown, unknown>>,
-): Promise<BetterResult<void, CommandResponseError>> {
+  respond: () => Promise<Result<unknown, unknown>>,
+): Promise<Result<void, CommandResponseError>> {
   const responded = await respond();
 
   return Result.map(
@@ -192,5 +192,5 @@ async function respondToThinkingAction(
 }
 
 type ChatEventWithReply = {
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+  readonly reply: (message: ChatTextInput) => Promise<Result<unknown, unknown>>;
 };

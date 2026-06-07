@@ -5,7 +5,7 @@ import type {
   ChatTextInput,
 } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import { Result } from "better-result";
 import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import { CommandResponseError } from "../errors";
@@ -46,16 +46,14 @@ export interface HandleModelActionInput<
     Actions,
     "model",
     Extract<keyof TChats, string>,
-    BetterResult<unknown, unknown>
+    Result<unknown, unknown>
   >;
 }
 
 export async function handleModelCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: HandleModelCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+>(input: HandleModelCommandInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
   const selected = await modelSessionCommand({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
@@ -82,9 +80,7 @@ export async function handleModelCommand<
 export async function handleModelAction<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: HandleModelActionInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+>(input: HandleModelActionInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
   const acknowledged = await respondToModelAction(() => input.event.ack());
   if (acknowledged.isErr()) return Result.err(acknowledged.error);
 
@@ -107,7 +103,7 @@ export async function handleModelAction<
 }
 
 function formatModelResult(input: {
-  readonly result: BetterResult<ModelCommandOutput, ModelCommandError>;
+  readonly result: Result<ModelCommandOutput, ModelCommandError>;
   readonly maxSuggestions: number;
 }): ChatTextInput {
   return Result.match(input.result, {
@@ -119,7 +115,7 @@ function formatModelResult(input: {
 function replyModelCommand(input: {
   readonly event: ChatEventWithReply;
   readonly message: ChatTextInput;
-}): Promise<BetterResult<void, CommandResponseError>> {
+}): Promise<Result<void, CommandResponseError>> {
   return replyToChatEvent({
     event: input.event,
     message: input.message,
@@ -134,7 +130,7 @@ async function sendModelPicker<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly event: CommandEvent<Extract<keyof TChats, string>, "model">;
   readonly output: ModelShownOutput;
-}): Promise<BetterResult<void, CommandResponseError>> {
+}): Promise<Result<void, CommandResponseError>> {
   const message = formatModelActionMessage(input.output);
   const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, message));
 
@@ -165,8 +161,8 @@ function toSendActionInput<
 }
 
 async function respondToModelAction(
-  respond: () => Promise<BetterResult<unknown, unknown>>,
-): Promise<BetterResult<void, CommandResponseError>> {
+  respond: () => Promise<Result<unknown, unknown>>,
+): Promise<Result<void, CommandResponseError>> {
   const responded = await respond();
 
   return Result.map(
@@ -176,5 +172,5 @@ async function respondToModelAction(
 }
 
 type ChatEventWithReply = {
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+  readonly reply: (message: ChatTextInput) => Promise<Result<unknown, unknown>>;
 };

@@ -1,6 +1,6 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import type { Result } from "better-result";
 import type { HandlerContext } from "../../../ctx";
 import { CommandResponseError } from "../../errors";
 import { replyWithResult, threadFromChatEvent, type CommandEvent } from "../../utils";
@@ -18,9 +18,7 @@ export interface HandleCdCommandInput<
 export async function handleCdCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: HandleCdCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+>(input: HandleCdCommandInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
   const changed = await changeDirectoryForThread({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),

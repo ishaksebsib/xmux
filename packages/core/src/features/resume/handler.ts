@@ -1,6 +1,6 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import type { Result as BetterResult } from "better-result";
+import type { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import { CommandResponseError } from "../errors";
 import { replyWithResult, threadFromChatEvent, type CommandEvent } from "../utils";
@@ -22,9 +22,7 @@ export interface HandleResumeCommandInput<
 export async function handleResumeCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: HandleResumeCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CommandResponseError>> {
+>(input: HandleResumeCommandInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
   const resumed = await resumeSessionCommand({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
