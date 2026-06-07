@@ -1,8 +1,11 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type {
+  AdapterOptionsFor,
   HarnessAdapterDefinitions,
   HarnessInteractionResponse,
   RespondInteractionInput,
+  RespondInteractionInputFor,
+  SessionRef,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
@@ -96,12 +99,19 @@ export async function respondToCurrentInteractionForThread<
 
     run.markInteractionResponding(selected.interaction.requestId);
 
-    const respondedResult = await input.ctx.app.harness.respondInteraction({
-      ref: session.value.ref,
+    const respondInput = createHarnessRespondInteractionInput<
+      TAdapters,
+      keyof TAdapters
+    >({
+      ref: toConfiguredSessionRef<TAdapters>(session.value.ref),
       cwd: session.value.cwd,
       response,
       signal: input.ctx.signal,
-    } as unknown as RespondInteractionInput<TAdapters>);
+    });
+
+    const respondedResult = await input.ctx.app.harness.respondInteraction(
+      respondInput as RespondInteractionInput<TAdapters>,
+    );
 
     if (respondedResult.isErr()) {
       run.markInteractionPending(selected.interaction.requestId);
@@ -132,6 +142,38 @@ type InteractionSelection =
   | { readonly status: "pending"; readonly interaction: PendingPromptInteraction }
   | { readonly status: "responding"; readonly interaction: PendingPromptInteraction }
   | { readonly status: "none" };
+
+type ConfiguredHarnessId<TAdapters extends HarnessAdapterDefinitions<TAdapters>> = Extract<
+  keyof TAdapters,
+  string
+>;
+
+function toConfiguredSessionRef<TAdapters extends HarnessAdapterDefinitions<TAdapters>>(
+  ref: SessionRecord["ref"],
+): SessionRef<ConfiguredHarnessId<TAdapters>> {
+  return {
+    harnessId: ref.harnessId as ConfiguredHarnessId<TAdapters>,
+    sessionId: ref.sessionId,
+  };
+}
+
+function createHarnessRespondInteractionInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  THarnessId extends keyof TAdapters,
+>(input: {
+  readonly ref: SessionRef<Extract<THarnessId, string>>;
+  readonly cwd: string;
+  readonly response: HarnessInteractionResponse;
+  readonly signal: AbortSignal;
+}): RespondInteractionInputFor<TAdapters, THarnessId> {
+  return {
+    ref: input.ref,
+    cwd: input.cwd,
+    response: input.response,
+    adapterOptions: {} as AdapterOptionsFor<TAdapters, THarnessId>,
+    signal: input.signal,
+  };
+}
 
 function selectCurrentInteraction(run: ActivePromptRun): InteractionSelection {
   const interaction = run.pendingInteractions[0];

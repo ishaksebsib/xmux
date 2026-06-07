@@ -1,9 +1,12 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type {
+  AdapterOptionsFor,
   HarnessAdapterDefinitions,
   HarnessPromptEvent,
   PromptError,
   PromptInput,
+  PromptInputFor,
+  SessionRef,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
@@ -60,14 +63,13 @@ export async function promptSessionForThread<
     });
 
     const signal = composeAbortSignals([input.ctx.signal, run.signal]);
-    const promptedResult = await input.ctx.app.harness.prompt(
-      createHarnessPromptInput({
-        ref: session.ref,
-        cwd: session.cwd,
-        text: input.text,
-        signal,
-      }) as unknown as PromptInput<TAdapters>,
-    );
+    const promptInput = createHarnessPromptInput<TAdapters, keyof TAdapters>({
+      ref: toConfiguredSessionRef<TAdapters>(session.ref),
+      cwd: session.cwd,
+      text: input.text,
+      signal,
+    });
+    const promptedResult = await input.ctx.app.harness.prompt(promptInput as PromptInput<TAdapters>);
 
     if (promptedResult.isErr()) {
       run.release();
@@ -174,16 +176,34 @@ export function composeAbortSignals(signals: readonly AbortSignal[]): AbortSigna
   return controller.signal;
 }
 
-function createHarnessPromptInput(input: {
-  readonly ref: SessionRecord["ref"];
+type ConfiguredHarnessId<TAdapters extends HarnessAdapterDefinitions<TAdapters>> = Extract<
+  keyof TAdapters,
+  string
+>;
+
+function toConfiguredSessionRef<TAdapters extends HarnessAdapterDefinitions<TAdapters>>(
+  ref: SessionRecord["ref"],
+): SessionRef<ConfiguredHarnessId<TAdapters>> {
+  return {
+    harnessId: ref.harnessId as ConfiguredHarnessId<TAdapters>,
+    sessionId: ref.sessionId,
+  };
+}
+
+function createHarnessPromptInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  THarnessId extends keyof TAdapters,
+>(input: {
+  readonly ref: SessionRef<Extract<THarnessId, string>>;
   readonly cwd: string;
   readonly text: string;
   readonly signal: AbortSignal;
-}) {
+}): PromptInputFor<TAdapters, THarnessId> {
   return {
     ref: input.ref,
     cwd: input.cwd,
     content: [{ type: "text", text: input.text }] as const,
+    adapterOptions: {} as AdapterOptionsFor<TAdapters, THarnessId>,
     signal: input.signal,
   };
 }

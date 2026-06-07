@@ -1,9 +1,11 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type {
+  AdapterOptionsFor,
   HarnessAdapterDefinitions,
   HarnessSessionInfo,
   ListSessionsError,
   ListSessionsInput,
+  ListSessionsInputFor,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../../ctx";
@@ -74,14 +76,14 @@ export async function listHarnessSelectableSessions<
   readonly cwd: string;
   readonly maxSessions?: number;
 }): Promise<Result<SessionSelectionGroup, ListSessionsError>> {
+  const listInput = createHarnessListInput<TAdapters, THarnessId>({
+    harnessId: input.harnessId as Extract<THarnessId, string>,
+    cwd: input.cwd,
+    signal: input.ctx.signal,
+  });
+
   return Result.map(
-    await input.ctx.app.harness.listSessions(
-      createHarnessListInput({
-        harnessId: input.harnessId,
-        cwd: input.cwd,
-        signal: input.ctx.signal,
-      }) as unknown as ListSessionsInput<TAdapters>,
-    ),
+    await input.ctx.app.harness.listSessions(listInput as ListSessionsInput<TAdapters>),
     (sessions) => {
       const listing = toSessionSelectionListing({
         harnessId: input.harnessId,
@@ -205,14 +207,18 @@ function shortestUniquePrefixes(
   );
 }
 
-function createHarnessListInput<THarnessId extends string>(input: {
-  readonly harnessId: THarnessId;
+function createHarnessListInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  THarnessId extends keyof TAdapters,
+>(input: {
+  readonly harnessId: Extract<THarnessId, string>;
   readonly cwd: string;
   readonly signal: AbortSignal;
-}) {
+}): ListSessionsInputFor<TAdapters, THarnessId> {
   return {
     harnessId: input.harnessId,
     cwd: input.cwd,
+    adapterOptions: {} as AdapterOptionsFor<TAdapters, THarnessId>,
     signal: input.signal,
   };
 }
