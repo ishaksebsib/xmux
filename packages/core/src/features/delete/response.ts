@@ -1,13 +1,8 @@
 import type { ChatTextInput } from "@xmux/chat-core";
 import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
-import { formatSessionSelectionList } from "../shared/session-selection";
 import { CommandHarnessNotConfiguredError } from "../errors";
-import {
-  DeleteCommandIncompleteTargetError,
-  DeleteSessionListAllFailedError,
-  DeleteSessionShortIdAmbiguousError,
-  DeleteSessionShortIdNotFoundError,
-} from "./errors";
+import { formatSessionCommandFailure } from "../shared/session-command";
+import { formatSessionSelectionList } from "../shared/session-selection";
 import type { DeleteCommandError, DeleteCommandOutput, DeleteListOutput } from "./service";
 
 export function formatDeleteOutput(output: DeleteCommandOutput): ChatTextInput {
@@ -25,16 +20,9 @@ export function formatDeleteList(output: DeleteListOutput): ChatTextInput {
 }
 
 export function formatDeleteFailure(error: DeleteCommandError): ChatTextInput {
-  if (DeleteCommandIncompleteTargetError.is(error)) {
-    return markdown({
-      text: [
-        "**Incomplete delete command**",
-        "",
-        "- Use `/delete` to delete the active session or list sessions.",
-        "- Then use `/delete <harnessId> <shortId>` to delete a listed session.",
-      ].join("\n"),
-    });
-  }
+  const shared = formatSessionCommandFailure(error, "delete", "delete the active session or list sessions", "to see deletable sessions");
+
+  if (shared) return shared;
 
   if (CommandHarnessNotConfiguredError.is(error)) {
     const available =
@@ -48,49 +36,6 @@ export function formatDeleteFailure(error: DeleteCommandError): ChatTextInput {
         "",
         "Available harnesses",
         `- ${available}`,
-      ].join("\n"),
-    });
-  }
-
-  if (DeleteSessionShortIdNotFoundError.is(error)) {
-    return markdown({
-      text: [
-        "**Session not found**",
-        "",
-        `- Harness: ${inlineCode(error.harnessId)}`,
-        `- Short ID: ${inlineCode(error.shortId)}`,
-        `- Directory: ${inlineCode(error.cwd)}`,
-        "",
-        `Run ${inlineCode("/delete")} to see deletable sessions.`,
-      ].join("\n"),
-    });
-  }
-
-  if (DeleteSessionShortIdAmbiguousError.is(error)) {
-    return markdown({
-      text: [
-        "**Short ID is ambiguous**",
-        "",
-        `- Harness: ${inlineCode(error.harnessId)}`,
-        `- Short ID: ${inlineCode(error.shortId)}`,
-        "",
-        "Matching sessions:",
-        error.matchingSessionIds.map((sessionId) => `- ${inlineCode(sessionId)}`).join("\n"),
-        "",
-        `Run ${inlineCode("/delete")} again and use the displayed short ID.`,
-      ].join("\n"),
-    });
-  }
-
-  if (DeleteSessionListAllFailedError.is(error)) {
-    return markdown({
-      text: [
-        `**Failed to list sessions** (${error.failures.length})`,
-        "",
-        ...error.failures.map(
-          (failure) =>
-            `- ${inlineCode(failure.harnessId)} — ${markdownText(failure.error.message)}`,
-        ),
       ].join("\n"),
     });
   }

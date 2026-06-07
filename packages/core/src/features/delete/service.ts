@@ -11,42 +11,31 @@ import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
 import {
-  allHarnessesFailed,
-  findSessionsByShortId,
-  listHarnessSelectableSessions,
-  listSessionSelectionCatalog,
-  type ListedSelectableSession,
-  type SessionSelectionGroup,
-  type SessionSelectionListFailure,
-} from "../shared/session-selection";
-import { CommandHarnessNotConfiguredError } from "../errors";
-import { requireConfiguredHarnessId } from "../utils";
+  listSessionsForCommand,
+  parseSessionTarget,
+  selectSessionByShortId,
+  type ListSessionsOutput,
+  type SelectSessionByShortIdError,
+} from "../shared/session-command";
+import type { SessionCommandIncompleteTargetError, SessionListAllFailedError } from "../shared/session-command";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
-import {
-  DeleteCommandIncompleteTargetError,
-  DeleteSessionListAllFailedError,
-  DeleteSessionShortIdAmbiguousError,
-  DeleteSessionShortIdNotFoundError,
-} from "./errors";
 
 export type DeleteCommandError =
   | StoreError
   | GetCurrentWorkspaceCwdError
   | ListSessionsError
   | DeleteSessionError
-  | CommandHarnessNotConfiguredError
-  | DeleteCommandIncompleteTargetError
-  | DeleteSessionListAllFailedError
-  | DeleteSessionShortIdNotFoundError
-  | DeleteSessionShortIdAmbiguousError;
+  | SelectSessionByShortIdError
+  | SessionCommandIncompleteTargetError
+  | SessionListAllFailedError;
 
 export type DeleteCommandOutput = DeleteListOutput | DeleteSessionOutput;
 
 export interface DeleteListOutput {
   readonly status: "listed";
   readonly cwd: string;
-  readonly groups: readonly SessionSelectionGroup[];
-  readonly failures: readonly SessionSelectionListFailure[];
+  readonly groups: readonly import("../shared/session-selection").SessionSelectionGroup[];
+  readonly failures: readonly import("../shared/session-selection").SessionSelectionListFailure[];
 }
 
 export interface DeleteSessionOutput {
@@ -71,7 +60,6 @@ export interface DeleteSessionCommandInput<
   readonly shortId?: string;
 }
 
-/** Deletes the active session, lists sessions, or deletes a selected session by short id. */
 export async function deleteSessionCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -79,9 +67,13 @@ export async function deleteSessionCommand<
   input: DeleteSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<DeleteCommandOutput, DeleteCommandError>> {
   return Result.gen(async function* () {
-    const target = yield* parseDeleteTarget({ harnessId: input.harnessId, shortId: input.shortId });
+    const target = yield* parseSessionTarget({
+      command: "delete",
+      harnessId: input.harnessId,
+      shortId: input.shortId,
+    });
 
-    if (target.status === "active_or_list") {
+    if (target.status === "list") {
       return Result.ok(yield* Result.await(deleteActiveSessionOrList(input)));
     }
 
@@ -89,45 +81,30 @@ export async function deleteSessionCommand<
       getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
     );
 
+    const selected = yield* Result.await(
+      selectSessionByShortId({
+        ctx: input.ctx,
+        cwd,
+        harnessId: target.harnessId,
+        shortId: target.shortId,
+      }),
+    );
+
     return Result.ok(
       yield* Result.await(
-        deleteSelectedSession({
+        deleteSessionEverywhere({
           ctx: input.ctx,
           thread: input.thread,
-          cwd,
-          harnessId: target.harnessId,
-          shortId: target.shortId,
+          session: {
+            ref: { harnessId: target.harnessId, sessionId: selected.sessionId },
+            shortId: input.shortId ?? selected.shortId,
+            cwd: selected.cwd ?? cwd,
+            title: selected.title,
+          },
         }),
       ),
     );
   });
-}
-
-type DeleteTarget =
-  | { readonly status: "active_or_list" }
-  | { readonly status: "delete"; readonly harnessId: string; readonly shortId: string };
-
-function parseDeleteTarget(input: {
-  readonly harnessId?: string;
-  readonly shortId?: string;
-}): Result<DeleteTarget, DeleteCommandIncompleteTargetError> {
-  const harnessId = input.harnessId?.trim();
-  const shortId = input.shortId?.trim();
-
-  if (!harnessId && !shortId) {
-    return Result.ok({ status: "active_or_list" });
-  }
-
-  if (!harnessId || !shortId) {
-    return Result.err(
-      new DeleteCommandIncompleteTargetError({
-        ...(harnessId ? { harnessId } : {}),
-        ...(shortId ? { shortId } : {}),
-      }),
-    );
-  }
-
-  return Result.ok({ status: "delete", harnessId, shortId });
 }
 
 async function deleteActiveSessionOrList<
@@ -162,126 +139,16 @@ async function deleteActiveSessionOrList<
       getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
     );
 
-    return Result.ok(yield* Result.await(listDeleteSessions({ ctx: input.ctx, cwd })));
-  });
-}
-
-async function listDeleteSessions<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly cwd: string;
-}): Promise<Result<DeleteListOutput, DeleteCommandError>> {
-  const catalog = await listSessionSelectionCatalog({
-    ctx: input.ctx,
-    cwd: input.cwd,
-    maxSessionsPerHarness: input.ctx.app.config.resume.maxSessionsPerHarness,
-  });
-
-  if (allHarnessesFailed({ harnessIds: input.ctx.app.harnessIds, failures: catalog.failures })) {
-    return Result.err(new DeleteSessionListAllFailedError({ failures: catalog.failures }));
-  }
-
-  return Result.ok({
-    status: "listed",
-    cwd: input.cwd,
-    groups: catalog.groups,
-    failures: catalog.failures,
-  });
-}
-
-async function deleteSelectedSession<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly thread: ChatThreadRef;
-  readonly cwd: string;
-  readonly harnessId: string;
-  readonly shortId: string;
-}): Promise<Result<DeleteSessionOutput, DeleteCommandError>> {
-  return Result.gen(async function* () {
-    const harnessId = yield* requireConfiguredHarnessId({
-      harnessId: input.harnessId,
-      availableHarnessIds: input.ctx.app.harnessIds,
-      onMissing: (args) => new CommandHarnessNotConfiguredError(args),
-    });
-
-    const listed = yield* Result.await(
-      listHarnessSelectableSessions({
-        ctx: input.ctx,
-        harnessId,
-        cwd: input.cwd,
-      }),
-    );
-
-    const selected = yield* resolveSelectedSession({
-      harnessId,
-      shortId: input.shortId,
-      cwd: input.cwd,
-      sessions: listed.sessions,
-    });
-
     return Result.ok(
       yield* Result.await(
-        deleteSessionEverywhere({
+        listSessionsForCommand({
           ctx: input.ctx,
-          thread: input.thread,
-          session: {
-            ref: { harnessId, sessionId: selected.sessionId },
-            shortId: input.shortId,
-            cwd: selected.cwd ?? input.cwd,
-            title: selected.title,
-          },
+          cwd,
+          maxSessionsPerHarness: input.ctx.app.config.resume.maxSessionsPerHarness,
         }),
       ),
     );
   });
-}
-
-function resolveSelectedSession(input: {
-  readonly harnessId: string;
-  readonly shortId: string;
-  readonly cwd: string;
-  readonly sessions: readonly ListedSelectableSession[];
-}): Result<
-  ListedSelectableSession,
-  DeleteSessionShortIdNotFoundError | DeleteSessionShortIdAmbiguousError
-> {
-  const matches = findSessionsByShortId({ sessions: input.sessions, shortId: input.shortId });
-
-  if (matches.length === 0) {
-    return Result.err(
-      new DeleteSessionShortIdNotFoundError({
-        harnessId: input.harnessId,
-        shortId: input.shortId,
-        cwd: input.cwd,
-      }),
-    );
-  }
-
-  if (matches.length > 1) {
-    return Result.err(
-      new DeleteSessionShortIdAmbiguousError({
-        harnessId: input.harnessId,
-        shortId: input.shortId,
-        cwd: input.cwd,
-        matchingSessionIds: matches.map((session) => session.sessionId),
-      }),
-    );
-  }
-
-  const selected = matches[0];
-  return selected
-    ? Result.ok(selected)
-    : Result.err(
-        new DeleteSessionShortIdNotFoundError({
-          harnessId: input.harnessId,
-          shortId: input.shortId,
-          cwd: input.cwd,
-        }),
-      );
 }
 
 async function deleteSessionEverywhere<

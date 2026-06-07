@@ -1,9 +1,3 @@
-export {
-  DeleteCommandIncompleteTargetError,
-  DeleteSessionShortIdNotFoundError,
-  DeleteSessionShortIdAmbiguousError,
-  DeleteSessionListAllFailedError,
-} from "./errors";
 export { registerDeleteRoute } from "./route";
 export { handleDeleteCommand, type HandleDeleteCommandInput } from "./handler";
 export { deleteSessionCommand, type DeleteSessionCommandInput } from "./service";

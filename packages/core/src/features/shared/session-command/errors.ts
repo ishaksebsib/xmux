@@ -1,26 +1,27 @@
 import { TaggedError } from "better-result";
-import type { SessionSelectionListFailure } from "../shared/session-selection";
+import type { SessionSelectionListFailure } from "../session-selection";
 
-/** Returned when `/delete` receives only one half of a delete target. */
-export class DeleteCommandIncompleteTargetError extends TaggedError(
-  "DeleteCommandIncompleteTargetError",
+export class SessionCommandIncompleteTargetError extends TaggedError(
+  "SessionCommandIncompleteTargetError",
 )<{
+  readonly command: string;
   readonly harnessId?: string;
   readonly shortId?: string;
   readonly message: string;
 }>() {
-  constructor(args: { readonly harnessId?: string; readonly shortId?: string }) {
+  constructor(args: {
+    readonly command: string;
+    readonly harnessId?: string;
+    readonly shortId?: string;
+  }) {
     super({
       ...args,
-      message: "Delete target must include both harness id and short session id",
+      message: `${args.command} target must include both harness id and short session id`,
     });
   }
 }
 
-/** Returned when a short id matches no listed session for the selected harness and cwd. */
-export class DeleteSessionShortIdNotFoundError extends TaggedError(
-  "DeleteSessionShortIdNotFoundError",
-)<{
+export class SessionShortIdNotFoundError extends TaggedError("SessionShortIdNotFoundError")<{
   readonly harnessId: string;
   readonly shortId: string;
   readonly cwd: string;
@@ -38,10 +39,7 @@ export class DeleteSessionShortIdNotFoundError extends TaggedError(
   }
 }
 
-/** Returned when a short id is no longer unique for the selected harness and cwd. */
-export class DeleteSessionShortIdAmbiguousError extends TaggedError(
-  "DeleteSessionShortIdAmbiguousError",
-)<{
+export class SessionShortIdAmbiguousError extends TaggedError("SessionShortIdAmbiguousError")<{
   readonly harnessId: string;
   readonly shortId: string;
   readonly cwd: string;
@@ -61,10 +59,7 @@ export class DeleteSessionShortIdAmbiguousError extends TaggedError(
   }
 }
 
-/** Returned when all configured harnesses fail while listing deletable sessions. */
-export class DeleteSessionListAllFailedError extends TaggedError(
-  "DeleteSessionListAllFailedError",
-)<{
+export class SessionListAllFailedError extends TaggedError("SessionListAllFailedError")<{
   readonly failures: readonly SessionSelectionListFailure[];
   readonly message: string;
 }>() {
