@@ -1,9 +1,7 @@
-export { NewCommandHarnessNotConfiguredError, NewCommandResponseError } from "./errors";
-export { handleNewCommand } from "./handler";
+export { NewCommandHarnessNotConfiguredError } from "./errors";
 export { registerNewRoute } from "./route";
-export type { HandleNewCommandInput, NewCommandEvent } from "./handler";
-export { createSessionForThread } from "./service";
-export type { CreateSessionForThreadError, CreateSessionForThreadInput } from "./service";
+export { handleNewCommand, type HandleNewCommandInput } from "./handler";
+export { createSessionForThread, type CreateSessionForThreadInput } from "./service";
 export {
   formatNewCommandUsage,
   formatNewSessionFailure,

@@ -69,7 +69,9 @@ export async function promptSessionForThread<
       text: input.text,
       signal,
     });
-    const promptedResult = await input.ctx.app.harness.prompt(promptInput as PromptInput<TAdapters>);
+    const promptedResult = await input.ctx.app.harness.prompt(
+      promptInput as PromptInput<TAdapters>,
+    );
 
     if (promptedResult.isErr()) {
       run.release();

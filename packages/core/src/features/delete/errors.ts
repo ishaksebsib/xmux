@@ -1,10 +1,6 @@
 import { TaggedError } from "better-result";
 import type { SessionSelectionListFailure } from "../shared/session-selection";
 
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
 /** Returned when `/delete` targets a harness that is not configured. */
 export class DeleteCommandHarnessNotConfiguredError extends TaggedError(
   "DeleteCommandHarnessNotConfiguredError",
@@ -100,15 +96,5 @@ export class DeleteSessionListAllFailedError extends TaggedError(
         .map((failure) => `${failure.harnessId}: ${failure.error.message}`)
         .join("; ")}`,
     });
-  }
-}
-
-/** Returned when the `/delete` response cannot be sent back to chat. */
-export class DeleteCommandResponseError extends TaggedError("DeleteCommandResponseError")<{
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly cause: unknown }) {
-    super({ ...args, message: `Failed to send /delete response: ${describeCause(args.cause)}` });
   }
 }

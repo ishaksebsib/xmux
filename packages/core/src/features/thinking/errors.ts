@@ -1,57 +1,6 @@
 import { TaggedError } from "better-result";
-import type { HarnessModelRef, HarnessThinkingLevel, SessionRef } from "@xmux/harness-core";
-import type { ChatThreadRef } from "../../store";
-
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
-function formatSessionRef(ref: SessionRef): string {
-  return `${ref.harnessId}:${ref.sessionId}`;
-}
-
-function formatModelRef(ref: HarnessModelRef): string {
-  const base = ref.providerId === undefined ? ref.modelId : `${ref.providerId}/${ref.modelId}`;
-  return ref.variant === undefined ? base : `${base}@${ref.variant}`;
-}
-
-/** Returned when a chat thread is not attached to an active session. */
-export class ThinkingNoActiveSessionError extends TaggedError("ThinkingNoActiveSessionError")<{
-  readonly thread: ChatThreadRef;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly thread: ChatThreadRef }) {
-    super({
-      ...args,
-      message: `No active session for thread ${args.thread.chatId}:${args.thread.threadId}`,
-    });
-  }
-}
-
-/** Returned when a thread binding points at a missing session record. */
-export class ThinkingSessionRecordMissingError extends TaggedError(
-  "ThinkingSessionRecordMissingError",
-)<{
-  readonly sessionRef: SessionRef;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly sessionRef: SessionRef }) {
-    super({
-      ...args,
-      message: `Session record not found: ${formatSessionRef(args.sessionRef)}`,
-    });
-  }
-}
-
-/** Returned when a thread binding points at a closed session. */
-export class ThinkingSessionClosedError extends TaggedError("ThinkingSessionClosedError")<{
-  readonly sessionRef: SessionRef;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly sessionRef: SessionRef }) {
-    super({ ...args, message: `Session is closed: ${formatSessionRef(args.sessionRef)}` });
-  }
-}
+import type { SessionRef } from "@xmux/harness-core";
+import type { HarnessModelRef, HarnessThinkingLevel } from "@xmux/harness-core";
 
 /** Returned when thinking is requested before the session has a selected model. */
 export class ThinkingModelUnsetError extends TaggedError("ThinkingModelUnsetError")<{
@@ -61,7 +10,7 @@ export class ThinkingModelUnsetError extends TaggedError("ThinkingModelUnsetErro
   constructor(args: { readonly sessionRef: SessionRef }) {
     super({
       ...args,
-      message: `Session model is unset: ${formatSessionRef(args.sessionRef)}`,
+      message: `Session model is unset: ${args.sessionRef.harnessId}:${args.sessionRef.sessionId}`,
     });
   }
 }
@@ -74,10 +23,16 @@ export class ThinkingModelThinkingUnsupportedError extends TaggedError(
   readonly message: string;
 }>() {
   constructor(args: { readonly model?: HarnessModelRef }) {
+    const ref = args.model;
+    const name = ref
+      ? ref.providerId === undefined
+        ? ref.modelId
+        : `${ref.providerId}/${ref.modelId}`
+      : undefined;
     super({
       ...args,
-      message: args.model
-        ? `Model does not support configurable thinking: ${formatModelRef(args.model)}`
+      message: ref
+        ? `Model does not support configurable thinking: ${name}`
         : "Model does not support configurable thinking",
     });
   }
@@ -108,15 +63,5 @@ export class ThinkingLevelUnsupportedError extends TaggedError("ThinkingLevelUns
     readonly supportedLevels: readonly HarnessThinkingLevel[];
   }) {
     super({ ...args, message: `Thinking level is not supported: ${args.level}` });
-  }
-}
-
-/** Returned when the `/thinking` response cannot be sent back to chat. */
-export class ThinkingCommandResponseError extends TaggedError("ThinkingCommandResponseError")<{
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly cause: unknown }) {
-    super({ ...args, message: `Failed to send /thinking response: ${describeCause(args.cause)}` });
   }
 }

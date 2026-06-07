@@ -1,10 +1,6 @@
 import { TaggedError } from "better-result";
 import type { ListSessionsError } from "@xmux/harness-core";
 
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
 /** Returned when `/resume` targets a harness that is not configured. */
 export class ResumeCommandHarnessNotConfiguredError extends TaggedError(
   "ResumeCommandHarnessNotConfiguredError",
@@ -100,16 +96,6 @@ export class ResumeSessionListAllFailedError extends TaggedError(
         .map((failure) => `${failure.harnessId}: ${failure.error.message}`)
         .join("; ")}`,
     });
-  }
-}
-
-/** Returned when the `/resume` response cannot be sent back to chat. */
-export class ResumeCommandResponseError extends TaggedError("ResumeCommandResponseError")<{
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly cause: unknown }) {
-    super({ ...args, message: `Failed to send /resume response: ${describeCause(args.cause)}` });
   }
 }
 

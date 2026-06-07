@@ -14,12 +14,13 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import {
-  ModelNoActiveSessionError,
-  ModelSessionClosedError,
-  ModelSessionRecordMissingError,
-} from "./errors";
+import type {
+  NoActiveSessionError,
+  SessionClosedError,
+  SessionRecordMissingError,
+} from "../errors";
 import { resolveModelSelector, type ResolveModelSelectorError } from "./selector";
+import { getActiveSessionForThread } from "../session";
 
 export type ModelCommandError =
   | StoreError
@@ -27,9 +28,9 @@ export type ModelCommandError =
   | GetModelError
   | SetModelError
   | ResolveModelSelectorError
-  | ModelNoActiveSessionError
-  | ModelSessionRecordMissingError
-  | ModelSessionClosedError;
+  | NoActiveSessionError
+  | SessionRecordMissingError
+  | SessionClosedError;
 
 export type ModelCommandOutput = ModelShownOutput | ModelUpdatedOutput;
 
@@ -62,7 +63,6 @@ export interface ModelSessionCommandInput<
   readonly selector?: string;
 }
 
-/** Shows or updates the model for the active session bound to a chat thread. */
 export async function modelSessionCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -70,9 +70,7 @@ export async function modelSessionCommand<
   input: ModelSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<ModelCommandOutput, ModelCommandError>> {
   return Result.gen(async function* () {
-    const session = yield* Result.await(
-      getModelSessionForThread({ ctx: input.ctx, thread: input.thread }),
-    );
+    const session = yield* Result.await(getActiveSessionForThread(input.ctx, input.thread));
 
     const selector = input.selector?.trim();
 
@@ -121,9 +119,7 @@ export async function modelAvailableCommand<
   input: Omit<ModelSessionCommandInput<TAdapters, TChats>, "selector">,
 ): Promise<Result<ModelAvailableOutput, ModelCommandError>> {
   return Result.gen(async function* () {
-    const session = yield* Result.await(
-      getModelSessionForThread({ ctx: input.ctx, thread: input.thread }),
-    );
+    const session = yield* Result.await(getActiveSessionForThread(input.ctx, input.thread));
 
     const models = yield* Result.await(listSessionModels({ ctx: input.ctx, session }));
 
@@ -156,47 +152,4 @@ function listSessionModels<
     cwd: input.session.cwd,
     signal: input.ctx.signal,
   } as ListModelsInput<TAdapters>) as Promise<Result<readonly HarnessModelInfo[], ListModelsError>>;
-}
-
-interface GetModelSessionForThreadInput<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
-> {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly thread: ChatThreadRef;
-}
-
-async function getModelSessionForThread<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: GetModelSessionForThreadInput<TAdapters, TChats>,
-): Promise<
-  Result<
-    SessionRecord,
-    | StoreError
-    | ModelNoActiveSessionError
-    | ModelSessionRecordMissingError
-    | ModelSessionClosedError
-  >
-> {
-  return Result.gen(async function* () {
-    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
-
-    if (!binding) {
-      return Result.err(new ModelNoActiveSessionError({ thread: input.thread }));
-    }
-
-    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
-
-    if (!session) {
-      return Result.err(new ModelSessionRecordMissingError({ sessionRef: binding.sessionRef }));
-    }
-
-    if (session.status !== "open") {
-      return Result.err(new ModelSessionClosedError({ sessionRef: session.ref }));
-    }
-
-    return Result.ok(session);
-  });
 }

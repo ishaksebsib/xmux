@@ -1,11 +1,5 @@
 export { registerInteractionRoute } from "./route";
-export {
-  handleInteractionCommand,
-  type AllowCommandEvent,
-  type InteractionCommandEvent,
-  type RejectCommandEvent,
-} from "./handler";
-export { InteractionCommandResponseError } from "./errors";
+export { handleInteractionCommand, type HandleInteractionCommandInput } from "./handler";
 export {
   respondToCurrentInteractionForThread,
   type InteractionCommandAction,

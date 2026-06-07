@@ -1,10 +1,7 @@
 import { TaggedError } from "better-result";
 import type { StoreOperation } from "./store";
 import type { XmuxCloseCause } from "./xmux";
-
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
+import { describeCause } from "./utils";
 
 export class XmuxInitializeError extends TaggedError("XmuxInitializeError")<{
   readonly cause: unknown;
@@ -121,7 +118,7 @@ export class StoreOperationError extends TaggedError("StoreOperationError")<{
     readonly resource: string;
     readonly cause: unknown;
   }) {
-    const detail = args.cause instanceof Error ? args.cause.message : String(args.cause);
+    const detail = describeCause(args.cause);
 
     super({
       ...args,

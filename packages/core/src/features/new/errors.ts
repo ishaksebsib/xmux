@@ -20,14 +20,3 @@ export class NewCommandHarnessNotConfiguredError extends TaggedError(
     });
   }
 }
-
-/** Returned when the `/new` response cannot be sent back to chat. */
-export class NewCommandResponseError extends TaggedError("NewCommandResponseError")<{
-  readonly cause: unknown;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly cause: unknown }) {
-    const detail = args.cause instanceof Error ? args.cause.message : String(args.cause);
-    super({ ...args, message: `Failed to send /new response: ${detail}` });
-  }
-}

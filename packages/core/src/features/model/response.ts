@@ -10,13 +10,11 @@ import {
   markdownText,
 } from "../../components";
 import {
-  ModelNoActiveSessionError,
   ModelSelectorAmbiguousError,
   ModelSelectorInvalidError,
   ModelSelectorNotFoundError,
-  ModelSessionClosedError,
-  ModelSessionRecordMissingError,
 } from "./errors";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
 import type {
   ModelAvailableOutput,
   ModelCommandError,
@@ -60,14 +58,14 @@ export function formatModelFailure(
   error: ModelCommandError,
   options: ModelFailureFormatOptions,
 ): ChatTextInput {
-  if (ModelNoActiveSessionError.is(error)) {
+  if (NoActiveSessionError.is(error)) {
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before changing models.",
       nextStep: "continue.",
     });
   }
 
-  if (ModelSessionClosedError.is(error)) {
+  if (SessionClosedError.is(error)) {
     return markdown({
       text: [
         "**Session is closed**",
@@ -77,7 +75,7 @@ export function formatModelFailure(
     });
   }
 
-  if (ModelSessionRecordMissingError.is(error)) {
+  if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route model command**", "", markdownText(error.message)].join("\n"),
     });

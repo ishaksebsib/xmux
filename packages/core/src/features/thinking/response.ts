@@ -17,10 +17,8 @@ import {
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
   ThinkingModelUnsetError,
-  ThinkingNoActiveSessionError,
-  ThinkingSessionClosedError,
-  ThinkingSessionRecordMissingError,
 } from "./errors";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
 import type {
   ThinkingClearedOutput,
   ThinkingCommandError,
@@ -63,14 +61,14 @@ export function formatThinkingActionMessage(output: ThinkingCommandOutput): Thin
 }
 
 export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInput {
-  if (ThinkingNoActiveSessionError.is(error)) {
+  if (NoActiveSessionError.is(error)) {
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before changing thinking level.",
       nextStep: "continue.",
     });
   }
 
-  if (ThinkingSessionClosedError.is(error)) {
+  if (SessionClosedError.is(error)) {
     return markdown({
       text: [
         "**Session is closed**",
@@ -80,7 +78,7 @@ export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInpu
     });
   }
 
-  if (ThinkingSessionRecordMissingError.is(error)) {
+  if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route thinking command**", "", markdownText(error.message)].join("\n"),
     });
@@ -346,12 +344,10 @@ function thinkingButtonView(
   readonly label: string;
   readonly style: "primary" | "secondary";
 } {
-  const selected = level === current;
-
   return {
     id: `thinking-level-${level}`,
-    label: `${selected ? "✓ " : ""}${formatButtonLabel(level)}`,
-    style: selected ? "primary" : "secondary",
+    label: `${level === current ? "✓ " : ""}${formatButtonLabel(level)}`,
+    style: level === current ? "primary" : "secondary",
   };
 }
 
@@ -360,11 +356,9 @@ function chunkButtons(
   size: number,
 ): readonly (readonly ChatButtonInput<Actions>[])[] {
   const rows: ChatButtonInput<Actions>[][] = [];
-
   for (let index = 0; index < buttons.length; index += size) {
     rows.push(buttons.slice(index, index + size));
   }
-
   return rows;
 }
 

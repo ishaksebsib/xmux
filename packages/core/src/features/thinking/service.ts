@@ -20,16 +20,15 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
+import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
 import {
   ThinkingLevelInvalidError,
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
   ThinkingModelUnsetError,
-  ThinkingNoActiveSessionError,
-  ThinkingSessionClosedError,
-  ThinkingSessionRecordMissingError,
 } from "./errors";
 import { parseThinkingSelector } from "./selector";
+import { getActiveSessionForThread } from "../session";
 
 export type ThinkingCommandError =
   | StoreError
@@ -41,9 +40,9 @@ export type ThinkingCommandError =
   | ThinkingLevelUnsupportedError
   | ThinkingModelThinkingUnsupportedError
   | ThinkingModelUnsetError
-  | ThinkingNoActiveSessionError
-  | ThinkingSessionRecordMissingError
-  | ThinkingSessionClosedError;
+  | NoActiveSessionError
+  | SessionRecordMissingError
+  | SessionClosedError;
 
 export type ThinkingCommandOutput =
   | ThinkingShownOutput
@@ -77,7 +76,6 @@ export interface ThinkingSessionCommandInput<
   readonly level?: string;
 }
 
-/** Shows or updates the thinking level for the active session bound to a chat thread. */
 export async function thinkingSessionCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -85,9 +83,7 @@ export async function thinkingSessionCommand<
   input: ThinkingSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<ThinkingCommandOutput, ThinkingCommandError>> {
   return Result.gen(async function* () {
-    const session = yield* Result.await(
-      getThinkingSessionForThread({ ctx: input.ctx, thread: input.thread }),
-    );
+    const session = yield* Result.await(getActiveSessionForThread(input.ctx, input.thread));
 
     const parsed = yield* parseThinkingSelector(input.level);
 
@@ -138,49 +134,6 @@ export async function thinkingSessionCommand<
       session,
       selected: selectedWithSupportedLevels,
     });
-  });
-}
-
-interface GetThinkingSessionForThreadInput<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
-> {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly thread: ChatThreadRef;
-}
-
-async function getThinkingSessionForThread<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: GetThinkingSessionForThreadInput<TAdapters, TChats>,
-): Promise<
-  Result<
-    SessionRecord,
-    | StoreError
-    | ThinkingNoActiveSessionError
-    | ThinkingSessionRecordMissingError
-    | ThinkingSessionClosedError
-  >
-> {
-  return Result.gen(async function* () {
-    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
-
-    if (!binding) {
-      return Result.err(new ThinkingNoActiveSessionError({ thread: input.thread }));
-    }
-
-    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
-
-    if (!session) {
-      return Result.err(new ThinkingSessionRecordMissingError({ sessionRef: binding.sessionRef }));
-    }
-
-    if (session.status !== "open") {
-      return Result.err(new ThinkingSessionClosedError({ sessionRef: session.ref }));
-    }
-
-    return Result.ok(session);
   });
 }
 

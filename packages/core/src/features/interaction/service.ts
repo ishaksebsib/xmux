@@ -99,10 +99,7 @@ export async function respondToCurrentInteractionForThread<
 
     run.markInteractionResponding(selected.interaction.requestId);
 
-    const respondInput = createHarnessRespondInteractionInput<
-      TAdapters,
-      keyof TAdapters
-    >({
+    const respondInput = createHarnessRespondInteractionInput<TAdapters, keyof TAdapters>({
       ref: toConfiguredSessionRef<TAdapters>(session.value.ref),
       cwd: session.value.cwd,
       response,

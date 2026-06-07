@@ -1,8 +1,6 @@
 import type {
   ChatActionEvent,
-  ChatActor,
   ChatAdapterDefinitions,
-  ChatConversationRef,
   ChatSendActionInput,
   ChatTextInput,
 } from "@xmux/chat-core";
@@ -11,8 +9,8 @@ import { Result, type Result as BetterResult } from "better-result";
 import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import type { ChatThreadRef } from "../../store";
-import { replyToChatEvent, threadFromChatEvent } from "../utils";
-import { ThinkingCommandResponseError } from "./errors";
+import { CommandResponseError } from "../errors";
+import { replyToChatEvent, threadFromChatEvent, type CommandEvent } from "../utils";
 import {
   formatThinkingActionMessage,
   formatThinkingFailure,
@@ -30,7 +28,11 @@ export interface HandleThinkingCommandInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ThinkingCommandEvent<Extract<keyof TChats, string>>;
+  readonly event: CommandEvent<
+    Extract<keyof TChats, string>,
+    "thinking",
+    { readonly level?: string }
+  >;
 }
 
 export interface HandleThinkingActionInput<
@@ -38,37 +40,20 @@ export interface HandleThinkingActionInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ThinkingActionEvent<Extract<keyof TChats, string>>;
+  readonly event: ChatActionEvent<
+    Actions,
+    "thinking",
+    Extract<keyof TChats, string>,
+    BetterResult<unknown, unknown>
+  >;
 }
 
-export interface ThinkingCommandEvent<TChatId extends string = string> {
-  readonly type: "command";
-  readonly chatId: TChatId;
-  readonly conversation: ChatConversationRef<TChatId>;
-  readonly actor?: ChatActor;
-  readonly command: {
-    readonly name: "thinking";
-    readonly options: {
-      readonly level?: string;
-    };
-  };
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
-}
-
-export type ThinkingActionEvent<TChatId extends string = string> = ChatActionEvent<
-  Actions,
-  "thinking",
-  TChatId,
-  BetterResult<unknown, unknown>
->;
-
-/** Handles `/thinking [level|clear]` from any configured chat adapter. */
 export async function handleThinkingCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleThinkingCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const level = input.event.command.options.level;
   const result = await selectThinking({
     ctx: input.ctx,
@@ -86,13 +71,12 @@ export async function handleThinkingCommand<
   });
 }
 
-/** Handles a thinking level button press from a `/thinking` action message. */
 export async function handleThinkingAction<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleThinkingActionInput<TAdapters, TChats>,
-): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const acknowledged = await respondToThinkingAction(() => input.event.ack());
   if (acknowledged.isErr()) return Result.err(acknowledged.error);
 
@@ -129,13 +113,13 @@ function formatThinkingResult(
 }
 
 function replyThinkingCommand(input: {
-  readonly event: ThinkingCommandEvent;
+  readonly event: ChatEventWithReply;
   readonly message: ChatTextInput;
-}): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+}): Promise<BetterResult<void, CommandResponseError>> {
   return replyToChatEvent({
     event: input.event,
     message: input.message,
-    onError: (cause) => new ThinkingCommandResponseError({ cause }),
+    onError: (cause) => new CommandResponseError({ command: "thinking", cause }),
   });
 }
 
@@ -144,22 +128,22 @@ async function sendThinkingPicker<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ThinkingCommandEvent<Extract<keyof TChats, string>>;
+  readonly event: CommandEvent<Extract<keyof TChats, string>, "thinking">;
   readonly output: ThinkingCommandOutput;
-}): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+}): Promise<BetterResult<void, CommandResponseError>> {
   const message = formatThinkingActionMessage(input.output);
   const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, message));
 
   return Result.map(
-    Result.mapError(sent, (cause) => new ThinkingCommandResponseError({ cause })),
+    Result.mapError(sent, (cause) => new CommandResponseError({ command: "thinking", cause })),
     () => undefined,
   );
 }
 
 function updateThinkingPicker(input: {
-  readonly event: ThinkingActionEvent;
+  readonly event: ChatActionEvent<Actions, "thinking", string, BetterResult<unknown, unknown>>;
   readonly output: ThinkingCommandOutput;
-}): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+}): Promise<BetterResult<void, CommandResponseError>> {
   const message = formatThinkingActionMessage(input.output);
 
   return respondToThinkingAction(() =>
@@ -176,7 +160,7 @@ function toSendActionInput<
 >(
   input: {
     readonly ctx: HandlerContext<TAdapters, TChats>;
-    readonly event: ThinkingCommandEvent<Extract<keyof TChats, string>>;
+    readonly event: CommandEvent<Extract<keyof TChats, string>, "thinking">;
   },
   message: ThinkingActionMessage,
 ): ChatSendActionInput<TChats, Actions> {
@@ -198,11 +182,15 @@ function toTextInput(message: ThinkingActionMessage): ChatTextInput {
 
 async function respondToThinkingAction(
   respond: () => Promise<BetterResult<unknown, unknown>>,
-): Promise<BetterResult<void, ThinkingCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const responded = await respond();
 
   return Result.map(
-    Result.mapError(responded, (cause) => new ThinkingCommandResponseError({ cause })),
+    Result.mapError(responded, (cause) => new CommandResponseError({ command: "thinking", cause })),
     () => undefined,
   );
 }
+
+type ChatEventWithReply = {
+  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+};

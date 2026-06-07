@@ -1,17 +1,15 @@
 import type {
   ChatActionEvent,
-  ChatActor,
-  ChatConversationRef,
+  ChatAdapterDefinitions,
   ChatSendActionInput,
   ChatTextInput,
 } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result, type Result as BetterResult } from "better-result";
 import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
-import { replyToChatEvent, threadFromChatEvent } from "../utils";
-import { ModelCommandResponseError } from "./errors";
+import { CommandResponseError } from "../errors";
+import { replyToChatEvent, threadFromChatEvent, type CommandEvent } from "../utils";
 import {
   formatModelActionMessage,
   formatModelAvailableOutput,
@@ -32,7 +30,11 @@ export interface HandleModelCommandInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ModelCommandEvent<Extract<keyof TChats, string>>;
+  readonly event: CommandEvent<
+    Extract<keyof TChats, string>,
+    "model",
+    { readonly selector?: string }
+  >;
 }
 
 export interface HandleModelActionInput<
@@ -40,37 +42,20 @@ export interface HandleModelActionInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ModelActionEvent<Extract<keyof TChats, string>>;
+  readonly event: ChatActionEvent<
+    Actions,
+    "model",
+    Extract<keyof TChats, string>,
+    BetterResult<unknown, unknown>
+  >;
 }
 
-export interface ModelCommandEvent<TChatId extends string = string> {
-  readonly type: "command";
-  readonly chatId: TChatId;
-  readonly conversation: ChatConversationRef<TChatId>;
-  readonly actor?: ChatActor;
-  readonly command: {
-    readonly name: "model";
-    readonly options: {
-      readonly selector?: string;
-    };
-  };
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
-}
-
-export type ModelActionEvent<TChatId extends string = string> = ChatActionEvent<
-  Actions,
-  "model",
-  TChatId,
-  BetterResult<unknown, unknown>
->;
-
-/** Handles `/model [providerId/modelId]` from any configured chat adapter. */
 export async function handleModelCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleModelCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, ModelCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const selected = await modelSessionCommand({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
@@ -94,13 +79,12 @@ export async function handleModelCommand<
   });
 }
 
-/** Handles a model action button press from a `/model` action message. */
 export async function handleModelAction<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleModelActionInput<TAdapters, TChats>,
-): Promise<BetterResult<void, ModelCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const acknowledged = await respondToModelAction(() => input.event.ack());
   if (acknowledged.isErr()) return Result.err(acknowledged.error);
 
@@ -133,13 +117,13 @@ function formatModelResult(input: {
 }
 
 function replyModelCommand(input: {
-  readonly event: ModelCommandEvent;
+  readonly event: ChatEventWithReply;
   readonly message: ChatTextInput;
-}): Promise<BetterResult<void, ModelCommandResponseError>> {
+}): Promise<BetterResult<void, CommandResponseError>> {
   return replyToChatEvent({
     event: input.event,
     message: input.message,
-    onError: (cause) => new ModelCommandResponseError({ cause }),
+    onError: (cause) => new CommandResponseError({ command: "model", cause }),
   });
 }
 
@@ -148,14 +132,14 @@ async function sendModelPicker<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: ModelCommandEvent<Extract<keyof TChats, string>>;
+  readonly event: CommandEvent<Extract<keyof TChats, string>, "model">;
   readonly output: ModelShownOutput;
-}): Promise<BetterResult<void, ModelCommandResponseError>> {
+}): Promise<BetterResult<void, CommandResponseError>> {
   const message = formatModelActionMessage(input.output);
   const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, message));
 
   return Result.map(
-    Result.mapError(sent, (cause) => new ModelCommandResponseError({ cause })),
+    Result.mapError(sent, (cause) => new CommandResponseError({ command: "model", cause })),
     () => undefined,
   );
 }
@@ -166,7 +150,7 @@ function toSendActionInput<
 >(
   input: {
     readonly ctx: HandlerContext<TAdapters, TChats>;
-    readonly event: ModelCommandEvent<Extract<keyof TChats, string>>;
+    readonly event: CommandEvent<Extract<keyof TChats, string>, "model">;
   },
   message: ModelActionMessage,
 ): ChatSendActionInput<TChats, Actions> {
@@ -182,11 +166,15 @@ function toSendActionInput<
 
 async function respondToModelAction(
   respond: () => Promise<BetterResult<unknown, unknown>>,
-): Promise<BetterResult<void, ModelCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const responded = await respond();
 
   return Result.map(
-    Result.mapError(responded, (cause) => new ModelCommandResponseError({ cause })),
+    Result.mapError(responded, (cause) => new CommandResponseError({ command: "model", cause })),
     () => undefined,
   );
 }
+
+type ChatEventWithReply = {
+  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+};

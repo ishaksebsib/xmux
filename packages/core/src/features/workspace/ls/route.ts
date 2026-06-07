@@ -1,18 +1,12 @@
-import type { Unsubscribe } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions } from "@xmux/chat-core";
+import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "../../../ctx";
-import { runXmuxHandler, type XmuxMiddleware } from "../../../middleware";
-import {
-  actorFromChatActor,
-  replyToInvalidCommandUsage,
-  type InvalidCommandEvent,
-} from "../../utils";
-import { LsCommandResponseError } from "./errors";
-import { handleLsCommand, type LsCommandEvent } from "./handler";
+import type { XmuxMiddleware } from "../../../middleware";
+import { dispatch, registerInvalidCommandRoute } from "../../routing";
+import type { CommandEvent } from "../../utils";
+import { handleLsCommand } from "./handler";
 import { formatLsCommandUsage } from "./response";
 
-/** Registers chat routes owned by the `/ls` feature. */
 export function registerLsRoute<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -20,57 +14,26 @@ export function registerLsRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
-  const unsubscribeLsCommand = ctx.chat.on("command", "ls", async (event) => {
-    const lsCommandEvent = event as LsCommandEvent<Extract<keyof TChats, string>>;
-    const handled = await runXmuxHandler({
-      app: ctx,
+  const unsubscribeCommand = ctx.chat.on("command", "ls", (raw) => {
+    const event = raw as CommandEvent<
+      Extract<keyof TChats, string>,
+      "ls",
+      { readonly path?: string }
+    >;
+    return dispatch(ctx, middleware, {
       event,
-      middleware,
-      actor: actorFromChatActor(lsCommandEvent.actor),
-      handler: (handlerCtx) =>
-        handleLsCommand({
-          ctx: handlerCtx,
-          event: lsCommandEvent,
-        }),
+      actor: event.actor,
+      handler: (handlerCtx) => handleLsCommand({ ctx: handlerCtx, event }),
     });
-
-    if (handled.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
   });
 
-  const unsubscribeInvalidCommand = ctx.chat.on("command.invalid", async (event) => {
-    const invalidCommandEvent = event as InvalidCommandEvent & {
-      readonly actor?: Parameters<typeof actorFromChatActor>[0];
-    };
-
-    if (invalidCommandEvent.commandName !== "ls") {
-      return;
-    }
-
-    const responded = await runXmuxHandler({
-      app: ctx,
-      event,
-      middleware,
-      actor: actorFromChatActor(invalidCommandEvent.actor),
-      handler: () =>
-        replyToInvalidCommandUsage({
-          event: invalidCommandEvent,
-          commandName: "ls",
-          usage: formatLsCommandUsage(),
-          onError: (cause) => new LsCommandResponseError({ cause }),
-        }),
-    });
-
-    if (responded.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
+  const unsubscribeInvalid = registerInvalidCommandRoute(ctx, middleware, {
+    commands: ["ls"],
+    usage: formatLsCommandUsage,
   });
 
   return () => {
-    unsubscribeLsCommand();
-    unsubscribeInvalidCommand();
+    unsubscribeCommand();
+    unsubscribeInvalid();
   };
 }

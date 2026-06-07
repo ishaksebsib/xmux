@@ -1,18 +1,12 @@
-import type { Unsubscribe } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions } from "@xmux/chat-core";
+import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "../../../ctx";
-import { runXmuxHandler, type XmuxMiddleware } from "../../../middleware";
-import {
-  actorFromChatActor,
-  replyToInvalidCommandUsage,
-  type InvalidCommandEvent,
-} from "../../utils";
-import { CdCommandResponseError } from "./errors";
-import { handleCdCommand, type CdCommandEvent } from "./handler";
+import type { XmuxMiddleware } from "../../../middleware";
+import { dispatch, registerInvalidCommandRoute } from "../../routing";
+import type { CommandEvent } from "../../utils";
+import { handleCdCommand } from "./handler";
 import { formatCdCommandUsage } from "./response";
 
-/** Registers chat routes owned by the `/cd` feature. */
 export function registerCdRoute<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -20,57 +14,26 @@ export function registerCdRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
-  const unsubscribeCdCommand = ctx.chat.on("command", "cd", async (event) => {
-    const cdCommandEvent = event as CdCommandEvent<Extract<keyof TChats, string>>;
-    const handled = await runXmuxHandler({
-      app: ctx,
+  const unsubscribeCommand = ctx.chat.on("command", "cd", (raw) => {
+    const event = raw as CommandEvent<
+      Extract<keyof TChats, string>,
+      "cd",
+      { readonly path: string }
+    >;
+    return dispatch(ctx, middleware, {
       event,
-      middleware,
-      actor: actorFromChatActor(cdCommandEvent.actor),
-      handler: (handlerCtx) =>
-        handleCdCommand({
-          ctx: handlerCtx,
-          event: cdCommandEvent,
-        }),
+      actor: event.actor,
+      handler: (handlerCtx) => handleCdCommand({ ctx: handlerCtx, event }),
     });
-
-    if (handled.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
   });
 
-  const unsubscribeInvalidCommand = ctx.chat.on("command.invalid", async (event) => {
-    const invalidCommandEvent = event as InvalidCommandEvent & {
-      readonly actor?: Parameters<typeof actorFromChatActor>[0];
-    };
-
-    if (invalidCommandEvent.commandName !== "cd") {
-      return;
-    }
-
-    const responded = await runXmuxHandler({
-      app: ctx,
-      event,
-      middleware,
-      actor: actorFromChatActor(invalidCommandEvent.actor),
-      handler: () =>
-        replyToInvalidCommandUsage({
-          event: invalidCommandEvent,
-          commandName: "cd",
-          usage: formatCdCommandUsage(),
-          onError: (cause) => new CdCommandResponseError({ cause }),
-        }),
-    });
-
-    if (responded.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
+  const unsubscribeInvalid = registerInvalidCommandRoute(ctx, middleware, {
+    commands: ["cd"],
+    usage: formatCdCommandUsage,
   });
 
   return () => {
-    unsubscribeCdCommand();
-    unsubscribeInvalidCommand();
+    unsubscribeCommand();
+    unsubscribeInvalid();
   };
 }

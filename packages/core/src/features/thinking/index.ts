@@ -1,18 +1,21 @@
 export {
-  ThinkingCommandResponseError,
   ThinkingLevelInvalidError,
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
   ThinkingModelUnsetError,
-  ThinkingNoActiveSessionError,
-  ThinkingSessionClosedError,
-  ThinkingSessionRecordMissingError,
 } from "./errors";
-export { handleThinkingCommand, type ThinkingCommandEvent } from "./handler";
 export {
+  handleThinkingAction,
+  handleThinkingCommand,
+  type HandleThinkingActionInput,
+  type HandleThinkingCommandInput,
+} from "./handler";
+export {
+  formatThinkingActionMessage,
   formatThinkingCommandUsage,
   formatThinkingFailure,
   formatThinkingOutput,
+  type ThinkingActionMessage,
 } from "./response";
 export { registerThinkingRoute } from "./route";
 export { parseThinkingSelector, thinkingLevels, type ParsedThinkingSelector } from "./selector";

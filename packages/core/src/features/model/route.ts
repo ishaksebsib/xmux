@@ -1,19 +1,12 @@
-import type { Unsubscribe } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions } from "@xmux/chat-core";
+import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Context } from "../../ctx";
-import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
-import { actorFromChatActor, replyToInvalidCommandUsage, type InvalidCommandEvent } from "../utils";
-import { ModelCommandResponseError } from "./errors";
-import {
-  handleModelAction,
-  handleModelCommand,
-  type ModelActionEvent,
-  type ModelCommandEvent,
-} from "./handler";
+import type { XmuxMiddleware } from "../../middleware";
+import { dispatch, registerInvalidCommandRoute } from "../routing";
+import type { CommandEvent } from "../utils";
+import { handleModelAction, handleModelCommand, type HandleModelActionInput } from "./handler";
 import { formatModelCommandUsage } from "./response";
 
-/** Registers chat routes owned by the `/model` feature. */
 export function registerModelRoute<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -21,78 +14,36 @@ export function registerModelRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
-  const unsubscribeModelCommand = ctx.chat.on("command", "model", async (event) => {
-    const modelCommandEvent = event as ModelCommandEvent<Extract<keyof TChats, string>>;
-    const handled = await runXmuxHandler({
-      app: ctx,
+  const unsubscribeCommand = ctx.chat.on("command", "model", (raw) => {
+    const event = raw as CommandEvent<
+      Extract<keyof TChats, string>,
+      "model",
+      { readonly selector?: string }
+    >;
+    return dispatch(ctx, middleware, {
       event,
-      middleware,
-      actor: actorFromChatActor(modelCommandEvent.actor),
-      handler: (handlerCtx) =>
-        handleModelCommand({
-          ctx: handlerCtx,
-          event: modelCommandEvent,
-        }),
+      actor: event.actor,
+      handler: (handlerCtx) => handleModelCommand({ ctx: handlerCtx, event }),
     });
-
-    if (handled.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
   });
 
-  const unsubscribeModelAction = ctx.chat.on("action", "model", async (event) => {
-    const modelActionEvent = event as ModelActionEvent<Extract<keyof TChats, string>>;
-    const handled = await runXmuxHandler({
-      app: ctx,
+  const unsubscribeAction = ctx.chat.on("action", "model", (raw) => {
+    const event = raw as HandleModelActionInput<TAdapters, TChats>["event"];
+    return dispatch(ctx, middleware, {
       event,
-      middleware,
-      actor: actorFromChatActor(modelActionEvent.actor),
-      handler: (handlerCtx) =>
-        handleModelAction({
-          ctx: handlerCtx,
-          event: modelActionEvent,
-        }),
+      actor: event.actor,
+      handler: (handlerCtx) => handleModelAction({ ctx: handlerCtx, event }),
     });
-
-    if (handled.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
   });
 
-  const unsubscribeInvalidCommand = ctx.chat.on("command.invalid", async (event) => {
-    const invalidCommandEvent = event as InvalidCommandEvent & {
-      readonly actor?: Parameters<typeof actorFromChatActor>[0];
-    };
-
-    if (invalidCommandEvent.commandName !== "model") {
-      return;
-    }
-
-    const responded = await runXmuxHandler({
-      app: ctx,
-      event,
-      middleware,
-      actor: actorFromChatActor(invalidCommandEvent.actor),
-      handler: () =>
-        replyToInvalidCommandUsage({
-          event: invalidCommandEvent,
-          commandName: "model",
-          usage: formatModelCommandUsage(),
-          onError: (cause) => new ModelCommandResponseError({ cause }),
-        }),
-    });
-
-    if (responded.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
+  const unsubscribeInvalid = registerInvalidCommandRoute(ctx, middleware, {
+    commands: ["model"],
+    usage: () => formatModelCommandUsage(),
   });
 
   return () => {
-    unsubscribeModelCommand();
-    unsubscribeModelAction();
-    unsubscribeInvalidCommand();
+    unsubscribeCommand();
+    unsubscribeAction();
+    unsubscribeInvalid();
   };
 }

@@ -1,20 +1,11 @@
 export {
   DeleteCommandHarnessNotConfiguredError,
   DeleteCommandIncompleteTargetError,
-  DeleteCommandResponseError,
-  DeleteSessionListAllFailedError,
-  DeleteSessionShortIdAmbiguousError,
   DeleteSessionShortIdNotFoundError,
+  DeleteSessionShortIdAmbiguousError,
+  DeleteSessionListAllFailedError,
 } from "./errors";
-export { handleDeleteCommand, type DeleteCommandEvent } from "./handler";
-export { formatDeleteCommandUsage, formatDeleteFailure, formatDeleteOutput } from "./response";
 export { registerDeleteRoute } from "./route";
-export type {
-  DeletedSessionSummary,
-  DeleteCommandError,
-  DeleteCommandOutput,
-  DeleteListOutput,
-  DeleteSessionCommandInput,
-  DeleteSessionOutput,
-} from "./service";
-export { deleteSessionCommand } from "./service";
+export { handleDeleteCommand, type HandleDeleteCommandInput } from "./handler";
+export { deleteSessionCommand, type DeleteSessionCommandInput } from "./service";
+export { formatDeleteCommandUsage, formatDeleteFailure, formatDeleteOutput } from "./response";

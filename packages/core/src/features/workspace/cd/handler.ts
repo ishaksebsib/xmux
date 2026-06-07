@@ -1,10 +1,9 @@
-import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import type { Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../../ctx";
-import { replyToChatEvent, threadFromChatEvent } from "../../utils";
-import { CdCommandResponseError } from "./errors";
+import { CommandResponseError } from "../../errors";
+import { replyWithResult, threadFromChatEvent, type CommandEvent } from "../../utils";
 import { formatCdFailure, formatCdSuccess } from "./response";
 import { changeDirectoryForThread } from "./service";
 
@@ -13,44 +12,26 @@ export interface HandleCdCommandInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: CdCommandEvent;
+  readonly event: CommandEvent<Extract<keyof TChats, string>, "cd", { readonly path: string }>;
 }
 
-export interface CdCommandEvent<TChatId extends string = string> {
-  readonly type: "command";
-  readonly chatId: TChatId;
-  readonly conversation: ChatConversationRef<TChatId>;
-  readonly actor?: ChatActor;
-  readonly command: {
-    readonly name: "cd";
-    readonly options: {
-      readonly path: string;
-    };
-  };
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
-}
-
-/** Handles `/cd <path>` from any configured chat adapter. */
 export async function handleCdCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleCdCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CdCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const changed = await changeDirectoryForThread({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
     path: input.event.command.options.path,
   });
 
-  const response = Result.match(changed, {
-    ok: (value) => formatCdSuccess(value),
-    err: (error) => formatCdFailure(error),
-  });
-
-  return replyToChatEvent({
+  return replyWithResult({
     event: input.event,
-    message: response,
-    onError: (cause) => new CdCommandResponseError({ cause }),
+    command: "cd",
+    result: changed,
+    ok: formatCdSuccess,
+    err: formatCdFailure,
   });
 }

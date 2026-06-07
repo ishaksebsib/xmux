@@ -11,5 +11,6 @@ export {
   type PromptToolStatus,
 } from "./prompt";
 export { formatCommandHelp } from "./usage";
+export { formatFailure, formatHarnessNotConfigured } from "./formatters";
 export type { MarkdownResponse } from "./markdown";
 export type { CommandHelpInput } from "./usage";

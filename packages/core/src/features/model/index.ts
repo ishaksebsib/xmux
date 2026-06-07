@@ -1,17 +1,13 @@
 export {
-  ModelCommandResponseError,
-  ModelNoActiveSessionError,
   ModelSelectorAmbiguousError,
   ModelSelectorInvalidError,
   ModelSelectorNotFoundError,
-  ModelSessionClosedError,
-  ModelSessionRecordMissingError,
 } from "./errors";
 export {
   handleModelAction,
   handleModelCommand,
-  type ModelActionEvent,
-  type ModelCommandEvent,
+  type HandleModelActionInput,
+  type HandleModelCommandInput,
 } from "./handler";
 export {
   formatModelActionMessage,

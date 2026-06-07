@@ -1,10 +1,9 @@
-import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import type { Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../../ctx";
-import { replyToChatEvent, threadFromChatEvent } from "../../utils";
-import { PwdCommandResponseError } from "./errors";
+import { CommandResponseError } from "../../errors";
+import { replyWithResult, threadFromChatEvent, type CommandEvent } from "../../utils";
 import { formatPwdFailure, formatPwdSuccess } from "./response";
 import { getPwdForThread } from "./service";
 
@@ -13,41 +12,25 @@ export interface HandlePwdCommandInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: PwdCommandEvent;
+  readonly event: CommandEvent<Extract<keyof TChats, string>, "pwd">;
 }
 
-export interface PwdCommandEvent<TChatId extends string = string> {
-  readonly type: "command";
-  readonly chatId: TChatId;
-  readonly conversation: ChatConversationRef<TChatId>;
-  readonly actor?: ChatActor;
-  readonly command: {
-    readonly name: "pwd";
-    readonly options: Record<never, never>;
-  };
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
-}
-
-/** Handles `/pwd` from any configured chat adapter. */
 export async function handlePwdCommand<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandlePwdCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, PwdCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const pwd = await getPwdForThread({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
   });
 
-  const response = Result.match(pwd, {
-    ok: (value) => formatPwdSuccess(value),
-    err: (error) => formatPwdFailure(error),
-  });
-
-  return replyToChatEvent({
+  return replyWithResult({
     event: input.event,
-    message: response,
-    onError: (cause) => new PwdCommandResponseError({ cause }),
+    command: "pwd",
+    result: pwd,
+    ok: formatPwdSuccess,
+    err: formatPwdFailure,
   });
 }

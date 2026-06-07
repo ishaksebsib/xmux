@@ -1,15 +1,14 @@
-import type { Unsubscribe } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions } from "@xmux/chat-core";
+import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import { CommandResponseError } from "../errors";
+import { dispatch } from "../routing";
+import type { ChatActor } from "@xmux/chat-core";
 import { commandNames } from "../../commands";
 import type { Context } from "../../ctx";
-import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
-import type { ChatActor } from "@xmux/chat-core";
-import { actorFromChatActor, replyToChatEvent, type ChatEventWithReply } from "../utils";
-import { UnknownCommandResponseError } from "./errors";
+import type { XmuxMiddleware } from "../../middleware";
+import { replyToChatEvent, type ChatEventWithReply } from "../utils";
 import { formatUnknownCommandResponse } from "./response";
 
-/** Registers chat routes for unknown commands. */
 export function registerUnknownCommandRoute<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -17,33 +16,29 @@ export function registerUnknownCommandRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
-  return ctx.chat.on("command.unknown", async (event) => {
-    const unknownCommandEvent = event as UnknownCommandEvent;
-    const responded = await runXmuxHandler({
-      app: ctx,
+  return ctx.chat.on("command.unknown", (raw) => {
+    const event = raw as UnknownCommandEvent<Extract<keyof TChats, string>>;
+    return dispatch(ctx, middleware, {
       event,
-      middleware,
+      actor: event.actor,
       routeName: "unknown-command",
-      actor: actorFromChatActor(unknownCommandEvent.actor),
       handler: () =>
         replyToChatEvent({
-          event: unknownCommandEvent,
+          event,
           message: formatUnknownCommandResponse({
-            commandName: unknownCommandEvent.commandName,
+            commandName: event.commandName,
             availableCommands: commandNames,
           }),
-          onError: (cause) => new UnknownCommandResponseError({ cause }),
+          onError: (cause) => new CommandResponseError({ command: event.commandName, cause }),
         }),
     });
-
-    if (responded.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
   });
 }
 
-type UnknownCommandEvent = ChatEventWithReply & {
+type UnknownCommandEvent<TChatId extends string = string> = ChatEventWithReply & {
+  readonly type: "command.unknown";
+  readonly chatId: TChatId;
+  readonly conversation: { readonly chatId: TChatId; readonly conversationId: string };
   readonly commandName: string;
   readonly actor?: ChatActor;
 };

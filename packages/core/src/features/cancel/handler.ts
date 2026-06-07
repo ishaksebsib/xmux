@@ -1,10 +1,9 @@
-import type { ChatActor, ChatConversationRef, ChatTextInput } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
-import { Result, type Result as BetterResult } from "better-result";
+import type { Result as BetterResult } from "better-result";
 import type { HandlerContext } from "../../ctx";
-import { replyToChatEvent, threadFromChatEvent } from "../utils";
-import { CancelCommandResponseError } from "./errors";
+import { CommandResponseError } from "../errors";
+import { replyWithResult, threadFromChatEvent, type CommandEvent } from "../utils";
 import { formatCancelFailure, formatCancelOutput } from "./response";
 import { cancelActivePromptForThread } from "./service";
 
@@ -13,19 +12,7 @@ export interface HandleCancelCommandInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: CancelCommandEvent;
-}
-
-export interface CancelCommandEvent<TChatId extends string = string> {
-  readonly type: "command";
-  readonly chatId: TChatId;
-  readonly conversation: ChatConversationRef<TChatId>;
-  readonly actor?: ChatActor;
-  readonly command: {
-    readonly name: "cancel";
-    readonly options: Record<never, never>;
-  };
-  readonly reply: (message: ChatTextInput) => Promise<BetterResult<unknown, unknown>>;
+  readonly event: CommandEvent<Extract<keyof TChats, string>, "cancel">;
 }
 
 /** Handles `/cancel` from any configured chat adapter. */
@@ -34,20 +21,17 @@ export async function handleCancelCommand<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: HandleCancelCommandInput<TAdapters, TChats>,
-): Promise<BetterResult<void, CancelCommandResponseError>> {
+): Promise<BetterResult<void, CommandResponseError>> {
   const cancelled = await cancelActivePromptForThread({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
   });
 
-  const response = Result.match(cancelled, {
-    ok: (value) => formatCancelOutput(value),
-    err: (error) => formatCancelFailure(error),
-  });
-
-  return replyToChatEvent({
+  return replyWithResult({
     event: input.event,
-    message: response,
-    onError: (cause) => new CancelCommandResponseError({ cause }),
+    command: "cancel",
+    result: cancelled,
+    ok: formatCancelOutput,
+    err: formatCancelFailure,
   });
 }

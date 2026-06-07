@@ -1,6 +1,5 @@
 export { registerCancelRoute } from "./route";
-export { handleCancelCommand, type CancelCommandEvent } from "./handler";
-export { CancelCommandResponseError } from "./errors";
+export { handleCancelCommand, type HandleCancelCommandInput } from "./handler";
 export {
   cancelActivePromptForThread,
   type CancelActivePromptError,

@@ -7,6 +7,7 @@ import type {
 import { Result, type Result as BetterResult } from "better-result";
 import type { Actor } from "../ctx";
 import type { ChatThreadRef } from "../store";
+import { CommandResponseError } from "./errors";
 
 export interface ChatEventWithConversation<TChatId extends string = string> {
   readonly chatId: TChatId;
@@ -28,6 +29,25 @@ export interface InvalidCommandEvent extends ChatEventWithReply {
   readonly commandName: string;
   readonly reason: string;
   readonly optionName?: string;
+}
+
+/**
+ * Minimal shape of a routed slash-command event consumed by command handlers.
+ *
+ * The concrete chat-core `ChatCommandEvent` is structurally assignable to this,
+ * so routes hand handlers the inferred event directly without casts. `reply`
+ * is typed as a `Result` (its true runtime shape) so handlers compose it with
+ * the better-result combinators.
+ */
+export interface CommandEvent<
+  TChatId extends string = string,
+  TName extends string = string,
+  TOptions = Record<never, never>,
+>
+  extends ChatEventWithConversation<TChatId>, ChatEventWithReply {
+  readonly type: "command";
+  readonly actor?: ChatActor;
+  readonly command: { readonly name: TName; readonly options: TOptions };
 }
 
 export type InvalidCommandUsageReplyStatus = "ignored" | "replied";
@@ -111,4 +131,25 @@ export async function replyToInvalidCommandUsage<TError>(input: {
   });
 
   return Result.map(replied, () => "replied" as const);
+}
+
+/**
+ * Formats a `Result` into a chat message and sends it back as a command reply.
+ * Shared tail for command handlers: match → format → reply, wrapping any
+ * transport failure as a `CommandResponseError` for `command`.
+ */
+export async function replyWithResult<TValue, TError>(input: {
+  readonly event: ChatEventWithReply;
+  readonly command: string;
+  readonly result: BetterResult<TValue, TError>;
+  readonly ok: (value: TValue) => ChatTextInput;
+  readonly err: (error: TError) => ChatTextInput;
+}): Promise<BetterResult<void, CommandResponseError>> {
+  const message = Result.match(input.result, { ok: input.ok, err: input.err });
+
+  return replyToChatEvent({
+    event: input.event,
+    message,
+    onError: (cause) => new CommandResponseError({ command: input.command, cause }),
+  });
 }
