@@ -21,9 +21,13 @@ export type {
   Config,
   DeliveryMode,
   ModelConfig,
+  NormalizedPromptConfig,
+  NormalizedPromptResponseConfig,
   NormalizedConfig,
   NormalizedModelConfig,
   NormalizedResumeConfig,
+  PromptConfig,
+  PromptResponseConfig,
   ResumeConfig,
   WorkspaceConfig,
 } from "./config";

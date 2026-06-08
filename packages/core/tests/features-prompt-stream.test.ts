@@ -1,6 +1,8 @@
 import type { ChatTextStreamChunk } from "@xmux/chat-core";
 import type { HarnessPromptEvent } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
+import type { NormalizedPromptResponseConfig } from "../src/config";
+import { normalizeConfig } from "../src/config";
 import { renderPromptEvents } from "../src/features/prompt";
 
 const ref = { harnessId: "pi", sessionId: "session-1" } as const;
@@ -56,6 +58,93 @@ describe("prompt stream renderer", () => {
     expect(text).toContain("> **Tool calls**");
     expect(text).toContain("> ✓ $ npm test");
     expect(text).toContain("> ```text\n> ok\n> ```");
+  });
+
+  test("uses configured prompt response limits for reasoning and tool previews", async () => {
+    const config = promptResponseConfig({
+      maxReasoningChars: 5,
+      maxToolTextOutputChars: 4,
+      maxToolJsonOutputChars: 8,
+      maxToolInputStringChars: 3,
+      maxToolInputObjectEntries: 1,
+    });
+    const text = await collectRendered(
+      [
+        {
+          type: "content",
+          phase: "completed",
+          kind: "reasoning",
+          ref,
+          partId: "r1",
+          text: "reasoning text",
+        },
+        {
+          type: "tool",
+          phase: "called",
+          ref,
+          callId: "call-1",
+          name: "unknown",
+          input: { query: "abcdef", extra: "hidden" },
+        },
+        {
+          type: "tool",
+          phase: "completed",
+          ref,
+          callId: "call-1",
+          output: [
+            { type: "text", text: "tool output" },
+            { type: "json", value: { result: "json output" } },
+          ],
+        },
+      ],
+      config,
+    );
+
+    expect(text).toContain("> reaso\n> … truncated 9 chars");
+    expect(text).toContain('> ✓ `unknown` \\{ query: "abc\\\\n… truncated 3 chars", … \\}');
+    expect(text).toContain("> ```text\n> tool\n> … truncated 7 chars\n> ```");
+    expect(text).toContain('> ```json\n> {\n>   "res\n> … truncated 21 chars\n> ```');
+  });
+
+  test("can hide tool output while keeping the tool summary", async () => {
+    const text = await collectRendered(
+      [
+        {
+          type: "tool",
+          phase: "called",
+          ref,
+          callId: "call-1",
+          name: "shell",
+          input: { command: "npm test" },
+        },
+        {
+          type: "tool",
+          phase: "completed",
+          ref,
+          callId: "call-1",
+          output: [{ type: "text", text: "ok" }],
+        },
+      ],
+      promptResponseConfig({ showToolOutput: false }),
+    );
+
+    expect(text).toContain("> ✓ $ npm test");
+    expect(text).not.toContain("```text");
+    expect(text).not.toContain("ok");
+  });
+
+  test("can split large stream deltas without truncating content", async () => {
+    const chunks = await collectRenderedChunks(
+      [{ type: "content", phase: "delta", kind: "text", ref, delta: "abcdefghi" }],
+      promptResponseConfig({ maxStreamDeltaChars: 4 }),
+    );
+
+    expect(chunks).toEqual([
+      { type: "delta", delta: "abcd" },
+      { type: "delta", delta: "efgh" },
+      { type: "delta", delta: "i" },
+      { type: "completed" },
+    ]);
   });
 
   test("renders permission requests with commands and without request ids", async () => {
@@ -198,14 +287,30 @@ describe("prompt stream renderer", () => {
   });
 });
 
-async function collectRendered(events: readonly HarnessPromptEvent[]): Promise<string> {
+async function collectRendered(
+  events: readonly HarnessPromptEvent[],
+  config?: NormalizedPromptResponseConfig,
+): Promise<string> {
   let text = "";
 
-  for await (const chunk of renderPromptEvents(toAsync(events))) {
+  for await (const chunk of renderPromptEvents(toAsync(events), { response: config })) {
     text = chunkText(chunk, text);
   }
 
   return text;
+}
+
+async function collectRenderedChunks(
+  events: readonly HarnessPromptEvent[],
+  config?: NormalizedPromptResponseConfig,
+): Promise<ChatTextStreamChunk[]> {
+  const chunks: ChatTextStreamChunk[] = [];
+
+  for await (const chunk of renderPromptEvents(toAsync(events), { response: config })) {
+    chunks.push(chunk);
+  }
+
+  return chunks;
 }
 
 function chunkText(chunk: ChatTextStreamChunk, previous: string): string {
@@ -215,4 +320,17 @@ function chunkText(chunk: ChatTextStreamChunk, previous: string): string {
 
 async function* toAsync<T>(values: readonly T[]): AsyncIterable<T> {
   yield* values;
+}
+
+function promptResponseConfig(
+  config: Partial<NormalizedPromptResponseConfig>,
+): NormalizedPromptResponseConfig {
+  return {
+    ...normalizeConfig({
+      userName: "xmux",
+      defaultWorkingDirectory: ".",
+      deliveryMode: "requester_only",
+    }).prompt.response,
+    ...config,
+  };
 }

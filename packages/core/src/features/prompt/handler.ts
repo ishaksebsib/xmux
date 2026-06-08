@@ -9,12 +9,13 @@ import type {
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions, HarnessPromptEvent } from "@xmux/harness-core";
 import { Result } from "better-result";
+import type { NormalizedPromptResponseConfig } from "../../config";
 import type { HandlerContext } from "../../ctx";
 import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
 import { PromptResponseError } from "./errors";
 import { formatPromptFailure } from "./response";
 import { promptSessionForThread } from "./service";
-import { createPromptEventRenderer } from "./stream";
+import { createPromptEventRenderer, splitPromptStreamDelta } from "./stream";
 
 export interface HandlePromptMessageInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -58,6 +59,7 @@ export async function handlePromptMessage<
   const streamed = await streamPromptReplyInMessages({
     event: input.event,
     events: prompted.value.events,
+    responseConfig: input.ctx.app.config.prompt.response,
   });
 
   if (streamed.isErr()) {
@@ -71,6 +73,7 @@ export async function handlePromptMessage<
 interface StreamPromptReplyInput {
   readonly event: PromptMessageEvent;
   readonly events: AsyncIterable<HarnessPromptEvent>;
+  readonly responseConfig: NormalizedPromptResponseConfig;
 }
 
 interface ActiveChatStream {
@@ -81,7 +84,7 @@ interface ActiveChatStream {
 async function streamPromptReplyInMessages(
   input: StreamPromptReplyInput,
 ): Promise<Result<void, PromptResponseError>> {
-  const renderer = createPromptEventRenderer();
+  const renderer = createPromptEventRenderer({ response: input.responseConfig });
   let activeStream: ActiveChatStream | undefined;
 
   const startStream = (): ActiveChatStream => {
@@ -101,7 +104,9 @@ async function streamPromptReplyInMessages(
   const appendToStream = (delta: string): void => {
     if (delta.length === 0) return;
     activeStream ??= startStream();
-    activeStream.chunks.push({ type: "delta", delta });
+    for (const chunk of splitPromptStreamDelta(delta, input.responseConfig.maxStreamDeltaChars)) {
+      activeStream.chunks.push({ type: "delta", delta: chunk });
+    }
   };
 
   const completeActiveStream = async (): Promise<Result<void, PromptResponseError>> => {

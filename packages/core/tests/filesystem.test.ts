@@ -20,6 +20,70 @@ describe("workspace filesystem", () => {
 
     expect(config.workspace).toEqual({ showHiddenFiles: false, maxListEntries: 100 });
     expect(config.model).toEqual({ maxModelsPerProvider: 10 });
+    expect(config.prompt.response).toEqual({
+      showToolOutput: true,
+      maxToolTextOutputChars: 280,
+      maxToolJsonOutputChars: 400,
+      maxReasoningChars: 320,
+      maxToolInputStringChars: 50,
+      maxToolInputObjectEntries: 2,
+    });
+  });
+
+  test("normalizes prompt response config", () => {
+    const config = normalizeConfig({
+      userName: "xmux",
+      defaultWorkingDirectory: ".",
+      deliveryMode: "requester_only",
+      prompt: {
+        response: {
+          showToolOutput: false,
+          maxToolTextOutputChars: 10,
+          maxToolJsonOutputChars: 11,
+          maxReasoningChars: 12,
+          maxToolInputStringChars: 13,
+          maxToolInputObjectEntries: 2,
+          maxStreamDeltaChars: 14,
+        },
+      },
+    });
+
+    expect(config.prompt.response).toEqual({
+      showToolOutput: false,
+      maxToolTextOutputChars: 10,
+      maxToolJsonOutputChars: 11,
+      maxReasoningChars: 12,
+      maxToolInputStringChars: 13,
+      maxToolInputObjectEntries: 2,
+      maxStreamDeltaChars: 14,
+    });
+  });
+
+  test("falls back to prompt response defaults for invalid limits", () => {
+    const config = normalizeConfig({
+      userName: "xmux",
+      defaultWorkingDirectory: ".",
+      deliveryMode: "requester_only",
+      prompt: {
+        response: {
+          maxToolTextOutputChars: 0,
+          maxToolJsonOutputChars: -1,
+          maxReasoningChars: 1.5,
+          maxToolInputStringChars: Number.NaN,
+          maxToolInputObjectEntries: 0,
+          maxStreamDeltaChars: 0,
+        },
+      },
+    });
+
+    expect(config.prompt.response).toEqual({
+      showToolOutput: true,
+      maxToolTextOutputChars: 280,
+      maxToolJsonOutputChars: 400,
+      maxReasoningChars: 320,
+      maxToolInputStringChars: 50,
+      maxToolInputObjectEntries: 2,
+    });
   });
 
   test("resolves a relative directory from a base cwd", async () => {

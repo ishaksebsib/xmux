@@ -1,4 +1,5 @@
 import type { ChatTextStreamChunk } from "@xmux/chat-core";
+import { DEFAULT_PROMPT_RESPONSE_CONFIG, type NormalizedPromptResponseConfig } from "../../config";
 import type {
   HarnessModelRef,
   HarnessPromptEvent,
@@ -38,6 +39,7 @@ interface PromptRenderState {
   thinking?: HarnessThinkingLevel;
   usage?: HarnessTokenUsage;
   cost?: number;
+  readonly config: NormalizedPromptResponseConfig;
 }
 
 export interface PromptEventRenderer {
@@ -45,7 +47,11 @@ export interface PromptEventRenderer {
   resetMessageBoundary(): void;
 }
 
-function createPromptRenderState(): PromptRenderState {
+export interface PromptEventRendererOptions {
+  readonly response?: NormalizedPromptResponseConfig;
+}
+
+function createPromptRenderState(options?: PromptEventRendererOptions): PromptRenderState {
   return {
     emitted: false,
     emittedAssistantText: false,
@@ -62,6 +68,7 @@ function createPromptRenderState(): PromptRenderState {
     retries: new Set(),
     toolCallsHeaderEmitted: false,
     summaryEmitted: false,
+    config: options?.response ?? DEFAULT_PROMPT_RESPONSE_CONFIG,
   };
 }
 
@@ -72,8 +79,10 @@ function createPromptRenderState(): PromptRenderState {
  * earlier output. Ephemeral states like "thinking" or "tool pending" are kept internal and only
  * emitted once they become stable enough to avoid stuck UI text.
  */
-export function createPromptEventRenderer(): PromptEventRenderer {
-  const state = createPromptRenderState();
+export function createPromptEventRenderer(
+  options?: PromptEventRendererOptions,
+): PromptEventRenderer {
+  const state = createPromptRenderState(options);
 
   return {
     render(event) {
@@ -90,16 +99,33 @@ export function createPromptEventRenderer(): PromptEventRenderer {
 
 export async function* renderPromptEvents(
   events: AsyncIterable<HarnessPromptEvent>,
+  options?: PromptEventRendererOptions,
 ): AsyncIterable<ChatTextStreamChunk> {
-  const renderer = createPromptEventRenderer();
+  const renderer = createPromptEventRenderer(options);
+  const config = options?.response ?? DEFAULT_PROMPT_RESPONSE_CONFIG;
 
   for await (const event of events) {
     const rendered = renderer.render(event);
     if (rendered.length === 0) continue;
-    yield { type: "delta", delta: rendered };
+    for (const delta of splitPromptStreamDelta(rendered, config.maxStreamDeltaChars)) {
+      yield { type: "delta", delta };
+    }
   }
 
   yield { type: "completed" };
+}
+
+export function splitPromptStreamDelta(
+  delta: string,
+  maxChars: number | undefined,
+): readonly string[] {
+  if (maxChars === undefined || delta.length <= maxChars) return [delta];
+
+  const chunks: string[] = [];
+  for (let index = 0; index < delta.length; index += maxChars) {
+    chunks.push(delta.slice(index, index + maxChars));
+  }
+  return chunks;
 }
 
 function renderPromptEvent(input: {
@@ -180,7 +206,14 @@ function renderContentEvent(input: {
     input.state.reasoningText.set(key, input.event.text);
     return input.event.text.trim().length === 0
       ? ""
-      : appendBlock(input.state, promptReasoning({ text: input.event.text, status: "done" }));
+      : appendBlock(
+          input.state,
+          promptReasoning({
+            text: input.event.text,
+            status: "done",
+            config: input.state.config,
+          }),
+        );
   }
 
   if (input.event.kind === "compaction") {
@@ -230,6 +263,7 @@ function renderToolEvent(input: {
           input: state.toolInputs.get(event.callId),
           rawInput: state.toolRawInputs.get(event.callId),
           status: "completed",
+          config: state.config,
           output: event.output.map(toToolOutputComponent),
         }),
       );
@@ -245,6 +279,7 @@ function renderToolEvent(input: {
           input: state.toolInputs.get(event.callId),
           rawInput: state.toolRawInputs.get(event.callId),
           status: "failed",
+          config: state.config,
           error: event.error,
         }),
       );

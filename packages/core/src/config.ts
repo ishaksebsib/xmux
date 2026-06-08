@@ -33,6 +33,34 @@ export interface NormalizedModelConfig {
   readonly maxModelsPerProvider: number;
 }
 
+export interface PromptResponseConfig {
+  readonly showToolOutput?: boolean;
+  readonly maxToolTextOutputChars?: number;
+  readonly maxToolJsonOutputChars?: number;
+  readonly maxReasoningChars?: number;
+  readonly maxToolInputStringChars?: number;
+  readonly maxToolInputObjectEntries?: number;
+  readonly maxStreamDeltaChars?: number;
+}
+
+export interface NormalizedPromptResponseConfig {
+  readonly showToolOutput: boolean;
+  readonly maxToolTextOutputChars: number;
+  readonly maxToolJsonOutputChars: number;
+  readonly maxReasoningChars: number;
+  readonly maxToolInputStringChars: number;
+  readonly maxToolInputObjectEntries: number;
+  readonly maxStreamDeltaChars?: number;
+}
+
+export interface PromptConfig {
+  readonly response?: PromptResponseConfig;
+}
+
+export interface NormalizedPromptConfig {
+  readonly response: NormalizedPromptResponseConfig;
+}
+
 export interface Config {
   readonly userName: string;
   readonly defaultWorkingDirectory: string;
@@ -40,6 +68,7 @@ export interface Config {
   readonly workspace?: WorkspaceConfig;
   readonly resume?: ResumeConfig;
   readonly model?: ModelConfig;
+  readonly prompt?: PromptConfig;
 }
 
 export interface NormalizedConfig {
@@ -49,11 +78,21 @@ export interface NormalizedConfig {
   readonly workspace: NormalizedWorkspaceConfig;
   readonly resume: NormalizedResumeConfig;
   readonly model: NormalizedModelConfig;
+  readonly prompt: NormalizedPromptConfig;
 }
 
 const DEFAULT_MAX_LIST_ENTRIES = 100;
 const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
 const DEFAULT_MAX_MODELS_PER_PROVIDER = 10;
+export const DEFAULT_PROMPT_RESPONSE_CONFIG: Readonly<NormalizedPromptResponseConfig> =
+  Object.freeze({
+    showToolOutput: true,
+    maxToolTextOutputChars: 280,
+    maxToolJsonOutputChars: 400,
+    maxReasoningChars: 320,
+    maxToolInputStringChars: 50,
+    maxToolInputObjectEntries: 2,
+  });
 
 export function normalizeConfig(config: Config): NormalizedConfig {
   return Object.freeze({
@@ -71,6 +110,9 @@ export function normalizeConfig(config: Config): NormalizedConfig {
     }),
     model: Object.freeze({
       maxModelsPerProvider: normalizeMaxModelsPerProvider(config.model?.maxModelsPerProvider),
+    }),
+    prompt: Object.freeze({
+      response: normalizePromptResponseConfig(config.prompt?.response),
     }),
   });
 }
@@ -97,4 +139,43 @@ function normalizeMaxModelsPerProvider(value: number | undefined): number {
   }
 
   return value;
+}
+
+function normalizePromptResponseConfig(
+  config: PromptResponseConfig | undefined,
+): NormalizedPromptResponseConfig {
+  const maxStreamDeltaChars = normalizeOptionalPositiveInteger(config?.maxStreamDeltaChars);
+
+  return Object.freeze({
+    showToolOutput: config?.showToolOutput ?? DEFAULT_PROMPT_RESPONSE_CONFIG.showToolOutput,
+    maxToolTextOutputChars: normalizePositiveInteger(
+      config?.maxToolTextOutputChars,
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolTextOutputChars,
+    ),
+    maxToolJsonOutputChars: normalizePositiveInteger(
+      config?.maxToolJsonOutputChars,
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolJsonOutputChars,
+    ),
+    maxReasoningChars: normalizePositiveInteger(
+      config?.maxReasoningChars,
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxReasoningChars,
+    ),
+    maxToolInputStringChars: normalizePositiveInteger(
+      config?.maxToolInputStringChars,
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolInputStringChars,
+    ),
+    maxToolInputObjectEntries: normalizePositiveInteger(
+      config?.maxToolInputObjectEntries,
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolInputObjectEntries,
+    ),
+    ...(maxStreamDeltaChars === undefined ? {} : { maxStreamDeltaChars }),
+  });
+}
+
+function normalizePositiveInteger(value: number | undefined, fallback: number): number {
+  return value === undefined || !Number.isInteger(value) || value < 1 ? fallback : value;
+}
+
+function normalizeOptionalPositiveInteger(value: number | undefined): number | undefined {
+  return value === undefined || !Number.isInteger(value) || value < 1 ? undefined : value;
 }

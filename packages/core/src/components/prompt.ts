@@ -1,4 +1,5 @@
 import { bulletList, inlineCode, markdownText } from "./markdown";
+import type { NormalizedPromptResponseConfig } from "../config";
 
 export type PromptToolStatus = "pending" | "running" | "completed" | "failed";
 
@@ -8,6 +9,7 @@ export interface PromptToolComponentInput {
   readonly input?: unknown;
   readonly rawInput?: string;
   readonly status: PromptToolStatus;
+  readonly config: NormalizedPromptResponseConfig;
   readonly output?: readonly PromptToolOutputComponentInput[];
   readonly error?: unknown;
 }
@@ -20,6 +22,7 @@ export type PromptToolOutputComponentInput =
 export interface PromptReasoningComponentInput {
   readonly text: string;
   readonly status: "streaming" | "done";
+  readonly config: NormalizedPromptResponseConfig;
 }
 
 const visibleOutputTools = new Set([
@@ -42,22 +45,26 @@ export function promptReasoning(input: PromptReasoningComponentInput): string {
   if (text.length === 0) return "";
 
   const label = input.status === "streaming" ? "Reasoning…" : "Reasoning";
-  return blockquote({ header: label, body: truncate(text, 3_000) });
+  return blockquote({ header: label, body: truncate(text, input.config.maxReasoningChars) });
 }
 
 /** Renders a tool call summary with optional compact output preview. */
 export function promptTool(input: PromptToolComponentInput): string {
-  const summary = `${toolStatusIcon(input.status)} ${toolDescription(input)}`;
+  const summary = `${toolStatusIcon(input.status)} ${toolDescription(input, input.config)}`;
 
   if (input.status === "failed") {
     return [summary, markdownText(describeUnknown(input.error ?? "Tool failed"))].join("\n");
   }
 
-  if (input.status !== "completed" || !shouldShowToolOutput(input)) {
+  if (
+    input.status !== "completed" ||
+    !input.config.showToolOutput ||
+    !shouldShowToolOutput(input)
+  ) {
     return summary;
   }
 
-  const output = promptToolOutput(input.output ?? []);
+  const output = promptToolOutput(input.output ?? [], input.config);
   return output.length === 0 ? summary : `${summary}\n\n${output}`;
 }
 
@@ -320,7 +327,10 @@ function toolStatusIcon(status: PromptToolStatus): string {
   }
 }
 
-function toolDescription(input: PromptToolComponentInput): string {
+function toolDescription(
+  input: PromptToolComponentInput,
+  config: NormalizedPromptResponseConfig,
+): string {
   const name = input.name ?? "tool";
   const normalized = name.toLowerCase();
   const record = toRecord(input.input);
@@ -373,7 +383,7 @@ function toolDescription(input: PromptToolComponentInput): string {
     return `Web search ${inlineCode(stringField(record, "query") ?? "query")}`;
   }
 
-  const inputSummary = record ? compactObject(record) : raw;
+  const inputSummary = record ? compactObject(record, config) : raw;
 
   return inputSummary ? `${inlineCode(name)} ${markdownText(inputSummary)}` : inlineCode(name);
 }
@@ -385,13 +395,19 @@ function shouldShowToolOutput(input: PromptToolComponentInput): boolean {
   return visibleOutputTools.has(normalized) || !hiddenOutputTools.has(normalized);
 }
 
-function promptToolOutput(outputs: readonly PromptToolOutputComponentInput[]): string {
+function promptToolOutput(
+  outputs: readonly PromptToolOutputComponentInput[],
+  config: NormalizedPromptResponseConfig,
+): string {
   const rendered = outputs.map((output) => {
     switch (output.type) {
       case "text":
-        return fenced("text", truncate(output.text.trim(), 2_000));
+        return fenced("text", truncate(output.text.trim(), config.maxToolTextOutputChars));
       case "json":
-        return fenced("json", truncate(stringifyUnknown(output.value), 2_000));
+        return fenced(
+          "json",
+          truncate(stringifyUnknown(output.value), config.maxToolJsonOutputChars),
+        );
       case "image":
         return `_Image output: ${markdownText(output.mimeType)}, ${formatNumber(output.dataLength)} bytes._`;
     }
@@ -433,16 +449,22 @@ function stringField(
   return undefined;
 }
 
-function compactObject(value: Record<string, unknown>): string {
-  const entries = Object.entries(value).slice(0, 3);
+function compactObject(
+  value: Record<string, unknown>,
+  config: NormalizedPromptResponseConfig,
+): string {
+  const entries = Object.entries(value).slice(0, config.maxToolInputObjectEntries);
   if (entries.length === 0) return "";
 
   const suffix = Object.keys(value).length > entries.length ? ", …" : "";
-  return `{ ${entries.map(([key, item]) => `${key}: ${compactValue(item)}`).join(", ")}${suffix} }`;
+  return `{ ${entries
+    .map(([key, item]) => `${key}: ${compactValue(item, config)}`)
+    .join(", ")}${suffix} }`;
 }
 
-function compactValue(value: unknown): string {
-  if (typeof value === "string") return JSON.stringify(truncate(value, 80));
+function compactValue(value: unknown, config: NormalizedPromptResponseConfig): string {
+  if (typeof value === "string")
+    return JSON.stringify(truncate(value, config.maxToolInputStringChars));
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (value === null) return "null";
   if (Array.isArray(value)) return `[${value.length} items]`;
