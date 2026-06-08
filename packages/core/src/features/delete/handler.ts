@@ -1,28 +1,24 @@
-import type {
-  ChatActionEvent,
-  ChatAdapterDefinitions,
-  ChatSendActionInput,
-  ChatTextInput,
-} from "@xmux/chat-core";
+import type { ChatActionEvent, ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { deleteHarnessActionId, deleteSessionActionId, type Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import { CommandResponseError } from "../errors";
-import { replyToChatEvent, threadFromChatEvent, type CommandEvent } from "../utils";
+import {
+  parseActionPayload,
+  replyWithResult,
+  respondToAction,
+  toSendActionInput,
+  type CommandEvent,
+  threadFromChatEvent,
+} from "../utils";
 import {
   formatDeleteFailure,
   formatDeleteHarnessActionMessage,
   formatDeleteListActionMessage,
   formatDeleteOutput,
-  type DeleteActionMessage,
 } from "./response";
-import {
-  deleteSessionCommand,
-  listDeleteSessionsForHarness,
-  type DeleteCommandError,
-  type DeleteCommandOutput,
-} from "./service";
+import { deleteSessionCommand, listDeleteSessionsForHarness } from "./service";
 
 export interface HandleDeleteCommandInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -78,14 +74,24 @@ export async function handleDeleteCommand<
     deleted.value.status === "harnesses" &&
     deleted.value.harnessIds.length > 0
   ) {
-    return sendDeleteActionMessage({
-      ctx: input.ctx,
-      event: input.event,
-      message: formatDeleteHarnessActionMessage(deleted.value),
+    const message = formatDeleteHarnessActionMessage(deleted.value);
+
+    return respondToAction({
+      command: "delete",
+      respond: () =>
+        input.ctx.app.chat.sendAction(
+          toSendActionInput({ ctx: input.ctx, event: input.event }, message),
+        ),
     });
   }
 
-  return replyDeleteResult({ event: input.event, result: deleted });
+  return replyWithResult({
+    event: input.event,
+    command: "delete",
+    result: deleted,
+    ok: formatDeleteOutput,
+    err: formatDeleteFailure,
+  });
 }
 
 export async function handleDeleteHarnessAction<
@@ -94,7 +100,10 @@ export async function handleDeleteHarnessAction<
 >(
   input: HandleDeleteHarnessActionInput<TAdapters, TChats>,
 ): Promise<Result<void, CommandResponseError>> {
-  const acknowledged = await respondToDeleteAction(() => input.event.ack());
+  const acknowledged = await respondToAction({
+    command: "delete",
+    respond: () => input.event.ack(),
+  });
   if (acknowledged.isErr()) return acknowledged;
 
   const listed = await listDeleteSessionsForHarness({
@@ -104,13 +113,23 @@ export async function handleDeleteHarnessAction<
   });
 
   if (listed.isOk()) {
-    return updateDeleteActionMessage({
-      event: input.event,
-      message: formatDeleteListActionMessage(listed.value),
+    const message = formatDeleteListActionMessage(listed.value);
+
+    return respondToAction({
+      command: "delete",
+      respond: () =>
+        input.event.update({
+          message: { text: message.text, format: message.format },
+          buttons: message.buttons,
+        }),
     });
   }
 
-  return respondToDeleteAction(() => input.event.reply(formatDeleteResult({ result: listed })));
+  return respondToAction({
+    command: "delete",
+    respond: () =>
+      input.event.reply(Result.match(listed, { ok: formatDeleteOutput, err: formatDeleteFailure })),
+  });
 }
 
 export async function handleDeleteSessionAction<
@@ -119,10 +138,13 @@ export async function handleDeleteSessionAction<
 >(
   input: HandleDeleteSessionActionInput<TAdapters, TChats>,
 ): Promise<Result<void, CommandResponseError>> {
-  const acknowledged = await respondToDeleteAction(() => input.event.ack());
+  const acknowledged = await respondToAction({
+    command: "delete",
+    respond: () => input.event.ack(),
+  });
   if (acknowledged.isErr()) return acknowledged;
 
-  const target = parseDeleteSessionActionPayload(input.event.payload);
+  const target = parseActionPayload(input.event.payload);
   const deleted = await deleteSessionCommand({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
@@ -131,7 +153,10 @@ export async function handleDeleteSessionAction<
   });
 
   if (deleted.isErr()) {
-    return respondToDeleteAction(() => input.event.reply(formatDeleteFailure(deleted.error)));
+    return respondToAction({
+      command: "delete",
+      respond: () => input.event.reply(formatDeleteFailure(deleted.error)),
+    });
   }
 
   const listed = await listDeleteSessionsForHarness({
@@ -141,119 +166,20 @@ export async function handleDeleteSessionAction<
   });
 
   if (listed.isOk()) {
-    return updateDeleteActionMessage({
-      event: input.event,
-      message: formatDeleteListActionMessage(listed.value),
+    const message = formatDeleteListActionMessage(listed.value);
+
+    return respondToAction({
+      command: "delete",
+      respond: () =>
+        input.event.update({
+          message: { text: message.text, format: message.format },
+          buttons: message.buttons,
+        }),
     });
   }
 
-  return respondToDeleteAction(() => input.event.reply(formatDeleteFailure(listed.error)));
-}
-
-function replyDeleteResult(input: {
-  readonly event: ChatEventWithReply;
-  readonly result: Result<DeleteCommandOutput, DeleteCommandError>;
-}): Promise<Result<void, CommandResponseError>> {
-  return replyToChatEvent({
-    event: input.event,
-    message: formatDeleteResult({ result: input.result }),
-    onError: (cause) => new CommandResponseError({ command: "delete", cause }),
+  return respondToAction({
+    command: "delete",
+    respond: () => input.event.reply(formatDeleteFailure(listed.error)),
   });
 }
-
-function formatDeleteResult(input: {
-  readonly result: Result<DeleteCommandOutput, DeleteCommandError>;
-}): ChatTextInput {
-  return Result.match(input.result, {
-    ok: formatDeleteOutput,
-    err: formatDeleteFailure,
-  });
-}
-
-async function sendDeleteActionMessage<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: CommandEvent<Extract<keyof TChats, string>, "delete">;
-  readonly message: DeleteActionMessage;
-}): Promise<Result<void, CommandResponseError>> {
-  const sent = await input.ctx.app.chat.sendAction(toSendActionInput(input, input.message));
-
-  return Result.map(
-    Result.mapError(sent, (cause) => new CommandResponseError({ command: "delete", cause })),
-    () => undefined,
-  );
-}
-
-function toSendActionInput<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: {
-    readonly ctx: HandlerContext<TAdapters, TChats>;
-    readonly event: CommandEvent<Extract<keyof TChats, string>, "delete">;
-  },
-  message: DeleteActionMessage,
-): ChatSendActionInput<TChats, Actions> {
-  return {
-    chatId: input.event.chatId,
-    conversationId: input.event.conversation.conversationId,
-    text: message.text,
-    format: message.format,
-    buttons: message.buttons,
-    signal: input.ctx.signal,
-  } as ChatSendActionInput<TChats, Actions>;
-}
-
-function updateDeleteActionMessage(input: {
-  readonly event: ChatActionUpdateEvent;
-  readonly message: DeleteActionMessage;
-}): Promise<Result<void, CommandResponseError>> {
-  return respondToDeleteAction(() =>
-    input.event.update({
-      message: {
-        text: input.message.text,
-        format: input.message.format,
-      },
-      buttons: input.message.buttons,
-    }),
-  );
-}
-
-async function respondToDeleteAction(
-  respond: () => Promise<Result<unknown, unknown>>,
-): Promise<Result<void, CommandResponseError>> {
-  const responded = await respond();
-
-  return Result.map(
-    Result.mapError(responded, (cause) => new CommandResponseError({ command: "delete", cause })),
-    () => undefined,
-  );
-}
-
-function parseDeleteSessionActionPayload(payload: string): {
-  readonly harnessId: string;
-  readonly shortId: string;
-} {
-  const separatorIndex = payload.indexOf(":");
-  if (separatorIndex < 1) {
-    return { harnessId: "", shortId: "" };
-  }
-
-  return {
-    harnessId: payload.slice(0, separatorIndex),
-    shortId: payload.slice(separatorIndex + 1),
-  };
-}
-
-type ChatEventWithReply = {
-  readonly reply: (message: ChatTextInput) => Promise<Result<unknown, unknown>>;
-};
-
-type ChatActionUpdateEvent = {
-  readonly update: (input: {
-    readonly message?: ChatTextInput;
-    readonly buttons?: readonly (readonly import("@xmux/chat-core").ChatButton[])[];
-  }) => Promise<Result<unknown, unknown>>;
-};

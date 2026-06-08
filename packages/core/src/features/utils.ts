@@ -1,13 +1,18 @@
 import type {
   ChatActor,
+  ChatAdapterDefinitions,
+  ChatButton,
+  ChatButtonInput,
   ChatConversationRef,
   ChatMessageFormat,
+  ChatSendActionInput,
   ChatTextInput,
   ChatTextStreamContent,
 } from "@xmux/chat-core";
-import type { HarnessModelRef } from "@xmux/harness-core";
+import type { HarnessAdapterDefinitions, HarnessModelRef } from "@xmux/harness-core";
 import { Result } from "better-result";
-import type { Actor } from "../ctx";
+import type { Actions } from "../actions";
+import type { Actor, HandlerContext } from "../ctx";
 import type { ChatThreadRef } from "../store";
 import { CommandResponseError } from "./errors";
 
@@ -174,4 +179,90 @@ export function isSameModel(
     left.modelId === right.modelId &&
     left.variant === right.variant
   );
+}
+
+/**
+ * Shared shape for action messages that carry text, format, and interactive
+ * buttons. Used when command handlers send action messages via
+ * `chat.sendAction` or update them in-place.
+ */
+export interface ActionMessage {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
+}
+
+/**
+ * Minimal event interface for action message updates.
+ * Handlers use `update` to replace the message text and buttons of a
+ * previously-sent action without posting a new message.
+ */
+export type ChatActionUpdateEvent = {
+  readonly update: (input: {
+    readonly message?: ChatTextInput;
+    readonly buttons?: readonly (readonly ChatButton[])[];
+  }) => Promise<Result<unknown, unknown>>;
+};
+
+/**
+ * Wraps a response callback (ack, reply, update, sendAction, …) and maps any
+ * transport error to a `CommandResponseError` for `command`.
+ *
+ * Used across every feature that sends or updates chat actions.
+ */
+export async function respondToAction(input: {
+  readonly command: string;
+  readonly respond: () => Promise<Result<unknown, unknown>>;
+}): Promise<Result<void, CommandResponseError>> {
+  const responded = await input.respond();
+
+  return Result.map(
+    Result.mapError(
+      responded,
+      (cause) => new CommandResponseError({ command: input.command, cause }),
+    ),
+    () => undefined,
+  );
+}
+
+/**
+ * Builds a `ChatSendActionInput` from the common context/event/message triple.
+ */
+export function toSendActionInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: {
+    readonly ctx: HandlerContext<TAdapters, TChats>;
+    readonly event: ChatEventWithConversation<Extract<keyof TChats, string>>;
+  },
+  message: ActionMessage,
+): ChatSendActionInput<TChats, Actions> {
+  return {
+    chatId: input.event.chatId,
+    conversationId: input.event.conversation.conversationId,
+    text: message.text,
+    format: message.format,
+    buttons: message.buttons,
+    signal: input.ctx.signal,
+  } as ChatSendActionInput<TChats, Actions>;
+}
+
+/**
+ * Parses a `"harnessId:shortId"` action payload into its components.
+ */
+export function parseActionPayload(payload: string): {
+  readonly harnessId: string;
+  readonly shortId: string;
+} {
+  const separatorIndex = payload.indexOf(":");
+
+  if (separatorIndex < 1) {
+    return { harnessId: "", shortId: "" };
+  }
+
+  return {
+    harnessId: payload.slice(0, separatorIndex),
+    shortId: payload.slice(separatorIndex + 1),
+  };
 }
