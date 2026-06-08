@@ -4,6 +4,8 @@ export const thinkingActionId = "thinking" as const;
 export const modelActionId = "model" as const;
 export const deleteHarnessActionId = "dh" as const;
 export const deleteSessionActionId = "d" as const;
+export const resumeHarnessActionId = "rh" as const;
+export const resumeSessionActionId = "r" as const;
 
 function actionWithoutPayload() {
   return actionValue<undefined>();
@@ -33,6 +35,16 @@ export const actions = defineChatActions({
     },
   }),
   [deleteSessionActionId]: defineChatAction({
+    values: {
+      x: actionValue<string>(),
+    },
+  }),
+  [resumeHarnessActionId]: defineChatAction({
+    values: {
+      x: actionValue<string>(),
+    },
+  }),
+  [resumeSessionActionId]: defineChatAction({
     values: {
       x: actionValue<string>(),
     },

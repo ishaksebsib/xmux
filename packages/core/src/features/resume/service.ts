@@ -17,13 +17,18 @@ import {
   type SessionRecord,
 } from "../../store";
 import {
-  listSessionsForCommand,
   parseSessionTarget,
   selectSessionByShortId,
   type SelectSessionByShortIdError,
 } from "../shared/session-command";
-import type { SessionCommandIncompleteTargetError, SessionListAllFailedError } from "../shared/session-command";
+import type { SessionCommandIncompleteTargetError } from "../shared/session-command";
+import {
+  listHarnessSelectableSessions,
+  type SessionSelectionGroup,
+} from "../shared/session-selection";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
+import { CommandHarnessNotConfiguredError } from "../errors";
+import { requireConfiguredHarnessId } from "../utils";
 
 export type ResumeCommandError =
   | StoreError
@@ -32,15 +37,20 @@ export type ResumeCommandError =
   | ResumeSessionError
   | SelectSessionByShortIdError
   | SessionCommandIncompleteTargetError
-  | SessionListAllFailedError;
+  | CommandHarnessNotConfiguredError;
 
-export type ResumeCommandOutput = ResumeListOutput | ResumeActivatedOutput;
+export type ResumeCommandOutput = ResumeHarnessesOutput | ResumeListOutput | ResumeActivatedOutput;
+
+export interface ResumeHarnessesOutput {
+  readonly status: "harnesses";
+  readonly cwd: string;
+  readonly harnessIds: readonly string[];
+}
 
 export interface ResumeListOutput {
   readonly status: "listed";
   readonly cwd: string;
-  readonly groups: readonly import("../shared/session-selection").SessionSelectionGroup[];
-  readonly failures: readonly import("../shared/session-selection").SessionSelectionListFailure[];
+  readonly group: SessionSelectionGroup;
 }
 
 export interface ResumeActivatedOutput {
@@ -77,15 +87,11 @@ export async function resumeSessionCommand<
     );
 
     if (target.status === "list") {
-      return Result.ok(
-        yield* Result.await(
-          listSessionsForCommand({
-            ctx: input.ctx,
-            cwd,
-            maxSessionsPerHarness: input.ctx.app.config.resume.maxSessionsPerHarness,
-          }),
-        ),
-      );
+      return Result.ok({
+        status: "harnesses" as const,
+        cwd,
+        harnessIds: input.ctx.app.harnessIds,
+      });
     }
 
     const selected = yield* Result.await(
@@ -124,7 +130,41 @@ export async function resumeSessionCommand<
       ),
     );
 
-    return Result.ok({ status: "resumed" as const, session: stored, shortId: input.shortId ?? selected.shortId });
+    return Result.ok({
+      status: "resumed" as const,
+      session: stored,
+      shortId: input.shortId ?? selected.shortId,
+    });
+  });
+}
+
+export async function listResumeSessionsForHarness<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly thread: ChatThreadRef;
+  readonly harnessId: string;
+}): Promise<Result<ResumeListOutput, ResumeCommandError>> {
+  return Result.gen(async function* () {
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
+    const harnessId = yield* requireConfiguredHarnessId({
+      harnessId: input.harnessId,
+      availableHarnessIds: input.ctx.app.harnessIds,
+      onMissing: (args) => new CommandHarnessNotConfiguredError(args),
+    });
+    const group = yield* Result.await(
+      listHarnessSelectableSessions({
+        ctx: input.ctx,
+        harnessId,
+        cwd,
+        maxSessions: input.ctx.app.config.resume.maxSessionsPerHarness,
+      }),
+    );
+
+    return Result.ok({ status: "listed" as const, cwd, group });
   });
 }
 

@@ -20,69 +20,155 @@ const capabilities = {
 const thread = { chatId: "telegram", threadId: "conversation-1" } as const;
 
 describe("/resume command", () => {
-  test("lists sessions from all harnesses with shortest unique ids per harness", async () => {
-    const { emitCommand, replies, listInputs, xmux } = await initializeXmux();
+  test("shows harness choices before listing sessions", async () => {
+    const { emitCommand, actionMessages, listInputs, xmux } = await initializeXmux();
 
     emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => actionMessages.length === 1);
 
-    expect(listInputs).toEqual([
-      { harnessId: "opencode", cwd: process.cwd() },
-      { harnessId: "pi", cwd: process.cwd() },
+    expect(listInputs).toEqual([]);
+    expect(actionMessages[0]?.text).toContain("**Choose a harness**");
+    expect(actionMessages[0]?.text).toContain("Pick one to view sessions.");
+    expect(actionMessages[0]?.text).not.toContain("Fix bug");
+    expect(actionMessages[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({
+          label: "opencode sessions",
+          actionId: "rh",
+          value: "x",
+          payload: "opencode",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          label: "pi sessions",
+          actionId: "rh",
+          value: "x",
+          payload: "pi",
+        }),
+      ],
     ]);
-    expect(replies[0]).toContain("**Available sessions** (4)");
-    expect(replies[0]).toContain("> **opencode** (3)");
-    expect(replies[0]).toContain(
+    expect(
+      encodedTelegramCallbackLength(actionMessages[0]?.buttons[0]?.[0] as ActionButtonFixture),
+    ).toBeLessThanOrEqual(64);
+
+    await xmux.shutdown();
+  });
+
+  test("lists sessions for the selected harness with resume buttons", async () => {
+    const { emitHarnessAction, actionUpdates, listInputs, xmux } = await initializeXmux();
+
+    emitHarnessAction("opencode");
+
+    await eventually(() => actionUpdates.length === 1);
+
+    expect(listInputs).toEqual([{ harnessId: "opencode", cwd: process.cwd() }]);
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions** (3)");
+    expect(actionUpdates[0]?.text).toContain(
       "- Title: Fix bug\n  Short ID: `abc1`\n  Command: `/resume opencode abc1`",
     );
-    expect(replies[0]).toContain("Short ID: `abc2`");
-    expect(replies[0]).toContain("Title: Refactor auth");
-    expect(replies[0]).toContain("Command: `/resume opencode abc2`");
-    expect(replies[0]).toContain("Short ID: `xy9`");
-    expect(replies[0]).toContain("Title: Cleanup");
-    expect(replies[0]).toContain("Command: `/resume opencode xy9`");
-    expect(replies[0]).toContain("> **pi** (1)");
-    expect(replies[0]).toContain("Short ID: `abc`");
-    expect(replies[0]).toContain("Title: PI session");
-    expect(replies[0]).toContain("Command: `/resume pi abc`");
+    expect(actionUpdates[0]?.text).toContain("Short ID: `abc2`");
+    expect(actionUpdates[0]?.text).toContain("Title: Refactor auth");
+    expect(actionUpdates[0]?.text).toContain("Command: `/resume opencode abc2`");
+    expect(actionUpdates[0]?.text).toContain("Short ID: `xy9`");
+    expect(actionUpdates[0]?.text).toContain("Title: Cleanup");
+    expect(actionUpdates[0]?.text).toContain("Command: `/resume opencode xy9`");
+    expect(actionUpdates[0]?.text).not.toContain("PI session");
+    expect(actionUpdates[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({
+          label: "Resume abc1",
+          actionId: "r",
+          value: "x",
+          payload: "opencode:abc1",
+          style: "primary",
+        }),
+      ],
+      [expect.objectContaining({ label: "Resume abc2", payload: "opencode:abc2" })],
+      [expect.objectContaining({ label: "Resume xy9", payload: "opencode:xy9" })],
+    ]);
+    expect(
+      encodedTelegramCallbackLength(actionUpdates[0]?.buttons[1]?.[0] as ActionButtonFixture),
+    ).toBeLessThanOrEqual(64);
 
     await xmux.shutdown();
   });
 
   test("limits listed sessions per harness using the default resume config", async () => {
-    const { emitCommand, replies, xmux } = await initializeXmux({
+    const { emitHarnessAction, actionUpdates, xmux } = await initializeXmux({
       opencodeSessions: createSessions("opencode", 6),
       piSessions: [],
     });
 
-    emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
+    emitHarnessAction("opencode");
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => actionUpdates.length === 1);
 
-    expect(replies[0]).toContain("> **opencode** (showing 5 of 6)");
-    expect(replies[0]).toContain("Title: opencode 5");
-    expect(replies[0]).not.toContain("Title: opencode 6");
-    expect(replies[0]).toContain("_And 1 more sessions._");
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions** (6)");
+    expect(actionUpdates[0]?.text).toContain("Title: opencode 5");
+    expect(actionUpdates[0]?.text).not.toContain("Title: opencode 6");
+    expect(actionUpdates[0]?.text).toContain("_And 1 more sessions._");
 
     await xmux.shutdown();
   });
 
   test("uses configured max resume sessions per harness", async () => {
-    const { emitCommand, replies, xmux } = await initializeXmux({
+    const { emitHarnessAction, actionUpdates, xmux } = await initializeXmux({
       maxSessionsPerHarness: 2,
       opencodeSessions: createSessions("opencode", 4),
       piSessions: [],
     });
 
-    emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
+    emitHarnessAction("opencode");
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => actionUpdates.length === 1);
 
-    expect(replies[0]).toContain("> **opencode** (showing 2 of 4)");
-    expect(replies[0]).toContain("Title: opencode 2");
-    expect(replies[0]).not.toContain("Title: opencode 3");
-    expect(replies[0]).toContain("_And 2 more sessions._");
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions** (4)");
+    expect(actionUpdates[0]?.text).toContain("Title: opencode 2");
+    expect(actionUpdates[0]?.text).not.toContain("Title: opencode 3");
+    expect(actionUpdates[0]?.text).toContain("_And 2 more sessions._");
+
+    await xmux.shutdown();
+  });
+
+  test("reports an empty selected harness without resume buttons", async () => {
+    const { emitHarnessAction, replies, actionUpdates, xmux } = await initializeXmux({
+      opencodeSessions: [],
+    });
+
+    emitHarnessAction("opencode");
+
+    await eventually(() => actionUpdates.length === 1);
+
+    expect(replies).toHaveLength(0);
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions**");
+    expect(actionUpdates[0]?.text).toContain("No sessions found.");
+    expect(actionUpdates[0]?.buttons).toEqual([]);
+
+    await xmux.shutdown();
+  });
+
+  test("resumes the selected session from a session button and updates the message", async () => {
+    const { emitResumeAction, replies, actionUpdates, resumeInputs, xmux } = await initializeXmux();
+
+    emitResumeAction({ harnessId: "opencode", shortId: "abc2" });
+
+    await eventually(() => actionUpdates.length === 1);
+
+    expect(replies).toHaveLength(0);
+    expect(resumeInputs).toEqual([
+      { harnessId: "opencode", sessionId: "abc222", cwd: process.cwd() },
+    ]);
+    expect(actionUpdates[0]?.text).toContain("**Resumed** `opencode/abc2`");
+    expect(actionUpdates[0]?.text).toContain("- Title: Refactor auth");
+    expect(actionUpdates[0]?.buttons).toEqual([]);
+
+    const binding = await xmux.ctx.store.threadBindings.get(thread);
+    expect(binding.unwrap("expected binding lookup to succeed")).toMatchObject({
+      thread,
+      sessionRef: { harnessId: "opencode", sessionId: "abc222" },
+    });
 
     await xmux.shutdown();
   });
@@ -204,6 +290,14 @@ interface SessionFixture {
 
 async function initializeXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
+  const actionMessages: {
+    readonly text: string;
+    readonly buttons: readonly (readonly unknown[])[];
+  }[] = [];
+  const actionUpdates: {
+    readonly text: string;
+    readonly buttons: readonly (readonly unknown[])[];
+  }[] = [];
   const listInputs: { readonly harnessId: string; readonly cwd?: string }[] = [];
   const resumeInputs: {
     readonly harnessId: string;
@@ -265,6 +359,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
               return Result.ok(sentMessage({ text: input.text, format: input.format }));
             },
             async sendAction(input) {
+              actionMessages.push({ text: input.text, buttons: input.buttons });
               return Result.ok({
                 chatId: input.chatId,
                 conversationId: input.conversationId,
@@ -273,7 +368,18 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
                 adapterData: {},
               });
             },
-            async respondToAction() {
+            async respondToAction(input) {
+              if (input.response.kind === "reply") {
+                const message = input.response.message;
+                replies.push(typeof message === "string" ? message : message.text);
+              }
+              if (input.response.kind === "update" && input.response.message) {
+                const message = input.response.message;
+                actionUpdates.push({
+                  text: typeof message === "string" ? message : message.text,
+                  buttons: input.response.buttons ?? [],
+                });
+              }
               return Result.ok();
             },
             async reply(input) {
@@ -300,9 +406,15 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
 
   return {
     replies,
+    actionMessages,
+    actionUpdates,
     listInputs,
     resumeInputs,
     emitCommand: emitCommand as (event: unknown) => void,
+    emitHarnessAction: (harnessId: string) =>
+      (emitCommand as (event: unknown) => void)(harnessActionEvent(harnessId)),
+    emitResumeAction: (target: { readonly harnessId: string; readonly shortId: string }) =>
+      (emitCommand as (event: unknown) => void)(resumeActionEvent(target)),
     xmux,
   };
 }
@@ -390,6 +502,51 @@ function commandEvent(input: {
       options: input.options,
     },
   };
+}
+
+function harnessActionEvent(harnessId: string) {
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "1" },
+    interactionId: "resume-harness-1",
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    actionId: "rh",
+    value: "x",
+    payload: harnessId,
+  };
+}
+
+function resumeActionEvent(input: { readonly harnessId: string; readonly shortId: string }) {
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "1" },
+    interactionId: "resume-session-1",
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    actionId: "r",
+    value: "x",
+    payload: `${input.harnessId}:${input.shortId}`,
+  };
+}
+
+interface ActionButtonFixture {
+  readonly actionId: string;
+  readonly value: string;
+  readonly payload?: unknown;
+}
+
+function encodedTelegramCallbackLength(button: ActionButtonFixture): number {
+  return Buffer.byteLength(
+    JSON.stringify({
+      actionId: button.actionId,
+      value: button.value,
+      ...(button.payload === undefined ? {} : { payload: button.payload }),
+    }),
+    "utf8",
+  );
 }
 
 function sentMessage(input: {
