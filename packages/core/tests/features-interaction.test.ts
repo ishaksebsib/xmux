@@ -263,6 +263,115 @@ describe("interaction commands", () => {
 
     await xmux.shutdown();
   });
+
+  test("Allow button responds allow_once and clears the message buttons", async () => {
+    const { emitCommand, replies, respondCalls, actionResponses, xmux } = await initializeXmux({
+      promptEvents: permissionEvents("permission-1"),
+    });
+    await bindSession({ xmux });
+    const prompt = await startPromptAndConsume({ xmux, eventsToConsume: 2 });
+
+    emitCommand(interactionActionEvent({ value: "allow" }));
+
+    await eventually(() => actionResponses.some((response) => response.kind === "update"));
+
+    expect(respondCalls).toEqual([
+      { kind: "permission", requestId: "permission-1", decision: "allow_once" },
+    ]);
+    expect(replies).toEqual([]);
+    expect(xmux.ctx.services.promptRuns.get(sessionRef)?.pendingInteractions).toEqual([]);
+
+    const update = actionResponses.find((response) => response.kind === "update");
+    expect(update?.text).toBe("✓ Permission allowed");
+    expect(update?.buttons).toEqual([]);
+
+    await prompt.close();
+    await xmux.shutdown();
+  });
+
+  test("Allow always button responds allow_always", async () => {
+    const { emitCommand, respondCalls, actionResponses, xmux } = await initializeXmux({
+      promptEvents: permissionEvents("permission-1"),
+    });
+    await bindSession({ xmux });
+    const prompt = await startPromptAndConsume({ xmux, eventsToConsume: 2 });
+
+    emitCommand(interactionActionEvent({ value: "always" }));
+
+    await eventually(() => actionResponses.some((response) => response.kind === "update"));
+
+    expect(respondCalls).toEqual([
+      { kind: "permission", requestId: "permission-1", decision: "allow_always" },
+    ]);
+    const update = actionResponses.find((response) => response.kind === "update");
+    expect(update?.text).toContain("✓ Permission allowed");
+    expect(update?.buttons).toEqual([]);
+
+    await prompt.close();
+    await xmux.shutdown();
+  });
+
+  test("Reject button responds reject and marks the message rejected", async () => {
+    const { emitCommand, respondCalls, actionResponses, xmux } = await initializeXmux({
+      promptEvents: permissionEvents("permission-1"),
+    });
+    await bindSession({ xmux });
+    const prompt = await startPromptAndConsume({ xmux, eventsToConsume: 2 });
+
+    emitCommand(interactionActionEvent({ value: "reject" }));
+
+    await eventually(() => actionResponses.some((response) => response.kind === "update"));
+
+    expect(respondCalls).toEqual([
+      { kind: "permission", requestId: "permission-1", decision: "reject" },
+    ]);
+    const update = actionResponses.find((response) => response.kind === "update");
+    expect(update?.text).toBe("✗ Permission rejected");
+    expect(update?.buttons).toEqual([]);
+
+    await prompt.close();
+    await xmux.shutdown();
+  });
+
+  test("button resolves its own interaction by ordinal", async () => {
+    const { emitCommand, respondCalls, actionResponses, xmux } = await initializeXmux({
+      promptEvents: twoPermissionEvents(),
+    });
+    await bindSession({ xmux });
+    const prompt = await startPromptAndConsume({ xmux, eventsToConsume: 3 });
+
+    emitCommand(interactionActionEvent({ value: "reject", ordinal: 2 }));
+
+    await eventually(() => actionResponses.some((response) => response.kind === "update"));
+
+    expect(respondCalls).toEqual([
+      { kind: "permission", requestId: "permission-2", decision: "reject" },
+    ]);
+    expect(
+      xmux.ctx.services.promptRuns
+        .get(sessionRef)
+        ?.pendingInteractions.map((interaction) => interaction.requestId),
+    ).toEqual(["permission-1"]);
+
+    await prompt.close();
+    await xmux.shutdown();
+  });
+
+  test("stale button clears its buttons when nothing is pending", async () => {
+    const { emitCommand, respondCalls, actionResponses, xmux } = await initializeXmux();
+    await bindSession({ xmux });
+
+    emitCommand(interactionActionEvent({ value: "allow" }));
+
+    await eventually(() => actionResponses.some((response) => response.kind === "update"));
+
+    expect(respondCalls).toEqual([]);
+    const update = actionResponses.find((response) => response.kind === "update");
+    expect(update?.text).toContain("no longer pending");
+    expect(update?.buttons).toEqual([]);
+
+    await xmux.shutdown();
+  });
 });
 
 interface InitializeXmuxInput {
@@ -270,9 +379,16 @@ interface InitializeXmuxInput {
   readonly respondErrors?: unknown[];
 }
 
+interface CapturedActionResponse {
+  readonly kind: "ack" | "reply" | "update";
+  readonly text?: string;
+  readonly buttons?: readonly (readonly { readonly value?: string }[])[];
+}
+
 async function initializeXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
   const respondCalls: HarnessInteractionResponse[] = [];
+  const actionResponses: CapturedActionResponse[] = [];
   let emitCommand: ((event: unknown) => void) | undefined;
 
   const xmux = createXmux({
@@ -341,7 +457,19 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
                 adapterData: {},
               });
             },
-            async respondToAction() {
+            async respondToAction(request) {
+              const response = request.response;
+              actionResponses.push({
+                kind: response.kind,
+                ...(response.kind === "ack" || response.kind === "reply"
+                  ? {}
+                  : {
+                      ...(response.message === undefined
+                        ? {}
+                        : { text: normalizeActionText(response.message) }),
+                      ...(response.buttons === undefined ? {} : { buttons: response.buttons }),
+                    }),
+              } as CapturedActionResponse);
               return Result.ok();
             },
             async reply(message) {
@@ -366,9 +494,14 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
   return {
     replies,
     respondCalls,
+    actionResponses,
     emitCommand: emitCommand as (event: unknown) => void,
     xmux,
   };
+}
+
+function normalizeActionText(message: { readonly text: string } | string): string {
+  return typeof message === "string" ? message : message.text;
 }
 
 async function bindSession(input: {
@@ -450,6 +583,24 @@ function rejectCommandEvent() {
       name: "reject",
       options: {},
     },
+  };
+}
+
+function interactionActionEvent(input: {
+  readonly value: "allow" | "always" | "reject";
+  readonly ordinal?: number;
+}) {
+  const payload = String(input.ordinal ?? 1);
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "1" },
+    interactionId: `interaction-${input.value}-${payload}`,
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    actionId: "i",
+    value: input.value,
+    payload,
   };
 }
 

@@ -127,8 +127,8 @@ describe("prompt messages", () => {
     await xmux.shutdown();
   });
 
-  test("splits permission requests into a separate chat message", async () => {
-    const { emitMessage, replies, xmux } = await initializeFallbackXmux({
+  test("sends permission requests as a separate button message", async () => {
+    const { emitMessage, replies, actionMessages, xmux } = await initializeFallbackXmux({
       events: [
         { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "Need access." },
         {
@@ -141,6 +141,7 @@ describe("prompt messages", () => {
           permission: {
             name: "external_directory",
             patterns: ["/home/pro/dev/forks/pi/*"],
+            allowAlways: true,
           },
         },
         { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "Continuing." },
@@ -151,10 +152,12 @@ describe("prompt messages", () => {
 
     emitMessage(messageEvent({ text: "go" }));
 
-    await eventually(() => replies.length === 3);
+    await eventually(() => replies.length === 2 && actionMessages.length === 1);
 
     expect(replies[0]).toBe("Need access.");
-    expect(replies[1]).toBe(
+    expect(replies[1]).toBe("Continuing.");
+
+    expect(actionMessages[0]?.text).toBe(
       [
         "⚠️ **Permission requested**",
         "",
@@ -163,15 +166,17 @@ describe("prompt messages", () => {
         "",
         "**Scope**",
         "- `/home/pro/dev/forks/pi/*`",
-        "",
-        "**Respond**",
-        "- `/allow` — allow this request once",
-        "- `/allow always` — always allow matching future requests",
-        "- `/reject` — reject this request",
       ].join("\n"),
     );
-    expect(replies[1]).not.toContain("per_internal_1");
-    expect(replies[2]).toBe("Continuing.");
+    expect(actionMessages[0]?.text).not.toContain("/allow");
+    expect(actionMessages[0]?.text).not.toContain("per_internal_1");
+    expect(actionMessages[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({ actionId: "i", value: "allow", payload: "1" }),
+        expect.objectContaining({ actionId: "i", value: "always", payload: "1" }),
+        expect.objectContaining({ actionId: "i", value: "reject", payload: "1" }),
+      ],
+    ]);
 
     await xmux.shutdown();
   });
@@ -424,6 +429,7 @@ interface InitializeXmuxInput {
 
 async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
+  const actionMessages: { readonly text: string; readonly buttons: unknown }[] = [];
   const promptInputs: unknown[] = [];
   let emitMessage: ((event: unknown) => void) | undefined;
 
@@ -449,6 +455,7 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
               return Result.ok(sentMessage({ text: message.text, format: message.format }));
             },
             async sendAction(input) {
+              actionMessages.push({ text: input.text, buttons: input.buttons });
               return Result.ok({
                 chatId: input.chatId,
                 conversationId: input.conversationId,
@@ -479,7 +486,13 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
   expect((await xmux.initialize()).isOk()).toBe(true);
   expect(emitMessage).toBeDefined();
 
-  return { replies, promptInputs, emitMessage: emitMessage as (event: unknown) => void, xmux };
+  return {
+    replies,
+    actionMessages,
+    promptInputs,
+    emitMessage: emitMessage as (event: unknown) => void,
+    xmux,
+  };
 }
 
 async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {

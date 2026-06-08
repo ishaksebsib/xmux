@@ -1,20 +1,62 @@
-import type { ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
+import type { Actions } from "../../actions";
+import { interactionActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
   inlineCode,
   markdown,
   markdownText,
+  promptInteraction,
+  type PromptInteractionComponentInput,
 } from "../../components";
 import {
   PromptInteractionAlreadyRespondingError,
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
 } from "../prompt";
+import type { ActionMessage } from "../utils";
 import type {
   RespondToCurrentInteractionError,
   RespondToCurrentInteractionOutput,
 } from "./service";
+
+/** The harness request fields needed to render an interaction prompt with buttons. */
+export type InteractionRequestView = Omit<PromptInteractionComponentInput, "phase" | "respond">;
+
+export type InteractionResolvedAction = Extract<
+  RespondToCurrentInteractionOutput,
+  { readonly status: "responded" }
+>["action"];
+
+/** Renders a pending interaction as a button message replacing the slash-command hints. */
+export function formatInteractionActionMessage(input: {
+  readonly ordinal: number;
+  readonly request: InteractionRequestView;
+}): ActionMessage {
+  return {
+    text: promptInteraction({ ...input.request, phase: "requested", respond: "none" }),
+    format: "markdown",
+    buttons: formatInteractionButtons({
+      kind: input.request.kind,
+      ordinal: input.ordinal,
+      allowAlways: input.request.permission?.allowAlways ?? false,
+    }),
+  };
+}
+
+/** Marks a resolved interaction message and clears its buttons. */
+export function formatInteractionResolvedMessage(input: {
+  readonly kind: "permission" | "question";
+  readonly action: InteractionResolvedAction;
+}): ActionMessage {
+  return { text: formatResolvedText(input), format: "markdown", buttons: [] };
+}
+
+/** Replaces a stale interaction message whose request is no longer pending. */
+export function formatInteractionStaleMessage(): ActionMessage {
+  return { text: "_This request is no longer pending._", format: "markdown", buttons: [] };
+}
 
 export function formatInteractionOutput(output: RespondToCurrentInteractionOutput): ChatTextInput {
   switch (output.status) {
@@ -146,4 +188,72 @@ function formatResponded(
         text: `**Rejected**\n\nThe current request was rejected.${more}`,
       });
   }
+}
+
+function formatResolvedText(input: {
+  readonly kind: "permission" | "question";
+  readonly action: InteractionResolvedAction;
+}): string {
+  if (input.kind === "question") {
+    return input.action === "rejected" ? "✗ Question rejected" : "✓ Question answered";
+  }
+
+  switch (input.action) {
+    case "allowed_once":
+      return "✓ Permission allowed";
+    case "allowed_always":
+      return "✓ Permission allowed — future matching requests auto-allowed";
+    case "rejected":
+      return "✗ Permission rejected";
+  }
+}
+
+function formatInteractionButtons(input: {
+  readonly kind: "permission" | "question";
+  readonly ordinal: number;
+  readonly allowAlways: boolean;
+}): readonly (readonly ChatButtonInput<Actions>[])[] {
+  const payload = String(input.ordinal);
+
+  if (input.kind === "question") {
+    return [[rejectButton(payload)]];
+  }
+
+  const row = [allowButton(payload)];
+  if (input.allowAlways) row.push(allowAlwaysButton(payload));
+  row.push(rejectButton(payload));
+  return [row];
+}
+
+function allowButton(payload: string): ChatButtonInput<Actions> {
+  return {
+    id: `interaction-allow-${payload}`,
+    label: "✅ Allow",
+    actionId: interactionActionId,
+    value: "allow",
+    payload,
+    style: "primary",
+  };
+}
+
+function allowAlwaysButton(payload: string): ChatButtonInput<Actions> {
+  return {
+    id: `interaction-always-${payload}`,
+    label: "♾️ Allow always",
+    actionId: interactionActionId,
+    value: "always",
+    payload,
+    style: "secondary",
+  };
+}
+
+function rejectButton(payload: string): ChatButtonInput<Actions> {
+  return {
+    id: `interaction-reject-${payload}`,
+    label: "⛔ Reject",
+    actionId: interactionActionId,
+    value: "reject",
+    payload,
+    style: "danger",
+  };
 }

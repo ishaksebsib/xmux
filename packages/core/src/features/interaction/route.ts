@@ -1,10 +1,15 @@
 import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import { interactionActionId } from "../../actions";
 import type { Context } from "../../ctx";
 import type { XmuxMiddleware } from "../../middleware";
 import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
-import { handleInteractionCommand } from "./handler";
+import {
+  handleInteractionAction,
+  handleInteractionCommand,
+  type HandleInteractionActionInput,
+} from "./handler";
 import { formatInvalidInteractionCommandUsage } from "./response";
 
 export function registerInteractionRoute<
@@ -46,6 +51,15 @@ export function registerInteractionRoute<
     });
   });
 
+  const unsubscribeAction = ctx.chat.on("action", interactionActionId, (raw) => {
+    const event = raw as HandleInteractionActionInput<TAdapters, TChats>["event"];
+    return dispatch(ctx, middleware, {
+      event,
+      actor: event.actor,
+      handler: (handlerCtx) => handleInteractionAction({ ctx: handlerCtx, event }),
+    });
+  });
+
   const unsubscribeInvalid = registerInvalidCommandRoute(ctx, middleware, {
     commands: ["allow", "reject"],
     usage: (name) =>
@@ -55,6 +69,7 @@ export function registerInteractionRoute<
   return () => {
     unsubscribeAllow();
     unsubscribeReject();
+    unsubscribeAction();
     unsubscribeInvalid();
   };
 }

@@ -24,6 +24,15 @@ export type InteractionCommandAction =
   | { readonly type: "allow"; readonly always: boolean }
   | { readonly type: "reject" };
 
+/**
+ * Which pending interaction to respond to. `current` targets the oldest
+ * unresolved request; `ordinal` targets a specific one so a tapped button
+ * resolves its own request when several are pending.
+ */
+export type InteractionTarget =
+  | { readonly type: "current" }
+  | { readonly type: "ordinal"; readonly ordinal: number };
+
 export type RespondToCurrentInteractionOutput =
   | {
       readonly status: "responded";
@@ -51,9 +60,11 @@ export interface RespondToCurrentInteractionForThreadInput<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly thread: ChatThreadRef;
   readonly action: InteractionCommandAction;
+  /** Defaults to the oldest unresolved interaction when omitted. */
+  readonly target?: InteractionTarget;
 }
 
-/** Responds to the oldest unresolved interaction for the active prompt run in a chat thread. */
+/** Responds to a pending interaction for the active prompt run in a chat thread. */
 export async function respondToCurrentInteractionForThread<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -76,7 +87,7 @@ export async function respondToCurrentInteractionForThread<
     return Result.ok({ status: "no_active_run", session: session.value });
   }
 
-  const selected = selectCurrentInteraction(run);
+  const selected = selectInteraction(run, input.target ?? { type: "current" });
 
   if (selected.status === "none") {
     return Result.ok({ status: "no_pending_interaction", session: session.value });
@@ -170,8 +181,11 @@ function createHarnessRespondInteractionInput<
   };
 }
 
-function selectCurrentInteraction(run: ActivePromptRun): InteractionSelection {
-  const interaction = run.pendingInteractions[0];
+function selectInteraction(run: ActivePromptRun, target: InteractionTarget): InteractionSelection {
+  const interaction =
+    target.type === "ordinal"
+      ? run.pendingInteractions.find((pending) => pending.ordinal === target.ordinal)
+      : run.pendingInteractions[0];
 
   if (!interaction) {
     return { status: "none" };

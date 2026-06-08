@@ -81,6 +81,8 @@ export function promptRetry(input: {
 export interface PromptInteractionComponentInput {
   readonly kind: "permission" | "question";
   readonly phase: "requested" | "answered" | "rejected";
+  /** `"none"` omits the slash-command hints when the caller renders buttons instead. */
+  readonly respond?: "commands" | "none";
   readonly prompt?: string;
   readonly title?: string;
   readonly permission?: {
@@ -126,14 +128,16 @@ function formatPermissionRequest(input: PromptInteractionComponentInput): string
     "⚠️ **Permission requested**",
     details.request ? section("Request", details.request) : undefined,
     details.scope.length > 0 ? section("Scope", bulletList(details.scope)) : undefined,
-    section(
-      "Respond",
-      bulletList([
-        `${inlineCode("/allow")} — allow this request once`,
-        `${inlineCode("/allow always")} — always allow matching future requests`,
-        `${inlineCode("/reject")} — reject this request`,
-      ]),
-    ),
+    input.respond === "none"
+      ? undefined
+      : section(
+          "Respond",
+          bulletList([
+            `${inlineCode("/allow")} — allow this request once`,
+            `${inlineCode("/allow always")} — always allow matching future requests`,
+            `${inlineCode("/reject")} — reject this request`,
+          ]),
+        ),
   ];
 
   return compactLines(parts);
@@ -149,7 +153,9 @@ function formatQuestionRequest(input: PromptInteractionComponentInput): string {
   return compactLines([
     "⚠️ **Question requested**",
     section(questions.length > 1 ? "Questions" : "Question", body),
-    section("Respond", bulletList([`${inlineCode("/reject")} — dismiss this question`])),
+    input.respond === "none"
+      ? undefined
+      : section("Respond", bulletList([`${inlineCode("/reject")} — dismiss this question`])),
   ]);
 }
 

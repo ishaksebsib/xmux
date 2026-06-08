@@ -6,12 +6,15 @@ import type {
   ChatTextStreamChunk,
   ChatTextStreamContent,
 } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions } from "@xmux/chat-core";
+import type { ChatAdapterDefinitions, ChatSendActionInput } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions, HarnessPromptEvent } from "@xmux/harness-core";
 import { Result } from "better-result";
+import type { Actions } from "../../actions";
 import type { NormalizedPromptResponseConfig } from "../../config";
 import type { HandlerContext } from "../../ctx";
+import type { SessionRecord } from "../../store";
 import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
+import { formatInteractionActionMessage } from "../interaction/response";
 import { PromptResponseError } from "./errors";
 import { formatPromptFailure } from "./response";
 import { promptSessionForThread } from "./service";
@@ -57,6 +60,8 @@ export async function handlePromptMessage<
   }
 
   const streamed = await streamPromptReplyInMessages({
+    ctx: input.ctx,
+    session: prompted.value.session,
     event: input.event,
     events: prompted.value.events,
     responseConfig: input.ctx.app.config.prompt.response,
@@ -70,7 +75,12 @@ export async function handlePromptMessage<
   return streamed;
 }
 
-interface StreamPromptReplyInput {
+interface StreamPromptReplyInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+> {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly session: SessionRecord;
   readonly event: PromptMessageEvent;
   readonly events: AsyncIterable<HarnessPromptEvent>;
   readonly responseConfig: NormalizedPromptResponseConfig;
@@ -81,9 +91,10 @@ interface ActiveChatStream {
   readonly result: Promise<Result<void, PromptResponseError>>;
 }
 
-async function streamPromptReplyInMessages(
-  input: StreamPromptReplyInput,
-): Promise<Result<void, PromptResponseError>> {
+async function streamPromptReplyInMessages<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: StreamPromptReplyInput<TAdapters, TChats>): Promise<Result<void, PromptResponseError>> {
   const renderer = createPromptEventRenderer({ response: input.responseConfig });
   let activeStream: ActiveChatStream | undefined;
 
@@ -123,19 +134,15 @@ async function streamPromptReplyInMessages(
       if (event.type === "interaction") {
         const completed = await completeActiveStream();
         if (completed.isErr()) return completed;
-
-        renderer.resetMessageBoundary();
-        const message = renderer.render(event);
         renderer.resetMessageBoundary();
 
-        if (message.length === 0) continue;
-
-        const replied = await replyToChatEvent({
+        const sent = await sendInteractionPrompt({
+          ctx: input.ctx,
+          session: input.session,
           event: input.event,
-          message: { text: message, format: "markdown" },
-          onError: (cause) => new PromptResponseError({ cause }),
+          interaction: event,
         });
-        if (replied.isErr()) return replied;
+        if (sent.isErr()) return sent;
         continue;
       }
 
@@ -152,6 +159,50 @@ async function streamPromptReplyInMessages(
   } finally {
     activeStream?.chunks.complete();
   }
+}
+
+async function sendInteractionPrompt<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly session: SessionRecord;
+  readonly event: PromptMessageEvent;
+  readonly interaction: Extract<HarnessPromptEvent, { readonly type: "interaction" }>;
+}): Promise<Result<void, PromptResponseError>> {
+  if (input.interaction.phase !== "requested") return Result.ok();
+
+  const ordinal = input.ctx.app.services.promptRuns
+    .get(input.session.ref)
+    ?.pendingInteractions.find(
+      (pending) => pending.requestId === input.interaction.requestId,
+    )?.ordinal;
+  if (ordinal === undefined) return Result.ok();
+
+  const message = formatInteractionActionMessage({
+    ordinal,
+    request: {
+      kind: input.interaction.kind,
+      prompt: input.interaction.prompt,
+      title: input.interaction.title,
+      permission: input.interaction.permission,
+      question: input.interaction.question,
+    },
+  });
+
+  const sent = await input.ctx.app.chat.sendAction({
+    chatId: input.event.chatId,
+    conversationId: input.event.conversation.conversationId,
+    text: message.text,
+    format: message.format,
+    buttons: message.buttons,
+    signal: input.ctx.signal,
+  } as ChatSendActionInput<TChats, Actions>);
+
+  return Result.map(
+    Result.mapError(sent, (cause) => new PromptResponseError({ cause })),
+    () => undefined,
+  );
 }
 
 class ChatTextStreamQueue implements AsyncIterable<ChatTextStreamChunk> {

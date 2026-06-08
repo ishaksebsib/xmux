@@ -6,6 +6,7 @@ export const deleteHarnessActionId = "dh" as const;
 export const deleteSessionActionId = "d" as const;
 export const resumeHarnessActionId = "rh" as const;
 export const resumeSessionActionId = "r" as const;
+export const interactionActionId = "i" as const;
 
 function actionWithoutPayload() {
   return actionValue<undefined>();
@@ -47,6 +48,15 @@ export const actions = defineChatActions({
   [resumeSessionActionId]: defineChatAction({
     values: {
       x: actionValue<string>(),
+    },
+  }),
+  [interactionActionId]: defineChatAction({
+    // Payload is the interaction ordinal as a string, kept compact to fit
+    // Telegram's 64-byte callback_data budget.
+    values: {
+      allow: actionValue<string>(),
+      always: actionValue<string>(),
+      reject: actionValue<string>(),
     },
   }),
 });

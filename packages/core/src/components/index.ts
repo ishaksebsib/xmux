@@ -6,6 +6,7 @@ export {
   promptRetry,
   promptTool,
   promptUsage,
+  type PromptInteractionComponentInput,
   type PromptToolComponentInput,
   type PromptToolOutputComponentInput,
   type PromptToolStatus,
