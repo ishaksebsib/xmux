@@ -162,6 +162,7 @@ describe("/resume command", () => {
     ]);
     expect(actionUpdates[0]?.text).toContain("**Resumed** `opencode/abc2`");
     expect(actionUpdates[0]?.text).toContain("- Title: Refactor auth");
+    expect(actionUpdates[0]?.text).toContain("- Model: `test-provider/test-model`");
     expect(actionUpdates[0]?.buttons).toEqual([]);
 
     const binding = await xmux.ctx.store.threadBindings.get(thread);
@@ -188,6 +189,7 @@ describe("/resume command", () => {
       { harnessId: "opencode", sessionId: "opencode-2", cwd: process.cwd() },
     ]);
     expect(replies[0]).toContain("**Resumed** `opencode/opencode-2`");
+    expect(replies[0]).toContain("- Model: `test-provider/test-model`");
 
     await xmux.shutdown();
   });
@@ -206,6 +208,7 @@ describe("/resume command", () => {
     expect(replies[0]).toContain("- Harness: `opencode`");
     expect(replies[0]).toContain("- Short ID: `abc2`");
     expect(replies[0]).toContain("- Title: Refactor auth");
+    expect(replies[0]).toContain("- Model: `test-provider/test-model`");
     expect(replies[0]).toContain("- Directory: ");
     expect(replies[0]).toContain("Send a message to continue the conversation.");
 
@@ -458,6 +461,7 @@ function createHarnessRuntime<const THarnessId extends "opencode" | "pi">(input:
         sessionId: session.sessionId,
         cwd: resumeInput.cwd ?? process.cwd(),
         title: session.title,
+        model: { providerId: "test-provider", modelId: "test-model" },
         adapterData: {},
       });
     },

@@ -1,6 +1,7 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type {
   HarnessAdapterDefinitions,
+  HarnessModelRef,
   HarnessSessionInfo,
   ListSessionsError,
   ResumeSessionError,
@@ -57,6 +58,7 @@ export interface ResumeActivatedOutput {
   readonly status: "resumed";
   readonly session: SessionRecord;
   readonly shortId: string;
+  readonly model: HarnessModelRef;
 }
 
 export interface ResumeSessionCommandInput<
@@ -134,6 +136,7 @@ export async function resumeSessionCommand<
       status: "resumed" as const,
       session: stored,
       shortId: input.shortId ?? selected.shortId,
+      model: resumed.model ?? { modelId: "unknown", providerId: "unknown" },
     });
   });
 }

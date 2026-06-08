@@ -46,8 +46,7 @@ export async function resumeSession(
       runtime.sessionModels.set(session.id, model);
     }
 
-    const thinking =
-      runtime.sessionThinking?.get(session.id) ?? runtime.defaultThinking;
+    const thinking = runtime.sessionThinking?.get(session.id) ?? runtime.defaultThinking;
     if (thinking) {
       runtime.sessionThinking?.set(session.id, thinking);
     }

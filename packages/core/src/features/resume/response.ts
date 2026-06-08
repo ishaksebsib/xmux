@@ -146,6 +146,8 @@ function formatResumeSuccess(
     lines.push(`- Title: ${markdownText(output.session.title)}`);
   }
 
+  lines.push(`- Model: ${inlineCode(`${output.model.providerId}/${output.model.modelId}`)}`);
+
   lines.push(`- Directory: ${inlineCode(output.session.cwd)}`);
   lines.push("");
   lines.push("Send a message to continue the conversation.");
