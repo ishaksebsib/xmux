@@ -22,8 +22,6 @@ import {
   listDeleteSessionsForHarness,
   type DeleteCommandError,
   type DeleteCommandOutput,
-  type DeleteHarnessesOutput,
-  type DeleteListOutput,
 } from "./service";
 
 export interface HandleDeleteCommandInput<

@@ -59,16 +59,13 @@ export function formatShortIdAmbiguousError(
   });
 }
 
-export function formatListAllFailedError(
-  error: SessionListAllFailedError,
-): ChatTextInput {
+export function formatListAllFailedError(error: SessionListAllFailedError): ChatTextInput {
   return markdown({
     text: [
       `**Failed to list sessions** (${error.failures.length})`,
       "",
       ...error.failures.map(
-        (failure) =>
-          `- ${inlineCode(failure.harnessId)} — ${markdownText(failure.error.message)}`,
+        (failure) => `- ${inlineCode(failure.harnessId)} — ${markdownText(failure.error.message)}`,
       ),
     ].join("\n"),
   });
