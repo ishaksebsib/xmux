@@ -41,10 +41,21 @@ export async function resumeSession(
       missingReason: "OpenCode session resume returned no session data",
     });
 
+    const model = getEffectiveSessionModel({ runtime, session });
+    if (model) {
+      runtime.sessionModels.set(session.id, model);
+    }
+
+    const thinking =
+      runtime.sessionThinking?.get(session.id) ?? runtime.defaultThinking;
+    if (thinking) {
+      runtime.sessionThinking?.set(session.id, thinking);
+    }
+
     return Result.ok(
       toAdapterSession({
         session,
-        model: getEffectiveSessionModel({ runtime, session }),
+        model,
       }),
     );
   });
