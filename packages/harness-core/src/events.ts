@@ -1,6 +1,7 @@
 import type {
   HarnessAdapterObject,
   HarnessModelRef,
+  HarnessThinkingLevel,
   HarnessTokenUsage,
   HarnessToolOutput,
   SessionRef,
@@ -59,6 +60,7 @@ export type HarnessTurnEvent<
       readonly messageId?: string;
       readonly agent?: string;
       readonly model?: HarnessModelRef;
+      readonly thinking?: HarnessThinkingLevel;
       readonly snapshot?: string;
     })
   | (HarnessPromptEventBase<THarnessId, TAdapterData> & {

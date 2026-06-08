@@ -158,6 +158,44 @@ describe("prompt stream renderer", () => {
     expect(abortedAfterOutput).toBe("hello\n\n**Prompt aborted**");
     expect(locallyCancelled).toBe("");
   });
+
+  test("appends response details after a completed run with usage metadata", async () => {
+    const text = await collectRendered([
+      {
+        type: "turn",
+        phase: "started",
+        ref,
+        messageId: "message-1",
+        agent: "coder",
+        thinking: "high",
+        model: { providerId: "openai", modelId: "gpt-5", variant: "high" },
+      },
+      { type: "content", phase: "delta", kind: "text", ref, delta: "done" },
+      {
+        type: "turn",
+        phase: "completed",
+        ref,
+        messageId: "message-1",
+        usage: { input: 1_000, output: 200, reasoning: 50, cacheRead: 25, total: 1_250 },
+        cost: 0.0123,
+      },
+      { type: "run", phase: "completed", ref, reason: "stop" },
+    ]);
+
+    expect(text).toBe(
+      [
+        "done",
+        "",
+        "**Stats**",
+        "_Model: `openai/gpt-5@high`_",
+        "_Harness: `pi`_",
+        "_Thinking: `high`_",
+        "_Tokens: 1,250_",
+        "_Context: 1,025 used_",
+        "_Cost: $0.01_",
+      ].join("\n"),
+    );
+  });
 });
 
 async function collectRendered(events: readonly HarnessPromptEvent[]): Promise<string> {

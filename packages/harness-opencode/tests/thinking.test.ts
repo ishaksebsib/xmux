@@ -9,6 +9,16 @@ import type { OpenCodeRuntime } from "../src/runtime";
 const cwd = process.cwd() as WorkingDirectoryPath;
 const defaultModel = { providerId: "provider-1", modelId: "model-1" } satisfies HarnessModelRef;
 
+async function collectAsync<TValue>(iterable: AsyncIterable<TValue>): Promise<TValue[]> {
+  const values: TValue[] = [];
+
+  for await (const value of iterable) {
+    values.push(value);
+  }
+
+  return values;
+}
+
 function createRuntime(args: {
   readonly defaultModel?: HarnessModelRef;
   readonly providers?: readonly Provider[];
@@ -25,6 +35,17 @@ function createRuntime(args: {
       global: {
         event: async () => ({
           stream: (async function* () {
+            yield {
+              payload: {
+                type: "session.next.step.started",
+                properties: {
+                  timestamp: 1,
+                  sessionID: "session-1",
+                  agent: "build",
+                  model: { providerID: "provider-1", id: "model-1", variant: "code-extreme" },
+                },
+              },
+            };
             yield { payload: { type: "session.idle", properties: { sessionID: "session-1" } } };
           })(),
         }),
@@ -134,13 +155,14 @@ describe("OpenCode thinking management", () => {
     });
 
     expect(prompted.isOk()).toBe(true);
-    for await (const _ of prompted.unwrap("stream")) {
-      // drain stream
-    }
+    const events = await collectAsync(prompted.unwrap("stream"));
     expect(calls[0]).toMatchObject({
       model: { providerID: "provider-1", modelID: "model-1" },
       variant: "code-extreme",
     });
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "turn", phase: "started", thinking: "max" }),
+    );
     expect(runtime.sessionThinking.get("session-1")).toBe("max");
   });
 });

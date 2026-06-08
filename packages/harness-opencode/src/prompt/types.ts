@@ -8,6 +8,7 @@ import type {
   HarnessContentKind,
   HarnessPromptEvent,
   HarnessRunReason,
+  HarnessThinkingLevel,
   HarnessTokenUsage,
 } from "@xmux/harness-core";
 
@@ -57,6 +58,7 @@ export type PromptStreamState = {
   eventFamily?: EventFamily;
   nextCompactionPartIndex: number;
   nextTextPartIndex: number;
+  selectedThinking?: HarnessThinkingLevel;
   terminalRun: boolean;
   completedRun?: CompletedRun;
 };

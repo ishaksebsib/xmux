@@ -226,37 +226,85 @@ function compactLines(lines: readonly (string | undefined)[]): string {
 }
 
 export function promptUsage(input: {
+  readonly model?: string;
+  readonly harnessId?: string;
+  readonly thinking?: string;
   readonly tokens?: {
     readonly total?: number;
     readonly input?: number;
     readonly output?: number;
     readonly reasoning?: number;
+    readonly cacheRead?: number;
+    readonly cacheWrite?: number;
   };
   readonly cost?: number;
 }): string {
-  const parts: string[] = [];
+  const details = [
+    input.model === undefined ? undefined : `Model: ${inlineCode(input.model)}`,
+    input.harnessId === undefined ? undefined : `Harness: ${inlineCode(input.harnessId)}`,
+    input.thinking === undefined ? undefined : `Thinking: ${inlineCode(input.thinking)}`,
+    formatTokenLine(input.tokens),
+    formatContextLine(input.tokens),
+    formatCostLine(input.cost),
+  ].filter((part): part is string => part !== undefined && part.length > 0);
 
-  if (input.tokens?.total !== undefined) {
-    parts.push(`${formatNumber(input.tokens.total)} tokens`);
-  } else {
-    const tokenParts = [
-      input.tokens?.input === undefined ? undefined : `${formatNumber(input.tokens.input)} in`,
-      input.tokens?.output === undefined ? undefined : `${formatNumber(input.tokens.output)} out`,
-      input.tokens?.reasoning === undefined
-        ? undefined
-        : `${formatNumber(input.tokens.reasoning)} reasoning`,
-    ].filter((part): part is string => part !== undefined);
+  if (details.length === 0) return "";
 
-    if (tokenParts.length > 0) {
-      parts.push(tokenParts.join(" · "));
-    }
+  return ["**Stats**", ...details.map((detail) => `_${detail}_`)].join("\n");
+}
+
+function formatTokenLine(
+  tokens:
+    | {
+        readonly total?: number;
+        readonly input?: number;
+        readonly output?: number;
+        readonly reasoning?: number;
+        readonly cacheRead?: number;
+        readonly cacheWrite?: number;
+      }
+    | undefined,
+): string | undefined {
+  if (!tokens) return undefined;
+
+  const total =
+    tokens.total ??
+    sumDefined(tokens.input, tokens.output, tokens.reasoning, tokens.cacheRead, tokens.cacheWrite);
+
+  return total === undefined ? undefined : `Tokens: ${formatNumber(total)}`;
+}
+
+function formatContextLine(
+  tokens:
+    | {
+        readonly input?: number;
+        readonly cacheRead?: number;
+        readonly cacheWrite?: number;
+      }
+    | undefined,
+): string | undefined {
+  if (!tokens) return undefined;
+
+  const context = sumDefined(tokens.input, tokens.cacheRead, tokens.cacheWrite);
+  return context === undefined ? undefined : `Context: ${formatNumber(context)} used`;
+}
+
+function formatCostLine(cost: number | undefined): string | undefined {
+  if (cost === undefined || cost <= 0) return undefined;
+  return `Cost: $${cost.toFixed(cost < 0.01 ? 4 : 2)}`;
+}
+
+function sumDefined(...values: readonly (number | undefined)[]): number | undefined {
+  let total = 0;
+  let found = false;
+
+  for (const value of values) {
+    if (value === undefined) continue;
+    total += value;
+    found = true;
   }
 
-  if (input.cost !== undefined && input.cost > 0) {
-    parts.push(`$${input.cost.toFixed(input.cost < 0.01 ? 4 : 2)}`);
-  }
-
-  return parts.length === 0 ? "" : `_Finished · ${parts.join(" · ")}_`;
+  return found ? total : undefined;
 }
 
 function toolStatusIcon(status: PromptToolStatus): string {

@@ -1,4 +1,8 @@
-import type { HarnessAdapterPromptInput, HarnessAdapterPromptResult } from "@xmux/harness-core";
+import type {
+  HarnessAdapterPromptInput,
+  HarnessAdapterPromptResult,
+  HarnessThinkingLevel,
+} from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import {
   OpenCodeModelSelectionError,
@@ -13,7 +17,7 @@ import { createPromptStreamState } from "./state";
 import type { OpenCodePromptEvent, OpenCodePromptPart, SelectedOpenCodeModel } from "./types";
 import type { OpenCodeCreateOptions } from "../types";
 import { normalizeOpenCodeModelRef } from "../handlers/models";
-import { applyThinkingToModel } from "../handlers/thinking";
+import { applyThinkingToModel, getEffectiveThinking } from "../handlers/thinking";
 import { describeResponseError } from "../handlers/utils";
 
 function createResponseError(args: { readonly status: number; readonly error: unknown }) {
@@ -52,9 +56,11 @@ function createPromptEventStream(args: {
   readonly input: HarnessAdapterPromptInput<"opencode", OpenCodeCreateOptions>;
   readonly parts: readonly OpenCodePromptPart[];
   readonly model?: SelectedOpenCodeModel;
+  readonly thinking?: HarnessThinkingLevel;
 }): HarnessAdapterPromptResult<"opencode"> {
   async function* eventStream(): AsyncIterable<OpenCodePromptEvent> {
     const state = createPromptStreamState();
+    state.selectedThinking = args.thinking;
     const streamAbort = new AbortController();
     let promptAccepted = false;
     const abortStream = () => {
@@ -236,8 +242,18 @@ export async function prompt(
       : undefined;
     if (selectedModelValue) runtime.sessionModels.set(input.ref.sessionId, selectedModelValue);
     if (input.thinking) runtime.sessionThinking?.set(input.ref.sessionId, input.thinking);
+    const effectiveThinking =
+      selectedThinking ??
+      (runtime.sessionThinking
+        ? getEffectiveThinking({
+            runtime,
+            target: { type: "session", ref: input.ref },
+          }).level
+        : undefined);
 
     const parts = toPromptParts(input.content);
-    return Result.ok(createPromptEventStream({ runtime, input, parts, model }));
+    return Result.ok(
+      createPromptEventStream({ runtime, input, parts, model, thinking: effectiveThinking }),
+    );
   });
 }

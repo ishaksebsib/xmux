@@ -408,6 +408,7 @@ export function* mapOpenCodeEvent(args: {
             messageId: info.id,
             agent: info.agent,
             model,
+            thinking: args.state.selectedThinking,
           };
         }
       } else if (!args.state.completedMessages.has(info.id)) {
@@ -632,6 +633,7 @@ export function* mapOpenCodeEvent(args: {
         messageId,
         agent: args.event.properties.agent,
         model,
+        thinking: args.state.selectedThinking,
         snapshot: args.event.properties.snapshot,
       };
       return;

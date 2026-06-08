@@ -1,13 +1,21 @@
 import type { ChatTextStreamChunk } from "@xmux/chat-core";
-import type { HarnessPromptEvent, HarnessToolOutput } from "@xmux/harness-core";
+import type {
+  HarnessModelRef,
+  HarnessPromptEvent,
+  HarnessThinkingLevel,
+  HarnessTokenUsage,
+  HarnessToolOutput,
+} from "@xmux/harness-core";
 import {
   markdownText,
   promptInteraction,
   promptReasoning,
   promptRetry,
   promptTool,
+  promptUsage,
   type PromptToolOutputComponentInput,
 } from "../../components";
+import { formatModelSelector } from "../model/selector";
 
 interface PromptRenderState {
   emitted: boolean;
@@ -25,6 +33,11 @@ interface PromptRenderState {
   readonly interactionPhases: Set<string>;
   readonly retries: Set<string>;
   toolCallsHeaderEmitted: boolean;
+  summaryEmitted: boolean;
+  model?: HarnessModelRef;
+  thinking?: HarnessThinkingLevel;
+  usage?: HarnessTokenUsage;
+  cost?: number;
 }
 
 export interface PromptEventRenderer {
@@ -48,6 +61,7 @@ function createPromptRenderState(): PromptRenderState {
     interactionPhases: new Set(),
     retries: new Set(),
     toolCallsHeaderEmitted: false,
+    summaryEmitted: false,
   };
 }
 
@@ -279,7 +293,13 @@ function renderRunEvent(input: {
   if (input.event.phase === "started") return "";
 
   if (input.event.phase === "completed") {
-    return input.state.emitted ? "" : appendBlock(input.state, "_Done._");
+    if (input.state.usage === undefined && input.event.usage !== undefined) {
+      input.state.usage = input.event.usage;
+    }
+    if (input.state.cost === undefined && input.event.cost !== undefined) {
+      input.state.cost = input.event.cost;
+    }
+    return appendCompletionSummary(input.state, input.event.ref.harnessId);
   }
 
   if (input.event.phase === "aborted") {
@@ -300,10 +320,52 @@ function renderTurnEvent(input: {
   readonly event: Extract<HarnessPromptEvent, { readonly type: "turn" }>;
   readonly state: PromptRenderState;
 }): string {
-  if (input.event.phase !== "failed") return "";
+  if (input.event.phase === "started") {
+    if (input.event.model !== undefined) input.state.model = input.event.model;
+    if (input.event.thinking !== undefined) input.state.thinking = input.event.thinking;
+    return "";
+  }
+
+  if (input.event.phase === "completed") {
+    if (input.event.usage !== undefined) input.state.usage = input.event.usage;
+    if (input.event.cost !== undefined) input.state.cost = input.event.cost;
+    return "";
+  }
+
   return appendBlock(
     input.state,
     `**Turn failed**\n\n${markdownText(describeUnknown(input.event.error))}`,
+  );
+}
+
+function appendCompletionSummary(state: PromptRenderState, harnessId: string): string {
+  if (state.summaryEmitted) return "";
+  if (!hasCompletionDetails(state)) {
+    return state.emitted ? "" : appendBlock(state, "_Done._");
+  }
+
+  const summary = promptUsage({
+    model: state.model === undefined ? undefined : formatModelSelector(state.model),
+    harnessId,
+    thinking: state.thinking,
+    tokens: state.usage,
+    cost: state.cost,
+  });
+
+  if (summary.length === 0) {
+    return state.emitted ? "" : appendBlock(state, "_Done._");
+  }
+
+  state.summaryEmitted = true;
+  return appendBlock(state, summary);
+}
+
+function hasCompletionDetails(state: PromptRenderState): boolean {
+  return (
+    state.model !== undefined ||
+    state.thinking !== undefined ||
+    state.usage !== undefined ||
+    state.cost !== undefined
   );
 }
 
