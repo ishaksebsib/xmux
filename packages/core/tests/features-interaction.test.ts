@@ -102,7 +102,7 @@ describe("interaction commands", () => {
     expect(respondCalls).toEqual([
       { kind: "permission", requestId: "permission-1", decision: "reject" },
     ]);
-    expect(replies[0]).toBe("**Rejected**\n\nThe current request was rejected.");
+    expect(replies[0]).toBe("✗ Permission rejected");
     expect(replies[0]).not.toContain("permission-1");
 
     await prompt.close();
@@ -121,7 +121,7 @@ describe("interaction commands", () => {
     await eventually(() => replies.length === 1);
 
     expect(respondCalls).toEqual([{ kind: "question", requestId: "question-1", reject: true }]);
-    expect(replies[0]).toBe("**Rejected**\n\nThe current request was rejected.");
+    expect(replies[0]).toBe("✗ Question rejected");
     expect(replies[0]).not.toContain("question-1");
 
     await prompt.close();
@@ -215,7 +215,7 @@ describe("interaction commands", () => {
       { kind: "permission", requestId: "permission-1", decision: "allow_once" },
       { kind: "permission", requestId: "permission-2", decision: "reject" },
     ]);
-    expect(replies[0]).toBe("**Rejected**\n\nThe current request was rejected.");
+    expect(replies[0]).toBe("✗ Permission rejected");
     expect(replies.join("\n")).not.toContain("permission-1");
     expect(replies.join("\n")).not.toContain("permission-2");
 

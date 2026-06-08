@@ -61,7 +61,9 @@ export function formatInteractionStaleMessage(): ActionMessage {
 export function formatInteractionOutput(output: RespondToCurrentInteractionOutput): ChatTextInput {
   switch (output.status) {
     case "responded":
-      return formatResponded(output);
+      return markdown({
+        text: formatResolvedText({ kind: output.interaction.kind, action: output.action }),
+      });
     case "not_active":
       return formatNoActiveSessionMessage({
         description: "There is no active session with a pending request.",
@@ -166,30 +168,6 @@ export function formatRejectCommandUsage(): ChatTextInput {
   });
 }
 
-function formatResponded(
-  output: Extract<RespondToCurrentInteractionOutput, { readonly status: "responded" }>,
-): ChatTextInput {
-  const more =
-    output.remainingPendingCount > 0
-      ? "\n\nThere are more pending requests; use `/allow` or `/reject` again for the next one."
-      : "";
-
-  switch (output.action) {
-    case "allowed_once":
-      return markdown({
-        text: `**Allowed**\n\nThe current permission request was allowed once.${more}`,
-      });
-    case "allowed_always":
-      return markdown({
-        text: `**Allowed always**\n\nFuture matching requests may be allowed automatically by the harness.${more}`,
-      });
-    case "rejected":
-      return markdown({
-        text: `**Rejected**\n\nThe current request was rejected.${more}`,
-      });
-  }
-}
-
 function formatResolvedText(input: {
   readonly kind: "permission" | "question";
   readonly action: InteractionResolvedAction;
@@ -228,7 +206,7 @@ function formatInteractionButtons(input: {
 function allowButton(payload: string): ChatButtonInput<Actions> {
   return {
     id: `interaction-allow-${payload}`,
-    label: "✅ Allow",
+    label: "✓ Allow",
     actionId: interactionActionId,
     value: "allow",
     payload,
@@ -239,7 +217,7 @@ function allowButton(payload: string): ChatButtonInput<Actions> {
 function allowAlwaysButton(payload: string): ChatButtonInput<Actions> {
   return {
     id: `interaction-always-${payload}`,
-    label: "♾️ Allow always",
+    label: "✓ Allow always",
     actionId: interactionActionId,
     value: "always",
     payload,
@@ -250,7 +228,7 @@ function allowAlwaysButton(payload: string): ChatButtonInput<Actions> {
 function rejectButton(payload: string): ChatButtonInput<Actions> {
   return {
     id: `interaction-reject-${payload}`,
-    label: "⛔ Reject",
+    label: "✗ Reject",
     actionId: interactionActionId,
     value: "reject",
     payload,
