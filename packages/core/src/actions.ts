@@ -2,6 +2,8 @@ import { actionValue, defineChatAction, defineChatActions } from "@xmux/chat-cor
 
 export const thinkingActionId = "thinking" as const;
 export const modelActionId = "model" as const;
+export const deleteHarnessActionId = "dh" as const;
+export const deleteSessionActionId = "d" as const;
 
 function actionWithoutPayload() {
   return actionValue<undefined>();
@@ -23,6 +25,16 @@ export const actions = defineChatActions({
       high: actionWithoutPayload(),
       xhigh: actionWithoutPayload(),
       max: actionWithoutPayload(),
+    },
+  }),
+  [deleteHarnessActionId]: defineChatAction({
+    values: {
+      x: actionValue<string>(),
+    },
+  }),
+  [deleteSessionActionId]: defineChatAction({
+    values: {
+      x: actionValue<string>(),
     },
   }),
 });

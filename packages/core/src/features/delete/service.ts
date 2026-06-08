@@ -11,14 +11,18 @@ import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
 import {
-  listSessionsForCommand,
   parseSessionTarget,
   selectSessionByShortId,
-  type ListSessionsOutput,
   type SelectSessionByShortIdError,
 } from "../shared/session-command";
-import type { SessionCommandIncompleteTargetError, SessionListAllFailedError } from "../shared/session-command";
+import type { SessionCommandIncompleteTargetError } from "../shared/session-command";
+import {
+  listHarnessSelectableSessions,
+  type SessionSelectionGroup,
+} from "../shared/session-selection";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
+import { CommandHarnessNotConfiguredError } from "../errors";
+import { requireConfiguredHarnessId } from "../utils";
 
 export type DeleteCommandError =
   | StoreError
@@ -27,15 +31,20 @@ export type DeleteCommandError =
   | DeleteSessionError
   | SelectSessionByShortIdError
   | SessionCommandIncompleteTargetError
-  | SessionListAllFailedError;
+  | CommandHarnessNotConfiguredError;
 
-export type DeleteCommandOutput = DeleteListOutput | DeleteSessionOutput;
+export type DeleteCommandOutput = DeleteHarnessesOutput | DeleteListOutput | DeleteSessionOutput;
+
+export interface DeleteHarnessesOutput {
+  readonly status: "harnesses";
+  readonly cwd: string;
+  readonly harnessIds: readonly string[];
+}
 
 export interface DeleteListOutput {
   readonly status: "listed";
   readonly cwd: string;
-  readonly groups: readonly import("../shared/session-selection").SessionSelectionGroup[];
-  readonly failures: readonly import("../shared/session-selection").SessionSelectionListFailure[];
+  readonly group: SessionSelectionGroup;
 }
 
 export interface DeleteSessionOutput {
@@ -107,6 +116,36 @@ export async function deleteSessionCommand<
   });
 }
 
+export async function listDeleteSessionsForHarness<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly thread: ChatThreadRef;
+  readonly harnessId: string;
+}): Promise<Result<DeleteListOutput, DeleteCommandError>> {
+  return Result.gen(async function* () {
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
+    const harnessId = yield* requireConfiguredHarnessId({
+      harnessId: input.harnessId,
+      availableHarnessIds: input.ctx.app.harnessIds,
+      onMissing: (args) => new CommandHarnessNotConfiguredError(args),
+    });
+    const group = yield* Result.await(
+      listHarnessSelectableSessions({
+        ctx: input.ctx,
+        harnessId,
+        cwd,
+        maxSessions: input.ctx.app.config.resume.maxSessionsPerHarness,
+      }),
+    );
+
+    return Result.ok({ status: "listed" as const, cwd, group });
+  });
+}
+
 async function deleteActiveSessionOrList<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
@@ -139,15 +178,11 @@ async function deleteActiveSessionOrList<
       getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
     );
 
-    return Result.ok(
-      yield* Result.await(
-        listSessionsForCommand({
-          ctx: input.ctx,
-          cwd,
-          maxSessionsPerHarness: input.ctx.app.config.resume.maxSessionsPerHarness,
-        }),
-      ),
-    );
+    return Result.ok({
+      status: "harnesses" as const,
+      cwd,
+      harnessIds: input.ctx.app.harnessIds,
+    });
   });
 }
 

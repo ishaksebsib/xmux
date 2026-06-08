@@ -43,21 +43,110 @@ describe("/delete command", () => {
     await xmux.shutdown();
   });
 
-  test("lists deletable sessions when no session is active", async () => {
-    const { emitCommand, replies, listInputs, xmux } = await initializeXmux();
+  test("shows harness choices when no session is active", async () => {
+    const { emitCommand, actionMessages, listInputs, xmux } = await initializeXmux();
 
     emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
 
+    await eventually(() => actionMessages.length === 1);
+
+    expect(listInputs).toEqual([]);
+    expect(actionMessages[0]?.text).toContain("**Choose a harness**");
+    expect(actionMessages[0]?.text).toContain("Pick one to view sessions.");
+    expect(actionMessages[0]?.text).not.toContain("Fix bug");
+    expect(actionMessages[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({
+          label: "opencode sessions",
+          actionId: "dh",
+          value: "x",
+          payload: "opencode",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          label: "pi sessions",
+          actionId: "dh",
+          value: "x",
+          payload: "pi",
+        }),
+      ],
+    ]);
+    expect(
+      encodedTelegramCallbackLength(actionMessages[0]?.buttons[0]?.[0] as ActionButtonFixture),
+    ).toBeLessThanOrEqual(64);
+
+    await xmux.shutdown();
+  });
+
+  test("lists sessions for the selected harness with delete buttons", async () => {
+    const { emitHarnessAction, actionUpdates, listInputs, xmux } = await initializeXmux();
+
+    emitHarnessAction("opencode");
+
+    await eventually(() => actionUpdates.length === 1);
+
+    expect(listInputs).toEqual([{ harnessId: "opencode", cwd: process.cwd() }]);
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions** (3)");
+    expect(actionUpdates[0]?.text).toContain("Title: Fix bug");
+    expect(actionUpdates[0]?.text).toContain("Command: `/delete opencode abc1`");
+    expect(actionUpdates[0]?.text).not.toContain("PI session");
+    expect(actionUpdates[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({
+          label: "Delete abc1",
+          actionId: "d",
+          value: "x",
+          payload: "opencode:abc1",
+          style: "danger",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          label: "Delete abc2",
+          payload: "opencode:abc2",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          label: "Delete xy9",
+          payload: "opencode:xy9",
+        }),
+      ],
+    ]);
+    expect(
+      encodedTelegramCallbackLength(actionUpdates[0]?.buttons[1]?.[0] as ActionButtonFixture),
+    ).toBeLessThanOrEqual(64);
+
+    await xmux.shutdown();
+  });
+
+  test("reports an empty selected harness without delete buttons", async () => {
+    const { emitHarnessAction, replies, actionUpdates, xmux } = await initializeXmux({
+      opencodeSessions: [],
+    });
+
+    emitHarnessAction("opencode");
+
     await eventually(() => replies.length === 1);
 
-    expect(listInputs).toEqual([
-      { harnessId: "opencode", cwd: process.cwd() },
-      { harnessId: "pi", cwd: process.cwd() },
-    ]);
-    expect(replies[0]).toContain("**Available sessions** (4)");
-    expect(replies[0]).toContain("Use `/delete <harnessId> <shortId>` to delete one.");
-    expect(replies[0]).toContain("Command: `/delete opencode abc1`");
-    expect(replies[0]).toContain("Command: `/delete pi abc`");
+    expect(actionUpdates).toHaveLength(0);
+    expect(replies[0]).toContain("**opencode sessions**");
+    expect(replies[0]).toContain("No sessions found.");
+
+    await xmux.shutdown();
+  });
+
+  test("deletes the selected session from a session button", async () => {
+    const { emitDeleteAction, replies, deleteInputs, xmux } = await initializeXmux();
+
+    emitDeleteAction({ harnessId: "opencode", shortId: "abc2" });
+
+    await eventually(() => replies.length === 1);
+
+    expect(deleteInputs).toEqual([{ harnessId: "opencode", sessionId: "abc222" }]);
+    expect(replies[0]).toContain("**Deleted** `opencode/abc2`");
+    expect(replies[0]).toContain("- Title: Refactor auth");
 
     await xmux.shutdown();
   });
@@ -164,8 +253,21 @@ interface SessionFixture {
   readonly title: string;
 }
 
-async function initializeXmux() {
+async function initializeXmux(
+  input: {
+    readonly opencodeSessions?: readonly SessionFixture[];
+    readonly piSessions?: readonly SessionFixture[];
+  } = {},
+) {
   const replies: string[] = [];
+  const actionMessages: {
+    readonly text: string;
+    readonly buttons: readonly (readonly unknown[])[];
+  }[] = [];
+  const actionUpdates: {
+    readonly text: string;
+    readonly buttons: readonly (readonly unknown[])[];
+  }[] = [];
   const listInputs: { readonly harnessId: string; readonly cwd?: string }[] = [];
   const deleteInputs: { readonly harnessId: string; readonly sessionId: string }[] = [];
   let emitCommand: ((event: unknown) => void) | undefined;
@@ -180,7 +282,7 @@ async function initializeXmux() {
               harnessId: "opencode",
               listInputs,
               deleteInputs,
-              sessions: [
+              sessions: input.opencodeSessions ?? [
                 { sessionId: "abc111", title: "Fix bug" },
                 { sessionId: "abc222", title: "Refactor auth" },
                 { sessionId: "xy9", title: "Cleanup" },
@@ -197,7 +299,7 @@ async function initializeXmux() {
               harnessId: "pi",
               listInputs,
               deleteInputs,
-              sessions: [{ sessionId: "abc999", title: "PI session" }],
+              sessions: input.piSessions ?? [{ sessionId: "abc999", title: "PI session" }],
             }),
           );
         },
@@ -223,6 +325,7 @@ async function initializeXmux() {
               return Result.ok(sentMessage({ text: input.text, format: input.format }));
             },
             async sendAction(input) {
+              actionMessages.push({ text: input.text, buttons: input.buttons });
               return Result.ok({
                 chatId: input.chatId,
                 conversationId: input.conversationId,
@@ -231,7 +334,18 @@ async function initializeXmux() {
                 adapterData: {},
               });
             },
-            async respondToAction() {
+            async respondToAction(input) {
+              if (input.response.kind === "reply") {
+                const message = input.response.message;
+                replies.push(typeof message === "string" ? message : message.text);
+              }
+              if (input.response.kind === "update" && input.response.message) {
+                const message = input.response.message;
+                actionUpdates.push({
+                  text: typeof message === "string" ? message : message.text,
+                  buttons: input.response.buttons ?? [],
+                });
+              }
               return Result.ok();
             },
             async reply(input) {
@@ -255,9 +369,15 @@ async function initializeXmux() {
 
   return {
     replies,
+    actionMessages,
+    actionUpdates,
     listInputs,
     deleteInputs,
     emitCommand: emitCommand as (event: unknown) => void,
+    emitHarnessAction: (harnessId: string) =>
+      (emitCommand as (event: unknown) => void)(harnessActionEvent(harnessId)),
+    emitDeleteAction: (target: { readonly harnessId: string; readonly shortId: string }) =>
+      (emitCommand as (event: unknown) => void)(deleteActionEvent(target)),
     xmux,
   };
 }
@@ -350,6 +470,51 @@ function commandEvent(input: {
       options: input.options,
     },
   };
+}
+
+function harnessActionEvent(harnessId: string) {
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "1" },
+    interactionId: "delete-harness-1",
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    actionId: "dh",
+    value: "x",
+    payload: harnessId,
+  };
+}
+
+function deleteActionEvent(input: { readonly harnessId: string; readonly shortId: string }) {
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "1" },
+    interactionId: "delete-session-1",
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    actionId: "d",
+    value: "x",
+    payload: `${input.harnessId}:${input.shortId}`,
+  };
+}
+
+interface ActionButtonFixture {
+  readonly actionId: string;
+  readonly value: string;
+  readonly payload?: unknown;
+}
+
+function encodedTelegramCallbackLength(button: ActionButtonFixture): number {
+  return Buffer.byteLength(
+    JSON.stringify({
+      actionId: button.actionId,
+      value: button.value,
+      ...(button.payload === undefined ? {} : { payload: button.payload }),
+    }),
+    "utf8",
+  );
 }
 
 function sentMessage(input: {

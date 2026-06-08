@@ -1,26 +1,102 @@
-import type { ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
+import type { Actions } from "../../actions";
+import { deleteHarnessActionId, deleteSessionActionId } from "../../actions";
 import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
 import { CommandHarnessNotConfiguredError } from "../errors";
 import { formatSessionCommandFailure } from "../shared/session-command";
-import { formatSessionSelectionList } from "../shared/session-selection";
-import type { DeleteCommandError, DeleteCommandOutput, DeleteListOutput } from "./service";
+import { normalizeTextInput } from "../utils";
+import type {
+  DeleteCommandError,
+  DeleteCommandOutput,
+  DeleteHarnessesOutput,
+  DeleteListOutput,
+} from "./service";
+
+export interface DeleteActionMessage {
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
+}
 
 export function formatDeleteOutput(output: DeleteCommandOutput): ChatTextInput {
-  return output.status === "listed" ? formatDeleteList(output) : formatDeleteSuccess(output);
+  if (output.status === "harnesses") return formatDeleteHarnesses(output);
+  if (output.status === "listed") return formatDeleteList(output);
+  return formatDeleteSuccess(output);
 }
 
 export function formatDeleteList(output: DeleteListOutput): ChatTextInput {
-  return formatSessionSelectionList({
-    commandName: "delete",
-    cwd: output.cwd,
-    groups: output.groups,
-    failures: output.failures,
-    emptyDescription: "No configured harness reported deletable sessions for this directory.",
-  });
+  const title = output.group.harnessId;
+
+  if (output.group.totalSessionCount === 0) {
+    return markdown({
+      text: [
+        `**${title} sessions**`,
+        "",
+        `Current directory: ${inlineCode(output.cwd)}`,
+        "",
+        "No sessions found.",
+      ].join("\n"),
+    });
+  }
+
+  const lines = [
+    `**${title} sessions** (${output.group.totalSessionCount})`,
+    "",
+    `Current directory: ${inlineCode(output.cwd)}`,
+    "",
+    `Use ${inlineCode(`/delete ${output.group.harnessId} <shortId>`)} or press Delete.`,
+    "",
+  ];
+
+  for (const session of output.group.sessions) {
+    const title = session.title?.trim() || "Untitled session";
+    lines.push(
+      [
+        `- Title: ${markdownText(title)}`,
+        `  Short ID: ${inlineCode(session.shortId)}`,
+        `  Command: ${inlineCode(`/delete ${session.harnessId} ${session.shortId}`)}`,
+      ].join("\n"),
+    );
+    lines.push("");
+  }
+
+  const remaining = output.group.totalSessionCount - output.group.sessions.length;
+  if (remaining > 0) {
+    lines.push(`_And ${remaining} more sessions._`);
+  }
+
+  while (lines.at(-1) === "") {
+    lines.pop();
+  }
+
+  return markdown({ text: lines.join("\n") });
+}
+
+export function formatDeleteHarnessActionMessage(
+  output: DeleteHarnessesOutput,
+): DeleteActionMessage {
+  return {
+    ...normalizeTextInput(formatDeleteHarnesses(output)),
+    buttons: output.harnessIds.map((harnessId) => [formatHarnessButton(harnessId)]),
+  };
+}
+
+export function formatDeleteListActionMessage(output: DeleteListOutput): DeleteActionMessage {
+  return {
+    ...normalizeTextInput(formatDeleteList(output)),
+    buttons: output.group.sessions.map((session) => [
+      formatDeleteButton({ harnessId: session.harnessId, shortId: session.shortId }),
+    ]),
+  };
 }
 
 export function formatDeleteFailure(error: DeleteCommandError): ChatTextInput {
-  const shared = formatSessionCommandFailure(error, "delete", "delete the active session or list sessions", "to see deletable sessions");
+  const shared = formatSessionCommandFailure(
+    error,
+    "delete",
+    "delete the active session or list sessions",
+    "to see deletable sessions",
+  );
 
   if (shared) return shared;
 
@@ -75,4 +151,53 @@ function formatDeleteSuccess(
   }
 
   return markdown({ text: lines.join("\n") });
+}
+
+function formatDeleteHarnesses(output: DeleteHarnessesOutput): ChatTextInput {
+  if (output.harnessIds.length === 0) {
+    return markdown({
+      text: [
+        "**No harnesses configured**",
+        "",
+        `Current directory: ${inlineCode(output.cwd)}`,
+        "",
+        "Add a harness before deleting sessions.",
+      ].join("\n"),
+    });
+  }
+
+  return markdown({
+    text: [
+      "**Choose a harness**",
+      "",
+      `Current directory: ${inlineCode(output.cwd)}`,
+      "",
+      "Pick one to view sessions.",
+    ].join("\n"),
+  });
+}
+
+function formatHarnessButton(harnessId: string): ChatButtonInput<Actions> {
+  return {
+    id: `delete-harness-${harnessId}`,
+    label: `${harnessId} sessions`,
+    actionId: deleteHarnessActionId,
+    value: "x",
+    payload: harnessId,
+    style: "secondary",
+  };
+}
+
+function formatDeleteButton(input: {
+  readonly harnessId: string;
+  readonly shortId: string;
+}): ChatButtonInput<Actions> {
+  return {
+    id: `delete-session-${input.harnessId}-${input.shortId}`,
+    label: `Delete ${input.shortId}`,
+    actionId: deleteSessionActionId,
+    value: "x",
+    payload: `${input.harnessId}:${input.shortId}`,
+    style: "danger",
+  };
 }
