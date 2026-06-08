@@ -128,25 +128,48 @@ describe("/delete command", () => {
 
     emitHarnessAction("opencode");
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => actionUpdates.length === 1);
 
-    expect(actionUpdates).toHaveLength(0);
-    expect(replies[0]).toContain("**opencode sessions**");
-    expect(replies[0]).toContain("No sessions found.");
+    expect(replies).toHaveLength(0);
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions**");
+    expect(actionUpdates[0]?.text).toContain("No sessions found.");
+    expect(actionUpdates[0]?.buttons).toEqual([]);
 
     await xmux.shutdown();
   });
 
-  test("deletes the selected session from a session button", async () => {
-    const { emitDeleteAction, replies, deleteInputs, xmux } = await initializeXmux();
+  test("deletes the selected session from a session button and refreshes the message", async () => {
+    const { emitDeleteAction, replies, actionUpdates, deleteInputs, listInputs, xmux } =
+      await initializeXmux();
 
     emitDeleteAction({ harnessId: "opencode", shortId: "abc2" });
 
-    await eventually(() => replies.length === 1);
+    await eventually(() => actionUpdates.length === 1);
 
     expect(deleteInputs).toEqual([{ harnessId: "opencode", sessionId: "abc222" }]);
-    expect(replies[0]).toContain("**Deleted** `opencode/abc2`");
-    expect(replies[0]).toContain("- Title: Refactor auth");
+    expect(replies).toHaveLength(0);
+    expect(listInputs).toEqual([
+      { harnessId: "opencode", cwd: process.cwd() },
+      { harnessId: "opencode", cwd: process.cwd() },
+    ]);
+    expect(actionUpdates[0]?.text).toContain("**opencode sessions** (2)");
+    expect(actionUpdates[0]?.text).toContain("Title: Fix bug");
+    expect(actionUpdates[0]?.text).toContain("Title: Cleanup");
+    expect(actionUpdates[0]?.text).not.toContain("Refactor auth");
+    expect(actionUpdates[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({
+          label: "Delete abc",
+          payload: "opencode:abc",
+        }),
+      ],
+      [
+        expect.objectContaining({
+          label: "Delete xy9",
+          payload: "opencode:xy9",
+        }),
+      ],
+    ]);
 
     await xmux.shutdown();
   });
@@ -388,6 +411,8 @@ function createHarnessRuntime<const THarnessId extends "opencode" | "pi">(input:
   readonly deleteInputs: { readonly harnessId: string; readonly sessionId: string }[];
   readonly sessions: readonly SessionFixture[];
 }) {
+  const sessions = [...input.sessions];
+
   return {
     id: input.harnessId,
     async createSession() {
@@ -399,7 +424,7 @@ function createHarnessRuntime<const THarnessId extends "opencode" | "pi">(input:
     async listSessions(listInput: { readonly cwd?: string }) {
       input.listInputs.push({ harnessId: input.harnessId, cwd: listInput.cwd });
       return Result.ok(
-        input.sessions.map((session) => ({
+        sessions.map((session) => ({
           sessionId: session.sessionId,
           cwd: listInput.cwd ?? process.cwd(),
           title: session.title,
@@ -418,9 +443,15 @@ function createHarnessRuntime<const THarnessId extends "opencode" | "pi">(input:
         harnessId: input.harnessId,
         sessionId: deleteInput.ref.sessionId,
       });
-      return input.sessions.some((session) => session.sessionId === deleteInput.ref.sessionId)
-        ? Result.ok()
-        : Result.err(new Error("missing session"));
+      const index = sessions.findIndex(
+        (session) => session.sessionId === deleteInput.ref.sessionId,
+      );
+      if (index < 0) {
+        return Result.err(new Error("missing session"));
+      }
+
+      sessions.splice(index, 1);
+      return Result.ok();
     },
     async abort() {
       return Result.err(new Error("not implemented"));
