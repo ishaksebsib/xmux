@@ -26,6 +26,8 @@ export type TelegramAdapterOptions = NonNullable<Parameters<Bot["api"]["sendMess
 export type TelegramAdapterData = {
   readonly telegramChatId: string;
   readonly telegramMessageId?: number;
+  readonly telegramFileId?: string;
+  readonly telegramFileUniqueId?: string;
   readonly updateId?: number;
   readonly raw: unknown;
 };

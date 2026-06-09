@@ -1,6 +1,6 @@
 import type { ChatAdapterStartContext, ChatCommandRegistry } from "@xmux/chat-core";
 import type { TelegramBotClient } from "../client";
-import { decodeTelegramActionUpdate, decodeTelegramTextUpdate } from "../conversions/inbound";
+import { decodeTelegramActionUpdate, decodeTelegramMessageUpdate } from "../conversions/inbound";
 import type { TelegramAdapterData } from "../types";
 
 export function registerInboundHandlers<
@@ -26,12 +26,13 @@ export function registerInboundHandlers<
     }
   });
 
-  args.bot.onTextMessage((telegramContext) => {
+  args.bot.onMessage((telegramContext) => {
     const botInfo = args.bot.getBotInfo();
-    const decoded = decodeTelegramTextUpdate<TCommands, TChatId>({
+    const decoded = decodeTelegramMessageUpdate<TCommands, TChatId>({
       chatId: args.chatId,
       commands: args.context.commands,
       context: telegramContext,
+      bot: args.bot,
       botUserId: botInfo.id,
       botUsername: botInfo.username,
       diagnostic: args.context.diagnostic,

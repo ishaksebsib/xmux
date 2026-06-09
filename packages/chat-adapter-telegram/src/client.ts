@@ -14,14 +14,17 @@ type SendMessage = GrammyBotApi["sendMessage"];
 type SendChatAction = GrammyBotApi["sendChatAction"];
 type AnswerCallbackQuery = GrammyBotApi["answerCallbackQuery"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
+type GetFile = GrammyBotApi["getFile"];
 
 export type TelegramEditedTextMessage = Awaited<ReturnType<EditMessageText>>;
 export type TelegramSentTextMessage = Awaited<ReturnType<SendMessage>>;
 export type TelegramStreamedTextMessages = Message.TextMessage[];
 
+export type TelegramMessageContext = Filter<Context, "message">;
 export type TelegramTextMessageContext = Filter<Context, "message:text">;
 export type TelegramCallbackQueryDataContext = Filter<Context, "callback_query:data">;
 
+export type TelegramMessageHandler = (context: TelegramMessageContext) => void | Promise<void>;
 export type TelegramTextMessageHandler = (
   context: TelegramTextMessageContext,
 ) => void | Promise<void>;
@@ -43,11 +46,16 @@ export interface TelegramBotClient {
     readonly options?: Parameters<EditMessageText>[3];
     readonly signal?: AbortSignal;
   }): ReturnType<EditMessageText>;
+  downloadFile(args: { readonly filePath: string; readonly signal?: AbortSignal }): Promise<Response>;
   getBotInfo(): UserFromGetMe;
+  getFile(args: {
+    readonly fileId: Parameters<GetFile>[0];
+    readonly signal?: AbortSignal;
+  }): ReturnType<GetFile>;
   init(signal?: AbortSignal): ReturnType<BotInit>;
   isRunning(): boolean;
   onCallbackQueryData(handler: TelegramCallbackQueryDataHandler): void;
-  onTextMessage(handler: TelegramTextMessageHandler): void;
+  onMessage(handler: TelegramMessageHandler): void;
   sendMessage(args: {
     readonly chatId: Parameters<SendMessage>[0];
     readonly text: Parameters<SendMessage>[1];
@@ -105,14 +113,20 @@ export function createTelegramBotClient(args: {
         input.options,
         input.signal as Parameters<EditMessageText>[4],
       ),
+    downloadFile: (input) =>
+      fetch(`https://api.telegram.org/file/bot${args.token}/${input.filePath}`, {
+        signal: input.signal,
+      }),
     getBotInfo: () => bot.botInfo,
+    getFile: (input) =>
+      bot.api.getFile(input.fileId, input.signal as Parameters<GetFile>[1]),
     init: (signal) => bot.init(signal as Parameters<BotInit>[0]),
     isRunning: bot.isRunning.bind(bot),
     onCallbackQueryData: (handler) => {
       bot.on("callback_query:data", handler);
     },
-    onTextMessage: (handler) => {
-      bot.on("message:text", handler);
+    onMessage: (handler) => {
+      bot.on("message", handler);
     },
     sendMessage: (input) =>
       bot.api.sendMessage(

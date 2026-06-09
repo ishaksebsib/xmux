@@ -15,7 +15,11 @@ import {
   TelegramStreamReplyError,
   TelegramWebhookModeUnsupportedError,
 } from "../src/errors";
-import type { TelegramCallbackQueryDataContext, TelegramTextMessageContext } from "../src/client";
+import type {
+  TelegramCallbackQueryDataContext,
+  TelegramMessageContext,
+  TelegramTextMessageContext,
+} from "../src/client";
 import { openTelegramRuntime } from "../src/runtime";
 import {
   booleanOption,
@@ -67,12 +71,16 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly getBotInfoMock: ReturnType<typeof vi.fn>;
   readonly answerCallbackQueryMock: ReturnType<typeof vi.fn>;
   readonly onCallbackQueryDataMock: ReturnType<typeof vi.fn>;
+  readonly onMessageMock: ReturnType<typeof vi.fn>;
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly sendMessageMock: ReturnType<typeof vi.fn>;
   readonly sendChatActionMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
   readonly streamMessageMock: ReturnType<typeof vi.fn>;
+  readonly getFileMock: ReturnType<typeof vi.fn>;
+  readonly downloadFileMock: ReturnType<typeof vi.fn>;
   readonly emitCallbackQueryData: (context: TelegramCallbackQueryDataContext) => Promise<void>;
+  readonly emitMessage: (context: TelegramMessageContext) => Promise<void>;
   readonly emitTextMessage: (context: TelegramTextMessageContext) => Promise<void>;
   readonly rejectPolling: (cause: unknown) => void;
 };
@@ -84,6 +92,8 @@ function createFakeTelegramBot(
     readonly sendChatActionError?: unknown;
     readonly setMyCommandsError?: unknown;
     readonly startError?: unknown;
+    readonly getFileError?: unknown;
+    readonly downloadFileError?: unknown;
   } = {},
 ): FakeTelegramBot {
   let running = false;
@@ -126,6 +136,7 @@ function createFakeTelegramBot(
     has_topics_enabled: false,
     allows_users_to_create_topics: false,
   }));
+  const messageHandlers: Array<(context: TelegramMessageContext) => void | Promise<void>> = [];
   const textMessageHandlers: Array<(context: TelegramTextMessageContext) => void | Promise<void>> =
     [];
   const callbackQueryDataHandlers: Array<
@@ -142,6 +153,11 @@ function createFakeTelegramBot(
   const onCallbackQueryDataMock = vi.fn(
     (handler: (context: TelegramCallbackQueryDataContext) => void | Promise<void>) => {
       callbackQueryDataHandlers.push(handler);
+    },
+  );
+  const onMessageMock = vi.fn(
+    (handler: (context: TelegramMessageContext) => void | Promise<void>) => {
+      messageHandlers.push(handler);
     },
   );
   const onTextMessageMock = vi.fn(
@@ -182,6 +198,28 @@ function createFakeTelegramBot(
     }
     return true;
   });
+  const getFileMock = vi.fn(async (input: { readonly fileId: string }) => {
+    if (args.getFileError !== undefined) {
+      throw args.getFileError;
+    }
+
+    return {
+      file_id: input.fileId,
+      file_unique_id: `${input.fileId}-unique`,
+      file_size: 3,
+      file_path: `documents/${input.fileId}`,
+    };
+  });
+  const downloadFileMock = vi.fn(async () => {
+    if (args.downloadFileError !== undefined) {
+      throw args.downloadFileError;
+    }
+
+    return new Response(new Uint8Array([1, 2, 3]), {
+      status: 200,
+      headers: { "content-length": "3" },
+    });
+  });
   const streamMessageMock = vi.fn(
     async (input: { readonly chatId: number; readonly stream: AsyncIterable<string> }) => {
       let text = "";
@@ -203,13 +241,16 @@ function createFakeTelegramBot(
   return {
     catch: catchMock,
     answerCallbackQuery: answerCallbackQueryMock,
+    downloadFile: downloadFileMock,
     editMessageText: editMessageTextMock,
     getBotInfo: getBotInfoMock,
+    getFile: getFileMock,
     init: initMock,
     isRunning: () => running,
     start: startMock,
     stop: stopMock,
     onCallbackQueryData: onCallbackQueryDataMock,
+    onMessage: onMessageMock,
     onTextMessage: onTextMessageMock,
     sendMessage: sendMessageMock,
     sendChatAction: sendChatActionMock,
@@ -222,7 +263,10 @@ function createFakeTelegramBot(
     getBotInfoMock,
     answerCallbackQueryMock,
     onCallbackQueryDataMock,
+    onMessageMock,
     onTextMessageMock,
+    getFileMock,
+    downloadFileMock,
     sendMessageMock,
     sendChatActionMock,
     setMyCommandsMock,
@@ -233,7 +277,15 @@ function createFakeTelegramBot(
         await handler(context);
       }
     },
+    emitMessage: async (context) => {
+      for (const handler of messageHandlers) {
+        await handler(context);
+      }
+    },
     emitTextMessage: async (context) => {
+      for (const handler of messageHandlers) {
+        await handler(context);
+      }
       for (const handler of textMessageHandlers) {
         await handler(context);
       }
@@ -258,6 +310,37 @@ async function* textChunks(parts: readonly string[]) {
   for (const delta of parts) {
     yield { type: "delta" as const, delta };
   }
+}
+
+function createTelegramMessageContext(args: {
+  readonly message: Record<string, unknown>;
+  readonly chatId?: number;
+  readonly messageId?: number;
+  readonly updateId?: number;
+  readonly from?: {
+    readonly id: number;
+    readonly is_bot: boolean;
+    readonly first_name: string;
+    readonly last_name?: string;
+    readonly username?: string;
+  };
+}): TelegramMessageContext {
+  const chat = { id: args.chatId ?? -100, type: "private", first_name: "Alice" };
+  const message = {
+    message_id: args.messageId ?? 10,
+    date: 1,
+    chat,
+    from: args.from,
+    ...args.message,
+  };
+
+  return {
+    update: {
+      update_id: args.updateId ?? 20,
+      message,
+    },
+    message,
+  } as unknown as TelegramMessageContext;
 }
 
 function createTelegramTextContext(args: {
@@ -584,6 +667,164 @@ describe("createTelegramAdapter", () => {
         },
       },
     });
+  });
+
+  test("document updates emit lazy downloadable attachments", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitMessage(
+      createTelegramMessageContext({
+        chatId: 12345,
+        messageId: 777,
+        updateId: 888,
+        from: { id: 42, is_bot: false, first_name: "Alice" },
+        message: {
+          caption: "please read",
+          document: {
+            file_id: "pdf-file-id",
+            file_unique_id: "pdf-unique-id",
+            file_name: "brief.pdf",
+            mime_type: "application/pdf",
+            file_size: 3,
+          },
+        },
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: "message",
+      message: {
+        text: "please read",
+        attachments: [
+          {
+            attachmentId: "pdf-unique-id",
+            kind: "document",
+            disposition: "attachment",
+            filename: "brief.pdf",
+            mimeType: "application/pdf",
+            sizeBytes: 3,
+            adapterData: {
+              telegramChatId: "12345",
+              telegramMessageId: 777,
+              telegramFileId: "pdf-file-id",
+              telegramFileUniqueId: "pdf-unique-id",
+              updateId: 888,
+            },
+          },
+        ],
+      },
+    });
+
+    const event = events[0] as {
+      readonly message: {
+        readonly attachments: readonly [
+          { open(input?: { readonly maxBytes?: number }): Promise<{ isOk(): boolean }> },
+        ];
+      };
+    };
+    expect(bot.getFileMock).not.toHaveBeenCalled();
+    expect(bot.downloadFileMock).not.toHaveBeenCalled();
+
+    const openedAttachment = await event.message.attachments[0].open({ maxBytes: 100 });
+    expect(openedAttachment.isOk()).toBe(true);
+    expect(bot.getFileMock).toHaveBeenCalledWith({ fileId: "pdf-file-id", signal: undefined });
+    expect(bot.downloadFileMock).toHaveBeenCalledWith({
+      filePath: "documents/pdf-file-id",
+      signal: undefined,
+    });
+  });
+
+  test("photo updates emit the largest photo as an image attachment", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitMessage(
+      createTelegramMessageContext({
+        chatId: 12345,
+        messageId: 777,
+        updateId: 888,
+        from: { id: 42, is_bot: false, first_name: "Alice" },
+        message: {
+          photo: [
+            { file_id: "small", file_unique_id: "small-unique", width: 10, height: 10 },
+            { file_id: "large", file_unique_id: "large-unique", width: 100, height: 100 },
+          ],
+        },
+      }),
+    );
+
+    expect(events[0]).toMatchObject({
+      type: "message",
+      message: {
+        text: "",
+        attachments: [
+          {
+            attachmentId: "large-unique",
+            kind: "image",
+            disposition: "inline",
+            mimeType: "image/jpeg",
+            adapterData: { telegramFileId: "large" },
+          },
+        ],
+      },
+    });
+  });
+
+  test("attachment open rejects known oversized files before download", async () => {
+    const bot = createFakeTelegramBot();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitMessage(
+      createTelegramMessageContext({
+        message: {
+          document: {
+            file_id: "big-file-id",
+            file_unique_id: "big-unique-id",
+            file_name: "big.pdf",
+            mime_type: "application/pdf",
+            file_size: 5_000,
+          },
+        },
+      }),
+    );
+
+    const event = events[0] as {
+      readonly message: {
+        readonly attachments: readonly [
+          { open(input?: { readonly maxBytes?: number }): Promise<{ isErr(): boolean }> },
+        ];
+      };
+    };
+    const openedAttachment = await event.message.attachments[0].open({ maxBytes: 100 });
+    expect(openedAttachment.isErr()).toBe(true);
+    expect(bot.getFileMock).not.toHaveBeenCalled();
+    expect(bot.downloadFileMock).not.toHaveBeenCalled();
   });
 
   test("bot and system text authors are normalized", async () => {

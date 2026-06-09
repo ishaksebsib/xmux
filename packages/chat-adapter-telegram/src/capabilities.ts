@@ -14,7 +14,12 @@ export const telegramAdapterCapabilities = {
     delete: false,
     typing: true,
     markdown: true,
-    attachments: false,
+    attachments: {
+      receive: true,
+      send: false,
+      download: true,
+      kinds: ["image", "audio", "video", "document", "archive", "other"],
+    },
     stream: { send: true, reply: true, strategy: "native" },
   },
   reactions: {

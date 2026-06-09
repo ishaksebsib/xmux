@@ -132,6 +132,32 @@ export class TelegramSendMessageError extends TaggedError("TelegramSendMessageEr
   }
 }
 
+/** Telegram attachment download/open failed. */
+export class TelegramAttachmentReadError extends TaggedError("TelegramAttachmentReadError")<{
+  readonly attachmentId: string;
+  readonly reason: "metadata" | "missing_file_path" | "too_large" | "download" | "invalid_response";
+  readonly maxBytes?: number;
+  readonly sizeBytes?: number;
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: {
+    readonly attachmentId: string;
+    readonly reason: "metadata" | "missing_file_path" | "too_large" | "download" | "invalid_response";
+    readonly maxBytes?: number;
+    readonly sizeBytes?: number;
+    readonly cause?: unknown;
+  }) {
+    const size = args.sizeBytes === undefined ? "unknown size" : `${args.sizeBytes} bytes`;
+    const limit = args.maxBytes === undefined ? "" : `; limit ${args.maxBytes} bytes`;
+
+    super({
+      ...args,
+      message: `Telegram attachment ${args.attachmentId} read failed (${args.reason}; ${size}${limit}): ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Telegram sendChatAction typing indicator failed. */
 export class TelegramSendTypingError extends TaggedError("TelegramSendTypingError")<{
   readonly message: string;
@@ -148,6 +174,7 @@ export class TelegramSendTypingError extends TaggedError("TelegramSendTypingErro
 /** Webhook delivery is reserved for the future webhook runtime path. */
 export type TelegramAdapterError =
   | TelegramActionResponseError
+  | TelegramAttachmentReadError
   | TelegramCommandRegistrationError
   | TelegramConfigurationError
   | TelegramReplyError
