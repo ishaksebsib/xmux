@@ -18,7 +18,7 @@ import {
 import { requireConfiguredHarnessId } from "../utils";
 import { getCurrentWorkspaceCwd } from "../workspace";
 import { CommandHarnessNotConfiguredError } from "../errors";
-import type { HarnessSelectionOutput } from "../shared/harness-selection";
+import { resolveHarnessChoice, type HarnessSelectionOutput } from "../shared/harness-selection";
 
 export type CreateSessionForThreadError =
   | CommandHarnessNotConfiguredError
@@ -54,23 +54,26 @@ export async function newSessionCommand<
   input: NewSessionCommandInput<TAdapters, TChats>,
 ): Promise<Result<NewCommandOutput, CreateSessionForThreadError>> {
   return Result.gen(async function* () {
-    if (input.harnessId === undefined) {
-      const cwd = yield* Result.await(
-        getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
-      );
+    const cwd = yield* Result.await(
+      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+    );
 
-      return Result.ok({
-        status: "harnesses" as const,
-        cwd,
-        harnessIds: input.ctx.app.harnessIds,
-      });
+    const harness = yield* resolveHarnessChoice({
+      harnessId: input.harnessId,
+      availableHarnessIds: input.ctx.app.harnessIds,
+      cwd,
+    });
+
+    if (harness.status === "harnesses") {
+      return Result.ok(harness);
     }
 
     const record = yield* Result.await(
       createSessionForThread({
         ctx: input.ctx,
         thread: input.thread,
-        harnessId: input.harnessId,
+        harnessId: harness.harnessId,
+        cwd,
         ...(input.title === undefined ? {} : { title: input.title }),
       }),
     );
@@ -86,6 +89,7 @@ export interface CreateSessionForThreadInput<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly thread: ChatThreadRef;
   readonly harnessId: string;
+  readonly cwd?: string;
   readonly title?: string;
 }
 
@@ -103,9 +107,9 @@ export async function createSessionForThread<
       onMissing: (args) => new CommandHarnessNotConfiguredError(args),
     });
 
-    const cwd = yield* Result.await(
-      getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
-    );
+    const cwd =
+      input.cwd ??
+      (yield* Result.await(getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread })));
 
     const created = yield* Result.await(
       input.ctx.app.harness.createSession(

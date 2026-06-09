@@ -18,7 +18,7 @@ const capabilities = {
 } as const;
 
 describe("/new command", () => {
-  test("creates a harness session, stores metadata, binds the chat thread, and replies", async () => {
+  test("defaults to the only configured harness, stores metadata, binds the chat thread, and replies", async () => {
     const replies: string[] = [];
     const createInputs: { readonly cwd: string; readonly title?: string }[] = [];
     let emitCommand: ((event: unknown) => void) | undefined;
@@ -118,7 +118,7 @@ describe("/new command", () => {
       message: { chatId: "telegram", conversationId: "conversation-1", messageId: "message-1" },
       command: {
         name: "new",
-        options: { harnessId: "pi", title: "Fix bug" },
+        options: { harnessId: undefined, title: "Fix bug" },
       },
     });
 

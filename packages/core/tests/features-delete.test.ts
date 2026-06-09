@@ -79,6 +79,28 @@ describe("/delete command", () => {
     await xmux.shutdown();
   });
 
+  test("defaults to the only configured harness when no session is active", async () => {
+    const { emitCommand, actionMessages, listInputs, xmux } = await initializeXmux({
+      includePi: false,
+    });
+
+    emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
+
+    await eventually(() => actionMessages.length === 1);
+
+    expect(listInputs).toEqual([{ harnessId: "opencode", cwd: process.cwd() }]);
+    expect(actionMessages[0]?.text).toContain("**opencode sessions** (3)");
+    expect(actionMessages[0]?.text).not.toContain("**Choose a harness**");
+    expect(actionMessages[0]?.text).not.toContain("PI session");
+    expect(actionMessages[0]?.buttons).toEqual([
+      [expect.objectContaining({ label: "Delete abc1", payload: "opencode:abc1" })],
+      [expect.objectContaining({ label: "Delete abc2", payload: "opencode:abc2" })],
+      [expect.objectContaining({ label: "Delete xy9", payload: "opencode:xy9" })],
+    ]);
+
+    await xmux.shutdown();
+  });
+
   test("lists sessions for the selected harness with delete buttons", async () => {
     const { emitHarnessAction, actionUpdates, listInputs, xmux } = await initializeXmux();
 
@@ -278,6 +300,7 @@ interface SessionFixture {
 
 async function initializeXmux(
   input: {
+    readonly includePi?: boolean;
     readonly opencodeSessions?: readonly SessionFixture[];
     readonly piSessions?: readonly SessionFixture[];
   } = {},
@@ -295,39 +318,40 @@ async function initializeXmux(
   const deleteInputs: { readonly harnessId: string; readonly sessionId: string }[] = [];
   let emitCommand: ((event: unknown) => void) | undefined;
 
-  const xmux = createXmux({
-    harnesses: {
-      opencode: defineHarnessAdapter<"opencode">({
-        id: "opencode",
-        async open() {
-          return Result.ok(
-            createHarnessRuntime({
-              harnessId: "opencode",
-              listInputs,
-              deleteInputs,
-              sessions: input.opencodeSessions ?? [
-                { sessionId: "abc111", title: "Fix bug" },
-                { sessionId: "abc222", title: "Refactor auth" },
-                { sessionId: "xy9", title: "Cleanup" },
-              ],
-            }),
-          );
-        },
-      }),
-      pi: defineHarnessAdapter<"pi">({
-        id: "pi",
-        async open() {
-          return Result.ok(
-            createHarnessRuntime({
-              harnessId: "pi",
-              listInputs,
-              deleteInputs,
-              sessions: input.piSessions ?? [{ sessionId: "abc999", title: "PI session" }],
-            }),
-          );
-        },
-      }),
+  const opencode = defineHarnessAdapter<"opencode">({
+    id: "opencode",
+    async open() {
+      return Result.ok(
+        createHarnessRuntime({
+          harnessId: "opencode",
+          listInputs,
+          deleteInputs,
+          sessions: input.opencodeSessions ?? [
+            { sessionId: "abc111", title: "Fix bug" },
+            { sessionId: "abc222", title: "Refactor auth" },
+            { sessionId: "xy9", title: "Cleanup" },
+          ],
+        }),
+      );
     },
+  });
+  const pi = defineHarnessAdapter<"pi">({
+    id: "pi",
+    async open() {
+      return Result.ok(
+        createHarnessRuntime({
+          harnessId: "pi",
+          listInputs,
+          deleteInputs,
+          sessions: input.piSessions ?? [{ sessionId: "abc999", title: "PI session" }],
+        }),
+      );
+    },
+  });
+  const harnesses = input.includePi === false ? { opencode } : { opencode, pi };
+
+  const xmux = createXmux({
+    harnesses,
     chats: {
       telegram: defineChatAdapter<
         "telegram",

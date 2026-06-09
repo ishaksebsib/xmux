@@ -23,7 +23,7 @@ import {
   type SelectSessionByShortIdError,
 } from "../shared/session-command";
 import type { SessionCommandIncompleteTargetError } from "../shared/session-command";
-import type { HarnessSelectionOutput } from "../shared/harness-selection";
+import { resolveHarnessChoice, type HarnessSelectionOutput } from "../shared/harness-selection";
 import {
   listHarnessSelectableSessions,
   type SessionSelectionGroup,
@@ -87,11 +87,25 @@ export async function resumeSessionCommand<
     );
 
     if (target.status === "list") {
-      return Result.ok({
-        status: "harnesses" as const,
+      const harness = yield* resolveHarnessChoice({
+        harnessId: undefined,
+        availableHarnessIds: input.ctx.app.harnessIds,
         cwd,
-        harnessIds: input.ctx.app.harnessIds,
       });
+
+      if (harness.status === "harnesses") {
+        return Result.ok(harness);
+      }
+
+      return Result.ok(
+        yield* Result.await(
+          listResumeSessionsForConfiguredHarness({
+            ctx: input.ctx,
+            cwd,
+            harnessId: harness.harnessId,
+          }),
+        ),
+      );
     }
 
     const selected = yield* Result.await(
@@ -156,17 +170,35 @@ export async function listResumeSessionsForHarness<
       availableHarnessIds: input.ctx.app.harnessIds,
       onMissing: (args) => new CommandHarnessNotConfiguredError(args),
     });
-    const group = yield* Result.await(
-      listHarnessSelectableSessions({
-        ctx: input.ctx,
-        harnessId,
-        cwd,
-        maxSessions: input.ctx.app.config.resume.maxSessionsPerHarness,
-      }),
+    return Result.ok(
+      yield* Result.await(
+        listResumeSessionsForConfiguredHarness({
+          ctx: input.ctx,
+          cwd,
+          harnessId,
+        }),
+      ),
     );
-
-    return Result.ok({ status: "listed" as const, cwd, group });
   });
+}
+
+async function listResumeSessionsForConfiguredHarness<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly cwd: string;
+  readonly harnessId: Extract<keyof TAdapters, string>;
+}): Promise<Result<ResumeListOutput, ListSessionsError>> {
+  return Result.map(
+    await listHarnessSelectableSessions({
+      ctx: input.ctx,
+      harnessId: input.harnessId,
+      cwd: input.cwd,
+      maxSessions: input.ctx.app.config.resume.maxSessionsPerHarness,
+    }),
+    (group) => ({ status: "listed" as const, cwd: input.cwd, group }),
+  );
 }
 
 async function upsertResumedSessionRecord<

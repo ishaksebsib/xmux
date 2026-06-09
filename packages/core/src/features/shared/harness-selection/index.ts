@@ -1,2 +1,7 @@
 export { formatHarnessChoice, harnessSelectionMessage, type HarnessChoicePrompt } from "./response";
-export type { HarnessSelectionOutput } from "./service";
+export {
+  resolveHarnessChoice,
+  type HarnessChoiceOutput,
+  type HarnessSelectedOutput,
+  type HarnessSelectionOutput,
+} from "./service";

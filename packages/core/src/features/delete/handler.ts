@@ -86,6 +86,18 @@ export async function handleDeleteCommand<
     });
   }
 
+  if (deleted.isOk() && deleted.value.status === "listed" && isBareDeleteCommand(input.event)) {
+    const message = formatDeleteListActionMessage(deleted.value);
+
+    return respondToAction({
+      command: "delete",
+      respond: () =>
+        input.ctx.app.chat.sendAction(
+          toSendActionInput({ ctx: input.ctx, event: input.event }, message),
+        ),
+    });
+  }
+
   return replyWithResult({
     event: input.event,
     command: "delete",
@@ -124,6 +136,15 @@ export async function handleDeleteHarnessAction<
     respond: () =>
       input.event.reply(Result.match(listed, { ok: formatDeleteOutput, err: formatDeleteFailure })),
   });
+}
+
+function isBareDeleteCommand<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(event: HandleDeleteCommandInput<TAdapters, TChats>["event"]): boolean {
+  return (
+    event.command.options.harnessId === undefined && event.command.options.shortId === undefined
+  );
 }
 
 export async function handleDeleteSessionAction<

@@ -88,6 +88,18 @@ export async function handleResumeCommand<
     });
   }
 
+  if (resumed.isOk() && resumed.value.status === "listed" && isBareResumeCommand(input.event)) {
+    const message = formatResumeListActionMessage(resumed.value);
+
+    return respondToAction({
+      command: "resume",
+      respond: () =>
+        input.ctx.app.chat.sendAction(
+          toSendActionInput({ ctx: input.ctx, event: input.event }, message),
+        ),
+    });
+  }
+
   return replyWithResult({
     event: input.event,
     command: "resume",
@@ -125,6 +137,15 @@ export async function handleResumeHarnessAction<
   const message = formatResumeListActionMessage(listed.value);
 
   return updateActionMessage({ command: "resume", event: input.event, message });
+}
+
+function isBareResumeCommand<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(event: HandleResumeCommandInput<TAdapters, TChats>["event"]): boolean {
+  return (
+    event.command.options.harnessId === undefined && event.command.options.shortId === undefined
+  );
 }
 
 export async function handleResumeSessionAction<
