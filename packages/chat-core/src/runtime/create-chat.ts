@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type { ChatActionRegistry } from "../registry/actions";
 import type {
   AdapterDataByChatId,
+  AdapterErrorByChatId,
   AdapterOptionsByChatId,
   AdapterCapabilitiesFor,
   AdapterDataFor,
@@ -101,7 +102,8 @@ export interface Chat<
     ChatId<TAdapters>,
     EventResult<TAdapters>,
     AdapterDataByChatId<TAdapters>,
-    AdapterOptionsByChatId<TAdapters>
+    AdapterOptionsByChatId<TAdapters>,
+    AdapterErrorByChatId<TAdapters>
   >;
   sendMessage<TInput extends ChatSendMessageInput<TAdapters>>(
     input: TInput,
@@ -135,7 +137,11 @@ export function createChat<
   type AdapterEvent = RuntimeAdapterEvent<TAdapters, TCommands>;
   type ActionAdapterEvent = ChatAdapterActionEvent<TChatId>;
   type ReplyableAdapterEvent =
-    | ChatAdapterMessageEventFor<TChatId, AdapterDataByChatId<TAdapters>>
+    | ChatAdapterMessageEventFor<
+        TChatId,
+        AdapterDataByChatId<TAdapters>,
+        AdapterErrorByChatId<TAdapters>
+      >
     | ChatAdapterCommandEvent<TCommands, keyof TCommands, TChatId>
     | ChatAdapterInvalidCommandEvent<TChatId>
     | ChatAdapterUnknownCommandEvent<TChatId>;
@@ -373,7 +379,12 @@ export function createChat<
         runtime,
         context: {
           commands: options.commands,
-          emit: emit as ChatAdapterStartContext<TCommands, TChatId, ChatAdapterObject>["emit"],
+          emit: emit as ChatAdapterStartContext<
+            TCommands,
+            TChatId,
+            ChatAdapterObject,
+            unknown
+          >["emit"],
           diagnostic: (diagnostic) => {
             emit({
               ...diagnostic,

@@ -29,12 +29,12 @@ export async function startChatAdapter<
 >(args: {
   readonly chatId: TChatId;
   readonly runtime: OpenedRuntime;
-  readonly context: ChatAdapterStartContext<TCommands, TChatId, ChatAdapterObject>;
+  readonly context: ChatAdapterStartContext<TCommands, TChatId, ChatAdapterObject, unknown>;
 }): Promise<Result<void, ChatAdapterStartError>> {
   const started = await Result.tryPromise({
     try: () =>
       args.runtime.start(
-        args.context as ChatAdapterStartContext<TCommands, string, ChatAdapterObject>,
+        args.context as ChatAdapterStartContext<TCommands, string, ChatAdapterObject, unknown>,
       ),
     catch: (cause) => new ChatAdapterStartError({ chatId: args.chatId, cause }),
   });

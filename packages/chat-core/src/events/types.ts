@@ -13,7 +13,11 @@ import type {
   ChatTextInput,
   ChatTextStreamContent,
 } from "../contracts";
-import type { ChatEventAdapterData, ChatEventAdapterOptions } from "../adapter/registry";
+import type {
+  ChatEventAdapterData,
+  ChatEventAdapterError,
+  ChatEventAdapterOptions,
+} from "../adapter/registry";
 import type {
   ChatTypingIndicatorBehavior,
   ChatTypingIndicatorFallback,
@@ -31,6 +35,7 @@ export interface ChatOn<
   TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
   TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
     ChatEventAdapterOptions<TChatId>,
+  TAdapterErrorByChatId extends ChatEventAdapterError<TChatId> = ChatEventAdapterError<TChatId>,
 > {
   <TActionId extends Extract<keyof TActions, string>>(
     type: "action",
@@ -78,7 +83,8 @@ export interface ChatOn<
         TChatId,
         TReplyResult,
         TAdapterDataByChatId,
-        TAdapterOptionsByChatId
+        TAdapterOptionsByChatId,
+        TAdapterErrorByChatId
       >
     >,
   ): Unsubscribe;
@@ -206,11 +212,12 @@ export interface ChatMessageEvent<
   TAdapterData extends ChatAdapterObject = Record<never, never>,
   TReplyResult = unknown,
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+  TAttachmentReadError = unknown,
 > {
   readonly type: "message";
   readonly chatId: TChatId;
   readonly conversation: ChatConversationRef<TChatId>;
-  readonly message: ChatMessage<TChatId, TAdapterData>;
+  readonly message: ChatMessage<TChatId, TAdapterData, TAttachmentReadError>;
   readonly reply: ChatEventReply<TReplyResult, TAdapterOptions>;
   readonly replyStream: ChatEventReplyStream<TReplyResult, TAdapterOptions>;
   readonly typingIndicator: ChatEventTypingIndicator<TAdapterOptions>;
@@ -223,12 +230,14 @@ export type ChatMessageEventFor<
   TReplyResult = unknown,
   TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
     ChatEventAdapterOptions<TChatId>,
+  TAdapterErrorByChatId extends ChatEventAdapterError<TChatId> = ChatEventAdapterError<TChatId>,
 > = {
   readonly [TCurrentChatId in TChatId]: ChatMessageEvent<
     TCurrentChatId,
     TAdapterDataByChatId[TCurrentChatId],
     TReplyResult,
-    TAdapterOptionsByChatId[TCurrentChatId]
+    TAdapterOptionsByChatId[TCurrentChatId],
+    TAdapterErrorByChatId[TCurrentChatId]
   >;
 }[TChatId];
 
@@ -437,9 +446,16 @@ export type ChatEvent<
   TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
   TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
     ChatEventAdapterOptions<TChatId>,
+  TAdapterErrorByChatId extends ChatEventAdapterError<TChatId> = ChatEventAdapterError<TChatId>,
 > =
   | ChatReadyEvent<TChatId>
-  | ChatMessageEventFor<TChatId, TAdapterDataByChatId, TReplyResult, TAdapterOptionsByChatId>
+  | ChatMessageEventFor<
+      TChatId,
+      TAdapterDataByChatId,
+      TReplyResult,
+      TAdapterOptionsByChatId,
+      TAdapterErrorByChatId
+    >
   | ChatCommandEventFor<TCommands, keyof TCommands, TChatId, TReplyResult, TAdapterOptionsByChatId>
   | ChatInvalidCommandEventFor<TChatId, TReplyResult, TAdapterOptionsByChatId>
   | ChatUnknownCommandEventFor<TChatId, TReplyResult, TAdapterOptionsByChatId>
@@ -454,16 +470,22 @@ export type ChatEvent<
 export type ChatAdapterMessageEvent<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
-> = Omit<ChatMessageEvent<TChatId, TAdapterData>, "reply" | "replyStream" | "typingIndicator">;
+  TAttachmentReadError = unknown,
+> = Omit<
+  ChatMessageEvent<TChatId, TAdapterData, unknown, Record<never, never>, TAttachmentReadError>,
+  "reply" | "replyStream" | "typingIndicator"
+>;
 
 /** Message adapter event selected by registered chat id. */
 export type ChatAdapterMessageEventFor<
   TChatId extends string,
   TAdapterDataByChatId extends ChatEventAdapterData<TChatId>,
+  TAdapterErrorByChatId extends ChatEventAdapterError<TChatId> = ChatEventAdapterError<TChatId>,
 > = {
   readonly [TCurrentChatId in TChatId]: ChatAdapterMessageEvent<
     TCurrentChatId,
-    TAdapterDataByChatId[TCurrentChatId]
+    TAdapterDataByChatId[TCurrentChatId],
+    TAdapterErrorByChatId[TCurrentChatId]
   >;
 }[TChatId];
 
@@ -504,8 +526,9 @@ export type ChatAdapterEvent<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
   TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
+  TAdapterErrorByChatId extends ChatEventAdapterError<TChatId> = ChatEventAdapterError<TChatId>,
 > =
-  | ChatAdapterMessageEventFor<TChatId, TAdapterDataByChatId>
+  | ChatAdapterMessageEventFor<TChatId, TAdapterDataByChatId, TAdapterErrorByChatId>
   | ChatAdapterCommandEvent<TCommands, keyof TCommands, TChatId>
   | ChatAdapterInvalidCommandEvent<TChatId>
   | ChatAdapterUnknownCommandEvent<TChatId>
@@ -525,6 +548,7 @@ export type ChatEventByType<
   TAdapterDataByChatId extends ChatEventAdapterData<TChatId> = ChatEventAdapterData<TChatId>,
   TAdapterOptionsByChatId extends ChatEventAdapterOptions<TChatId> =
     ChatEventAdapterOptions<TChatId>,
+  TAdapterErrorByChatId extends ChatEventAdapterError<TChatId> = ChatEventAdapterError<TChatId>,
 > = Extract<
   ChatEvent<
     TCommands,
@@ -532,7 +556,8 @@ export type ChatEventByType<
     TChatId,
     TReplyResult,
     TAdapterDataByChatId,
-    TAdapterOptionsByChatId
+    TAdapterOptionsByChatId,
+    TAdapterErrorByChatId
   >,
   { readonly type: TType }
 >;

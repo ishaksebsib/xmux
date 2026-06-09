@@ -44,7 +44,7 @@ export interface OpenedChatAdapterBase<
   readonly id: TChatId;
   readonly capabilities?: TCapabilities;
   start<TCommands extends ChatCommandRegistry>(
-    context: ChatAdapterStartContext<TCommands, TChatId, TAdapterData>,
+    context: ChatAdapterStartContext<TCommands, TChatId, TAdapterData, TAdapterError>,
   ): Promise<Result<void, TAdapterError>>;
   sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TAdapterOptions>,

@@ -97,12 +97,21 @@ export type ChatEventAdapterOptions<TChatId extends string = string> = {
   readonly [TCurrentChatId in TChatId]: ChatAdapterObject;
 };
 
+/** Adapter error map keyed by registered chat id. */
+export type ChatEventAdapterError<TChatId extends string = string> = {
+  readonly [TCurrentChatId in TChatId]: unknown;
+};
+
 export type AdapterDataByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
   readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterDataFor<TAdapters, TChatId>;
 };
 
 export type AdapterOptionsByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
   readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterOptionsFor<TAdapters, TChatId>;
+};
+
+export type AdapterErrorByChatId<TAdapters extends ChatAdapterDefinitions<TAdapters>> = {
+  readonly [TChatId in Extract<keyof TAdapters, string>]: AdapterErrorFor<TAdapters, TChatId>;
 };
 
 /** Extracts the chat id from a normalized conversation reference. */

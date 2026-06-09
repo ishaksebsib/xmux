@@ -1,3 +1,5 @@
+import type { Result } from "better-result";
+
 /** Adapter-owned JSON-like metadata kept typed but opaque to chat-core. */
 export type ChatAdapterObject = Record<string, unknown>;
 
@@ -123,13 +125,56 @@ export interface ChatTextStreamContent {
 /** Behavior when a streaming adapter operation is unavailable. */
 export type ChatStreamFallback = "send-message" | "error";
 
+/** Coarse cross-platform media class for a received attachment. */
+export type ChatAttachmentKind =
+  | "image"
+  | "audio"
+  | "video"
+  | "document"
+  | "archive"
+  | "other";
+
+/** Hint for how the source platform presented a received attachment. */
+export type ChatAttachmentDisposition = "inline" | "attachment";
+
+/** Options for lazily opening a received attachment's bytes. */
+export interface ChatAttachmentOpenInput {
+  readonly signal?: AbortSignal;
+  /** Adapter-enforced byte limit for callers that want to reject oversized downloads early. */
+  readonly maxBytes?: number;
+}
+
+/** Byte content returned after opening a received attachment. */
+export interface ChatAttachmentContent {
+  readonly chunks: AsyncIterable<Uint8Array>;
+  readonly filename?: string;
+  readonly mimeType?: string;
+  readonly sizeBytes?: number;
+}
+
+/** Received file/media handle. Bytes are fetched lazily by the owning adapter. */
+export interface ChatAttachment<
+  TAdapterData extends ChatAdapterObject = Record<never, never>,
+  TReadError = unknown,
+> {
+  readonly attachmentId: string;
+  readonly kind: ChatAttachmentKind;
+  readonly disposition?: ChatAttachmentDisposition;
+  readonly filename?: string;
+  readonly mimeType?: string;
+  readonly sizeBytes?: number;
+  readonly adapterData: TAdapterData;
+  open(input?: ChatAttachmentOpenInput): Promise<Result<ChatAttachmentContent, TReadError>>;
+}
+
 /** Message received from an adapter with normalized identity and typed metadata. */
 export interface ChatMessage<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
->
-  extends ChatMessageRef<TChatId>, ChatTextContent {
+  TAttachmentReadError = unknown,
+> extends ChatMessageRef<TChatId>, ChatTextContent {
   readonly actor: ChatActor;
+  readonly attachments: readonly ChatAttachment<TAdapterData, TAttachmentReadError>[];
   readonly adapterData: TAdapterData;
 }
 

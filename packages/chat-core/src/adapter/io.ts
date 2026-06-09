@@ -28,8 +28,14 @@ export type ChatAdapterEmit<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+  TAdapterError = unknown,
 > = (
-  event: ChatAdapterEvent<TCommands, TChatId, { readonly [TKey in TChatId]: TAdapterData }>,
+  event: ChatAdapterEvent<
+    TCommands,
+    TChatId,
+    { readonly [TKey in TChatId]: TAdapterData },
+    { readonly [TKey in TChatId]: TAdapterError }
+  >,
 ) => void;
 
 /** Context passed when an opened adapter connects to its platform. */
@@ -37,9 +43,10 @@ export interface ChatAdapterStartContext<
   TCommands extends ChatCommandRegistry = ChatCommandRegistry,
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+  TAdapterError = unknown,
 > {
   readonly commands: TCommands;
-  readonly emit: ChatAdapterEmit<TCommands, TChatId, TAdapterData>;
+  readonly emit: ChatAdapterEmit<TCommands, TChatId, TAdapterData, TAdapterError>;
   readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
   readonly signal?: AbortSignal;
 }

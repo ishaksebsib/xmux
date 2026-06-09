@@ -15,6 +15,8 @@ import {
   type AdapterOptionsFor,
   type ChatActionValues,
   type ChatAdapterDefinitions,
+  type ChatAttachmentContent,
+  type ChatAttachmentOpenInput,
   type ChatCommandValues,
   type ChatOn,
   type ChatSentMessageFromInput,
@@ -34,7 +36,7 @@ const basicCapabilities = {
     delete: false,
     typing: false,
     markdown: false,
-    attachments: false,
+    attachments: { receive: false, send: false, download: false },
   },
 } as const;
 
@@ -46,7 +48,7 @@ const streamCapabilities = {
     delete: false,
     typing: false,
     markdown: false,
-    attachments: false,
+    attachments: { receive: false, send: false, download: false },
     stream: { send: true, reply: true, strategy: "edit" },
   },
 } as const;
@@ -356,11 +358,17 @@ test("typing indicator result types follow pulse and managed modes", () => {
   >().toEqualTypeOf<ChatTypingIndicatorHandle>();
 });
 
-test("message events preserve adapter data and event.reply adapter options", () => {
+class AttachmentReadError extends Error {
+  readonly reason = "download" as const;
+}
+
+test("message events preserve adapter data, attachment reads, and event.reply adapter options", () => {
   const discord = defineChatAdapter<
     "discord",
     { readonly allowedMentions: boolean },
-    { readonly nativeMessageId: string }
+    { readonly nativeMessageId: string },
+    typeof basicCapabilities,
+    AttachmentReadError
   >({
     id: "discord",
     capabilities: basicCapabilities,
@@ -403,6 +411,22 @@ test("message events preserve adapter data and event.reply adapter options", () 
   chat.on("message", (event) => {
     if (event.chatId === "discord") {
       expectTypeOf(event.message.adapterData.nativeMessageId).toEqualTypeOf<string>();
+      expectTypeOf(event.message.attachments).toEqualTypeOf<
+        readonly import("../src").ChatAttachment<
+          { readonly nativeMessageId: string },
+          AttachmentReadError
+        >[]
+      >();
+
+      const attachment = event.message.attachments[0];
+      if (attachment !== undefined) {
+        expectTypeOf<Parameters<typeof attachment.open>[0]>().toEqualTypeOf<
+          ChatAttachmentOpenInput | undefined
+        >();
+        expectTypeOf<Awaited<ReturnType<typeof attachment.open>>>().toEqualTypeOf<
+          Result<ChatAttachmentContent, AttachmentReadError>
+        >();
+      }
 
       void event.reply("ok", { adapterOptions: { allowedMentions: false } });
       void event.typingIndicator({ adapterOptions: { allowedMentions: false } });

@@ -1,5 +1,9 @@
 import type { Result } from "better-result";
-import type { AdapterDataByChatId, ChatAdapterDefinitions } from "../adapter/registry";
+import type {
+  AdapterDataByChatId,
+  AdapterErrorByChatId,
+  ChatAdapterDefinitions,
+} from "../adapter/registry";
 import type { ChatCommandRegistry } from "../registry/commands";
 import type {
   ChatActionResponseFailure,
@@ -24,4 +28,9 @@ export type EventResult<TAdapters extends ChatAdapterDefinitions<TAdapters>> =
 export type RuntimeAdapterEvent<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
   TCommands extends ChatCommandRegistry,
-> = ChatAdapterEvent<TCommands, ChatId<TAdapters>, AdapterDataByChatId<TAdapters>>;
+> = ChatAdapterEvent<
+  TCommands,
+  ChatId<TAdapters>,
+  AdapterDataByChatId<TAdapters>,
+  AdapterErrorByChatId<TAdapters>
+>;

@@ -1,3 +1,5 @@
+import type { ChatAttachmentKind } from "./contracts";
+
 /** Runtime feature map used for diagnostics and safe facade decisions. */
 export interface ChatAdapterCapabilities {
   readonly commands?: {
@@ -13,7 +15,12 @@ export interface ChatAdapterCapabilities {
     readonly delete: boolean;
     readonly typing: boolean;
     readonly markdown: boolean;
-    readonly attachments: boolean;
+    readonly attachments: {
+      readonly receive: boolean;
+      readonly send: boolean;
+      readonly download: boolean;
+      readonly kinds?: readonly ChatAttachmentKind[];
+    };
     readonly stream?: {
       readonly send: boolean;
       readonly reply: boolean;
