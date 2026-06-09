@@ -1,8 +1,19 @@
 import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
 import type { Actions } from "../../actions";
 import { deleteHarnessActionId, deleteSessionActionId } from "../../actions";
-import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
+import {
+  formatCommandHelp,
+  formatHarnessNotConfigured,
+  inlineCode,
+  markdown,
+  markdownText,
+} from "../../components";
 import { CommandHarnessNotConfiguredError } from "../errors";
+import {
+  formatHarnessChoice,
+  harnessSelectionMessage,
+  type HarnessChoicePrompt,
+} from "../shared/harness-selection";
 import { formatSessionCommandFailure } from "../shared/session-command";
 import { normalizeTextInput } from "../utils";
 import type {
@@ -75,10 +86,10 @@ export function formatDeleteList(output: DeleteListOutput): ChatTextInput {
 export function formatDeleteHarnessActionMessage(
   output: DeleteHarnessesOutput,
 ): DeleteActionMessage {
-  return {
-    ...normalizeTextInput(formatDeleteHarnesses(output)),
-    buttons: output.harnessIds.map((harnessId) => [formatHarnessButton(harnessId)]),
-  };
+  return harnessSelectionMessage({
+    prompt: deleteHarnessPrompt(output),
+    button: formatHarnessButton,
+  });
 }
 
 export function formatDeleteListActionMessage(output: DeleteListOutput): DeleteActionMessage {
@@ -101,19 +112,7 @@ export function formatDeleteFailure(error: DeleteCommandError): ChatTextInput {
   if (shared) return shared;
 
   if (CommandHarnessNotConfiguredError.is(error)) {
-    const available =
-      error.availableHarnessIds.length > 0
-        ? error.availableHarnessIds.map(inlineCode).join("\n- ")
-        : "none";
-
-    return markdown({
-      text: [
-        `**Error:** Unknown harness ${inlineCode(error.harnessId)}`,
-        "",
-        "Available harnesses",
-        `- ${available}`,
-      ].join("\n"),
-    });
+    return formatHarnessNotConfigured(error);
   }
 
   return markdown({
@@ -154,27 +153,16 @@ function formatDeleteSuccess(
 }
 
 function formatDeleteHarnesses(output: DeleteHarnessesOutput): ChatTextInput {
-  if (output.harnessIds.length === 0) {
-    return markdown({
-      text: [
-        "**No harnesses configured**",
-        "",
-        `Current directory: ${inlineCode(output.cwd)}`,
-        "",
-        "Add a harness before deleting sessions.",
-      ].join("\n"),
-    });
-  }
+  return formatHarnessChoice(deleteHarnessPrompt(output));
+}
 
-  return markdown({
-    text: [
-      "**Choose a harness**",
-      "",
-      `Current directory: ${inlineCode(output.cwd)}`,
-      "",
-      "Pick one to view sessions.",
-    ].join("\n"),
-  });
+function deleteHarnessPrompt(output: DeleteHarnessesOutput): HarnessChoicePrompt {
+  return {
+    cwd: output.cwd,
+    harnessIds: output.harnessIds,
+    pickHint: "Pick one to view sessions.",
+    emptyHint: "Add a harness before deleting sessions.",
+  };
 }
 
 function formatHarnessButton(harnessId: string): ChatButtonInput<Actions> {

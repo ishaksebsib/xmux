@@ -1,10 +1,15 @@
 import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import { newHarnessActionId } from "../../actions";
 import type { Context } from "../../ctx";
 import type { XmuxMiddleware } from "../../middleware";
 import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
-import { handleNewCommand } from "./handler";
+import {
+  handleNewCommand,
+  handleNewHarnessAction,
+  type HandleNewHarnessActionInput,
+} from "./handler";
 import { formatNewCommandUsage } from "./response";
 
 export function registerNewRoute<
@@ -18,12 +23,21 @@ export function registerNewRoute<
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
       "new",
-      { readonly harnessId: string; readonly title?: string }
+      { readonly harnessId?: string; readonly title?: string }
     >;
     return dispatch(ctx, middleware, {
       event,
       actor: event.actor,
       handler: (handlerCtx) => handleNewCommand({ ctx: handlerCtx, event }),
+    });
+  });
+
+  const unsubscribeHarnessAction = ctx.chat.on("action", newHarnessActionId, (raw) => {
+    const event = raw as HandleNewHarnessActionInput<TAdapters, TChats>["event"];
+    return dispatch(ctx, middleware, {
+      event,
+      actor: event.actor,
+      handler: (handlerCtx) => handleNewHarnessAction({ ctx: handlerCtx, event }),
     });
   });
 
@@ -34,6 +48,7 @@ export function registerNewRoute<
 
   return () => {
     unsubscribeCommand();
+    unsubscribeHarnessAction();
     unsubscribeInvalid();
   };
 }

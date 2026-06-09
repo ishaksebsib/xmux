@@ -18,11 +18,66 @@ import {
 import { requireConfiguredHarnessId } from "../utils";
 import { getCurrentWorkspaceCwd } from "../workspace";
 import { CommandHarnessNotConfiguredError } from "../errors";
+import type { HarnessSelectionOutput } from "../shared/harness-selection";
 
 export type CreateSessionForThreadError =
   | CommandHarnessNotConfiguredError
   | CreateSessionError
   | StoreError;
+
+/** Outcome of `/new`: either a harness picker prompt, or a created session. */
+export type NewCommandOutput = HarnessSelectionOutput | NewSessionCreatedOutput;
+
+export interface NewSessionCreatedOutput {
+  readonly status: "created";
+  readonly record: SessionRecord;
+}
+
+export interface NewSessionCommandInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+> {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly thread: ChatThreadRef;
+  readonly harnessId?: string;
+  readonly title?: string;
+}
+
+/**
+ * Routes the `/new` command: with no harness chosen, returns the configured
+ * harness ids so the caller can render a picker; otherwise creates the session.
+ */
+export async function newSessionCommand<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: NewSessionCommandInput<TAdapters, TChats>,
+): Promise<Result<NewCommandOutput, CreateSessionForThreadError>> {
+  return Result.gen(async function* () {
+    if (input.harnessId === undefined) {
+      const cwd = yield* Result.await(
+        getCurrentWorkspaceCwd({ ctx: input.ctx.app, thread: input.thread }),
+      );
+
+      return Result.ok({
+        status: "harnesses" as const,
+        cwd,
+        harnessIds: input.ctx.app.harnessIds,
+      });
+    }
+
+    const record = yield* Result.await(
+      createSessionForThread({
+        ctx: input.ctx,
+        thread: input.thread,
+        harnessId: input.harnessId,
+        ...(input.title === undefined ? {} : { title: input.title }),
+      }),
+    );
+
+    return Result.ok({ status: "created" as const, record });
+  });
+}
 
 export interface CreateSessionForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,

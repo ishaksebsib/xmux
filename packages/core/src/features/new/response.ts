@@ -1,8 +1,30 @@
-import type { ChatTextInput } from "@xmux/chat-core";
-import { formatCommandHelp, inlineCode, markdown, markdownText } from "../../components";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
+import type { Actions } from "../../actions";
+import { newHarnessActionId } from "../../actions";
+import {
+  formatCommandHelp,
+  formatFailure,
+  formatHarnessNotConfigured,
+  inlineCode,
+  markdown,
+  markdownText,
+} from "../../components";
 import type { SessionRecord } from "../../store";
 import { CommandHarnessNotConfiguredError } from "../errors";
-import type { CreateSessionForThreadError } from "./service";
+import {
+  formatHarnessChoice,
+  harnessSelectionMessage,
+  type HarnessChoicePrompt,
+  type HarnessSelectionOutput,
+} from "../shared/harness-selection";
+import type { ActionMessage } from "../utils";
+import type { CreateSessionForThreadError, NewCommandOutput } from "./service";
+
+export function formatNewOutput(output: NewCommandOutput): ChatTextInput {
+  return output.status === "created"
+    ? formatNewSessionSuccess(output.record)
+    : formatNewHarnesses(output);
+}
 
 export function formatNewSessionSuccess(record: SessionRecord): ChatTextInput {
   const lines = [
@@ -28,26 +50,20 @@ export function formatNewSessionSuccess(record: SessionRecord): ChatTextInput {
   return markdown({ text: lines.join("\n") });
 }
 
+/** Builds the harness picker action message shown for a bare `/new`. */
+export function formatNewHarnessActionMessage(output: HarnessSelectionOutput): ActionMessage {
+  return harnessSelectionMessage({
+    prompt: newHarnessPrompt(output),
+    button: formatNewHarnessButton,
+  });
+}
+
 export function formatNewSessionFailure(error: CreateSessionForThreadError): ChatTextInput {
   if (CommandHarnessNotConfiguredError.is(error)) {
-    const available =
-      error.availableHarnessIds.length > 0
-        ? error.availableHarnessIds.map(inlineCode).join("\n - ")
-        : "none";
-
-    return markdown({
-      text: [
-        `**Error:** Unknown harness ${inlineCode(error.harnessId)}`,
-        "",
-        "Available harnesses",
-        `- ${available}`,
-      ].join("\n"),
-    });
+    return formatHarnessNotConfigured(error);
   }
 
-  return markdown({
-    text: ["**Failed to create session**", "", markdownText(error.message)].join("\n"),
-  });
+  return formatFailure("create session", error);
 }
 
 export function formatNewCommandUsage(): ChatTextInput {
@@ -58,4 +74,28 @@ export function formatNewCommandUsage(): ChatTextInput {
     usage: "/new <harnessId> [title]",
     examples: ["/new pi", "/new opencode my-session"],
   });
+}
+
+function formatNewHarnesses(output: HarnessSelectionOutput): ChatTextInput {
+  return formatHarnessChoice(newHarnessPrompt(output));
+}
+
+function newHarnessPrompt(output: HarnessSelectionOutput): HarnessChoicePrompt {
+  return {
+    cwd: output.cwd,
+    harnessIds: output.harnessIds,
+    pickHint: "Pick one to start a new session.",
+    emptyHint: "Add a harness before starting a session.",
+  };
+}
+
+function formatNewHarnessButton(harnessId: string): ChatButtonInput<Actions> {
+  return {
+    id: `new-harness-${harnessId}`,
+    label: harnessId,
+    actionId: newHarnessActionId,
+    value: "x",
+    payload: harnessId,
+    style: "primary",
+  };
 }
