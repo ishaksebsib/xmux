@@ -16,6 +16,7 @@ import {
   type SelectSessionByShortIdError,
 } from "../shared/session-command";
 import type { SessionCommandIncompleteTargetError } from "../shared/session-command";
+import type { HarnessSelectionOutput } from "../shared/harness-selection";
 import {
   listHarnessSelectableSessions,
   type SessionSelectionGroup,
@@ -35,11 +36,8 @@ export type DeleteCommandError =
 
 export type DeleteCommandOutput = DeleteHarnessesOutput | DeleteListOutput | DeleteSessionOutput;
 
-export interface DeleteHarnessesOutput {
-  readonly status: "harnesses";
-  readonly cwd: string;
-  readonly harnessIds: readonly string[];
-}
+/** Picker output shared with the other session commands (see `/new`, `/resume`). */
+export type DeleteHarnessesOutput = HarnessSelectionOutput;
 
 export interface DeleteListOutput {
   readonly status: "listed";

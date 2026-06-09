@@ -1,8 +1,4 @@
-import type {
-  ChatActionEvent,
-  ChatAdapterDefinitions,
-  ChatButtonInput,
-} from "@xmux/chat-core";
+import type { ChatActionEvent, ChatAdapterDefinitions, ChatButtonInput } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { newHarnessActionId, type Actions } from "../../actions";
