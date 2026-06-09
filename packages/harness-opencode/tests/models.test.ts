@@ -116,7 +116,7 @@ function createPromptRuntime(args: {
 }
 
 describe("OpenCode model management", () => {
-  test("lists models and variants with normalized metadata", async () => {
+  test("lists models with normalized metadata and keeps variants on adapter data", async () => {
     const runtime = createModelRuntime({
       providers: [
         createNativeProvider({
@@ -139,20 +139,23 @@ describe("OpenCode model management", () => {
     expect(listed.unwrap("models")).toEqual([
       expect.objectContaining({
         harnessId: "opencode",
-        ref: { providerId: "provider-1", modelId: "model-1", variant: undefined },
+        ref: { providerId: "provider-1", modelId: "model-1" },
         name: "model-1 name",
         available: true,
         providerName: "Provider One",
         capabilities: expect.objectContaining({ input: ["text", "image"] }),
         limits: { context: 1000, input: 900, output: 100 },
         cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 0.2 },
+        adapterData: expect.objectContaining({
+          model: expect.objectContaining({
+            variants: expect.objectContaining({
+              fast: expect.any(Object),
+            }),
+          }),
+        }),
       }),
       expect.objectContaining({
-        ref: { providerId: "provider-1", modelId: "model-1", variant: "fast" },
-        adapterData: expect.objectContaining({ variant: expect.objectContaining({ id: "fast" }) }),
-      }),
-      expect.objectContaining({
-        ref: { providerId: "provider-1", modelId: "old-model", variant: undefined },
+        ref: { providerId: "provider-1", modelId: "old-model" },
       }),
     ]);
 
@@ -163,7 +166,7 @@ describe("OpenCode model management", () => {
     });
 
     expect(listedWithUnavailable.isOk()).toBe(true);
-    expect(listedWithUnavailable.unwrap("models")).toHaveLength(4);
+    expect(listedWithUnavailable.unwrap("models")).toHaveLength(3);
   });
 
   test("sets, gets, and clears harness and session model selections", async () => {

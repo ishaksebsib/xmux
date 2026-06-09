@@ -62,7 +62,6 @@ function toHarnessModelInfo(args: {
   readonly runtime: OpenCodeRuntime;
   readonly provider: OpenCodeModelInfo["provider"];
   readonly model: OpenCodeModelInfo["model"];
-  readonly variant?: OpenCodeModelInfo["variant"];
 }): HarnessModelInfo<"opencode", OpenCodeModelInfo> {
   const supportedThinkingLevels = supportedThinkingLevelsForModel({
     runtime: args.runtime,
@@ -73,9 +72,8 @@ function toHarnessModelInfo(args: {
     ref: {
       providerId: args.model.providerID,
       modelId: args.model.id,
-      variant: args.variant?.id,
     },
-    name: args.variant ? `${args.model.name} (${args.variant.id})` : args.model.name,
+    name: args.model.name,
     providerName: args.provider.name,
     status: toModelStatus(args.model),
     available: true,
@@ -101,13 +99,8 @@ function toHarnessModelInfo(args: {
     adapterData: {
       provider: args.provider,
       model: args.model,
-      variant: args.variant,
     },
   };
-}
-
-function modelVariants(model: OpenCodeModelInfo["model"]): OpenCodeModelInfo["variant"][] {
-  return Object.entries(model.variants ?? {}).map(([id, data]) => ({ id, data }));
 }
 
 function releaseTime(model: OpenCodeModelInfo["model"]): number {
@@ -220,12 +213,7 @@ export async function listModels(
           Object.values(provider.models).filter(
             (model) => input.includeUnavailable || model.status !== "deprecated",
           ),
-        ).flatMap((model) => [
-          toHarnessModelInfo({ runtime, provider, model }),
-          ...modelVariants(model).map((variant) =>
-            toHarnessModelInfo({ runtime, provider, model, variant }),
-          ),
-        ]),
+        ).map((model) => toHarnessModelInfo({ runtime, provider, model })),
       ),
     );
   });
