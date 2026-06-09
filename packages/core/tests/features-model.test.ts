@@ -83,8 +83,8 @@ describe("/model command", () => {
     expect(sentActions[0]?.text).toContain("**Model: `openai/gpt-4.1`**");
     expect(sentActions[0]?.text).toContain("- Harness: `opencode`");
     expect(sentActions[0]?.text).toContain("- Session ID: `session-1`");
-    expect(sentActions[0]?.text).toContain("- Current: `openai/gpt-4.1`");
-    expect(sentActions[0]?.text).toContain("- Source: session");
+    expect(sentActions[0]?.text).toContain("- Model: `openai/gpt-4.1`");
+    expect(sentActions[0]?.text).not.toContain("- Thinking Level:");
     expect(sentActions[0]?.text).not.toContain("**Available models**");
     expect(sentActions[0]?.buttons).toEqual([
       [
@@ -123,7 +123,8 @@ describe("/model command", () => {
     expect(actionResponses[1]?.response.kind).toBe("update");
     const providerMessage = actionResponseText(actionResponses[1]?.response.message);
     expect(providerMessage).toContain("**Anthropic models** (1/1)");
-    expect(providerMessage).toContain("- Current: `openai/gpt-4.1`");
+    expect(providerMessage).toContain("- Model: `openai/gpt-4.1`");
+    expect(providerMessage).not.toContain("- Thinking Level:");
     expect(providerMessage).not.toContain("- Claude 3\\.7 Sonnet");
     expect(actionResponses[1]?.response.buttons).toEqual([
       [
@@ -154,7 +155,7 @@ describe("/model command", () => {
     expect(actionResponses[3]?.response.kind).toBe("update");
     const updatedMessage = actionResponseText(actionResponses[3]?.response.message);
     expect(updatedMessage).toBe(
-      "**Model updated**\n\n- Current: `anthropic/claude-3-7-sonnet`\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis model is now selected for the current session.",
+      "**Model updated**\n\n- Model: `anthropic/claude-3-7-sonnet`\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis model is now selected for the current session.",
     );
     expect(actionResponses[3]?.response.buttons).toEqual([]);
 
@@ -197,10 +198,11 @@ describe("/model command", () => {
     const thinkingMessage = actionResponseText(actionResponses[3]?.response.message);
     expect(thinkingMessage).toContain("**Choose thinking level**");
     expect(thinkingMessage).toContain("- Model: `openai/gpt-5`");
+    expect(thinkingMessage).toContain("- Thinking Level: `medium`");
     expect(actionResponses[3]?.response.buttons).toEqual([
+      [expect.objectContaining({ label: "Off", value: "t", payload: "0:0:off" })],
+      [expect.objectContaining({ label: "Low", value: "t", payload: "0:0:low" })],
       [
-        expect.objectContaining({ label: "Off", value: "t", payload: "0:0:off" }),
-        expect.objectContaining({ label: "Low", value: "t", payload: "0:0:low" }),
         expect.objectContaining({
           label: "Medium",
           value: "t",
@@ -229,10 +231,78 @@ describe("/model command", () => {
         update: { type: "set", level: "high" },
       },
     ]);
-    expect(actionResponseText(actionResponses[5]?.response.message)).toContain(
-      "- Current: `openai/gpt-5@high`",
-    );
+    const updatedThinkingMessage = actionResponseText(actionResponses[5]?.response.message);
+    expect(updatedThinkingMessage).toContain("- Model: `openai/gpt-5`");
+    expect(updatedThinkingMessage).toContain("- Thinking Level: `high`");
     expect(actionResponses[5]?.response.buttons).toEqual([]);
+
+    await xmux.shutdown();
+  });
+
+  test("disables carried thinking before selecting a model without configurable thinking", async () => {
+    const thinkingModel = {
+      harnessId: "opencode",
+      ref: { providerId: "openai", modelId: "gpt-5" },
+      name: "GPT-5",
+      providerName: "OpenAI",
+      capabilities: {
+        thinking: { supportedLevels: ["off", "low", "medium", "high"], defaultLevel: "medium" },
+      },
+      adapterData: {},
+    } satisfies HarnessModelInfo<"opencode">;
+    const nonThinkingModel = {
+      harnessId: "opencode",
+      ref: { providerId: "opencode", modelId: "big-pickle" },
+      name: "Big Pickle",
+      providerName: "OpenCode",
+      capabilities: {
+        thinking: { supportedLevels: ["off"], defaultLevel: "off" },
+      },
+      adapterData: {},
+    } satisfies HarnessModelInfo<"opencode">;
+    const {
+      emitCommand,
+      emitAction,
+      sentActions,
+      actionResponses,
+      setInputs,
+      setThinkingInputs,
+      xmux,
+    } = await initializeXmux({
+      models: [thinkingModel, nonThinkingModel],
+      initialModel: { providerId: "openai", modelId: "gpt-5", variant: "medium" },
+      initialThinkingLevel: "medium",
+    });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ selector: undefined }));
+    await eventually(() => sentActions.length === 1);
+
+    emitAction(actionEvent({ value: "p", payload: "1" }));
+    await eventually(() => actionResponses.length === 2);
+
+    emitAction(actionEvent({ value: "m", payload: "1:0" }));
+    await eventually(() => actionResponses.length === 4);
+
+    expect(setThinkingInputs).toEqual([
+      {
+        target: { type: "session", ref: sessionRef },
+        update: { type: "set", level: "off" },
+      },
+    ]);
+    expect(setInputs).toEqual([
+      {
+        target: { type: "session", ref: sessionRef },
+        update: {
+          type: "set",
+          model: { providerId: "opencode", modelId: "big-pickle" },
+        },
+      },
+    ]);
+    const updatedMessage = actionResponseText(actionResponses[3]?.response.message);
+    expect(updatedMessage).toContain("- Model: `opencode/big-pickle`");
+    expect(updatedMessage).not.toContain("- Thinking Level:");
+    expect(updatedMessage).not.toContain("@medium");
 
     await xmux.shutdown();
   });
@@ -301,7 +371,7 @@ describe("/model command", () => {
       },
     ]);
     expect(replies[0]).toBe(
-      "**Model updated**\n\n- Current: `anthropic/claude-3-7-sonnet`\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis model is now selected for the current session.",
+      "**Model updated**\n\n- Model: `anthropic/claude-3-7-sonnet`\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis model is now selected for the current session.",
     );
     expect(replies[0]).not.toContain("**Available models**");
 
@@ -389,6 +459,8 @@ interface InitializeXmuxInput {
   readonly models?: readonly HarnessModelInfo<"opencode">[];
   readonly maxModelsPerProvider?: number;
   readonly supportModels?: boolean;
+  readonly initialModel?: HarnessModelRef;
+  readonly initialThinkingLevel?: HarnessThinkingLevel;
 }
 
 async function initializeXmux(input: InitializeXmuxInput = {}) {
@@ -422,7 +494,11 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
     readonly target: HarnessThinkingTarget<"opencode">;
     readonly update: { readonly type: "set"; readonly level: HarnessThinkingLevel };
   }[] = [];
-  let selectedModel: HarnessModelRef = { providerId: "openai", modelId: "gpt-4.1" };
+  let selectedModel: HarnessModelRef = input.initialModel ?? {
+    providerId: "openai",
+    modelId: "gpt-4.1",
+  };
+  let selectedThinkingLevel: HarnessThinkingLevel | undefined = input.initialThinkingLevel;
   let emitEvent: ((event: unknown) => void) | undefined;
 
   const xmux = createXmux({
@@ -474,6 +550,14 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
                 source: "session" as const,
               });
             },
+            async getThinking(getInput: { readonly target: HarnessThinkingTarget<"opencode"> }) {
+              return Result.ok({
+                target: getInput.target,
+                ...(selectedThinkingLevel === undefined ? {} : { level: selectedThinkingLevel }),
+                source:
+                  selectedThinkingLevel === undefined ? ("unset" as const) : ("session" as const),
+              });
+            },
             async setModel(setInput: {
               readonly target: HarnessSelectedModel["target"];
               readonly update: { readonly type: "set"; readonly model: HarnessModelRef };
@@ -491,7 +575,11 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
               readonly update: { readonly type: "set"; readonly level: HarnessThinkingLevel };
             }) {
               setThinkingInputs.push({ target: setInput.target, update: setInput.update });
-              selectedModel = { ...selectedModel, variant: setInput.update.level };
+              selectedThinkingLevel = setInput.update.level;
+              selectedModel =
+                setInput.update.level === "off"
+                  ? { ...selectedModel, variant: undefined }
+                  : { ...selectedModel, variant: setInput.update.level };
               return Result.ok({
                 target: setInput.target,
                 level: setInput.update.level,

@@ -2,6 +2,7 @@ import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
 import {
   HarnessAdapterModelUnsupportedError,
   type HarnessModelInfo,
+  type HarnessModelRef,
   type HarnessThinkingLevel,
 } from "@xmux/harness-core";
 import type { Actions } from "../../actions";
@@ -24,7 +25,7 @@ import {
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
 } from "../thinking/errors";
-import { isSameModel, normalizeTextInput, type ActionMessage } from "../utils";
+import { normalizeTextInput, type ActionMessage } from "../utils";
 import type {
   ModelAvailableOutput,
   ModelCommandError,
@@ -219,10 +220,7 @@ function formatModelShown(output: ModelShownOutput): ChatTextInput {
   const lines = [
     `**Model: ${formatCurrentModel(output.current.model)}**`,
     "",
-    `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-    `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
-    `- Current: ${formatCurrentModel(output.current.model)}`,
-    `- Source: ${markdownText(output.current.source)}`,
+    ...formatModelSessionLines(output, output.current.model),
   ];
 
   return markdown({ text: lines.join("\n") });
@@ -234,9 +232,7 @@ function formatModelUpdated(
   const lines = [
     "**Model updated**",
     "",
-    `- Current: ${formatCurrentModel(output.selected.model)}`,
-    `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-    `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
+    ...formatModelSessionLines(output, output.selected.model),
     "",
     "This model is now selected for the current session.",
   ];
@@ -249,9 +245,7 @@ function formatProviderModels(output: ModelProviderOutput): ChatTextInput {
   const lines = [
     `**${markdownText(output.provider.providerName)} models** (${displayedModels.length}/${output.provider.models.length})`,
     "",
-    `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-    `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
-    `- Current: ${formatCurrentModel(output.current.model)}`,
+    ...formatModelSessionLines(output, output.current.model),
   ];
 
   if (displayedModels.length === 0) {
@@ -267,15 +261,46 @@ function formatModelThinking(output: ModelThinkingOutput): ChatTextInput {
     text: [
       "**Choose thinking level**",
       "",
-      `- Model: ${inlineCode(formatModelSelector(output.model.ref))}`,
-      `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
-      `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
+      ...formatModelSessionLines(output, output.model.ref),
     ].join("\n"),
   });
 }
 
+function formatModelSessionLines(
+  input: {
+    readonly session: ModelShownOutput["session"];
+    readonly thinkingSupported: boolean;
+    readonly thinkingLevel?: HarnessThinkingLevel;
+  },
+  model: HarnessModelRef | undefined,
+): readonly string[] {
+  return [
+    `- Model: ${formatCurrentModel(model)}`,
+    ...formatThinkingLevelLine(input),
+    `- Harness: ${inlineCode(input.session.ref.harnessId)}`,
+    `- Session ID: ${inlineCode(input.session.ref.sessionId)}`,
+  ];
+}
+
 function formatCurrentModel(model: ModelShownOutput["current"]["model"]): string {
-  return model === undefined ? markdownText("unset") : inlineCode(formatModelSelector(model));
+  return model === undefined ? markdownText("unset") : inlineCode(formatModelWithoutVariant(model));
+}
+
+function formatThinkingLevel(level: HarnessThinkingLevel | undefined): string {
+  return level === undefined ? markdownText("unset") : inlineCode(level);
+}
+
+function formatThinkingLevelLine(input: {
+  readonly thinkingSupported: boolean;
+  readonly thinkingLevel?: HarnessThinkingLevel;
+}): readonly string[] {
+  return input.thinkingSupported
+    ? [`- Thinking Level: ${formatThinkingLevel(input.thinkingLevel)}`]
+    : [];
+}
+
+function formatModelWithoutVariant(model: HarnessModelRef): string {
+  return formatModelSelector({ ...model, variant: undefined });
 }
 
 function formatProviderButtons(
@@ -286,7 +311,7 @@ function formatProviderButtons(
       formatProviderButton({
         providerName: provider.providerName,
         providerIndex: index,
-        current: provider.models.some((model) => isSameModel(model.ref, output.current.model)),
+        current: provider.models.some((model) => isSameBaseModel(model.ref, output.current.model)),
       }),
     ),
     1,
@@ -316,7 +341,7 @@ function formatProviderModelButtons(
       model,
       providerIndex: output.providerIndex,
       modelIndex,
-      current: isSameModel(model.ref, output.current.model),
+      current: isSameBaseModel(model.ref, output.current.model),
     }),
   ]);
 }
@@ -349,7 +374,7 @@ function formatThinkingButtons(
         defaultLevel: output.defaultLevel,
       }),
     ),
-    3,
+    1,
   );
 }
 
@@ -375,6 +400,15 @@ function formatThinkingButtonLabel(level: HarnessThinkingLevel): string {
 
 function formatModelButtonLabel(model: HarnessModelInfo): string {
   return model.name ?? formatModelSelector(model.ref);
+}
+
+function isSameBaseModel(left: HarnessModelRef | undefined, right: HarnessModelRef | undefined) {
+  return (
+    left !== undefined &&
+    right !== undefined &&
+    left.providerId === right.providerId &&
+    left.modelId === right.modelId
+  );
 }
 
 function chunkButtons(
@@ -445,7 +479,7 @@ function formatModelListItem(input: {
   readonly current: ModelShownOutput["current"]["model"];
 }): string {
   const selector = formatModelSelector(input.model.ref);
-  const currentMarker = isSameModel(input.model.ref, input.current) ? " — current" : "";
+  const currentMarker = isSameBaseModel(input.model.ref, input.current) ? " — current" : "";
 
   return [
     `- ${formatModelDisplayName(input.model)}${currentMarker}`,
