@@ -208,30 +208,16 @@ function formatModelUpdated(
 function formatProviderModels(output: ModelProviderOutput): ChatTextInput {
   const displayedModels = output.provider.models.slice(0, output.maxModelsPerProvider);
   const lines = [
-    `**${markdownText(output.provider.providerName)} models** (${output.provider.models.length})`,
+    `**${markdownText(output.provider.providerName)} models** (${displayedModels.length}/${output.provider.models.length})`,
     "",
     `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
     `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
     `- Current: ${formatCurrentModel(output.current.model)}`,
-    "",
   ];
 
   if (displayedModels.length === 0) {
-    lines.push("No available models reported for this provider.");
-    return markdown({ text: lines.join("\n") });
-  }
-
-  for (const model of displayedModels) {
-    const currentMarker = isSameModel(model.ref, output.current.model) ? " — current" : "";
-    lines.push(`- ${formatModelDisplayName(model)}${currentMarker}`);
-  }
-
-  const remaining = output.provider.models.length - displayedModels.length;
-  if (remaining > 0) {
     lines.push("");
-    lines.push(
-      `_And ${remaining} more models from ${markdownText(output.provider.providerName)}._`,
-    );
+    lines.push("No available models reported for this provider.");
   }
 
   return markdown({ text: lines.join("\n") });
@@ -252,7 +238,7 @@ function formatProviderButtons(
         current: provider.models.some((model) => isSameModel(model.ref, output.current.model)),
       }),
     ),
-    2,
+    1,
   );
 }
 

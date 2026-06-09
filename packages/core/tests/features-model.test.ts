@@ -93,6 +93,8 @@ describe("/model command", () => {
           value: "p",
           payload: "0",
         }),
+      ],
+      [
         expect.objectContaining({
           id: "model-provider-1",
           label: "Anthropic",
@@ -118,9 +120,9 @@ describe("/model command", () => {
     expect(actionResponses[0]?.response.kind).toBe("ack");
     expect(actionResponses[1]?.response.kind).toBe("update");
     const providerMessage = actionResponseText(actionResponses[1]?.response.message);
-    expect(providerMessage).toContain("**Anthropic models** (1)");
+    expect(providerMessage).toContain("**Anthropic models** (1/1)");
     expect(providerMessage).toContain("- Current: `openai/gpt-4.1`");
-    expect(providerMessage).toContain("- Claude 3\\.7 Sonnet");
+    expect(providerMessage).not.toContain("- Claude 3\\.7 Sonnet");
     expect(actionResponses[1]?.response.buttons).toEqual([
       [
         expect.objectContaining({
@@ -173,10 +175,9 @@ describe("/model command", () => {
     await eventually(() => actionResponses.length === 2);
 
     const providerMessage = actionResponseText(actionResponses[1]?.response.message);
-    expect(providerMessage).toContain("**OpenAI models** (11)");
-    expect(providerMessage).toContain("- OpenAI Model 10");
+    expect(providerMessage).toContain("**OpenAI models** (10/11)");
+    expect(providerMessage).not.toContain("- OpenAI Model 10");
     expect(providerMessage).not.toContain("- OpenAI Model 11");
-    expect(providerMessage).toContain("_And 1 more models from OpenAI._");
     expect(actionResponses[1]?.response.buttons).toHaveLength(10);
 
     await xmux.shutdown();
@@ -196,10 +197,9 @@ describe("/model command", () => {
     await eventually(() => actionResponses.length === 2);
 
     const providerMessage = actionResponseText(actionResponses[1]?.response.message);
-    expect(providerMessage).toContain("**OpenAI models** (4)");
-    expect(providerMessage).toContain("- OpenAI Model 2");
+    expect(providerMessage).toContain("**OpenAI models** (2/4)");
+    expect(providerMessage).not.toContain("- OpenAI Model 2");
     expect(providerMessage).not.toContain("- OpenAI Model 3");
-    expect(providerMessage).toContain("_And 2 more models from OpenAI._");
     expect(actionResponses[1]?.response.buttons).toHaveLength(2);
 
     await xmux.shutdown();
