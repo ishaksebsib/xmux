@@ -6,6 +6,8 @@ import {
   type HarnessModelInfo,
   type HarnessModelRef,
   type HarnessSelectedModel,
+  type HarnessThinkingLevel,
+  type HarnessThinkingTarget,
 } from "@xmux/harness-core";
 import { createXmux } from "../src";
 import { createSessionRecord, createThreadBinding } from "../src/store";
@@ -155,6 +157,82 @@ describe("/model command", () => {
       "**Model updated**\n\n- Current: `anthropic/claude-3-7-sonnet`\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis model is now selected for the current session.",
     );
     expect(actionResponses[3]?.response.buttons).toEqual([]);
+
+    await xmux.shutdown();
+  });
+
+  test("asks for thinking level before setting models with configurable thinking", async () => {
+    const thinkingModel = {
+      harnessId: "opencode",
+      ref: { providerId: "openai", modelId: "gpt-5" },
+      name: "GPT-5",
+      providerName: "OpenAI",
+      capabilities: {
+        thinking: { supportedLevels: ["off", "low", "medium", "high"], defaultLevel: "medium" },
+      },
+      adapterData: {},
+    } satisfies HarnessModelInfo<"opencode">;
+    const {
+      emitCommand,
+      emitAction,
+      sentActions,
+      actionResponses,
+      setInputs,
+      setThinkingInputs,
+      xmux,
+    } = await initializeXmux({ models: [thinkingModel] });
+    await bindSession({ xmux });
+
+    emitCommand(commandEvent({ selector: undefined }));
+    await eventually(() => sentActions.length === 1);
+
+    emitAction(actionEvent({ value: "p", payload: "0" }));
+    await eventually(() => actionResponses.length === 2);
+
+    emitAction(actionEvent({ value: "m", payload: "0:0" }));
+    await eventually(() => actionResponses.length === 4);
+
+    expect(setInputs).toHaveLength(0);
+    expect(actionResponses[3]?.response.kind).toBe("update");
+    const thinkingMessage = actionResponseText(actionResponses[3]?.response.message);
+    expect(thinkingMessage).toContain("**Choose thinking level**");
+    expect(thinkingMessage).toContain("- Model: `openai/gpt-5`");
+    expect(actionResponses[3]?.response.buttons).toEqual([
+      [
+        expect.objectContaining({ label: "Off", value: "t", payload: "0:0:off" }),
+        expect.objectContaining({ label: "Low", value: "t", payload: "0:0:low" }),
+        expect.objectContaining({
+          label: "Medium",
+          value: "t",
+          payload: "0:0:medium",
+          style: "primary",
+        }),
+      ],
+      [expect.objectContaining({ label: "High", value: "t", payload: "0:0:high" })],
+    ]);
+
+    emitAction(actionEvent({ value: "t", payload: "0:0:high" }));
+    await eventually(() => actionResponses.length === 6);
+
+    expect(setInputs).toEqual([
+      {
+        target: { type: "session", ref: sessionRef },
+        update: {
+          type: "set",
+          model: { providerId: "openai", modelId: "gpt-5" },
+        },
+      },
+    ]);
+    expect(setThinkingInputs).toEqual([
+      {
+        target: { type: "session", ref: sessionRef },
+        update: { type: "set", level: "high" },
+      },
+    ]);
+    expect(actionResponseText(actionResponses[5]?.response.message)).toContain(
+      "- Current: `openai/gpt-5@high`",
+    );
+    expect(actionResponses[5]?.response.buttons).toEqual([]);
 
     await xmux.shutdown();
   });
@@ -340,6 +418,10 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
     readonly target: HarnessSelectedModel["target"];
     readonly update: { readonly type: "set"; readonly model: HarnessModelRef };
   }[] = [];
+  const setThinkingInputs: {
+    readonly target: HarnessThinkingTarget<"opencode">;
+    readonly update: { readonly type: "set"; readonly level: HarnessThinkingLevel };
+  }[] = [];
   let selectedModel: HarnessModelRef = { providerId: "openai", modelId: "gpt-4.1" };
   let emitEvent: ((event: unknown) => void) | undefined;
 
@@ -401,6 +483,18 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
               return Result.ok({
                 target: setInput.target,
                 model: selectedModel,
+                source: "session" as const,
+              });
+            },
+            async setThinking(setInput: {
+              readonly target: HarnessThinkingTarget<"opencode">;
+              readonly update: { readonly type: "set"; readonly level: HarnessThinkingLevel };
+            }) {
+              setThinkingInputs.push({ target: setInput.target, update: setInput.update });
+              selectedModel = { ...selectedModel, variant: setInput.update.level };
+              return Result.ok({
+                target: setInput.target,
+                level: setInput.update.level,
                 source: "session" as const,
               });
             },
@@ -479,6 +573,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
     listInputs,
     getInputs,
     setInputs,
+    setThinkingInputs,
     emitCommand: emitEvent as (event: unknown) => void,
     emitAction: emitEvent as (event: unknown) => void,
     xmux,
@@ -547,7 +642,7 @@ function commandEvent(input: { readonly selector?: string }) {
 }
 
 function actionEvent(input: {
-  readonly value: "available" | "p" | "m";
+  readonly value: "available" | "p" | "m" | "t";
   readonly payload?: string;
 }) {
   return {

@@ -34,6 +34,6 @@ export function parseThinkingSelector(
   );
 }
 
-function isThinkingLevel(value: string): value is HarnessThinkingLevel {
+export function isThinkingLevel(value: string): value is HarnessThinkingLevel {
   return (thinkingLevels as readonly string[]).includes(value);
 }

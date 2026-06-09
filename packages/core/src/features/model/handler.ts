@@ -1,5 +1,5 @@
 import type { ChatActionEvent, ChatAdapterDefinitions } from "@xmux/chat-core";
-import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import type { HarnessAdapterDefinitions, HarnessThinkingLevel } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
@@ -17,16 +17,19 @@ import {
   formatModelFailure,
   formatModelOutput,
   formatModelProviderActionMessage,
+  formatModelThinkingActionMessage,
   formatModelUpdatedActionMessage,
 } from "./response";
 import { ModelActionPayloadInvalidError } from "./errors";
 import {
   modelActionSetCommand,
+  modelActionSetThinkingCommand,
   modelProviderCommand,
   modelSessionCommand,
   type ModelCommandError,
   type ModelCommandOutput,
 } from "./service";
+import { isThinkingLevel } from "../thinking/selector";
 
 export interface HandleModelCommandInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -108,6 +111,8 @@ export async function handleModelAction<
       return updateModelProviderModels(input);
     case "m":
       return updateSelectedModel(input);
+    case "t":
+      return updateSelectedModelThinking(input);
   }
 }
 
@@ -167,6 +172,35 @@ async function updateSelectedModel<
     thread: threadFromChatEvent(input.event),
     providerIndex: selection.value.providerIndex,
     modelIndex: selection.value.modelIndex,
+  });
+
+  if (result.isOk()) {
+    const message =
+      result.value.status === "thinking"
+        ? formatModelThinkingActionMessage(result.value)
+        : formatModelUpdatedActionMessage(result.value);
+    return updateActionMessage({ command: "model", event: input.event, message });
+  }
+
+  return replyWithModelFailure({ input, error: result.error });
+}
+
+async function updateSelectedModelThinking<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: HandleModelActionInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
+  const selection = parseModelThinkingPayload(input.event.payload);
+
+  if (selection.isErr()) {
+    return replyWithModelFailure({ input, error: selection.error });
+  }
+
+  const result = await modelActionSetThinkingCommand({
+    ctx: input.ctx,
+    thread: threadFromChatEvent(input.event),
+    providerIndex: selection.value.providerIndex,
+    modelIndex: selection.value.modelIndex,
+    level: selection.value.level,
   });
 
   if (result.isOk()) {
@@ -263,5 +297,39 @@ function parseModelPayload(payload: string | undefined): Result<
   return Result.ok({
     providerIndex: Number(providerIndex),
     modelIndex: Number(modelIndex),
+  });
+}
+
+function parseModelThinkingPayload(payload: string | undefined): Result<
+  {
+    readonly providerIndex: number;
+    readonly modelIndex: number;
+    readonly level: HarnessThinkingLevel;
+  },
+  ModelActionPayloadInvalidError
+> {
+  const [providerIndex, modelIndex, level, extra] = payload?.split(":") ?? [];
+
+  if (
+    providerIndex === undefined ||
+    modelIndex === undefined ||
+    level === undefined ||
+    extra !== undefined ||
+    !/^\d+$/.test(providerIndex) ||
+    !/^\d+$/.test(modelIndex) ||
+    !isThinkingLevel(level)
+  ) {
+    return Result.err(
+      new ModelActionPayloadInvalidError({
+        payload: payload ?? "",
+        reason: "thinking level selection is missing or invalid",
+      }),
+    );
+  }
+
+  return Result.ok({
+    providerIndex: Number(providerIndex),
+    modelIndex: Number(modelIndex),
+    level,
   });
 }

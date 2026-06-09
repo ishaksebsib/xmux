@@ -20,6 +20,7 @@ export const actions = defineChatActions({
       available: actionWithoutPayload(),
       p: actionValue<string>(),
       m: actionValue<string>(),
+      t: actionValue<string>(),
     },
   }),
   [thinkingActionId]: defineChatAction({

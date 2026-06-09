@@ -1,5 +1,9 @@
 import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
-import { HarnessAdapterModelUnsupportedError, type HarnessModelInfo } from "@xmux/harness-core";
+import {
+  HarnessAdapterModelUnsupportedError,
+  type HarnessModelInfo,
+  type HarnessThinkingLevel,
+} from "@xmux/harness-core";
 import type { Actions } from "../../actions";
 import { modelActionId } from "../../actions";
 import {
@@ -16,6 +20,10 @@ import {
   ModelSelectorNotFoundError,
 } from "./errors";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import {
+  ThinkingLevelUnsupportedError,
+  ThinkingModelThinkingUnsupportedError,
+} from "../thinking/errors";
 import { isSameModel, normalizeTextInput, type ActionMessage } from "../utils";
 import type {
   ModelAvailableOutput,
@@ -23,6 +31,7 @@ import type {
   ModelCommandOutput,
   ModelProviderOutput,
   ModelShownOutput,
+  ModelThinkingOutput,
   ModelUpdatedOutput,
 } from "./service";
 import { groupModelsByProvider } from "./service";
@@ -56,6 +65,13 @@ export function formatModelUpdatedActionMessage(output: ModelUpdatedOutput): Mod
   return {
     ...normalizeTextInput(formatModelUpdated(output)),
     buttons: [],
+  };
+}
+
+export function formatModelThinkingActionMessage(output: ModelThinkingOutput): ModelActionMessage {
+  return {
+    ...normalizeTextInput(formatModelThinking(output)),
+    buttons: formatThinkingButtons(output),
   };
 }
 
@@ -161,6 +177,29 @@ export function formatModelFailure(
     });
   }
 
+  if (ThinkingModelThinkingUnsupportedError.is(error)) {
+    return markdown({
+      text: [
+        "**Model thinking unsupported**",
+        "",
+        markdownText(error.message),
+        "",
+        `Use ${inlineCode("/model")} to choose a model again.`,
+      ].join("\n"),
+    });
+  }
+
+  if (ThinkingLevelUnsupportedError.is(error)) {
+    return markdown({
+      text: [
+        "**Thinking level unsupported**",
+        "",
+        `Level: ${inlineCode(error.level)}`,
+        `Supported: ${error.supportedLevels.map((level) => inlineCode(level)).join(", ")}`,
+      ].join("\n"),
+    });
+  }
+
   return markdown({
     text: ["**Failed to manage model**", "", markdownText(error.message)].join("\n"),
   });
@@ -221,6 +260,18 @@ function formatProviderModels(output: ModelProviderOutput): ChatTextInput {
   }
 
   return markdown({ text: lines.join("\n") });
+}
+
+function formatModelThinking(output: ModelThinkingOutput): ChatTextInput {
+  return markdown({
+    text: [
+      "**Choose thinking level**",
+      "",
+      `- Model: ${inlineCode(formatModelSelector(output.model.ref))}`,
+      `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
+      `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
+    ].join("\n"),
+  });
 }
 
 function formatCurrentModel(model: ModelShownOutput["current"]["model"]): string {
@@ -284,6 +335,42 @@ function formatProviderModelButton(input: {
     payload: `${input.providerIndex}:${input.modelIndex}`,
     style: input.current ? "primary" : "secondary",
   };
+}
+
+function formatThinkingButtons(
+  output: ModelThinkingOutput,
+): readonly (readonly ChatButtonInput<Actions>[])[] {
+  return chunkButtons(
+    output.levels.map((level) =>
+      formatThinkingButton({
+        level,
+        providerIndex: output.providerIndex,
+        modelIndex: output.modelIndex,
+        defaultLevel: output.defaultLevel,
+      }),
+    ),
+    3,
+  );
+}
+
+function formatThinkingButton(input: {
+  readonly level: HarnessThinkingLevel;
+  readonly providerIndex: number;
+  readonly modelIndex: number;
+  readonly defaultLevel?: HarnessThinkingLevel;
+}): ChatButtonInput<Actions> {
+  return {
+    id: `model-thinking-${input.providerIndex}-${input.modelIndex}-${input.level}`,
+    label: formatThinkingButtonLabel(input.level),
+    actionId: modelActionId,
+    value: "t",
+    payload: `${input.providerIndex}:${input.modelIndex}:${input.level}`,
+    style: input.level === input.defaultLevel ? "primary" : "secondary",
+  };
+}
+
+function formatThinkingButtonLabel(level: HarnessThinkingLevel): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
 }
 
 function formatModelButtonLabel(model: HarnessModelInfo): string {
