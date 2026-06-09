@@ -10,7 +10,9 @@ import {
   replyWithResult,
   respondToAction,
   toSendActionInput,
+  updateActionMessage,
   type CommandEvent,
+  type ActionMessage,
   threadFromChatEvent,
 } from "../utils";
 import {
@@ -122,14 +124,7 @@ export async function handleResumeHarnessAction<
 
   const message = formatResumeListActionMessage(listed.value);
 
-  return respondToAction({
-    command: "resume",
-    respond: () =>
-      input.event.update({
-        message: { text: message.text, format: message.format },
-        buttons: message.buttons,
-      }),
-  });
+  return updateActionMessage({ command: "resume", event: input.event, message });
 }
 
 export async function handleResumeSessionAction<
@@ -161,15 +156,8 @@ export async function handleResumeSessionAction<
 
   const message = {
     ...normalizeTextInput(formatResumeOutput(resumed.value)),
-    buttons: [] as readonly (readonly import("@xmux/chat-core").ChatButtonInput<Actions>[])[],
-  };
+    buttons: [],
+  } satisfies ActionMessage;
 
-  return respondToAction({
-    command: "resume",
-    respond: () =>
-      input.event.update({
-        message: { text: message.text, format: message.format },
-        buttons: message.buttons,
-      }),
-  });
+  return updateActionMessage({ command: "resume", event: input.event, message });
 }

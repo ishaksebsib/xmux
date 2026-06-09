@@ -9,6 +9,7 @@ import {
   replyWithResult,
   respondToAction,
   toSendActionInput,
+  updateActionMessage,
   type CommandEvent,
   threadFromChatEvent,
 } from "../utils";
@@ -104,14 +105,7 @@ export async function handleThinkingAction<
     ok: (value) => {
       const message = formatThinkingActionMessage(value);
 
-      return respondToAction({
-        command: "thinking",
-        respond: () =>
-          input.event.update({
-            message: { text: message.text, format: message.format },
-            buttons: message.buttons,
-          }),
-      });
+      return updateActionMessage({ command: "thinking", event: input.event, message });
     },
     err: (error) =>
       respondToAction({

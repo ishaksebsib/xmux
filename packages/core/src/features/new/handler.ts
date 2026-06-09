@@ -1,4 +1,4 @@
-import type { ChatActionEvent, ChatAdapterDefinitions, ChatButtonInput } from "@xmux/chat-core";
+import type { ChatActionEvent, ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { newHarnessActionId, type Actions } from "../../actions";
@@ -9,7 +9,9 @@ import {
   replyWithResult,
   respondToAction,
   toSendActionInput,
+  updateActionMessage,
   type CommandEvent,
+  type ActionMessage,
   threadFromChatEvent,
 } from "../utils";
 import { createSessionForThread, newSessionCommand } from "./service";
@@ -104,15 +106,8 @@ export async function handleNewHarnessAction<
 
   const message = {
     ...normalizeTextInput(formatNewSessionSuccess(created.value)),
-    buttons: [] as readonly (readonly ChatButtonInput<Actions>[])[],
-  };
+    buttons: [],
+  } satisfies ActionMessage;
 
-  return respondToAction({
-    command: "new",
-    respond: () =>
-      input.event.update({
-        message: { text: message.text, format: message.format },
-        buttons: message.buttons,
-      }),
-  });
+  return updateActionMessage({ command: "new", event: input.event, message });
 }

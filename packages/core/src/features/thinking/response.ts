@@ -1,4 +1,4 @@
-import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
 import {
   HarnessAdapterThinkingUnsupportedError,
   type HarnessThinkingLevel,
@@ -19,7 +19,7 @@ import {
   ThinkingModelUnsetError,
 } from "./errors";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
-import { normalizeTextInput } from "../utils";
+import { normalizeTextInput, type ActionMessage } from "../utils";
 import { formatModelSelector } from "../model/selector";
 import type {
   ThinkingClearedOutput,
@@ -30,11 +30,7 @@ import type {
 } from "./service";
 import { thinkingLevels } from "./selector";
 
-export interface ThinkingActionMessage {
-  readonly text: string;
-  readonly format?: ChatMessageFormat;
-  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
-}
+export type ThinkingActionMessage = ActionMessage;
 
 export function formatThinkingOutput(output: ThinkingCommandOutput): ChatTextInput {
   switch (output.status) {

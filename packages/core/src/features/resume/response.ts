@@ -1,6 +1,5 @@
-import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
-import type { Actions } from "../../actions";
-import { resumeHarnessActionId, resumeSessionActionId } from "../../actions";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
+import { resumeHarnessActionId, resumeSessionActionId, type Actions } from "../../actions";
 import {
   formatCommandHelp,
   formatHarnessNotConfigured,
@@ -15,7 +14,7 @@ import {
   type HarnessChoicePrompt,
 } from "../shared/harness-selection";
 import { formatSessionCommandFailure } from "../shared/session-command";
-import { normalizeTextInput } from "../utils";
+import { normalizeTextInput, type ActionMessage } from "../utils";
 import type {
   ResumeCommandError,
   ResumeCommandOutput,
@@ -23,11 +22,7 @@ import type {
   ResumeListOutput,
 } from "./service";
 
-export interface ResumeActionMessage {
-  readonly text: string;
-  readonly format?: ChatMessageFormat;
-  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
-}
+export type ResumeActionMessage = ActionMessage;
 
 export function formatResumeOutput(output: ResumeCommandOutput): ChatTextInput {
   if (output.status === "harnesses") return formatResumeHarnesses(output);

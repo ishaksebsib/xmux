@@ -4,7 +4,13 @@ import { Result } from "better-result";
 import { interactionActionId, type Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import { CommandResponseError } from "../errors";
-import { replyWithResult, respondToAction, threadFromChatEvent, type CommandEvent } from "../utils";
+import {
+  replyWithResult,
+  respondToAction,
+  threadFromChatEvent,
+  updateActionMessage,
+  type CommandEvent,
+} from "../utils";
 import {
   respondToCurrentInteractionForThread,
   type InteractionCommandAction,
@@ -105,14 +111,7 @@ export async function handleInteractionAction<
         })
       : formatInteractionStaleMessage();
 
-  return respondToAction({
-    command,
-    respond: () =>
-      input.event.update({
-        message: { text: message.text, format: message.format },
-        buttons: message.buttons,
-      }),
-  });
+  return updateActionMessage({ command, event: input.event, message });
 }
 
 function toInteractionAction(value: "allow" | "always" | "reject"): InteractionCommandAction {

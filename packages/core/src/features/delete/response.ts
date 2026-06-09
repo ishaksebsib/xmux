@@ -1,4 +1,4 @@
-import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
 import type { Actions } from "../../actions";
 import { deleteHarnessActionId, deleteSessionActionId } from "../../actions";
 import {
@@ -15,7 +15,7 @@ import {
   type HarnessChoicePrompt,
 } from "../shared/harness-selection";
 import { formatSessionCommandFailure } from "../shared/session-command";
-import { normalizeTextInput } from "../utils";
+import { normalizeTextInput, type ActionMessage } from "../utils";
 import type {
   DeleteCommandError,
   DeleteCommandOutput,
@@ -23,11 +23,7 @@ import type {
   DeleteListOutput,
 } from "./service";
 
-export interface DeleteActionMessage {
-  readonly text: string;
-  readonly format?: ChatMessageFormat;
-  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
-}
+export type DeleteActionMessage = ActionMessage;
 
 export function formatDeleteOutput(output: DeleteCommandOutput): ChatTextInput {
   if (output.status === "harnesses") return formatDeleteHarnesses(output);

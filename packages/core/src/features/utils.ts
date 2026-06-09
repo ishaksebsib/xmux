@@ -226,6 +226,24 @@ export async function respondToAction(input: {
 }
 
 /**
+ * Updates an existing action message with a formatted `ActionMessage`.
+ */
+export function updateActionMessage(input: {
+  readonly command: string;
+  readonly event: ChatActionUpdateEvent;
+  readonly message: ActionMessage;
+}): Promise<Result<void, CommandResponseError>> {
+  return respondToAction({
+    command: input.command,
+    respond: () =>
+      input.event.update({
+        message: { text: input.message.text, format: input.message.format },
+        buttons: input.message.buttons,
+      }),
+  });
+}
+
+/**
  * Builds a `ChatSendActionInput` from the common context/event/message triple.
  */
 export function toSendActionInput<

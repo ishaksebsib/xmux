@@ -9,6 +9,7 @@ import {
   replyWithResult,
   respondToAction,
   toSendActionInput,
+  updateActionMessage,
   type CommandEvent,
   threadFromChatEvent,
 } from "../utils";
@@ -115,14 +116,7 @@ export async function handleDeleteHarnessAction<
   if (listed.isOk()) {
     const message = formatDeleteListActionMessage(listed.value);
 
-    return respondToAction({
-      command: "delete",
-      respond: () =>
-        input.event.update({
-          message: { text: message.text, format: message.format },
-          buttons: message.buttons,
-        }),
-    });
+    return updateActionMessage({ command: "delete", event: input.event, message });
   }
 
   return respondToAction({
@@ -168,14 +162,7 @@ export async function handleDeleteSessionAction<
   if (listed.isOk()) {
     const message = formatDeleteListActionMessage(listed.value);
 
-    return respondToAction({
-      command: "delete",
-      respond: () =>
-        input.event.update({
-          message: { text: message.text, format: message.format },
-          buttons: message.buttons,
-        }),
-    });
+    return updateActionMessage({ command: "delete", event: input.event, message });
   }
 
   return respondToAction({
