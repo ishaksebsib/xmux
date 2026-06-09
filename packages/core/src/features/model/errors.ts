@@ -31,3 +31,13 @@ export class ModelSelectorAmbiguousError extends TaggedError("ModelSelectorAmbig
     super({ ...args, message: `Model selector is ambiguous: ${args.selector}` });
   }
 }
+
+/** Returned when a model action button payload is malformed or stale. */
+export class ModelActionPayloadInvalidError extends TaggedError("ModelActionPayloadInvalidError")<{
+  readonly payload: string;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly payload: string; readonly reason: string }) {
+    super({ ...args, message: `Invalid model action payload '${args.payload}': ${args.reason}` });
+  }
+}

@@ -1,4 +1,4 @@
-import type { ChatButtonInput, ChatMessageFormat, ChatTextInput } from "@xmux/chat-core";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
 import { HarnessAdapterModelUnsupportedError, type HarnessModelInfo } from "@xmux/harness-core";
 import type { Actions } from "../../actions";
 import { modelActionId } from "../../actions";
@@ -10,29 +10,29 @@ import {
   markdownText,
 } from "../../components";
 import {
+  ModelActionPayloadInvalidError,
   ModelSelectorAmbiguousError,
   ModelSelectorInvalidError,
   ModelSelectorNotFoundError,
 } from "./errors";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
-import { isSameModel, normalizeTextInput } from "../utils";
+import { isSameModel, normalizeTextInput, type ActionMessage } from "../utils";
 import type {
   ModelAvailableOutput,
   ModelCommandError,
   ModelCommandOutput,
+  ModelProviderOutput,
   ModelShownOutput,
+  ModelUpdatedOutput,
 } from "./service";
+import { groupModelsByProvider } from "./service";
 import { formatModelSelector } from "./selector";
-
-export interface ModelActionMessage {
-  readonly text: string;
-  readonly format?: ChatMessageFormat;
-  readonly buttons: readonly (readonly ChatButtonInput<Actions>[])[];
-}
 
 export interface ModelFailureFormatOptions {
   readonly maxSuggestions: number;
 }
+
+export type ModelActionMessage = ActionMessage;
 
 export function formatModelOutput(output: ModelCommandOutput): ChatTextInput {
   return output.status === "updated" ? formatModelUpdated(output) : formatModelShown(output);
@@ -41,7 +41,21 @@ export function formatModelOutput(output: ModelCommandOutput): ChatTextInput {
 export function formatModelActionMessage(output: ModelShownOutput): ModelActionMessage {
   return {
     ...normalizeTextInput(formatModelShown(output)),
-    buttons: [[formatAvailableModelsButton()]],
+    buttons: formatProviderButtons(output),
+  };
+}
+
+export function formatModelProviderActionMessage(output: ModelProviderOutput): ModelActionMessage {
+  return {
+    ...normalizeTextInput(formatProviderModels(output)),
+    buttons: formatProviderModelButtons(output),
+  };
+}
+
+export function formatModelUpdatedActionMessage(output: ModelUpdatedOutput): ModelActionMessage {
+  return {
+    ...normalizeTextInput(formatModelUpdated(output)),
+    buttons: [],
   };
 }
 
@@ -125,6 +139,18 @@ export function formatModelFailure(
     });
   }
 
+  if (ModelActionPayloadInvalidError.is(error)) {
+    return markdown({
+      text: [
+        "**Model selection expired**",
+        "",
+        markdownText(error.message),
+        "",
+        `Use ${inlineCode("/model")} to choose a model again.`,
+      ].join("\n"),
+    });
+  }
+
   if (HarnessAdapterModelUnsupportedError.is(error)) {
     return markdown({
       text: [
@@ -163,18 +189,8 @@ function formatModelShown(output: ModelShownOutput): ChatTextInput {
   return markdown({ text: lines.join("\n") });
 }
 
-function formatAvailableModelsButton(): ChatButtonInput<Actions> {
-  return {
-    id: "model-available",
-    label: "See available models",
-    actionId: modelActionId,
-    value: "available",
-    style: "secondary",
-  };
-}
-
 function formatModelUpdated(
-  output: Extract<ModelCommandOutput, { readonly status: "updated" }>,
+  output: Extract<ModelCommandOutput, { readonly status: "updated" }> | ModelUpdatedOutput,
 ): ChatTextInput {
   const lines = [
     "**Model updated**",
@@ -189,8 +205,114 @@ function formatModelUpdated(
   return markdown({ text: lines.join("\n") });
 }
 
+function formatProviderModels(output: ModelProviderOutput): ChatTextInput {
+  const displayedModels = output.provider.models.slice(0, output.maxModelsPerProvider);
+  const lines = [
+    `**${markdownText(output.provider.providerName)} models** (${output.provider.models.length})`,
+    "",
+    `- Harness: ${inlineCode(output.session.ref.harnessId)}`,
+    `- Session ID: ${inlineCode(output.session.ref.sessionId)}`,
+    `- Current: ${formatCurrentModel(output.current.model)}`,
+    "",
+  ];
+
+  if (displayedModels.length === 0) {
+    lines.push("No available models reported for this provider.");
+    return markdown({ text: lines.join("\n") });
+  }
+
+  for (const model of displayedModels) {
+    const currentMarker = isSameModel(model.ref, output.current.model) ? " — current" : "";
+    lines.push(`- ${formatModelDisplayName(model)}${currentMarker}`);
+  }
+
+  const remaining = output.provider.models.length - displayedModels.length;
+  if (remaining > 0) {
+    lines.push("");
+    lines.push(
+      `_And ${remaining} more models from ${markdownText(output.provider.providerName)}._`,
+    );
+  }
+
+  return markdown({ text: lines.join("\n") });
+}
+
 function formatCurrentModel(model: ModelShownOutput["current"]["model"]): string {
   return model === undefined ? markdownText("unset") : inlineCode(formatModelSelector(model));
+}
+
+function formatProviderButtons(
+  output: ModelShownOutput,
+): readonly (readonly ChatButtonInput<Actions>[])[] {
+  return chunkButtons(
+    output.providerGroups.map((provider, index) =>
+      formatProviderButton({
+        providerName: provider.providerName,
+        providerIndex: index,
+        current: provider.models.some((model) => isSameModel(model.ref, output.current.model)),
+      }),
+    ),
+    2,
+  );
+}
+
+function formatProviderButton(input: {
+  readonly providerName: string;
+  readonly providerIndex: number;
+  readonly current: boolean;
+}): ChatButtonInput<Actions> {
+  return {
+    id: `model-provider-${input.providerIndex}`,
+    label: input.providerName,
+    actionId: modelActionId,
+    value: "p",
+    payload: String(input.providerIndex),
+    style: input.current ? "primary" : "secondary",
+  };
+}
+
+function formatProviderModelButtons(
+  output: ModelProviderOutput,
+): readonly (readonly ChatButtonInput<Actions>[])[] {
+  return output.provider.models.slice(0, output.maxModelsPerProvider).map((model, modelIndex) => [
+    formatProviderModelButton({
+      model,
+      providerIndex: output.providerIndex,
+      modelIndex,
+      current: isSameModel(model.ref, output.current.model),
+    }),
+  ]);
+}
+
+function formatProviderModelButton(input: {
+  readonly model: HarnessModelInfo;
+  readonly providerIndex: number;
+  readonly modelIndex: number;
+  readonly current: boolean;
+}): ChatButtonInput<Actions> {
+  return {
+    id: `model-option-${input.providerIndex}-${input.modelIndex}`,
+    label: formatModelButtonLabel(input.model),
+    actionId: modelActionId,
+    value: "m",
+    payload: `${input.providerIndex}:${input.modelIndex}`,
+    style: input.current ? "primary" : "secondary",
+  };
+}
+
+function formatModelButtonLabel(model: HarnessModelInfo): string {
+  return model.name ?? formatModelSelector(model.ref);
+}
+
+function chunkButtons(
+  buttons: readonly ChatButtonInput<Actions>[],
+  size: number,
+): readonly (readonly ChatButtonInput<Actions>[])[] {
+  const rows: ChatButtonInput<Actions>[][] = [];
+  for (let index = 0; index < buttons.length; index += size) {
+    rows.push(buttons.slice(index, index + size));
+  }
+  return rows;
 }
 
 function formatAvailableModels(input: {
@@ -266,51 +388,6 @@ function formatModelDisplayName(model: HarnessModelInfo): string {
   }
 
   return `${markdownText(displayName)} (${markdownText(model.status)})`;
-}
-
-function groupModelsByProvider(models: readonly HarnessModelInfo[]): readonly ModelProviderGroup[] {
-  const groups: ModelProviderGroup[] = [];
-
-  for (const model of models) {
-    const providerName = model.providerName ?? formatProviderId(model.ref.providerId);
-    const group = groups.find((candidate) => candidate.providerName === providerName);
-
-    if (group) {
-      group.models.push(model);
-      continue;
-    }
-
-    groups.push({ providerName, models: [model] });
-  }
-
-  return groups;
-}
-
-function formatProviderId(providerId: string | undefined): string {
-  if (providerId === undefined || providerId.length === 0) {
-    return "Other";
-  }
-
-  const normalized = providerId.toLowerCase();
-  switch (normalized) {
-    case "openai":
-      return "OpenAI";
-    case "openrouter":
-      return "OpenRouter";
-    case "openai-compatible":
-      return "OpenAI Compatible";
-    default:
-      return normalized
-        .split(/[-_\s]+/)
-        .filter((part) => part.length > 0)
-        .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
-        .join(" ");
-  }
-}
-
-interface ModelProviderGroup {
-  readonly providerName: string;
-  readonly models: HarnessModelInfo[];
 }
 
 function formatSelectorSuggestions(input: {

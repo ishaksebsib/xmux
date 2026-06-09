@@ -19,6 +19,7 @@ import type {
   SessionClosedError,
   SessionRecordMissingError,
 } from "../errors";
+import { ModelActionPayloadInvalidError } from "./errors";
 import { resolveModelSelector, type ResolveModelSelectorError } from "./selector";
 import { getActiveSessionForThread } from "../session";
 
@@ -28,6 +29,7 @@ export type ModelCommandError =
   | GetModelError
   | SetModelError
   | ResolveModelSelectorError
+  | ModelActionPayloadInvalidError
   | NoActiveSessionError
   | SessionRecordMissingError
   | SessionClosedError;
@@ -46,12 +48,28 @@ export interface ModelShownOutput {
   readonly status: "shown";
   readonly session: SessionRecord;
   readonly current: HarnessSelectedModel;
+  readonly models: readonly HarnessModelInfo[];
+  readonly providerGroups: readonly ModelProviderGroup[];
 }
 
 export interface ModelUpdatedOutput {
   readonly status: "updated";
   readonly session: SessionRecord;
   readonly selected: HarnessSelectedModel;
+}
+
+export interface ModelProviderOutput {
+  readonly status: "provider";
+  readonly session: SessionRecord;
+  readonly current: HarnessSelectedModel;
+  readonly provider: ModelProviderGroup;
+  readonly providerIndex: number;
+  readonly maxModelsPerProvider: number;
+}
+
+export interface ModelProviderGroup {
+  readonly providerName: string;
+  readonly models: HarnessModelInfo[];
 }
 
 export interface ModelSessionCommandInput<
@@ -75,6 +93,7 @@ export async function modelSessionCommand<
     const selector = input.selector?.trim();
 
     if (!selector) {
+      const models = yield* Result.await(listSessionModels({ ctx: input.ctx, session }));
       const current = yield* Result.await(
         input.ctx.app.harness.getModel({
           target: { type: "session", ref: session.ref },
@@ -86,6 +105,8 @@ export async function modelSessionCommand<
         status: "shown" as const,
         session,
         current: current as HarnessSelectedModel,
+        models: models as readonly HarnessModelInfo[],
+        providerGroups: groupModelsByProvider(models as readonly HarnessModelInfo[]),
       });
     }
 
@@ -100,6 +121,79 @@ export async function modelSessionCommand<
       input.ctx.app.harness.setModel({
         target: { type: "session", ref: session.ref },
         update: { type: "set", model: resolved.ref },
+        signal: input.ctx.signal,
+      } as SetModelInput<TAdapters>),
+    );
+
+    return Result.ok({
+      status: "updated" as const,
+      session,
+      selected: selected as HarnessSelectedModel,
+    });
+  });
+}
+
+export async function modelProviderCommand<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly thread: ChatThreadRef;
+  readonly providerIndex: number;
+}): Promise<Result<ModelProviderOutput, ModelCommandError>> {
+  return Result.gen(async function* () {
+    const session = yield* Result.await(getActiveSessionForThread(input.ctx, input.thread));
+    const models = yield* Result.await(listSessionModels({ ctx: input.ctx, session }));
+    const providerGroups = groupModelsByProvider(models as readonly HarnessModelInfo[]);
+    const provider = yield* requireProviderGroup({
+      providerGroups,
+      providerIndex: input.providerIndex,
+    });
+    const current = yield* Result.await(
+      input.ctx.app.harness.getModel({
+        target: { type: "session", ref: session.ref },
+        signal: input.ctx.signal,
+      } as GetModelInput<TAdapters>),
+    );
+
+    return Result.ok({
+      status: "provider" as const,
+      session,
+      current: current as HarnessSelectedModel,
+      provider,
+      providerIndex: input.providerIndex,
+      maxModelsPerProvider: input.ctx.app.config.model.maxModelsPerProvider,
+    });
+  });
+}
+
+export async function modelActionSetCommand<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly thread: ChatThreadRef;
+  readonly providerIndex: number;
+  readonly modelIndex: number;
+}): Promise<Result<ModelUpdatedOutput, ModelCommandError>> {
+  return Result.gen(async function* () {
+    const session = yield* Result.await(getActiveSessionForThread(input.ctx, input.thread));
+    const models = yield* Result.await(listSessionModels({ ctx: input.ctx, session }));
+    const providerGroups = groupModelsByProvider(models as readonly HarnessModelInfo[]);
+    const provider = yield* requireProviderGroup({
+      providerGroups,
+      providerIndex: input.providerIndex,
+    });
+    const model = yield* requireModelInfo({
+      provider,
+      providerIndex: input.providerIndex,
+      modelIndex: input.modelIndex,
+    });
+
+    const selected = yield* Result.await(
+      input.ctx.app.harness.setModel({
+        target: { type: "session", ref: session.ref },
+        update: { type: "set", model: model.ref },
         signal: input.ctx.signal,
       } as SetModelInput<TAdapters>),
     );
@@ -152,4 +246,65 @@ function listSessionModels<
     cwd: input.session.cwd,
     signal: input.ctx.signal,
   } as ListModelsInput<TAdapters>) as Promise<Result<readonly HarnessModelInfo[], ListModelsError>>;
+}
+
+export function groupModelsByProvider(
+  models: readonly HarnessModelInfo[],
+): readonly ModelProviderGroup[] {
+  const groups: ModelProviderGroup[] = [];
+
+  for (const model of models) {
+    const providerName = modelProviderName(model);
+    const group = groups.find((candidate) => candidate.providerName === providerName);
+
+    if (group) {
+      group.models.push(model);
+      continue;
+    }
+
+    groups.push({ providerName, models: [model] });
+  }
+
+  return groups;
+}
+
+function modelProviderName(model: HarnessModelInfo): string {
+  const reportedName = model.providerName?.trim();
+  if (reportedName) return reportedName;
+
+  const providerId = model.ref.providerId?.trim();
+  return providerId && providerId.length > 0 ? providerId : "Other";
+}
+
+function requireProviderGroup(input: {
+  readonly providerGroups: readonly ModelProviderGroup[];
+  readonly providerIndex: number;
+}): Result<ModelProviderGroup, ModelActionPayloadInvalidError> {
+  const provider = input.providerGroups[input.providerIndex];
+
+  return provider === undefined
+    ? Result.err(
+        new ModelActionPayloadInvalidError({
+          payload: String(input.providerIndex),
+          reason: "provider selection is no longer available",
+        }),
+      )
+    : Result.ok(provider);
+}
+
+function requireModelInfo(input: {
+  readonly provider: ModelProviderGroup;
+  readonly providerIndex: number;
+  readonly modelIndex: number;
+}): Result<HarnessModelInfo, ModelActionPayloadInvalidError> {
+  const model = input.provider.models[input.modelIndex];
+
+  return model === undefined
+    ? Result.err(
+        new ModelActionPayloadInvalidError({
+          payload: `${input.providerIndex}:${input.modelIndex}`,
+          reason: "model selection is no longer available",
+        }),
+      )
+    : Result.ok(model);
 }

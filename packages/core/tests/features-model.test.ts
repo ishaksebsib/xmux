@@ -57,7 +57,7 @@ describe("/model command", () => {
     await xmux.shutdown();
   });
 
-  test("shows the current model with a button to list available models", async () => {
+  test("shows provider buttons, lists provider models, and updates selected model", async () => {
     const {
       emitCommand,
       emitAction,
@@ -66,6 +66,7 @@ describe("/model command", () => {
       actionResponses,
       listInputs,
       getInputs,
+      setInputs,
       xmux,
     } = await initializeXmux();
     await bindSession({ xmux });
@@ -75,7 +76,7 @@ describe("/model command", () => {
     await eventually(() => sentActions.length === 1);
 
     expect(replies).toHaveLength(0);
-    expect(listInputs).toHaveLength(0);
+    expect(listInputs).toEqual([{ harnessId: "opencode", cwd: process.cwd() }]);
     expect(getInputs).toEqual([{ target: { type: "session", ref: sessionRef } }]);
     expect(sentActions[0]?.text).toContain("**Model: `openai/gpt-4.1`**");
     expect(sentActions[0]?.text).toContain("- Harness: `opencode`");
@@ -86,29 +87,72 @@ describe("/model command", () => {
     expect(sentActions[0]?.buttons).toEqual([
       [
         expect.objectContaining({
-          id: "model-available",
-          label: "See available models",
+          id: "model-provider-0",
+          label: "OpenAI",
           actionId: "model",
-          value: "available",
+          value: "p",
+          payload: "0",
+        }),
+        expect.objectContaining({
+          id: "model-provider-1",
+          label: "Anthropic",
+          actionId: "model",
+          value: "p",
+          payload: "1",
         }),
       ],
     ]);
 
-    emitAction(actionEvent());
+    emitAction(actionEvent({ value: "p", payload: "1" }));
 
     await eventually(() => actionResponses.length === 2);
 
-    expect(listInputs).toEqual([{ harnessId: "opencode", cwd: process.cwd() }]);
+    expect(listInputs).toEqual([
+      { harnessId: "opencode", cwd: process.cwd() },
+      { harnessId: "opencode", cwd: process.cwd() },
+    ]);
+    expect(getInputs).toEqual([
+      { target: { type: "session", ref: sessionRef } },
+      { target: { type: "session", ref: sessionRef } },
+    ]);
     expect(actionResponses[0]?.response.kind).toBe("ack");
-    expect(actionResponses[1]?.response.kind).toBe("reply");
-    const availableMessage = actionResponseText(actionResponses[1]?.response.message);
-    expect(availableMessage).toContain("**Available models** (2)");
-    expect(availableMessage).toContain("> **OpenAI** (1)");
-    expect(availableMessage).toContain("- GPT\\-4\\.1 — current");
-    expect(availableMessage).toContain("  - `/model openai/gpt-4.1`");
-    expect(availableMessage).toContain("> **Anthropic** (1)");
-    expect(availableMessage).toContain("- Claude 3\\.7 Sonnet");
-    expect(availableMessage).toContain("  - `/model anthropic/claude-3-7-sonnet`");
+    expect(actionResponses[1]?.response.kind).toBe("update");
+    const providerMessage = actionResponseText(actionResponses[1]?.response.message);
+    expect(providerMessage).toContain("**Anthropic models** (1)");
+    expect(providerMessage).toContain("- Current: `openai/gpt-4.1`");
+    expect(providerMessage).toContain("- Claude 3\\.7 Sonnet");
+    expect(actionResponses[1]?.response.buttons).toEqual([
+      [
+        expect.objectContaining({
+          id: "model-option-1-0",
+          label: "Claude 3.7 Sonnet",
+          actionId: "model",
+          value: "m",
+          payload: "1:0",
+        }),
+      ],
+    ]);
+
+    emitAction(actionEvent({ value: "m", payload: "1:0" }));
+
+    await eventually(() => actionResponses.length === 4);
+
+    expect(setInputs).toEqual([
+      {
+        target: { type: "session", ref: sessionRef },
+        update: {
+          type: "set",
+          model: { providerId: "anthropic", modelId: "claude-3-7-sonnet" },
+        },
+      },
+    ]);
+    expect(actionResponses[2]?.response.kind).toBe("ack");
+    expect(actionResponses[3]?.response.kind).toBe("update");
+    const updatedMessage = actionResponseText(actionResponses[3]?.response.message);
+    expect(updatedMessage).toBe(
+      "**Model updated**\n\n- Current: `anthropic/claude-3-7-sonnet`\n- Harness: `opencode`\n- Session ID: `session-1`\n\nThis model is now selected for the current session.",
+    );
+    expect(actionResponses[3]?.response.buttons).toEqual([]);
 
     await xmux.shutdown();
   });
@@ -124,17 +168,16 @@ describe("/model command", () => {
 
     emitCommand(commandEvent({ selector: undefined }));
     await eventually(() => sentActions.length === 1);
-    emitAction(actionEvent());
+    emitAction(actionEvent({ value: "p", payload: "0" }));
 
     await eventually(() => actionResponses.length === 2);
 
-    const availableMessage = actionResponseText(actionResponses[1]?.response.message);
-    expect(availableMessage).toContain("> **OpenAI** (showing 10 of 11)");
-    expect(availableMessage).toContain("- OpenAI Model 10");
-    expect(availableMessage).not.toContain("- OpenAI Model 11");
-    expect(availableMessage).toContain("_And 1 more models from OpenAI._");
-    expect(availableMessage).toContain("> **Google** (2)");
-    expect(availableMessage).toContain("- Google Model 2");
+    const providerMessage = actionResponseText(actionResponses[1]?.response.message);
+    expect(providerMessage).toContain("**OpenAI models** (11)");
+    expect(providerMessage).toContain("- OpenAI Model 10");
+    expect(providerMessage).not.toContain("- OpenAI Model 11");
+    expect(providerMessage).toContain("_And 1 more models from OpenAI._");
+    expect(actionResponses[1]?.response.buttons).toHaveLength(10);
 
     await xmux.shutdown();
   });
@@ -148,15 +191,16 @@ describe("/model command", () => {
 
     emitCommand(commandEvent({ selector: undefined }));
     await eventually(() => sentActions.length === 1);
-    emitAction(actionEvent());
+    emitAction(actionEvent({ value: "p", payload: "0" }));
 
     await eventually(() => actionResponses.length === 2);
 
-    const availableMessage = actionResponseText(actionResponses[1]?.response.message);
-    expect(availableMessage).toContain("> **OpenAI** (showing 2 of 4)");
-    expect(availableMessage).toContain("- OpenAI Model 2");
-    expect(availableMessage).not.toContain("- OpenAI Model 3");
-    expect(availableMessage).toContain("_And 2 more models from OpenAI._");
+    const providerMessage = actionResponseText(actionResponses[1]?.response.message);
+    expect(providerMessage).toContain("**OpenAI models** (4)");
+    expect(providerMessage).toContain("- OpenAI Model 2");
+    expect(providerMessage).not.toContain("- OpenAI Model 3");
+    expect(providerMessage).toContain("_And 2 more models from OpenAI._");
+    expect(actionResponses[1]?.response.buttons).toHaveLength(2);
 
     await xmux.shutdown();
   });
@@ -279,6 +323,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
       readonly label: string;
       readonly actionId?: string;
       readonly value?: string;
+      readonly payload?: unknown;
     }[])[];
   }[] = [];
   const actionResponses: {
@@ -501,7 +546,10 @@ function commandEvent(input: { readonly selector?: string }) {
   };
 }
 
-function actionEvent() {
+function actionEvent(input: {
+  readonly value: "available" | "p" | "m";
+  readonly payload?: string;
+}) {
   return {
     type: "action",
     chatId: "telegram",
@@ -510,7 +558,8 @@ function actionEvent() {
     message: { chatId: "telegram", conversationId: thread.threadId, messageId: "action-1" },
     interactionId: "interaction-1",
     actionId: "model",
-    value: "available",
+    value: input.value,
+    ...(input.payload === undefined ? {} : { payload: input.payload }),
   };
 }
 

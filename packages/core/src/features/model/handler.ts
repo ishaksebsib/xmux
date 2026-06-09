@@ -8,16 +8,25 @@ import {
   replyWithResult,
   respondToAction,
   toSendActionInput,
+  updateActionMessage,
   type CommandEvent,
   threadFromChatEvent,
 } from "../utils";
 import {
   formatModelActionMessage,
-  formatModelAvailableOutput,
   formatModelFailure,
   formatModelOutput,
+  formatModelProviderActionMessage,
+  formatModelUpdatedActionMessage,
 } from "./response";
-import { modelAvailableCommand, modelSessionCommand } from "./service";
+import { ModelActionPayloadInvalidError } from "./errors";
+import {
+  modelActionSetCommand,
+  modelProviderCommand,
+  modelSessionCommand,
+  type ModelCommandError,
+  type ModelCommandOutput,
+} from "./service";
 
 export interface HandleModelCommandInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -92,22 +101,167 @@ export async function handleModelAction<
   });
   if (acknowledged.isErr()) return acknowledged;
 
-  const available = await modelAvailableCommand({
+  switch (input.event.value) {
+    case "available":
+      return updateModelProviderPicker(input);
+    case "p":
+      return updateModelProviderModels(input);
+    case "m":
+      return updateSelectedModel(input);
+  }
+}
+
+async function updateModelProviderPicker<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: HandleModelActionInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
+  const result = await modelSessionCommand({
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
   });
 
+  if (result.isOk() && result.value.status === "shown") {
+    const message = formatModelActionMessage(result.value);
+    return updateActionMessage({ command: "model", event: input.event, message });
+  }
+
+  return replyWithModelResult({ input, result });
+}
+
+async function updateModelProviderModels<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: HandleModelActionInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
+  const providerIndex = parseProviderPayload(input.event.payload);
+
+  if (providerIndex.isErr()) {
+    return replyWithModelFailure({ input, error: providerIndex.error });
+  }
+
+  const result = await modelProviderCommand({
+    ctx: input.ctx,
+    thread: threadFromChatEvent(input.event),
+    providerIndex: providerIndex.value,
+  });
+
+  if (result.isOk()) {
+    const message = formatModelProviderActionMessage(result.value);
+    return updateActionMessage({ command: "model", event: input.event, message });
+  }
+
+  return replyWithModelFailure({ input, error: result.error });
+}
+
+async function updateSelectedModel<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: HandleModelActionInput<TAdapters, TChats>): Promise<Result<void, CommandResponseError>> {
+  const selection = parseModelPayload(input.event.payload);
+
+  if (selection.isErr()) {
+    return replyWithModelFailure({ input, error: selection.error });
+  }
+
+  const result = await modelActionSetCommand({
+    ctx: input.ctx,
+    thread: threadFromChatEvent(input.event),
+    providerIndex: selection.value.providerIndex,
+    modelIndex: selection.value.modelIndex,
+  });
+
+  if (result.isOk()) {
+    const message = formatModelUpdatedActionMessage(result.value);
+    return updateActionMessage({ command: "model", event: input.event, message });
+  }
+
+  return replyWithModelFailure({ input, error: result.error });
+}
+
+function replyWithModelResult<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly input: HandleModelActionInput<TAdapters, TChats>;
+  readonly result: Result<ModelCommandOutput, ModelCommandError>;
+}): Promise<Result<void, CommandResponseError>> {
   return respondToAction({
     command: "model",
     respond: () =>
-      input.event.reply(
-        Result.match(available, {
-          ok: (value) => formatModelAvailableOutput(value),
-          err: (error) =>
-            formatModelFailure(error, {
-              maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
-            }),
+      input.input.event.reply(
+        Result.match(input.result, {
+          ok: (value) => formatModelOutput(value),
+          err: (error) => formatModelFailureForAction(input.input, error),
         }),
       ),
+  });
+}
+
+function replyWithModelFailure<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: {
+  readonly input: HandleModelActionInput<TAdapters, TChats>;
+  readonly error: Parameters<typeof formatModelFailure>[0];
+}): Promise<Result<void, CommandResponseError>> {
+  return respondToAction({
+    command: "model",
+    respond: () => input.input.event.reply(formatModelFailureForAction(input.input, input.error)),
+  });
+}
+
+function formatModelFailureForAction<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: HandleModelActionInput<TAdapters, TChats>,
+  error: Parameters<typeof formatModelFailure>[0],
+) {
+  return formatModelFailure(error, {
+    maxSuggestions: input.ctx.app.config.model.maxModelsPerProvider,
+  });
+}
+
+function parseProviderPayload(
+  payload: string | undefined,
+): Result<number, ModelActionPayloadInvalidError> {
+  if (payload === undefined || !/^\d+$/.test(payload)) {
+    return Result.err(
+      new ModelActionPayloadInvalidError({
+        payload: payload ?? "",
+        reason: "provider index is missing or invalid",
+      }),
+    );
+  }
+
+  return Result.ok(Number(payload));
+}
+
+function parseModelPayload(payload: string | undefined): Result<
+  {
+    readonly providerIndex: number;
+    readonly modelIndex: number;
+  },
+  ModelActionPayloadInvalidError
+> {
+  const [providerIndex, modelIndex, extra] = payload?.split(":") ?? [];
+
+  if (
+    providerIndex === undefined ||
+    modelIndex === undefined ||
+    extra !== undefined ||
+    !/^\d+$/.test(providerIndex) ||
+    !/^\d+$/.test(modelIndex)
+  ) {
+    return Result.err(
+      new ModelActionPayloadInvalidError({
+        payload: payload ?? "",
+        reason: "model index is missing or invalid",
+      }),
+    );
+  }
+
+  return Result.ok({
+    providerIndex: Number(providerIndex),
+    modelIndex: Number(modelIndex),
   });
 }
