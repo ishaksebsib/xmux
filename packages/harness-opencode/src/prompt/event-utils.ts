@@ -16,7 +16,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-export function toOpenCodeEvent(value: unknown): OpenCodeEvent | undefined {
+export function normalizeOpenCodeStreamEvent(value: unknown): OpenCodeEvent | undefined {
   const payload = isRecord(value) && "payload" in value ? value.payload : value;
 
   if (!isRecord(payload) || typeof payload.type !== "string") {

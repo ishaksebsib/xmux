@@ -159,6 +159,20 @@ describe("OpenCode prompt stream", () => {
                 properties: {
                   sessionID: "session-1",
                   part: {
+                    id: "input-text-1",
+                    sessionID: "session-1",
+                    messageID: "user-1",
+                    type: "text",
+                    text: "who is this person?",
+                    time: { start: 1, end: 1 },
+                  },
+                },
+              });
+              yield globalEvent({
+                type: "message.part.updated",
+                properties: {
+                  sessionID: "session-1",
+                  part: {
                     id: "input-file-1",
                     sessionID: "session-1",
                     messageID: "user-1",
@@ -218,6 +232,11 @@ describe("OpenCode prompt stream", () => {
     expect(prompted.isOk()).toBe(true);
     const events = await collectAsync(prompted.unwrap("prompt stream"));
 
+    expect(events).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "content", phase: "delta", delta: "who is this person?" }),
+      ]),
+    );
     expect(events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "turn", phase: "started", agent: "build" }),

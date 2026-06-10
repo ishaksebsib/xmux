@@ -16,7 +16,6 @@ export type OpenCodePromptEvent = HarnessPromptEvent<"opencode">;
 export type OpenCodePromptPart = TextPartInput | FilePartInput;
 export type OpenCodeToolPart = Extract<Part, { readonly type: "tool" }>;
 export type OpenCodeStreamEvent = OpenCodeEvent;
-export type EventFamily = "legacy" | "next";
 
 export type TokenUsageInput = {
   readonly input?: number;
@@ -55,7 +54,6 @@ export type PromptStreamState = {
   currentNextCompactionPartId?: string;
   currentNextTextPartId?: string;
   currentNextTurnId?: string;
-  eventFamily?: EventFamily;
   nextCompactionPartIndex: number;
   nextTextPartIndex: number;
   selectedThinking?: HarnessThinkingLevel;

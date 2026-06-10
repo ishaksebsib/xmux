@@ -11,7 +11,6 @@ import {
   toUsage,
 } from "./event-utils";
 import type {
-  EventFamily,
   OpenCodePromptEvent,
   OpenCodeStreamEvent as OpenCodeEvent,
   OpenCodeToolPart,
@@ -287,13 +286,6 @@ function* mapPartUpdated(args: {
   }
 }
 
-function shouldProcessFamily(state: PromptStreamState, family: EventFamily): boolean {
-  if (state.eventFamily && state.eventFamily !== family) return false;
-
-  state.eventFamily = family;
-  return true;
-}
-
 function startNextTextPart(state: PromptStreamState): string {
   const partId = `session-next-text-${state.nextTextPartIndex}`;
   state.nextTextPartIndex += 1;
@@ -483,8 +475,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "message.removed": {
-      if (!shouldProcessFamily(args.state, "legacy")) return;
-
       const role = args.state.messageRoles.get(args.event.properties.messageID);
       if (!role) return;
 
@@ -499,18 +489,14 @@ export function* mapOpenCodeEvent(args: {
     }
     case "message.part.updated":
       if (args.state.messageRoles.get(args.event.properties.part.messageID) === "user") return;
-      if (!shouldProcessFamily(args.state, "legacy")) return;
 
       yield* mapPartUpdated({ ref: args.ref, state: args.state, part: args.event.properties.part });
       return;
     case "message.part.removed":
-      if (!shouldProcessFamily(args.state, "legacy")) return;
-
       args.state.completedParts.add(args.event.properties.partID);
       return;
     case "message.part.delta": {
       if (args.state.messageRoles.get(args.event.properties.messageID) === "user") return;
-      if (!shouldProcessFamily(args.state, "legacy")) return;
 
       const kind = args.state.partKinds.get(args.event.properties.partID) ?? "text";
       yield* ensureContentStarted({
@@ -616,8 +602,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.synthetic": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* mapTextPart({
         ref: args.ref,
         state: args.state,
@@ -697,8 +681,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.text.delta": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const partId = getNextTextPart(args.state);
       yield* mapTextPart({
         ref: args.ref,
@@ -712,8 +694,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.text.ended": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const partId = getNextTextPart(args.state);
       yield* mapTextPart({
         ref: args.ref,
@@ -737,8 +717,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.reasoning.delta":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* mapTextPart({
         ref: args.ref,
         state: args.state,
@@ -750,8 +728,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.reasoning.ended":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* mapTextPart({
         ref: args.ref,
         state: args.state,
@@ -771,8 +747,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.tool.input.delta": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureNextToolStarted({
         ref: args.ref,
         state: args.state,
@@ -793,8 +767,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.tool.input.ended": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureNextToolStarted({
         ref: args.ref,
         state: args.state,
@@ -815,8 +787,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.tool.called":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureNextToolCalled({
         ref: args.ref,
         state: args.state,
@@ -826,8 +796,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.tool.progress":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureNextToolStarted({
         ref: args.ref,
         state: args.state,
@@ -846,8 +814,6 @@ export function* mapOpenCodeEvent(args: {
       };
       return;
     case "session.next.tool.success": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const name =
         args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
       const input = parseToolInput(args.state.toolInputs.get(args.event.properties.callID) ?? "{}");
@@ -874,8 +840,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.tool.failed": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const name =
         args.state.toolNames.get(args.event.properties.callID) ?? args.event.properties.callID;
       const input = parseToolInput(args.state.toolInputs.get(args.event.properties.callID) ?? "{}");
@@ -899,8 +863,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.retried":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield {
         type: "retry",
         ref: args.ref,
@@ -918,8 +880,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.compaction.delta": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const partId = getNextCompactionPart(args.state);
       yield* mapTextPart({
         ref: args.ref,
@@ -933,8 +893,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.compaction.ended": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const partId = getNextCompactionPart(args.state);
       yield* mapTextPart({
         ref: args.ref,

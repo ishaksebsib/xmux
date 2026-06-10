@@ -11,7 +11,7 @@ import {
 } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
 import { toPromptParts } from "./content";
-import { createStreamEndedError, isAbortError, toOpenCodeEvent } from "./event-utils";
+import { createStreamEndedError, isAbortError, normalizeOpenCodeStreamEvent } from "./event-utils";
 import { mapOpenCodeEvent } from "./event-mapper";
 import { createPromptStreamState } from "./state";
 import type { OpenCodePromptEvent, OpenCodePromptPart, SelectedOpenCodeModel } from "./types";
@@ -136,7 +136,7 @@ function createPromptEventStream(args: {
 
         pendingEvent = iterator.next();
 
-        const event = toOpenCodeEvent(next.value);
+        const event = normalizeOpenCodeStreamEvent(next.value);
         if (!event) {
           continue;
         }
