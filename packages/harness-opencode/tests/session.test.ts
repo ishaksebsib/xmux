@@ -628,8 +628,18 @@ describe("OpenCode prompt stream", () => {
         { type: "text", text: "hello" },
         { type: "image", data: "aW1n", mimeType: "image/png", name: "image.png" },
         { type: "file", uri: "file:///tmp/a.txt", mime: "text/plain", name: "a.txt" },
-        { type: "file", uri: "file:///tmp/config.json", mime: "application/json", name: "config.json" },
-        { type: "file", uri: "file:///tmp/manual.pdf", mime: "application/pdf", name: "manual.pdf" },
+        {
+          type: "file",
+          uri: "file:///tmp/config.json",
+          mime: "application/json",
+          name: "config.json",
+        },
+        {
+          type: "file",
+          uri: "file:///tmp/manual.pdf",
+          mime: "application/pdf",
+          name: "manual.pdf",
+        },
       ],
       adapterOptions: {},
     });

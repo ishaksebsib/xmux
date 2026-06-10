@@ -190,8 +190,8 @@ function normalizePromptAttachmentKinds(
 ): readonly ChatAttachmentKind[] {
   if (kinds === undefined) return DEFAULT_PROMPT_ATTACHMENTS_CONFIG.kinds;
 
-  const normalized = kinds.filter((kind, index) =>
-    PROMPT_ATTACHMENT_KINDS.includes(kind) && kinds.indexOf(kind) === index,
+  const normalized = kinds.filter(
+    (kind, index) => PROMPT_ATTACHMENT_KINDS.includes(kind) && kinds.indexOf(kind) === index,
   );
 
   return normalized.length === 0

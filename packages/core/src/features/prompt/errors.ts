@@ -192,7 +192,8 @@ export class PromptAttachmentStorageError extends TaggedError("PromptAttachmentS
     readonly operation: "create_temp_dir" | "write_temp_file";
     readonly cause: unknown;
   }) {
-    const target = args.attachmentId === undefined ? "attachments" : `attachment ${args.attachmentId}`;
+    const target =
+      args.attachmentId === undefined ? "attachments" : `attachment ${args.attachmentId}`;
     super({
       ...args,
       message: `Failed to store ${target}: ${describeCause(args.cause)}`,

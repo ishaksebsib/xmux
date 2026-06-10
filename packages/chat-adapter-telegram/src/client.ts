@@ -46,7 +46,10 @@ export interface TelegramBotClient {
     readonly options?: Parameters<EditMessageText>[3];
     readonly signal?: AbortSignal;
   }): ReturnType<EditMessageText>;
-  downloadFile(args: { readonly filePath: string; readonly signal?: AbortSignal }): Promise<Response>;
+  downloadFile(args: {
+    readonly filePath: string;
+    readonly signal?: AbortSignal;
+  }): Promise<Response>;
   getBotInfo(): UserFromGetMe;
   getFile(args: {
     readonly fileId: Parameters<GetFile>[0];
@@ -118,8 +121,7 @@ export function createTelegramBotClient(args: {
         signal: input.signal,
       }),
     getBotInfo: () => bot.botInfo,
-    getFile: (input) =>
-      bot.api.getFile(input.fileId, input.signal as Parameters<GetFile>[1]),
+    getFile: (input) => bot.api.getFile(input.fileId, input.signal as Parameters<GetFile>[1]),
     init: (signal) => bot.init(signal as Parameters<BotInit>[0]),
     isRunning: bot.isRunning.bind(bot),
     onCallbackQueryData: (handler) => {

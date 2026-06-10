@@ -143,7 +143,12 @@ export class TelegramAttachmentReadError extends TaggedError("TelegramAttachment
 }>() {
   constructor(args: {
     readonly attachmentId: string;
-    readonly reason: "metadata" | "missing_file_path" | "too_large" | "download" | "invalid_response";
+    readonly reason:
+      | "metadata"
+      | "missing_file_path"
+      | "too_large"
+      | "download"
+      | "invalid_response";
     readonly maxBytes?: number;
     readonly sizeBytes?: number;
     readonly cause?: unknown;

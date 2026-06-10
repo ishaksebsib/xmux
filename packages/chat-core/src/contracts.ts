@@ -126,13 +126,7 @@ export interface ChatTextStreamContent {
 export type ChatStreamFallback = "send-message" | "error";
 
 /** Coarse cross-platform media class for a received attachment. */
-export type ChatAttachmentKind =
-  | "image"
-  | "audio"
-  | "video"
-  | "document"
-  | "archive"
-  | "other";
+export type ChatAttachmentKind = "image" | "audio" | "video" | "document" | "archive" | "other";
 
 /** Hint for how the source platform presented a received attachment. */
 export type ChatAttachmentDisposition = "inline" | "attachment";
@@ -172,7 +166,8 @@ export interface ChatMessage<
   TChatId extends string = string,
   TAdapterData extends ChatAdapterObject = Record<never, never>,
   TAttachmentReadError = unknown,
-> extends ChatMessageRef<TChatId>, ChatTextContent {
+>
+  extends ChatMessageRef<TChatId>, ChatTextContent {
   readonly actor: ChatActor;
   readonly attachments: readonly ChatAttachment<TAdapterData, TAttachmentReadError>[];
   readonly adapterData: TAdapterData;

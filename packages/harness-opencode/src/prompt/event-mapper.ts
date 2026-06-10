@@ -606,7 +606,9 @@ export function* mapOpenCodeEvent(args: {
         ref: args.ref,
         state: args.state,
         kind: "text",
-        messageId: args.state.currentNextTurnId ?? `session-next-synthetic-${args.event.properties.timestamp}`,
+        messageId:
+          args.state.currentNextTurnId ??
+          `session-next-synthetic-${args.event.properties.timestamp}`,
         partId: `session-next-synthetic-${args.event.properties.timestamp}`,
         text: args.event.properties.text,
         completed: true,
