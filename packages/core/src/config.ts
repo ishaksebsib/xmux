@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import type { ChatAttachmentKind } from "@xmux/chat-core";
 
 /**
  * Delivery mode for harnesses responses.
@@ -53,12 +54,26 @@ export interface NormalizedPromptResponseConfig {
   readonly maxStreamDeltaChars?: number;
 }
 
+export interface PromptAttachmentsConfig {
+  readonly enabled?: boolean;
+  readonly maxBytes?: number;
+  readonly kinds?: readonly ChatAttachmentKind[];
+}
+
+export interface NormalizedPromptAttachmentsConfig {
+  readonly enabled: boolean;
+  readonly maxBytes: number;
+  readonly kinds: readonly ChatAttachmentKind[];
+}
+
 export interface PromptConfig {
   readonly response?: PromptResponseConfig;
+  readonly attachments?: PromptAttachmentsConfig;
 }
 
 export interface NormalizedPromptConfig {
   readonly response: NormalizedPromptResponseConfig;
+  readonly attachments: NormalizedPromptAttachmentsConfig;
 }
 
 export interface Config {
@@ -84,6 +99,21 @@ export interface NormalizedConfig {
 const DEFAULT_MAX_LIST_ENTRIES = 100;
 const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
 const DEFAULT_MAX_MODELS_PER_PROVIDER = 10;
+const DEFAULT_PROMPT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const PROMPT_ATTACHMENT_KINDS = Object.freeze([
+  "image",
+  "audio",
+  "video",
+  "document",
+  "archive",
+  "other",
+] as const satisfies readonly ChatAttachmentKind[]);
+export const DEFAULT_PROMPT_ATTACHMENTS_CONFIG: Readonly<NormalizedPromptAttachmentsConfig> =
+  Object.freeze({
+    enabled: true,
+    maxBytes: DEFAULT_PROMPT_ATTACHMENT_MAX_BYTES,
+    kinds: PROMPT_ATTACHMENT_KINDS,
+  });
 export const DEFAULT_PROMPT_RESPONSE_CONFIG: Readonly<NormalizedPromptResponseConfig> =
   Object.freeze({
     showToolOutput: true,
@@ -113,6 +143,7 @@ export function normalizeConfig(config: Config): NormalizedConfig {
     }),
     prompt: Object.freeze({
       response: normalizePromptResponseConfig(config.prompt?.response),
+      attachments: normalizePromptAttachmentsConfig(config.prompt?.attachments),
     }),
   });
 }
@@ -139,6 +170,33 @@ function normalizeMaxModelsPerProvider(value: number | undefined): number {
   }
 
   return value;
+}
+
+function normalizePromptAttachmentsConfig(
+  config: PromptAttachmentsConfig | undefined,
+): NormalizedPromptAttachmentsConfig {
+  return Object.freeze({
+    enabled: config?.enabled ?? DEFAULT_PROMPT_ATTACHMENTS_CONFIG.enabled,
+    maxBytes: normalizePositiveInteger(
+      config?.maxBytes,
+      DEFAULT_PROMPT_ATTACHMENTS_CONFIG.maxBytes,
+    ),
+    kinds: normalizePromptAttachmentKinds(config?.kinds),
+  });
+}
+
+function normalizePromptAttachmentKinds(
+  kinds: readonly ChatAttachmentKind[] | undefined,
+): readonly ChatAttachmentKind[] {
+  if (kinds === undefined) return DEFAULT_PROMPT_ATTACHMENTS_CONFIG.kinds;
+
+  const normalized = kinds.filter((kind, index) =>
+    PROMPT_ATTACHMENT_KINDS.includes(kind) && kinds.indexOf(kind) === index,
+  );
+
+  return normalized.length === 0
+    ? DEFAULT_PROMPT_ATTACHMENTS_CONFIG.kinds
+    : Object.freeze(normalized);
 }
 
 function normalizePromptResponseConfig(
