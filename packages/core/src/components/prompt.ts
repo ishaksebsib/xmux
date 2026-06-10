@@ -254,8 +254,8 @@ export function promptUsage(input: {
 }): string {
   const details = [
     input.model === undefined ? undefined : `Model: ${inlineCode(input.model)}`,
+    input.thinking === undefined ? undefined : `Thinking Level: ${inlineCode(input.thinking)}`,
     input.harnessId === undefined ? undefined : `Harness: ${inlineCode(input.harnessId)}`,
-    input.thinking === undefined ? undefined : `Thinking: ${inlineCode(input.thinking)}`,
     formatTokenLine(input.tokens),
     formatContextLine(input.tokens),
     formatCostLine(input.cost),

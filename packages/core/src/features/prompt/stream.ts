@@ -380,7 +380,7 @@ function appendCompletionSummary(state: PromptRenderState, harnessId: string): s
   }
 
   const summary = promptUsage({
-    model: state.model === undefined ? undefined : formatModelSelector(state.model),
+    model: state.model === undefined ? undefined : formatPromptModel(state.model, state.thinking),
     harnessId,
     thinking: state.thinking,
     tokens: state.usage,
@@ -402,6 +402,13 @@ function hasCompletionDetails(state: PromptRenderState): boolean {
     state.usage !== undefined ||
     state.cost !== undefined
   );
+}
+
+function formatPromptModel(
+  model: HarnessModelRef,
+  thinking: HarnessThinkingLevel | undefined,
+): string {
+  return formatModelSelector(thinking === undefined ? model : { ...model, variant: undefined });
 }
 
 function appendTextDelta(state: PromptRenderState, partId: string, delta: string): string {
