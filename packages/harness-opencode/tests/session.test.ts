@@ -628,6 +628,8 @@ describe("OpenCode prompt stream", () => {
         { type: "text", text: "hello" },
         { type: "image", data: "aW1n", mimeType: "image/png", name: "image.png" },
         { type: "file", uri: "file:///tmp/a.txt", mime: "text/plain", name: "a.txt" },
+        { type: "file", uri: "file:///tmp/config.json", mime: "application/json", name: "config.json" },
+        { type: "file", uri: "file:///tmp/manual.pdf", mime: "application/pdf", name: "manual.pdf" },
       ],
       adapterOptions: {},
     });
@@ -640,6 +642,18 @@ describe("OpenCode prompt stream", () => {
       { type: "text", text: "hello" },
       { type: "file", mime: "image/png", filename: "image.png", url: "data:image/png;base64,aW1n" },
       { type: "file", mime: "text/plain", filename: "a.txt", url: "file:///tmp/a.txt" },
+      {
+        type: "file",
+        mime: "text/plain",
+        filename: "config.json",
+        url: "file:///tmp/config.json",
+      },
+      {
+        type: "file",
+        mime: "application/pdf",
+        filename: "manual.pdf",
+        url: "file:///tmp/manual.pdf",
+      },
     ]);
   });
 });
