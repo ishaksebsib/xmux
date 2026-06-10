@@ -19,8 +19,31 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function toOpenCodeEvent(value: unknown): OpenCodeEvent | undefined {
   const payload = isRecord(value) && "payload" in value ? value.payload : value;
 
-  if (!isRecord(payload) || typeof payload.type !== "string" || payload.type === "sync") {
+  if (!isRecord(payload) || typeof payload.type !== "string") {
     return undefined;
+  }
+
+  if (payload.type === "sync") {
+    const syncEvent = isRecord(payload.syncEvent) ? payload.syncEvent : payload;
+    const rawType =
+      typeof syncEvent.type === "string"
+        ? syncEvent.type
+        : typeof syncEvent.name === "string"
+          ? syncEvent.name
+          : undefined;
+    const data = isRecord(syncEvent.data)
+      ? syncEvent.data
+      : isRecord(payload.data)
+        ? payload.data
+        : undefined;
+
+    if (rawType === undefined || data === undefined) return undefined;
+
+    return {
+      id: typeof syncEvent.id === "string" ? syncEvent.id : rawType,
+      type: rawType.replace(/\.\d+$/, ""),
+      properties: data,
+    } as OpenCodeEvent;
   }
 
   return payload as OpenCodeEvent;

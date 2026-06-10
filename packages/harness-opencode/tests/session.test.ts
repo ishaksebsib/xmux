@@ -227,6 +227,246 @@ describe("OpenCode prompt stream", () => {
     );
   });
 
+  test("maps legacy assistant text after session.next control events", async () => {
+    const runtime = {
+      client: {
+        global: {
+          event: async () => ({
+            stream: (async function* () {
+              yield globalEvent({
+                type: "session.next.step.started",
+                properties: {
+                  timestamp: 1,
+                  sessionID: "session-1",
+                  agent: "build",
+                  model: { providerID: "opencode", id: "big-pickle", variant: "" },
+                },
+              });
+              yield globalEvent({
+                type: "message.updated",
+                properties: {
+                  sessionID: "session-1",
+                  info: {
+                    id: "assistant-1",
+                    sessionID: "session-1",
+                    role: "assistant",
+                    time: { created: 1 },
+                    parentID: "user-1",
+                    modelID: "big-pickle",
+                    providerID: "opencode",
+                    mode: "build",
+                    agent: "build",
+                    path: { cwd: process.cwd(), root: process.cwd() },
+                    cost: 0,
+                    tokens: { input: 1, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                  },
+                },
+              });
+              yield globalEvent({
+                type: "message.part.delta",
+                properties: {
+                  sessionID: "session-1",
+                  messageID: "assistant-1",
+                  partID: "part-1",
+                  field: "text",
+                  delta: "I can't read images.",
+                },
+              });
+              yield globalEvent({
+                type: "message.part.updated",
+                properties: {
+                  sessionID: "session-1",
+                  time: 2,
+                  part: {
+                    id: "part-1",
+                    sessionID: "session-1",
+                    messageID: "assistant-1",
+                    type: "text",
+                    text: "I can't read images.",
+                    time: { start: 1, end: 2 },
+                  },
+                },
+              });
+              yield globalEvent({ type: "session.idle", properties: { sessionID: "session-1" } });
+            })(),
+          }),
+        },
+        session: {
+          promptAsync: async () => ({ error: undefined, response: { status: 204 } }),
+        },
+      },
+      defaultModel: undefined,
+      sessionModels: new Map(),
+      close: async () => undefined,
+    } as unknown as OpenCodeRuntime;
+
+    const prompted = await prompt(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
+      content: [
+        { type: "text", text: "who is this person?" },
+        { type: "image", data: "aW1n", mimeType: "image/png" },
+      ],
+      adapterOptions: {},
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "content",
+          phase: "delta",
+          kind: "text",
+          delta: "I can't read images.",
+        }),
+        expect.objectContaining({ type: "run", phase: "completed" }),
+      ]),
+    );
+  });
+
+  test("maps sync envelopes with syncEvent payloads", async () => {
+    const runtime = {
+      client: {
+        global: {
+          event: async () => ({
+            stream: (async function* () {
+              yield globalEvent({
+                type: "sync",
+                syncEvent: {
+                  id: "evt-1",
+                  type: "message.updated.1",
+                  seq: 1,
+                  aggregateID: "session-1",
+                  data: {
+                    sessionID: "session-1",
+                    info: {
+                      id: "assistant-1",
+                      sessionID: "session-1",
+                      role: "assistant",
+                      time: { created: 1 },
+                      parentID: "user-1",
+                      modelID: "big-pickle",
+                      providerID: "opencode",
+                      mode: "build",
+                      agent: "build",
+                      path: { cwd: process.cwd(), root: process.cwd() },
+                      cost: 0,
+                      tokens: { input: 1, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                    },
+                  },
+                },
+              });
+              yield globalEvent({
+                type: "sync",
+                syncEvent: {
+                  id: "evt-2",
+                  type: "message.part.updated.1",
+                  seq: 2,
+                  aggregateID: "session-1",
+                  data: {
+                    sessionID: "session-1",
+                    part: {
+                      id: "part-1",
+                      sessionID: "session-1",
+                      messageID: "assistant-1",
+                      type: "text",
+                      text: "hello from sync",
+                      time: { start: 1, end: 2 },
+                    },
+                    time: 2,
+                  },
+                },
+              });
+              yield globalEvent({ type: "session.idle", properties: { sessionID: "session-1" } });
+            })(),
+          }),
+        },
+        session: {
+          promptAsync: async () => ({ error: undefined, response: { status: 204 } }),
+        },
+      },
+      defaultModel: undefined,
+      sessionModels: new Map(),
+      close: async () => undefined,
+    } as unknown as OpenCodeRuntime;
+
+    const prompted = await prompt(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
+      content: [{ type: "text", text: "hello" }],
+      adapterOptions: {},
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "content",
+          phase: "completed",
+          kind: "text",
+          text: "hello from sync",
+        }),
+      ]),
+    );
+  });
+
+  test("maps OpenCode session.next synthetic text into harness prompt content", async () => {
+    const runtime = {
+      client: {
+        global: {
+          event: async () => ({
+            stream: (async function* () {
+              yield globalEvent({
+                type: "session.next.synthetic",
+                properties: {
+                  timestamp: 1,
+                  sessionID: "session-1",
+                  text: "I can't see any image — this model doesn't support image input.",
+                },
+              });
+              yield globalEvent({ type: "session.idle", properties: { sessionID: "session-1" } });
+            })(),
+          }),
+        },
+        session: {
+          promptAsync: async () => ({ error: undefined, response: { status: 204 } }),
+        },
+      },
+      defaultModel: undefined,
+      sessionModels: new Map(),
+      close: async () => undefined,
+    } as unknown as OpenCodeRuntime;
+
+    const prompted = await prompt(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
+      content: [
+        { type: "text", text: "who is this person?" },
+        { type: "image", data: "aW1n", mimeType: "image/png" },
+      ],
+      adapterOptions: {},
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "content",
+          phase: "completed",
+          kind: "text",
+          text: "I can't see any image — this model doesn't support image input.",
+        }),
+        expect.objectContaining({ type: "run", phase: "completed" }),
+      ]),
+    );
+  });
+
   test("maps OpenCode session.next events into harness prompt events", async () => {
     const runtime = {
       client: {

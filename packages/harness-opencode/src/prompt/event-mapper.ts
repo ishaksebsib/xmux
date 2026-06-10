@@ -385,8 +385,6 @@ export function* mapOpenCodeEvent(args: {
         return;
       }
 
-      if (!shouldProcessFamily(args.state, "legacy")) return;
-
       if (!args.state.seenMessages.has(info.id)) {
         args.state.seenMessages.add(info.id);
         yield {
@@ -610,8 +608,6 @@ export function* mapOpenCodeEvent(args: {
       };
       return;
     case "session.next.model.switched": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       args.runtime.sessionModels.set(args.ref.sessionId, {
         providerId: args.event.properties.model.providerID,
         modelId: args.event.properties.model.id,
@@ -619,9 +615,21 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     }
-    case "session.next.step.started": {
+    case "session.next.synthetic": {
       if (!shouldProcessFamily(args.state, "next")) return;
 
+      yield* mapTextPart({
+        ref: args.ref,
+        state: args.state,
+        kind: "text",
+        messageId: args.state.currentNextTurnId ?? `session-next-synthetic-${args.event.properties.timestamp}`,
+        partId: `session-next-synthetic-${args.event.properties.timestamp}`,
+        text: args.event.properties.text,
+        completed: true,
+      });
+      return;
+    }
+    case "session.next.step.started": {
       const messageId = `session-next-step-${args.event.properties.timestamp}`;
       const model = {
         providerId: args.event.properties.model.providerID,
@@ -643,8 +651,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.step.ended": {
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       const usage = toUsage(args.event.properties.tokens);
       const reason = toRunReason(args.event.properties.finish);
       args.state.completedRun = {
@@ -665,8 +671,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.step.failed":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       args.state.terminalRun = true;
       yield {
         type: "turn",
@@ -684,8 +688,6 @@ export function* mapOpenCodeEvent(args: {
       };
       return;
     case "session.next.text.started":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureContentStarted({
         ref: args.ref,
         state: args.state,
@@ -726,8 +728,6 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "session.next.reasoning.started":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureContentStarted({
         ref: args.ref,
         state: args.state,
@@ -763,8 +763,6 @@ export function* mapOpenCodeEvent(args: {
       });
       return;
     case "session.next.tool.input.started":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureNextToolStarted({
         ref: args.ref,
         state: args.state,
@@ -911,8 +909,6 @@ export function* mapOpenCodeEvent(args: {
       };
       return;
     case "session.next.compaction.started":
-      if (!shouldProcessFamily(args.state, "next")) return;
-
       yield* ensureContentStarted({
         ref: args.ref,
         state: args.state,
