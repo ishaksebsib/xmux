@@ -21,7 +21,10 @@ export function registerPromptRoute<
       return;
     }
 
-    if (promptEvent.message.text.trim().length === 0) {
+    if (
+      promptEvent.message.text.trim().length === 0 &&
+      promptEvent.message.attachments.length === 0
+    ) {
       return;
     }
 

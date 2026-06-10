@@ -1,7 +1,13 @@
 import type { ChatTextInput } from "@xmux/chat-core";
 import { formatNoActiveSessionMessage, inlineCode, markdown, markdownText } from "../../components";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
-import { PromptAlreadyRunningError } from "./errors";
+import {
+  PromptAlreadyRunningError,
+  PromptAttachmentReadError,
+  PromptAttachmentStorageError,
+  PromptAttachmentTooLargeError,
+  PromptAttachmentUnsupportedError,
+} from "./errors";
 import type { PromptSessionForThreadError } from "./service";
 
 export function formatPromptFailure(error: PromptSessionForThreadError): ChatTextInput {
@@ -35,6 +41,24 @@ export function formatPromptFailure(error: PromptSessionForThreadError): ChatTex
   if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route prompt**", "", markdownText(error.message)].join("\n"),
+    });
+  }
+
+  if (PromptAttachmentUnsupportedError.is(error)) {
+    return markdown({
+      text: ["**Attachment unsupported**", "", markdownText(error.message)].join("\n"),
+    });
+  }
+
+  if (PromptAttachmentTooLargeError.is(error)) {
+    return markdown({
+      text: ["**Attachment too large**", "", markdownText(error.message)].join("\n"),
+    });
+  }
+
+  if (PromptAttachmentReadError.is(error) || PromptAttachmentStorageError.is(error)) {
+    return markdown({
+      text: ["**Failed to prepare attachment**", "", markdownText(error.message)].join("\n"),
     });
   }
 

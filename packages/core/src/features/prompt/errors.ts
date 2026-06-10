@@ -1,4 +1,5 @@
 import { TaggedError } from "better-result";
+import type { ChatAttachmentKind } from "@xmux/chat-core";
 import type { SessionRef } from "@xmux/harness-core";
 
 function describeCause(cause: unknown): string {
@@ -121,6 +122,91 @@ export class PromptInteractionAlreadyRespondingError extends TaggedError(
     });
   }
 }
+
+/** Returned when the prompt response cannot be sent back to chat. */
+export class PromptAttachmentUnsupportedError extends TaggedError(
+  "PromptAttachmentUnsupportedError",
+)<{
+  readonly attachmentId: string;
+  readonly kind: ChatAttachmentKind;
+  readonly reason: "disabled" | "kind_disabled" | "missing_mime_type" | "model_unsupported";
+  readonly message: string;
+}>() {
+  constructor(args: {
+    readonly attachmentId: string;
+    readonly kind: ChatAttachmentKind;
+    readonly reason: "disabled" | "kind_disabled" | "missing_mime_type" | "model_unsupported";
+    readonly detail?: string;
+  }) {
+    const fallback =
+      args.reason === "disabled"
+        ? "Attachments are disabled for prompts"
+        : args.reason === "kind_disabled"
+          ? `Attachment kind is disabled for prompts: ${args.kind}`
+          : args.reason === "missing_mime_type"
+            ? `Attachment is missing a MIME type: ${args.attachmentId}`
+            : `The active model does not support this attachment: ${args.kind}`;
+
+    super({ ...args, message: args.detail ?? fallback });
+  }
+}
+
+export class PromptAttachmentReadError extends TaggedError("PromptAttachmentReadError")<{
+  readonly attachmentId: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly attachmentId: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to read attachment ${args.attachmentId}: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export class PromptAttachmentTooLargeError extends TaggedError("PromptAttachmentTooLargeError")<{
+  readonly attachmentId: string;
+  readonly maxBytes: number;
+  readonly actualBytes?: number;
+  readonly message: string;
+}>() {
+  constructor(args: {
+    readonly attachmentId: string;
+    readonly maxBytes: number;
+    readonly actualBytes?: number;
+  }) {
+    const actual = args.actualBytes === undefined ? "" : ` (${args.actualBytes} bytes received)`;
+    super({
+      ...args,
+      message: `Attachment ${args.attachmentId} exceeds the ${args.maxBytes} byte limit${actual}`,
+    });
+  }
+}
+
+export class PromptAttachmentStorageError extends TaggedError("PromptAttachmentStorageError")<{
+  readonly attachmentId?: string;
+  readonly operation: "create_temp_dir" | "write_temp_file";
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: {
+    readonly attachmentId?: string;
+    readonly operation: "create_temp_dir" | "write_temp_file";
+    readonly cause: unknown;
+  }) {
+    const target = args.attachmentId === undefined ? "attachments" : `attachment ${args.attachmentId}`;
+    super({
+      ...args,
+      message: `Failed to store ${target}: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+export type PromptAttachmentError =
+  | PromptAttachmentUnsupportedError
+  | PromptAttachmentReadError
+  | PromptAttachmentTooLargeError
+  | PromptAttachmentStorageError;
 
 /** Returned when the prompt response cannot be sent back to chat. */
 export class PromptResponseError extends TaggedError("PromptResponseError")<{

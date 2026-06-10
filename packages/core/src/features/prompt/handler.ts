@@ -49,6 +49,7 @@ export async function handlePromptMessage<
     ctx: input.ctx,
     thread: threadFromChatEvent(input.event),
     text: input.event.message.text,
+    attachments: input.event.message.attachments,
   });
 
   if (prompted.isErr()) {

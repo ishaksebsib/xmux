@@ -10,6 +10,10 @@ export {
 } from "./service";
 export {
   PromptAlreadyRunningError,
+  PromptAttachmentReadError,
+  PromptAttachmentStorageError,
+  PromptAttachmentTooLargeError,
+  PromptAttachmentUnsupportedError,
   PromptInteractionAlreadyRespondingError,
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
@@ -17,6 +21,7 @@ export {
   PromptNoPendingInteractionError,
   PromptResponseError,
   PromptRunCancellationError,
+  type PromptAttachmentError,
 } from "./errors";
 export {
   createPromptRunRegistry,
