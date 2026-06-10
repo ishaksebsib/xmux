@@ -1,6 +1,6 @@
 import { Result } from "better-result";
-import { describe, expect, test } from "vitest";
-import { defineChatAdapter } from "@xmux/chat-core";
+import { describe, expect, test, vi } from "vitest";
+import { defineChatAdapter, type ChatAttachment } from "@xmux/chat-core";
 import { defineHarnessAdapter, type HarnessPromptEvent } from "@xmux/harness-core";
 import { createHandlerContext, createXmux } from "../src";
 import {
@@ -9,6 +9,7 @@ import {
   PromptResponseError,
   type PromptMessageEvent,
 } from "../src/features/prompt";
+import type { PromptAttachmentsConfig } from "../src";
 import { createSessionRecord, createThreadBinding, type Store } from "../src/store";
 
 const fallbackCapabilities = {
@@ -19,7 +20,7 @@ const fallbackCapabilities = {
     delete: false,
     typing: false,
     markdown: true,
-    attachments: false,
+    attachments: { receive: false, send: false, download: false },
   },
 } as const;
 
@@ -31,7 +32,7 @@ const streamingCapabilities = {
     delete: false,
     typing: false,
     markdown: true,
-    attachments: false,
+    attachments: { receive: false, send: false, download: false },
     stream: { send: false, reply: true, strategy: "native" },
   },
 } as const;
@@ -123,6 +124,93 @@ describe("prompt messages", () => {
       content: [{ type: "text", text: "please help" }],
     });
     expect(replies[0]).toBe("Hello");
+
+    await xmux.shutdown();
+  });
+
+  test("prompts the active session with image attachment content", async () => {
+    const attachment = imageAttachment({
+      attachmentId: "image-1",
+      filename: "photo.png",
+      mimeType: "image/png",
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux({
+      events: [completedEvent()],
+    });
+    await bindSession({ xmux });
+
+    emitMessage(messageEvent({ text: "describe this", attachments: [attachment] }));
+
+    await eventually(() => promptInputs.length === 1);
+
+    expect(attachment.open).toHaveBeenCalledWith({
+      maxBytes: 10 * 1024 * 1024,
+      signal: expect.any(AbortSignal),
+    });
+    expect(promptInputs[0]).toMatchObject({
+      ref: sessionRef,
+      content: [
+        { type: "text", text: "describe this" },
+        {
+          type: "image",
+          data: Buffer.from([1, 2, 3]).toString("base64"),
+          mimeType: "image/png",
+          name: "photo.png",
+        },
+      ],
+    });
+
+    await xmux.shutdown();
+  });
+
+  test("attachment-only messages are routed as prompts", async () => {
+    const attachment = imageAttachment({
+      attachmentId: "image-only",
+      mimeType: "image/jpeg",
+      bytes: new Uint8Array([4, 5]),
+    });
+    const { emitMessage, promptInputs, xmux } = await initializeFallbackXmux({
+      events: [completedEvent()],
+    });
+    await bindSession({ xmux });
+
+    emitMessage(messageEvent({ text: "", attachments: [attachment] }));
+
+    await eventually(() => promptInputs.length === 1);
+
+    expect(promptInputs[0]).toMatchObject({
+      content: [
+        {
+          type: "image",
+          data: Buffer.from([4, 5]).toString("base64"),
+          mimeType: "image/jpeg",
+        },
+      ],
+    });
+
+    await xmux.shutdown();
+  });
+
+  test("replies when prompt attachments are disabled", async () => {
+    const attachment = imageAttachment({
+      attachmentId: "disabled-image",
+      mimeType: "image/png",
+      bytes: new Uint8Array([1]),
+    });
+    const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux({
+      promptAttachments: { enabled: false },
+    });
+    await bindSession({ xmux });
+
+    emitMessage(messageEvent({ text: "describe", attachments: [attachment] }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(promptInputs).toHaveLength(0);
+    expect(attachment.open).not.toHaveBeenCalled();
+    expect(replies[0]).toContain("**Attachment unsupported**");
+    expect(replies[0]).toContain("Attachments are disabled");
 
     await xmux.shutdown();
   });
@@ -423,6 +511,7 @@ describe("prompt messages", () => {
 
 interface InitializeXmuxInput {
   readonly events?: readonly PiPromptEvent[];
+  readonly promptAttachments?: PromptAttachmentsConfig;
   readonly promptError?: unknown;
   readonly onPrompt?: () => AsyncIterable<PiPromptEvent>;
 }
@@ -480,6 +569,7 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
       userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
+      prompt: { attachments: input.promptAttachments },
     },
   });
 
@@ -550,6 +640,7 @@ async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
       userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
+      prompt: { attachments: input.promptAttachments },
     },
   });
 
@@ -636,6 +727,7 @@ function promptMessageEvent(input: {
 function messageEvent(input: {
   readonly text: string;
   readonly actorKind?: "user" | "bot" | "system";
+  readonly attachments?: readonly ChatAttachment[];
   readonly messageId?: string;
 }) {
   const actor =
@@ -659,7 +751,34 @@ function messageEvent(input: {
       actor,
       text: input.text,
       adapterData: {},
+      attachments: input.attachments ?? [],
     },
+  };
+}
+
+function imageAttachment(input: {
+  readonly attachmentId: string;
+  readonly bytes: Uint8Array;
+  readonly filename?: string;
+  readonly mimeType: string;
+  readonly sizeBytes?: number;
+}): ChatAttachment {
+  return {
+    attachmentId: input.attachmentId,
+    kind: "image",
+    disposition: "inline",
+    filename: input.filename,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes ?? input.bytes.byteLength,
+    adapterData: {},
+    open: vi.fn(async () =>
+      Result.ok({
+        chunks: toAsync([input.bytes]),
+        filename: input.filename,
+        mimeType: input.mimeType,
+        sizeBytes: input.bytes.byteLength,
+      }),
+    ),
   };
 }
 

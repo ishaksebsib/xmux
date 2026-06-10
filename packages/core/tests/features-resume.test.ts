@@ -13,7 +13,7 @@ const capabilities = {
     delete: false,
     typing: false,
     markdown: true,
-    attachments: false,
+    attachments: { receive: false, send: false, download: false },
   },
 } as const;
 

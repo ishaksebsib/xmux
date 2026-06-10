@@ -28,6 +28,32 @@ describe("workspace filesystem", () => {
       maxToolInputStringChars: 50,
       maxToolInputObjectEntries: 2,
     });
+    expect(config.prompt.attachments).toEqual({
+      enabled: true,
+      maxBytes: 10 * 1024 * 1024,
+      kinds: ["image", "audio", "video", "document", "archive", "other"],
+    });
+  });
+
+  test("normalizes prompt attachment config", () => {
+    const config = normalizeConfig({
+      userName: "xmux",
+      defaultWorkingDirectory: ".",
+      deliveryMode: "requester_only",
+      prompt: {
+        attachments: {
+          enabled: false,
+          maxBytes: 42,
+          kinds: ["image", "document", "image"],
+        },
+      },
+    });
+
+    expect(config.prompt.attachments).toEqual({
+      enabled: false,
+      maxBytes: 42,
+      kinds: ["image", "document"],
+    });
   });
 
   test("normalizes prompt response config", () => {
