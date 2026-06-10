@@ -135,6 +135,98 @@ describe("OpenCode prompt stream", () => {
     );
   });
 
+  test("ignores legacy user input events before session.next output events", async () => {
+    const runtime = {
+      client: {
+        global: {
+          event: async () => ({
+            stream: (async function* () {
+              yield globalEvent({
+                type: "message.updated",
+                properties: {
+                  sessionID: "session-1",
+                  info: {
+                    id: "user-1",
+                    sessionID: "session-1",
+                    role: "user",
+                    time: { created: 1 },
+                    path: { cwd: process.cwd(), root: process.cwd() },
+                  },
+                },
+              });
+              yield globalEvent({
+                type: "message.part.updated",
+                properties: {
+                  sessionID: "session-1",
+                  part: {
+                    id: "input-file-1",
+                    sessionID: "session-1",
+                    messageID: "user-1",
+                    type: "file",
+                    mime: "image/png",
+                    url: "file:///tmp/image.png",
+                    time: { start: 1 },
+                  },
+                },
+              });
+              yield globalEvent({
+                type: "session.next.step.started",
+                properties: {
+                  timestamp: 2,
+                  sessionID: "session-1",
+                  agent: "build",
+                  model: { providerID: "provider-next", id: "model-next" },
+                },
+              });
+              yield globalEvent({
+                type: "session.next.text.delta",
+                properties: { timestamp: 3, sessionID: "session-1", delta: "visible reply" },
+              });
+              yield globalEvent({
+                type: "session.next.step.ended",
+                properties: {
+                  timestamp: 4,
+                  sessionID: "session-1",
+                  finish: "stop",
+                  cost: 0.02,
+                  tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+                },
+              });
+              yield globalEvent({ type: "session.idle", properties: { sessionID: "session-1" } });
+            })(),
+          }),
+        },
+        session: {
+          promptAsync: async () => ({ error: undefined, response: { status: 204 } }),
+        },
+      },
+      defaultModel: undefined,
+      sessionModels: new Map(),
+      close: async () => undefined,
+    } as unknown as OpenCodeRuntime;
+
+    const prompted = await prompt(runtime, {
+      ref: { harnessId: "opencode", sessionId: "session-1" },
+      cwd,
+      content: [
+        { type: "text", text: "who is this person?" },
+        { type: "image", data: "aW1n", mimeType: "image/png" },
+      ],
+      adapterOptions: {},
+    });
+
+    expect(prompted.isOk()).toBe(true);
+    const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "turn", phase: "started", agent: "build" }),
+        expect.objectContaining({ type: "content", phase: "delta", delta: "visible reply" }),
+        expect.objectContaining({ type: "run", phase: "completed", reason: "stop" }),
+      ]),
+    );
+  });
+
   test("maps OpenCode session.next events into harness prompt events", async () => {
     const runtime = {
       client: {

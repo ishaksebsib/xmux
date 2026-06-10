@@ -378,10 +378,14 @@ export function* mapOpenCodeEvent(args: {
 
   switch (args.event.type) {
     case "message.updated": {
-      if (!shouldProcessFamily(args.state, "legacy")) return;
-
       const { info } = args.event.properties;
       args.state.messageRoles.set(info.id, info.role);
+
+      if (info.role !== "assistant") {
+        return;
+      }
+
+      if (!shouldProcessFamily(args.state, "legacy")) return;
 
       if (!args.state.seenMessages.has(info.id)) {
         args.state.seenMessages.add(info.id);
@@ -393,24 +397,22 @@ export function* mapOpenCodeEvent(args: {
           messageId: info.id,
         };
 
-        if (info.role === "assistant") {
-          const model = {
-            providerId: info.providerID,
-            modelId: info.modelID,
-            ...(info.variant === undefined ? {} : { variant: info.variant }),
-          };
-          args.runtime.sessionModels.set(args.ref.sessionId, model);
+        const model = {
+          providerId: info.providerID,
+          modelId: info.modelID,
+          ...(info.variant === undefined ? {} : { variant: info.variant }),
+        };
+        args.runtime.sessionModels.set(args.ref.sessionId, model);
 
-          yield {
-            type: "turn",
-            phase: "started",
-            ref: args.ref,
-            messageId: info.id,
-            agent: info.agent,
-            model,
-            thinking: args.state.selectedThinking,
-          };
-        }
+        yield {
+          type: "turn",
+          phase: "started",
+          ref: args.ref,
+          messageId: info.id,
+          agent: info.agent,
+          model,
+          thinking: args.state.selectedThinking,
+        };
       } else if (!args.state.completedMessages.has(info.id)) {
         yield {
           type: "message",
@@ -421,7 +423,7 @@ export function* mapOpenCodeEvent(args: {
         };
       }
 
-      if (info.role !== "assistant" || info.time.completed === undefined) return;
+      if (info.time.completed === undefined) return;
 
       if (!args.state.completedMessages.has(info.id)) {
         args.state.completedMessages.add(info.id);
@@ -498,6 +500,7 @@ export function* mapOpenCodeEvent(args: {
       return;
     }
     case "message.part.updated":
+      if (args.state.messageRoles.get(args.event.properties.part.messageID) === "user") return;
       if (!shouldProcessFamily(args.state, "legacy")) return;
 
       yield* mapPartUpdated({ ref: args.ref, state: args.state, part: args.event.properties.part });
@@ -508,6 +511,7 @@ export function* mapOpenCodeEvent(args: {
       args.state.completedParts.add(args.event.properties.partID);
       return;
     case "message.part.delta": {
+      if (args.state.messageRoles.get(args.event.properties.messageID) === "user") return;
       if (!shouldProcessFamily(args.state, "legacy")) return;
 
       const kind = args.state.partKinds.get(args.event.properties.partID) ?? "text";
