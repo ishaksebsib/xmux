@@ -129,13 +129,13 @@ export class PromptAttachmentUnsupportedError extends TaggedError(
 )<{
   readonly attachmentId: string;
   readonly kind: ChatAttachmentKind;
-  readonly reason: "disabled" | "kind_disabled" | "missing_mime_type" | "model_unsupported";
+  readonly reason: "disabled" | "kind_disabled" | "missing_mime_type";
   readonly message: string;
 }>() {
   constructor(args: {
     readonly attachmentId: string;
     readonly kind: ChatAttachmentKind;
-    readonly reason: "disabled" | "kind_disabled" | "missing_mime_type" | "model_unsupported";
+    readonly reason: "disabled" | "kind_disabled" | "missing_mime_type";
     readonly detail?: string;
   }) {
     const fallback =
@@ -143,9 +143,7 @@ export class PromptAttachmentUnsupportedError extends TaggedError(
         ? "Attachments are disabled for prompts"
         : args.reason === "kind_disabled"
           ? `Attachment kind is disabled for prompts: ${args.kind}`
-          : args.reason === "missing_mime_type"
-            ? `Attachment is missing a MIME type: ${args.attachmentId}`
-            : `The active model does not support this attachment: ${args.kind}`;
+          : `Attachment is missing a MIME type: ${args.attachmentId}`;
 
     super({ ...args, message: args.detail ?? fallback });
   }

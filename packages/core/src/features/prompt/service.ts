@@ -3,8 +3,6 @@ import type {
   AdapterOptionsFor,
   HarnessAdapterDefinitions,
   HarnessPromptEvent,
-  HarnessModelInfo,
-  HarnessModelRef,
   HarnessPromptContent,
   PromptError,
   PromptInput,
@@ -17,11 +15,7 @@ import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
 import { materializePromptAttachments } from "./attachments";
-import {
-  PromptAlreadyRunningError,
-  PromptAttachmentUnsupportedError,
-  type PromptAttachmentError,
-} from "./errors";
+import { PromptAlreadyRunningError, type PromptAttachmentError } from "./errors";
 import type { ActivePromptRun } from "./run-registry";
 
 export type PromptSessionForThreadError =
@@ -69,18 +63,6 @@ export async function promptSessionForThread<
     });
 
     const signal = composeAbortSignals([input.ctx.signal, run.signal]);
-    const capabilities = await validatePromptAttachmentCapabilities({
-      ctx: input.ctx,
-      session,
-      attachments: input.attachments ?? [],
-      signal,
-    });
-
-    if (capabilities.isErr()) {
-      run.release();
-      return Result.err(capabilities.error);
-    }
-
     const materializedResult = await materializePromptAttachments({
       text: input.text,
       attachments: input.attachments ?? [],
@@ -167,101 +149,6 @@ export async function getPromptSessionForThread<
 
     return Result.ok(session);
   });
-}
-
-async function validatePromptAttachmentCapabilities<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly session: SessionRecord;
-  readonly attachments: readonly ChatAttachment[];
-  readonly signal: AbortSignal;
-}): Promise<Result<void, PromptAttachmentUnsupportedError>> {
-  const required = requiredModelInputKinds(input.attachments);
-  if (required.length === 0) return Result.ok();
-
-  const ref = toConfiguredSessionRef<TAdapters>(input.session.ref);
-  const selected = await input.ctx.app.harness.getModel({
-    target: { type: "session", ref },
-    signal: input.signal,
-  } as Parameters<typeof input.ctx.app.harness.getModel>[0]);
-  if (selected.isErr() || selected.value.model === undefined) return Result.ok();
-
-  const models = await input.ctx.app.harness.listModels({
-    harnessId: ref.harnessId,
-    cwd: input.session.cwd,
-    includeUnavailable: true,
-    signal: input.signal,
-  } as Parameters<typeof input.ctx.app.harness.listModels>[0]);
-  if (models.isErr()) return Result.ok();
-
-  const model = findModelInfo(models.value as readonly HarnessModelInfo[], selected.value.model);
-  const supported = model?.capabilities?.input;
-  if (supported === undefined) return Result.ok();
-
-  for (const kind of required) {
-    if (!supported.includes(kind)) {
-      const attachment = input.attachments.find((candidate) =>
-        requiredModelInputKinds([candidate]).includes(kind),
-      );
-      return Result.err(
-        new PromptAttachmentUnsupportedError({
-          attachmentId: attachment?.attachmentId ?? "unknown",
-          kind: attachment?.kind ?? "other",
-          reason: "model_unsupported",
-          detail: `The active model does not advertise ${kind} input support`,
-        }),
-      );
-    }
-  }
-
-  return Result.ok();
-}
-
-function requiredModelInputKinds(
-  attachments: readonly ChatAttachment[],
-): readonly ("image" | "audio" | "video" | "pdf")[] {
-  const required = new Set<"image" | "audio" | "video" | "pdf">();
-
-  for (const attachment of attachments) {
-    switch (attachment.kind) {
-      case "image":
-        required.add("image");
-        break;
-      case "audio":
-        required.add("audio");
-        break;
-      case "video":
-        required.add("video");
-        break;
-      case "document":
-      case "archive":
-      case "other":
-        if (isPdfAttachment(attachment)) required.add("pdf");
-        break;
-    }
-  }
-
-  return [...required];
-}
-
-function isPdfAttachment(attachment: ChatAttachment): boolean {
-  return (
-    attachment.mimeType === "application/pdf" ||
-    attachment.filename?.toLocaleLowerCase().endsWith(".pdf") === true
-  );
-}
-
-function findModelInfo(
-  models: readonly HarnessModelInfo[],
-  selected: HarnessModelRef,
-): HarnessModelInfo | undefined {
-  return models.find((model) =>
-    model.ref.providerId === selected.providerId &&
-    model.ref.modelId === selected.modelId &&
-    model.ref.variant === selected.variant,
-  );
 }
 
 export function composeAbortSignals(signals: readonly AbortSignal[]): AbortSignal {
