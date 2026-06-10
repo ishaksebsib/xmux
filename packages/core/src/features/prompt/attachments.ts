@@ -324,7 +324,12 @@ function safeAttachmentFilename(input: {
   const fallback = `${input.attachmentId}.bin`;
   const raw = input.filename?.trim() || fallback;
   const sanitized = raw
-    .replace(/[\u0000-\u001f\u007f/\\]/g, "-")
+    .split("")
+    .map((c) => {
+      const code = c.charCodeAt(0);
+      return code <= 0x1f || code === 0x7f || c === "/" || c === "\\" ? "-" : c;
+    })
+    .join("")
     .replace(/^\.+$/, "-")
     .slice(0, 120);
 

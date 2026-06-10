@@ -135,7 +135,7 @@ describe("prompt messages", () => {
       mimeType: "image/png",
       bytes: new Uint8Array([1, 2, 3]),
     });
-    const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux({
+    const { emitMessage, promptInputs, xmux } = await initializeFallbackXmux({
       events: [completedEvent()],
     });
     await bindSession({ xmux });
