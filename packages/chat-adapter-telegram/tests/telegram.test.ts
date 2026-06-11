@@ -22,6 +22,12 @@ import type {
 } from "../src/client";
 import { openTelegramRuntime } from "../src/runtime";
 import {
+  renderTelegramMarkdownFinal,
+  renderTelegramMarkdownPreview,
+  validateTelegramEntities,
+} from "../src/conversions/markdown-entities";
+import { splitTelegramRenderedText } from "../src/conversions/telegram-segments";
+import {
   booleanOption,
   defineChatCommand,
   defineChatCommands,
@@ -74,6 +80,8 @@ type FakeTelegramBot = ReturnType<CreateBotClient> & {
   readonly onMessageMock: ReturnType<typeof vi.fn>;
   readonly onTextMessageMock: ReturnType<typeof vi.fn>;
   readonly sendMessageMock: ReturnType<typeof vi.fn>;
+  readonly sendMessageDraftMock: ReturnType<typeof vi.fn>;
+  readonly deleteMessageMock: ReturnType<typeof vi.fn>;
   readonly sendChatActionMock: ReturnType<typeof vi.fn>;
   readonly setMyCommandsMock: ReturnType<typeof vi.fn>;
   readonly streamMessageMock: ReturnType<typeof vi.fn>;
@@ -89,6 +97,8 @@ function createFakeTelegramBot(
   args: {
     readonly initError?: unknown;
     readonly sendMessageError?: unknown;
+    readonly sendMessageDraftError?: unknown;
+    readonly editMessageTextError?: unknown;
     readonly sendChatActionError?: unknown;
     readonly setMyCommandsError?: unknown;
     readonly startError?: unknown;
@@ -148,7 +158,12 @@ function createFakeTelegramBot(
       readonly chatId: string | number;
       readonly messageId: number;
       readonly text: string;
-    }) => true,
+    }) => {
+      if (args.editMessageTextError !== undefined) {
+        throw args.editMessageTextError;
+      }
+      return true;
+    },
   );
   const onCallbackQueryDataMock = vi.fn(
     (handler: (context: TelegramCallbackQueryDataContext) => void | Promise<void>) => {
@@ -165,20 +180,33 @@ function createFakeTelegramBot(
       textMessageHandlers.push(handler);
     },
   );
+  let nextSentMessageId = 123;
   const sendMessageMock = vi.fn(
-    async (input: { readonly chatId: string | number; readonly text: string }) => {
+    async (input: {
+      readonly chatId: string | number;
+      readonly text: string;
+      readonly options?: { readonly entities?: readonly unknown[] };
+    }) => {
       if (args.sendMessageError !== undefined) {
         throw args.sendMessageError;
       }
 
       return {
-        message_id: 123,
+        message_id: nextSentMessageId++,
         date: 1,
         chat: { id: input.chatId, type: "private", first_name: "Alice" },
         text: input.text,
+        entities: input.options?.entities,
       };
     },
   );
+  const sendMessageDraftMock = vi.fn(async () => {
+    if (args.sendMessageDraftError !== undefined) {
+      throw args.sendMessageDraftError;
+    }
+    return true;
+  });
+  const deleteMessageMock = vi.fn(async () => true);
   const sendChatActionMock = vi.fn(
     async (_input: {
       readonly chatId: string | number;
@@ -253,6 +281,8 @@ function createFakeTelegramBot(
     onMessage: onMessageMock,
     onTextMessage: onTextMessageMock,
     sendMessage: sendMessageMock,
+    sendMessageDraft: sendMessageDraftMock,
+    deleteMessage: deleteMessageMock,
     sendChatAction: sendChatActionMock,
     setMyCommands: setMyCommandsMock,
     streamMessage: streamMessageMock,
@@ -268,6 +298,8 @@ function createFakeTelegramBot(
     getFileMock,
     downloadFileMock,
     sendMessageMock,
+    sendMessageDraftMock,
+    deleteMessageMock,
     sendChatActionMock,
     setMyCommandsMock,
     streamMessageMock,
@@ -310,6 +342,17 @@ async function* textChunks(parts: readonly string[]) {
   for (const delta of parts) {
     yield { type: "delta" as const, delta };
   }
+}
+
+function createDeferred<T = void>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
 }
 
 function createTelegramMessageContext(args: {
@@ -391,6 +434,78 @@ function createTelegramTextContext(args: {
     },
   } as unknown as TelegramTextMessageContext;
 }
+
+describe("Telegram markdown entity rendering", () => {
+  test("renders healed markdown previews without raw markers", () => {
+    const rendered = renderTelegramMarkdownPreview("**hel");
+
+    expect(rendered).toEqual({
+      text: "hel",
+      entities: [{ type: "bold", offset: 0, length: 3 }],
+    });
+    expect(rendered.text).not.toContain("**");
+    expect(validateTelegramEntities(rendered).isOk()).toBe(true);
+  });
+
+  test("renders nested blockquote formatting in valid outer-first entity order", () => {
+    const rendered = renderTelegramMarkdownPreview("> **Reasoning**\n>\n> The user said hello.");
+
+    expect(rendered.entities).toEqual([
+      { type: "blockquote", offset: 0, length: 31 },
+      { type: "bold", offset: 0, length: 9 },
+    ]);
+    expect(validateTelegramEntities(rendered).isOk()).toBe(true);
+  });
+
+  test("renders tables as plain text, not pre/code blocks", () => {
+    const rendered = renderTelegramMarkdownFinal(
+      "| Name | Role |\n| --- | --- |\n| Ishak | Author |",
+    );
+
+    expect(rendered).toEqual({
+      text: "Name | Role\nIshak | Author",
+      entities: [],
+    });
+    expect(validateTelegramEntities(rendered).isOk()).toBe(true);
+  });
+
+  test("does not emit entities nested inside code spans", () => {
+    const rendered = renderTelegramMarkdownPreview("> `**not bold**`");
+
+    expect(rendered).toEqual({
+      text: "**not bold**",
+      entities: [{ type: "code", offset: 0, length: 12 }],
+    });
+    expect(validateTelegramEntities(rendered).isOk()).toBe(true);
+  });
+
+  test("renders final markdown as plain text plus Telegram entities", () => {
+    const rendered = renderTelegramMarkdownFinal("**hello** from hello_world");
+
+    expect(rendered).toEqual({
+      text: "hello from hello_world",
+      entities: [{ type: "bold", offset: 0, length: 5 }],
+    });
+    expect(rendered.text).not.toContain("\\_");
+    expect(validateTelegramEntities(rendered).isOk()).toBe(true);
+  });
+
+  test("splits long entity spans with segment-local offsets", () => {
+    const rendered = renderTelegramMarkdownFinal(`**${"a".repeat(4_100)}**`);
+    const segments = splitTelegramRenderedText(rendered);
+
+    expect(segments).toHaveLength(2);
+    expect(segments[0]?.text).toHaveLength(4_096);
+    expect(segments[0]?.entities).toEqual([{ type: "bold", offset: 0, length: 4_096 }]);
+    expect(segments[1]?.entities).toEqual([{ type: "bold", offset: 0, length: 4 }]);
+  });
+
+  test("does not split inside emoji surrogate pairs", () => {
+    const segments = splitTelegramRenderedText({ text: "a😀b", entities: [] }, 2);
+
+    expect(segments.map((segment) => segment.text)).toEqual(["a", "😀", "b"]);
+  });
+});
 
 describe("createTelegramAdapter", () => {
   test("preserves the default and custom adapter ids", () => {
@@ -1386,7 +1501,7 @@ describe("createTelegramAdapter", () => {
     }
   });
 
-  test("streamMessage uses grammY stream drafts", async () => {
+  test("streamMessage uses grammY stream drafts for non-markdown streams", async () => {
     const bot = createFakeTelegramBot();
     const opened = createRuntimeWithFakeBot({ bot });
     expect(opened.isOk()).toBe(true);
@@ -1397,7 +1512,7 @@ describe("createTelegramAdapter", () => {
     const streamed = await opened.value.streamMessage({
       chatId: "telegram",
       conversationId: "12345",
-      content: { chunks: textChunks(["hel", "lo"]), format: "markdown" },
+      content: { chunks: textChunks(["hel", "lo"]) },
       adapterOptions: { disable_notification: true },
     });
 
@@ -1415,7 +1530,6 @@ describe("createTelegramAdapter", () => {
         conversationId: "12345",
         messageId: "124",
         text: "hello",
-        format: "markdown",
         adapterData: {
           telegramChatId: "12345",
           telegramMessageId: 124,
@@ -1424,7 +1538,7 @@ describe("createTelegramAdapter", () => {
     }
   });
 
-  test("streamMessage finalizes markdown streams with MarkdownV2 edit", async () => {
+  test("streamMessage streams rendered markdown with entities", async () => {
     const bot = createFakeTelegramBot();
     const opened = createRuntimeWithFakeBot({ bot });
     expect(opened.isOk()).toBe(true);
@@ -1440,22 +1554,288 @@ describe("createTelegramAdapter", () => {
     });
 
     expect(streamed.isOk()).toBe(true);
-    expect(bot.streamMessageMock).toHaveBeenCalledWith(
+    expect(bot.streamMessageMock).not.toHaveBeenCalled();
+    expect(bot.sendMessageDraftMock).toHaveBeenCalledWith(
       expect.objectContaining({
         chatId: 12345,
-        messageOptions: {},
+        text: "hel",
+        options: { entities: [{ type: "bold", offset: 0, length: 3 }] },
       }),
     );
-    expect(bot.editMessageTextMock).toHaveBeenCalledWith({
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
       chatId: 12345,
-      messageId: 124,
-      text: "*hello* from hello\\_world",
-      options: { parse_mode: "MarkdownV2" },
+      text: "hello from hello_world",
+      options: { entities: [{ type: "bold", offset: 0, length: 5 }] },
       signal: undefined,
     });
+    expect(bot.editMessageTextMock).not.toHaveBeenCalled();
     if (streamed.isOk()) {
       expect(streamed.value.text).toBe("**hello** from hello_world");
       expect(streamed.value.format).toBe("markdown");
+    }
+  });
+
+  test("streamMessage omits empty entities for plain rendered markdown", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["plain response"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.sendMessageDraftMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "plain response",
+        options: {},
+      }),
+    );
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: 12345,
+      text: "plain response",
+      options: {},
+      signal: undefined,
+    });
+  });
+
+  test("streamMessage refreshes the live markdown draft while waiting for chunks", async () => {
+    vi.useFakeTimers();
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    const nextChunk = createDeferred();
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      vi.useRealTimers();
+      return;
+    }
+
+    async function* chunks() {
+      yield { type: "delta" as const, delta: "waiting" };
+      await nextChunk.promise;
+      yield { type: "delta" as const, delta: " done" };
+    }
+
+    try {
+      const streamed = opened.value.streamMessage({
+        chatId: "telegram",
+        conversationId: "12345",
+        content: { chunks: chunks(), format: "markdown" },
+        adapterOptions: {},
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(bot.sendMessageDraftMock).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(bot.sendMessageDraftMock).toHaveBeenCalledTimes(2);
+      expect(bot.sendMessageDraftMock.mock.calls[1]?.[0]).toEqual(
+        expect.objectContaining({ text: "waiting" }),
+      );
+
+      nextChunk.resolve();
+      const result = await streamed;
+      expect(result.isOk()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("streamMessage still sends final output if Telegram drafts fail", async () => {
+    const bot = createFakeTelegramBot({ sendMessageDraftError: new Error("draft failed") });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["plain response"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
+      chatId: 12345,
+      text: "plain response",
+      options: {},
+      signal: undefined,
+    });
+  });
+
+  test("streamMessage returns typed markdown path send failures", async () => {
+    const bot = createFakeTelegramBot({ sendMessageError: new Error("send failed") });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["plain response"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isErr()).toBe(true);
+    if (streamed.isErr()) {
+      expect(streamed.error).toBeInstanceOf(TelegramStreamMessageError);
+      if (TelegramStreamMessageError.is(streamed.error)) {
+        expect(streamed.error.message).toContain("send failed");
+      }
+    }
+  });
+
+  test("streamMessage honors aborts on the rendered markdown path", async () => {
+    const bot = createFakeTelegramBot();
+    const abortController = new AbortController();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    async function* chunks() {
+      yield { type: "delta" as const, delta: "before abort" };
+      abortController.abort(new Error("aborted"));
+      yield { type: "delta" as const, delta: " after abort" };
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: chunks(), format: "markdown" },
+      adapterOptions: {},
+      signal: abortController.signal,
+    });
+
+    expect(streamed.isErr()).toBe(true);
+    if (streamed.isErr()) {
+      expect(streamed.error).toBeInstanceOf(TelegramStreamMessageError);
+    }
+    expect(bot.sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  test("streamMessage keeps Telegram-owned parse mode on the native stream path", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks(["**hel", "lo**"]), format: "markdown" },
+      adapterOptions: { parse_mode: "Markdown" },
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.streamMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: 12345,
+        draftOptions: { parse_mode: "Markdown" },
+        messageOptions: { parse_mode: "Markdown" },
+      }),
+    );
+    expect(bot.sendMessageDraftMock).not.toHaveBeenCalled();
+  });
+
+  test("streamMessage sends long rendered markdown as multiple messages", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks([`**${"a".repeat(5_000)}**`]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.streamMessageMock).not.toHaveBeenCalled();
+    expect(bot.sendMessageMock).toHaveBeenCalledTimes(2);
+    const calls = bot.sendMessageMock.mock.calls.map((call) => call[0]);
+    expect(calls[0].text).toHaveLength(4_096);
+    expect(calls[0].options.entities).toEqual([{ type: "bold", offset: 0, length: 4_096 }]);
+    expect(calls[1].text).toHaveLength(904);
+    expect(calls[1].options.entities).toEqual([{ type: "bold", offset: 0, length: 904 }]);
+    if (streamed.isOk()) {
+      expect(streamed.value.text).toBe(`**${"a".repeat(5_000)}**`);
+      expect(streamed.value.messageId).toBe("124");
+    }
+  });
+
+  test("streamMessage edits provisional segments during final markdown reconciliation", async () => {
+    const bot = createFakeTelegramBot();
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const label = "a".repeat(4_100);
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks([`[${label}](`, "https://example.com)"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.editMessageTextMock).toHaveBeenCalledWith({
+      chatId: 12345,
+      messageId: 123,
+      text: label.slice(0, 4_096),
+      options: {
+        entities: [{ type: "text_link", offset: 0, length: 4_096, url: "https://example.com" }],
+      },
+      signal: undefined,
+    });
+    expect(bot.sendMessageMock).toHaveBeenCalledTimes(2);
+  });
+
+  test("streamMessage ignores Telegram message-not-modified errors during final reconciliation", async () => {
+    const bot = createFakeTelegramBot({
+      editMessageTextError: {
+        error_code: 400,
+        description:
+          "Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      },
+    });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const label = "a".repeat(4_100);
+    const streamed = await opened.value.streamMessage({
+      chatId: "telegram",
+      conversationId: "12345",
+      content: { chunks: textChunks([`[${label}](`, "https://example.com)"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isOk()).toBe(true);
+    expect(bot.editMessageTextMock).toHaveBeenCalledOnce();
+    expect(bot.sendMessageMock).toHaveBeenCalledTimes(2);
+    if (streamed.isOk()) {
+      expect(streamed.value.messageId).toBe("124");
     }
   });
 
@@ -1514,7 +1894,7 @@ describe("createTelegramAdapter", () => {
     }
   });
 
-  test("streamReply finalizes markdown streams with MarkdownV2 edit", async () => {
+  test("streamReply streams rendered markdown with reply parameters", async () => {
     const bot = createFakeTelegramBot();
     const opened = createRuntimeWithFakeBot({ bot });
     expect(opened.isOk()).toBe(true);
@@ -1531,22 +1911,45 @@ describe("createTelegramAdapter", () => {
     });
 
     expect(streamed.isOk()).toBe(true);
-    expect(bot.streamMessageMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        chatId: 12345,
-        messageOptions: { reply_parameters: { message_id: 777 } },
-      }),
-    );
-    expect(bot.editMessageTextMock).toHaveBeenCalledWith({
+    expect(bot.streamMessageMock).not.toHaveBeenCalled();
+    expect(bot.sendMessageMock).toHaveBeenCalledWith({
       chatId: 12345,
-      messageId: 124,
-      text: "reply *ok*",
-      options: { parse_mode: "MarkdownV2" },
+      text: "reply ok",
+      options: {
+        reply_parameters: { message_id: 777 },
+        entities: [{ type: "bold", offset: 6, length: 2 }],
+      },
       signal: undefined,
     });
+    expect(bot.editMessageTextMock).not.toHaveBeenCalled();
     if (streamed.isOk()) {
       expect(streamed.value.text).toBe("reply **ok**");
       expect(streamed.value.format).toBe("markdown");
+    }
+  });
+
+  test("streamReply returns typed markdown path send failures", async () => {
+    const bot = createFakeTelegramBot({ sendMessageError: new Error("reply send failed") });
+    const opened = createRuntimeWithFakeBot({ bot });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const streamed = await opened.value.streamReply({
+      chatId: "telegram",
+      conversationId: "12345",
+      message: { chatId: "telegram", conversationId: "12345", messageId: "777" },
+      content: { chunks: textChunks(["reply"]), format: "markdown" },
+      adapterOptions: {},
+    });
+
+    expect(streamed.isErr()).toBe(true);
+    if (streamed.isErr()) {
+      expect(streamed.error).toBeInstanceOf(TelegramStreamReplyError);
+      if (TelegramStreamReplyError.is(streamed.error)) {
+        expect(streamed.error.message).toContain("reply send failed");
+      }
     }
   });
 

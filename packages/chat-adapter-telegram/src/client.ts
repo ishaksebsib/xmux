@@ -11,7 +11,9 @@ type BotInit = Bot["init"];
 type BotStart = Bot["start"];
 type EditMessageText = GrammyBotApi["editMessageText"];
 type SendMessage = GrammyBotApi["sendMessage"];
+type SendMessageDraft = GrammyBotApi["sendMessageDraft"];
 type SendChatAction = GrammyBotApi["sendChatAction"];
+type DeleteMessage = GrammyBotApi["deleteMessage"];
 type AnswerCallbackQuery = GrammyBotApi["answerCallbackQuery"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
 type GetFile = GrammyBotApi["getFile"];
@@ -65,6 +67,18 @@ export interface TelegramBotClient {
     readonly options?: Parameters<SendMessage>[2];
     readonly signal?: AbortSignal;
   }): ReturnType<SendMessage>;
+  sendMessageDraft(args: {
+    readonly chatId: Parameters<SendMessageDraft>[0];
+    readonly draftId: Parameters<SendMessageDraft>[1];
+    readonly text: Parameters<SendMessageDraft>[2];
+    readonly options?: Parameters<SendMessageDraft>[3];
+    readonly signal?: AbortSignal;
+  }): ReturnType<SendMessageDraft>;
+  deleteMessage(args: {
+    readonly chatId: Parameters<DeleteMessage>[0];
+    readonly messageId: Parameters<DeleteMessage>[1];
+    readonly signal?: AbortSignal;
+  }): ReturnType<DeleteMessage>;
   sendChatAction(args: {
     readonly chatId: Parameters<SendChatAction>[0];
     readonly action: Parameters<SendChatAction>[1];
@@ -116,6 +130,12 @@ export function createTelegramBotClient(args: {
         input.options,
         input.signal as Parameters<EditMessageText>[4],
       ),
+    deleteMessage: (input) =>
+      bot.api.deleteMessage(
+        input.chatId,
+        input.messageId,
+        input.signal as Parameters<DeleteMessage>[2],
+      ),
     downloadFile: (input) =>
       fetch(`https://api.telegram.org/file/bot${args.token}/${input.filePath}`, {
         signal: input.signal,
@@ -136,6 +156,14 @@ export function createTelegramBotClient(args: {
         input.text,
         input.options,
         input.signal as Parameters<SendMessage>[3],
+      ),
+    sendMessageDraft: (input) =>
+      bot.api.sendMessageDraft(
+        input.chatId,
+        input.draftId,
+        input.text,
+        input.options,
+        input.signal as Parameters<SendMessageDraft>[4],
       ),
     sendChatAction: (input) =>
       bot.api.sendChatAction(

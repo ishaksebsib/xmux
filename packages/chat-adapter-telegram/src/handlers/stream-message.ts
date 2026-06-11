@@ -10,7 +10,7 @@ import {
 } from "../conversions/streaming";
 import { TelegramStreamMessageError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
-import { finalizeMarkdownStream } from "./finalize-markdown-stream";
+import { streamTelegramMarkdown } from "./markdown-stream-spooler";
 
 export async function streamMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
@@ -28,16 +28,29 @@ export async function streamMessage<TChatId extends string>(args: {
 
   return Result.gen(async function* () {
     const request = encodeTelegramStreamMessage(args.input);
-    const captured = yield* Result.await(
-      captureStreamedText({
-        bot: args.bot,
-        request,
-        chatId,
-        signal: args.input.signal,
-        format: args.input.content.format,
-        adapterOptions: args.input.adapterOptions,
-      }),
-    );
+    const useRenderedMarkdown = shouldFinalizeTelegramMarkdownStream({
+      format: args.input.content.format,
+      adapterOptions: args.input.adapterOptions,
+    });
+    const captured = useRenderedMarkdown
+      ? yield* Result.await(
+          streamTelegramMarkdown({
+            bot: args.bot,
+            request,
+            chatId,
+            chunks: args.input.content.chunks,
+            signal: args.input.signal,
+            createError: (cause) => new TelegramStreamMessageError({ cause }),
+          }),
+        )
+      : yield* Result.await(
+          captureStreamedText({
+            bot: args.bot,
+            request,
+            chatId,
+            signal: args.input.signal,
+          }),
+        );
 
     const sent = yield* Result.try({
       try: () =>
@@ -60,11 +73,6 @@ function captureStreamedText(args: {
   readonly request: ReturnType<typeof encodeTelegramStreamMessage>;
   readonly chatId: number;
   readonly signal?: AbortSignal;
-  readonly format: ChatAdapterStreamMessageInput<
-    string,
-    TelegramAdapterOptions
-  >["content"]["format"];
-  readonly adapterOptions: TelegramAdapterOptions;
 }): Promise<
   Result<
     {
@@ -90,22 +98,6 @@ function captureStreamedText(args: {
         catch: (cause) => new TelegramStreamMessageError({ cause }),
       }),
     );
-
-    if (
-      shouldFinalizeTelegramMarkdownStream({
-        format: args.format,
-        adapterOptions: args.adapterOptions,
-      })
-    ) {
-      yield* Result.await(
-        finalizeMarkdownStream({
-          bot: args.bot,
-          telegramMessages,
-          signal: args.signal,
-          createError: (cause) => new TelegramStreamMessageError({ cause }),
-        }),
-      );
-    }
 
     return Result.ok({ text, telegramMessages });
   });
