@@ -66,7 +66,7 @@ export function createTypingIndicatorHandler<
 
       if (runtime.sendTyping === undefined) {
         if (fallback === "ignore") {
-          args.logger?.debug(chatLogEvents.operationFallback, {
+          args.logger?.info(chatLogEvents.operationFallback, {
             ...metadata,
             result: "ignored",
             reason: "adapter_send_typing_missing",

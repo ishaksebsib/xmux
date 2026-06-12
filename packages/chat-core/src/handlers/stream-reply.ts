@@ -68,13 +68,14 @@ export function createStreamReplyHandler<
         );
       }
 
-      args.logger?.debug(chatLogEvents.operationFallback, {
+      args.logger?.info(chatLogEvents.operationFallback, {
         chatId: String(input.chatId),
         operation: "streamReply",
         conversationId: input.conversationId,
         messageId: input.messageId,
         mode,
         fallback,
+        reason: "adapter_stream_reply_missing",
       });
 
       const collected = yield* Result.await(collectStreamForReply<TAdapters, TInput>({ input }));

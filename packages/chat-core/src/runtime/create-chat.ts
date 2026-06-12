@@ -497,6 +497,7 @@ export function createChat<
           metadata,
           successEvent: chatLogEvents.adapterCloseSuccess,
           failureEvent: chatLogEvents.adapterCloseFailure,
+          failureLevel: "warn",
         });
 
         return result;

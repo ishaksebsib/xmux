@@ -65,11 +65,12 @@ export function createStreamMessageHandler<
         );
       }
 
-      args.logger?.debug(chatLogEvents.operationFallback, {
+      args.logger?.info(chatLogEvents.operationFallback, {
         chatId: String(input.chatId),
         operation: "streamMessage",
         conversationId: input.conversationId,
         fallback,
+        reason: "adapter_stream_message_missing",
       });
 
       const collected = yield* Result.await(collectStreamForMessage<TAdapters, TInput>({ input }));

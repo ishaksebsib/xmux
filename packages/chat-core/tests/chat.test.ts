@@ -632,6 +632,39 @@ describe("createChat lifecycle", () => {
     }
   });
 
+  test("logs startup cleanup close failures as warnings", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const logger = createMockLogger();
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          closeError: new Error("cleanup failed"),
+        }),
+        beta: createRuntimeAdapter({ id: "beta", handles, throwOnStart: new Error("boom") }),
+      },
+      commands,
+      logger,
+    });
+
+    const started = await chat.start();
+
+    expect(started.isErr()).toBe(true);
+    expect(handles.closes).toEqual(["alpha", "beta"]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      chatLogEvents.adapterCloseFailure,
+      expect.objectContaining({
+        chatId: "alpha",
+        operation: "closeAdapter",
+        reason: "startup_cleanup",
+        error: expect.objectContaining({
+          cause: expect.objectContaining({ message: "cleanup failed" }),
+        }),
+      }),
+    );
+  });
+
   test("routes synchronous handler throws to error events", async () => {
     const handles = { opens: [], starts: [], closes: [] };
     let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
@@ -1032,6 +1065,7 @@ describe("createChat lifecycle", () => {
   test("streamMessage falls back to sendMessage when unsupported", async () => {
     const handles = { opens: [], starts: [], closes: [] };
     const sends: string[] = [];
+    const logger = createMockLogger();
     const chat = createChat({
       adapters: {
         alpha: createRuntimeAdapter({
@@ -1043,6 +1077,7 @@ describe("createChat lifecycle", () => {
         }),
       },
       commands,
+      logger,
     });
 
     expect((await chat.start()).isOk()).toBe(true);
@@ -1055,6 +1090,14 @@ describe("createChat lifecycle", () => {
 
     expect(streamed.isOk()).toBe(true);
     expect(sends).toEqual(["hello"]);
+    expect(logger.info).toHaveBeenCalledWith(
+      chatLogEvents.operationFallback,
+      expect.objectContaining({
+        chatId: "alpha",
+        operation: "streamMessage",
+        reason: "adapter_stream_message_missing",
+      }),
+    );
   });
 
   test("streamMessage can require adapter streaming", async () => {
@@ -1109,9 +1152,11 @@ describe("createChat lifecycle", () => {
 
   test("typingIndicator returns unsupported errors or ignored no-op handles", async () => {
     const handles = { opens: [], starts: [], closes: [] };
+    const logger = createMockLogger();
     const chat = createChat({
       adapters: { alpha: createRuntimeAdapter({ id: "alpha", handles }) },
       commands,
+      logger,
     });
 
     expect((await chat.start()).isOk()).toBe(true);
@@ -1134,6 +1179,15 @@ describe("createChat lifecycle", () => {
     if (ignored.isOk()) {
       ignored.value.stop();
     }
+    expect(logger.info).toHaveBeenCalledWith(
+      chatLogEvents.operationFallback,
+      expect.objectContaining({
+        chatId: "alpha",
+        operation: "typingIndicator",
+        reason: "adapter_send_typing_missing",
+        result: "ignored",
+      }),
+    );
   });
 
   test("managed typingIndicator refreshes until stopped", async () => {
@@ -1257,6 +1311,7 @@ describe("createChat lifecycle", () => {
 
   test("streamReply falls back to reply and event.replyStream targets the original message", async () => {
     const handles = { opens: [], starts: [], closes: [] };
+    const logger = createMockLogger();
     let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
     const replies: string[] = [];
     let resolveReply!: (value: unknown) => void;
@@ -1278,6 +1333,7 @@ describe("createChat lifecycle", () => {
         }),
       },
       commands,
+      logger,
     });
 
     chat.on("message", async (event) => {
@@ -1306,6 +1362,15 @@ describe("createChat lifecycle", () => {
 
     await replyHandled;
     expect(replies).toEqual(["original:quote:streamed"]);
+    expect(logger.info).toHaveBeenCalledWith(
+      chatLogEvents.operationFallback,
+      expect.objectContaining({
+        chatId: "alpha",
+        operation: "streamReply",
+        messageId: "original",
+        reason: "adapter_stream_reply_missing",
+      }),
+    );
   });
 
   test("close attempts every opened runtime and aggregates failures", async () => {
