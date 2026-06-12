@@ -9,7 +9,7 @@ import {
   type OpenCodeCreateOptions,
   type OpenCodeModelInfo,
   type OpenCodeSessionInfo,
-} from "../src";
+} from "../../src";
 
 const shouldRunTypeErrorChecks = process.argv.length === 0;
 

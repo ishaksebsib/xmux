@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHarness } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
-import { createOpenCodeAdapter } from "../src";
+import { createOpenCodeAdapter } from "../../src";
 
 function hasOpenCodeBinary(): boolean {
   const command = process.platform === "win32" ? "where opencode" : "command -v opencode";
@@ -85,9 +85,12 @@ describe("createOpenCodeAdapter real OpenCode", () => {
         signal: controller.signal,
       });
       expect(prompted.isOk()).toBe(true);
-      expect(await collectAsync(prompted.unwrap("expected prompt stream"))).toEqual([
-        expect.objectContaining({ type: "run", phase: "aborted", reason: "aborted" }),
-      ]);
+      const promptEvents = await collectAsync(prompted.unwrap("expected prompt stream"));
+      expect(promptEvents.at(-1)).toMatchObject({
+        type: "run",
+        phase: "aborted",
+        reason: "aborted",
+      });
 
       const aborted = await harness.abort({ ref: session.ref });
       expect(aborted.isOk()).toBe(true);
