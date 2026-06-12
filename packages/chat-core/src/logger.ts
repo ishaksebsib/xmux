@@ -65,36 +65,18 @@ export interface ChatLogErrorMetadata {
 /**
  * General structured metadata shape for chat logs.
  *
- * The named fields provide autocomplete for common dimensions. The index signature keeps the
- * shape extensible for future chat-core features and adapter-specific metadata.
+ * Keep only the common cross-package fields typed; package-specific dimensions
+ * stay supported through the index signature.
  */
 export interface ChatLogMetadata {
   readonly component?: string;
   readonly packageName?: string;
   readonly chatId?: string;
-  readonly chatIds?: readonly string[];
   readonly operation?: ChatLogOperation;
-  readonly lifecycleStatus?: string;
-  readonly eventType?: string;
-  readonly eventKey?: string;
-  readonly commandName?: string;
-  readonly actionId?: string;
-  readonly interactionId?: string;
-  readonly responseKind?: string;
-  readonly conversationId?: string;
-  readonly messageId?: string;
-  readonly mode?: string;
-  readonly fallback?: string;
-  readonly action?: string;
   readonly result?: "ok" | "error" | "ignored" | (string & {});
   readonly reason?: string;
   readonly durationMs?: number;
-  readonly textLength?: number;
-  readonly format?: string;
-  readonly buttonRows?: number;
-  readonly buttonCount?: number;
   readonly error?: ChatLogErrorMetadata;
-  readonly cause?: ChatLogErrorMetadata;
   readonly [key: string]: unknown;
 }
 
