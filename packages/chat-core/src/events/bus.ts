@@ -1,9 +1,5 @@
-import {
-  chatLogEvents,
-  serializeChatLogError,
-  type ChatLogScope,
-  type ChatLogEventName,
-} from "../logger";
+import { chatLogEvents, type ChatLogScope, type ChatLogEventName } from "../logger";
+import { serializeChatLogError } from "../logger-utils";
 import type { ChatEvent, ChatEventHandler, ChatEventType, Unsubscribe } from "./types";
 
 type StoredHandler = {

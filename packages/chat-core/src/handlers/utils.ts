@@ -5,12 +5,11 @@ import type { ChatAdapterObject, ChatTextContent, ChatTextInput } from "../contr
 import { ChatAdapterOpenError, ChatAdapterStartError } from "../errors";
 import {
   chatLogEvents,
-  logChatResult,
-  startChatLogTimer,
   type ChatLogEventName,
   type ChatLogScope,
   type ChatLogger,
 } from "../logger";
+import { logChatResult, startChatLogTimer } from "../logger-utils";
 import type { OpenedRuntime, RuntimeChatAdapterDefinition } from "./types";
 
 export async function openChatAdapter(args: {

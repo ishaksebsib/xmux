@@ -27,8 +27,9 @@ adapter.
 - `registry/` owns command/action registry definitions and helpers.
 - `events/` owns event contracts plus the erased runtime event bus.
 - `handlers/` owns outbound operation implementations and adapter-input mapping.
-- `logger.ts` owns the public logger contract, typed log event names, safe log
-  dispatch, and reusable structured metadata helpers.
+- `logger.ts` owns the public logger contract and typed log event names.
+- `logger-utils.ts` owns safe log dispatch and reusable structured metadata
+  helpers.
 - `runtime/` owns `createChat`, top-level orchestration, and runtime aliases.
 
 If a new concern does not clearly belong to one folder, define the boundary first

@@ -3,13 +3,8 @@ import { ChatSendActionError, type ChatSendActionFailure } from "../errors";
 import type { ChatActionRegistry } from "../registry/actions";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatSendActionInput, ChatSentMessageFromInput } from "../inputs";
-import {
-  chatLogEvents,
-  logChatResult,
-  startChatLogTimer,
-  type ChatLogEventName,
-  type ChatLogScope,
-} from "../logger";
+import { chatLogEvents, type ChatLogEventName, type ChatLogScope } from "../logger";
+import { logChatResult, startChatLogTimer } from "../logger-utils";
 import type { GetStartedRuntime } from "./types";
 import { createAdapterSendActionInput } from "./adapter-inputs";
 

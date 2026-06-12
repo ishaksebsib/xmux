@@ -1,5 +1,6 @@
 import type { ChatCommandOption, ChatCommandRegistry, ChatCommandValues } from "@xmux/chat-core";
 import type { TelegramTextMessageContext } from "../client";
+import { telegramLogEvents, type TelegramLogScope } from "../logger";
 
 export type TelegramCommandParseResult<TCommands extends ChatCommandRegistry> =
   | { readonly status: "not_command" }
@@ -19,6 +20,7 @@ export function parseTelegramCommand<TCommands extends ChatCommandRegistry>(args
   readonly commands: TCommands;
   readonly context: TelegramTextMessageContext;
   readonly botUsername: string;
+  readonly logger?: TelegramLogScope;
 }): TelegramCommandParseResult<TCommands> {
   const commandToken = readBotCommandToken(args.context.message);
   if (commandToken === undefined) {
@@ -39,6 +41,7 @@ export function parseTelegramCommand<TCommands extends ChatCommandRegistry>(args
     commandName: parsedToken.name,
     definition: command,
     input: args.context.message.text.slice(commandToken.length).trim(),
+    logger: args.logger,
   });
   if (parsedOptions.status === "invalid") {
     return {
@@ -86,6 +89,7 @@ function parseCommandOptions(args: {
   readonly commandName: string;
   readonly definition: ChatCommandRegistry[string];
   readonly input: string;
+  readonly logger?: TelegramLogScope;
 }):
   | { readonly status: "valid"; readonly options: Record<string, unknown> }
   | { readonly status: "invalid"; readonly optionName: string; readonly reason: string } {
@@ -100,7 +104,12 @@ function parseCommandOptions(args: {
     const rawValue = rawOptions.get(name);
     if (rawValue === undefined) {
       if (definition.required === true) {
-        return { status: "invalid", optionName: name, reason: "required option is missing" };
+        return invalidCommandOption({
+          logger: args.logger,
+          commandName: args.commandName,
+          optionName: name,
+          reason: "required option is missing",
+        });
       }
 
       options[name] = undefined;
@@ -109,18 +118,45 @@ function parseCommandOptions(args: {
 
     const value = parseOptionValue({ rawValue, kind: definition.kind });
     if (value.status === "invalid") {
-      return { status: "invalid", optionName: name, reason: value.reason };
+      return invalidCommandOption({
+        logger: args.logger,
+        commandName: args.commandName,
+        optionName: name,
+        reason: value.reason,
+      });
     }
 
     if (definition.choices !== undefined && !definition.choices.includes(value.value as never)) {
       const reason = `value must be one of: ${definition.choices.join(", ")}`;
-      return { status: "invalid", optionName: name, reason };
+      return invalidCommandOption({
+        logger: args.logger,
+        commandName: args.commandName,
+        optionName: name,
+        reason,
+      });
     }
 
     options[name] = value.value;
   }
 
   return { status: "valid", options };
+}
+
+function invalidCommandOption(args: {
+  readonly logger?: TelegramLogScope;
+  readonly commandName: string;
+  readonly optionName: string;
+  readonly reason: string;
+}): { readonly status: "invalid"; readonly optionName: string; readonly reason: string } {
+  args.logger?.warn(telegramLogEvents.commandParseFailure, {
+    operation: "parseCommand",
+    code: "COMMAND_PARSE_FAILED",
+    commandName: args.commandName,
+    optionName: args.optionName,
+    reason: args.reason,
+  });
+
+  return { status: "invalid", optionName: args.optionName, reason: args.reason };
 }
 
 function createRawCommandOptions(args: {

@@ -18,6 +18,7 @@ import type {
 import { createTelegramCommandEvent, parseTelegramCommand } from "../commands";
 import { decodeTelegramActionCallbackData } from "./actions";
 import { TelegramAttachmentReadError, type TelegramAdapterError } from "../errors";
+import type { TelegramLogScope } from "../logger";
 import type { TelegramAdapterData } from "../types";
 
 export type TelegramInboundDecodeResult<TEvent> =
@@ -34,6 +35,7 @@ export function decodeTelegramMessageUpdate<
   readonly bot: TelegramBotClient;
   readonly botUserId: number;
   readonly botUsername: string;
+  readonly logger?: TelegramLogScope;
 }): TelegramInboundDecodeResult<
   ChatAdapterEvent<
     TCommands,
@@ -60,6 +62,7 @@ export function decodeTelegramMessageUpdate<
     commands: args.commands,
     context: args.context,
     botUsername: args.botUsername,
+    logger: args.logger,
   });
 
   if (command.status === "unknown") {
@@ -126,6 +129,7 @@ export function decodeTelegramTextUpdate<
   readonly bot: TelegramBotClient;
   readonly botUserId: number;
   readonly botUsername: string;
+  readonly logger?: TelegramLogScope;
 }): TelegramInboundDecodeResult<
   ChatAdapterEvent<
     TCommands,

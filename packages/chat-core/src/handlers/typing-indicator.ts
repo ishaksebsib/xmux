@@ -13,13 +13,11 @@ import type {
 } from "../inputs";
 import {
   chatLogEvents,
-  logChatResult,
-  serializeChatLogError,
-  startChatLogTimer,
   type ChatLogEventName,
   type ChatLogMetadata,
   type ChatLogScope,
 } from "../logger";
+import { logChatResult, serializeChatLogError, startChatLogTimer } from "../logger-utils";
 import type { GetStartedRuntime } from "./types";
 import { createAdapterTypingIndicatorInput } from "./adapter-inputs";
 

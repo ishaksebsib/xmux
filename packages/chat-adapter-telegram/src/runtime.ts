@@ -198,6 +198,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       const registered = await registerCommands({
         bot: this.bot,
         commands: context.commands,
+        logger: this.logger,
         signal: context.signal,
       });
       logChatResult({

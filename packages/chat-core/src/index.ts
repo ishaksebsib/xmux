@@ -8,16 +8,15 @@ export {
 } from "./registry/commands";
 export { defineChatAdapter } from "./adapter";
 export { createChat } from "./runtime/create-chat";
+export { chatLogEvents, dummyChatLogger } from "./logger";
 export {
   chatLogDurationMs,
-  chatLogEvents,
   createChatLogScope,
-  dummyChatLogger,
   logChatResult,
   serializeChatLogError,
   startChatLogTimer,
   writeChatLog,
-} from "./logger";
+} from "./logger-utils";
 export {
   ChatAdapterOpenError,
   ChatAdapterStartError,

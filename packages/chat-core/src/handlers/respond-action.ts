@@ -1,13 +1,8 @@
 import { Result } from "better-result";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import { ChatActionResponseError, type ChatActionResponseFailure } from "../errors";
-import {
-  chatLogEvents,
-  logChatResult,
-  startChatLogTimer,
-  type ChatLogEventName,
-  type ChatLogScope,
-} from "../logger";
+import { chatLogEvents, type ChatLogEventName, type ChatLogScope } from "../logger";
+import { logChatResult, startChatLogTimer } from "../logger-utils";
 import type { GetStartedRuntime } from "./types";
 import { createAdapterRespondToActionInput, type RespondToActionInput } from "./adapter-inputs";
 

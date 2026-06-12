@@ -8,13 +8,8 @@ import {
 } from "../errors";
 import type { AdapterOptionsFor, ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatReplyInput, ChatSentMessageFromInput } from "../inputs";
-import {
-  chatLogEvents,
-  logChatResult,
-  startChatLogTimer,
-  type ChatLogEventName,
-  type ChatLogScope,
-} from "../logger";
+import { chatLogEvents, type ChatLogEventName, type ChatLogScope } from "../logger";
+import { logChatResult, startChatLogTimer } from "../logger-utils";
 import type { GetStartedRuntime } from "./types";
 import { createAdapterSendMessageInput } from "./adapter-inputs";
 

@@ -20,6 +20,8 @@ export const telegramLogEvents = {
   commandsRegisterBegin: "xmux.telegram.commands.register.begin",
   commandsRegisterSuccess: "xmux.telegram.commands.register.success",
   commandsRegisterFailure: "xmux.telegram.commands.register.failure",
+  commandsRegisterWarning: "xmux.telegram.commands.register.warning",
+  commandParseFailure: "xmux.telegram.command.parse.failure",
   pollingStart: "xmux.telegram.polling.start",
   pollingFailure: "xmux.telegram.polling.failure",
   inboundEvent: "xmux.telegram.inbound.event",

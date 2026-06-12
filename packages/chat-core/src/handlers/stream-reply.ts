@@ -6,13 +6,8 @@ import {
 } from "../errors";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatSentMessageFromInput, ChatStreamReplyInput } from "../inputs";
-import {
-  chatLogEvents,
-  logChatResult,
-  startChatLogTimer,
-  type ChatLogEventName,
-  type ChatLogScope,
-} from "../logger";
+import { chatLogEvents, type ChatLogEventName, type ChatLogScope } from "../logger";
+import { logChatResult, startChatLogTimer } from "../logger-utils";
 import type { GetStartedRuntime, ReplyHandler, ReplyInputForStream } from "./types";
 import { createAdapterStreamReplyInput, sentMessageFromSameChatInput } from "./adapter-inputs";
 import { collectChatTextStream, hasStreamReplyRuntime } from "./stream";

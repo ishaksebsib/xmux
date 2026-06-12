@@ -47,13 +47,8 @@ import type {
   ChatOn,
 } from "../events/types";
 import { createEventBus } from "../events/bus";
-import {
-  chatLogEvents,
-  createChatLogScope,
-  logChatResult,
-  startChatLogTimer,
-  type ChatLogger,
-} from "../logger";
+import { chatLogEvents, type ChatLogger } from "../logger";
+import { createChatLogScope, logChatResult, startChatLogTimer } from "../logger-utils";
 import type {
   ChatReplyInput,
   ChatSendActionInput,

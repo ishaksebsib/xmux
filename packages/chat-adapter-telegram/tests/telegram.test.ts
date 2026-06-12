@@ -703,6 +703,7 @@ describe("createTelegramAdapter", () => {
 
   test("polling start registers Telegram commands", async () => {
     const bot = createFakeTelegramBot();
+    const logger = createMockLogger();
     const commands = defineChatCommands({
       start: defineChatCommand({
         description: "Start session",
@@ -712,7 +713,7 @@ describe("createTelegramAdapter", () => {
       }),
       BadName: defineChatCommand({ description: "Invalid Telegram name" }),
     });
-    const opened = createRuntimeWithFakeBot({ bot });
+    const opened = createRuntimeWithFakeBot({ bot, logger });
     expect(opened.isOk()).toBe(true);
     if (opened.isErr()) {
       return;
@@ -725,6 +726,28 @@ describe("createTelegramAdapter", () => {
       commands: [{ command: "start", description: "Start session" }],
       signal: undefined,
     });
+    expect(logger.warn).toHaveBeenCalledWith(
+      telegramLogEvents.commandsRegisterWarning,
+      expect.objectContaining({
+        code: "COMMAND_NAME_INVALID",
+        commandName: "BadName",
+        reason: "command_name_invalid",
+      }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      telegramLogEvents.commandsRegisterWarning,
+      expect.objectContaining({
+        code: "COMMAND_OPTIONS_NOT_SUPPORTED",
+        reason: "telegram_registered_commands_do_not_support_options",
+      }),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      telegramLogEvents.commandsRegisterWarning,
+      expect.objectContaining({
+        code: "COMMAND_CHOICES_NOT_SUPPORTED",
+        reason: "telegram_registered_commands_do_not_support_choices",
+      }),
+    );
   });
 
   test("polling start returns typed command registration failures", async () => {
@@ -1219,6 +1242,7 @@ describe("createTelegramAdapter", () => {
 
   test("invalid slash command options emit invalid command events", async () => {
     const bot = createFakeTelegramBot();
+    const logger = createMockLogger();
     const events: unknown[] = [];
     const commands = defineChatCommands({
       start: defineChatCommand({
@@ -1228,7 +1252,7 @@ describe("createTelegramAdapter", () => {
         },
       }),
     });
-    const opened = createRuntimeWithFakeBot({ bot });
+    const opened = createRuntimeWithFakeBot({ bot, logger });
     expect(opened.isOk()).toBe(true);
     if (opened.isErr()) {
       return;
@@ -1253,6 +1277,15 @@ describe("createTelegramAdapter", () => {
       optionName: "harness",
       reason: "value must be one of: opencode, pi",
     });
+    expect(logger.warn).toHaveBeenCalledWith(
+      telegramLogEvents.commandParseFailure,
+      expect.objectContaining({
+        code: "COMMAND_PARSE_FAILED",
+        commandName: "start",
+        optionName: "harness",
+        reason: "value must be one of: opencode, pi",
+      }),
+    );
   });
 
   test("text updates from the current bot are ignored", async () => {
