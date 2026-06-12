@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   HarnessAdapterInteractionUnsupportedError,
   HarnessAdapterRespondInteractionError,
+  InvalidWorkingDirectoryError,
   UnknownHarnessError,
   createHarness,
   type HarnessAdapterRespondInteractionInput,
@@ -66,6 +67,62 @@ describe("interaction responses", () => {
 
     expect(responded.isErr()).toBe(true);
     if (responded.isErr()) expect(responded.error).toBeInstanceOf(UnknownHarnessError);
+  });
+
+  test("rejects an invalid cwd before opening the adapter", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            respondInteraction: async () => Result.ok(),
+          },
+        }),
+      },
+    });
+
+    const responded = await harness.respondInteraction({
+      ref: { harnessId: "pi", sessionId: "native-1" },
+      cwd: "/definitely/not/a/real/xmux/interaction/path",
+      response: { kind: "permission", requestId: "request-1", decision: "allow_once" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(responded.isErr()).toBe(true);
+    if (responded.isErr()) expect(responded.error).toBeInstanceOf(InvalidWorkingDirectoryError);
+    expect(handles.opens).toEqual([]);
+  });
+
+  test("invalid cwd takes precedence over an unknown harness id", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            respondInteraction: async () => Result.ok(),
+          },
+        }),
+      },
+    });
+
+    const responded = await harness.respondInteraction({
+      ref: { harnessId: "missing", sessionId: "native-1" },
+      cwd: "/definitely/not/a/real/xmux/interaction/unknown/path",
+      response: { kind: "permission", requestId: "request-1", decision: "allow_once" },
+      adapterOptions: { sessionMode: "memory" },
+    } as never);
+
+    expect(responded.isErr()).toBe(true);
+    if (responded.isErr()) expect(responded.error).toBeInstanceOf(InvalidWorkingDirectoryError);
+    expect(handles.opens).toEqual([]);
   });
 
   test("returns unsupported error when adapter does not implement respondInteraction", async () => {

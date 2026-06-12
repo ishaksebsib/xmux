@@ -59,6 +59,7 @@ describe("prompt", () => {
   test("prompts through the selected adapter", async () => {
     const handles = { opens: [], closes: [] };
     const calls: string[] = [];
+    const controller = new AbortController();
     const harness = createHarness({
       adapters: {
         pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
@@ -71,6 +72,7 @@ describe("prompt", () => {
               calls.push(
                 `prompt:${input.ref.sessionId}:${input.cwd}:${input.adapterOptions.sessionMode}:${input.content.length}`,
               );
+              expect(input.signal).toBe(controller.signal);
               return Result.ok(
                 (async function* () {
                   yield { type: "run", phase: "started", ref: input.ref } as const;
@@ -100,6 +102,7 @@ describe("prompt", () => {
       cwd: process.cwd(),
       content: { type: "text", text: "hello" },
       adapterOptions: { sessionMode: "persistent" },
+      signal: controller.signal,
     });
 
     expect(prompted.isOk()).toBe(true);
@@ -303,6 +306,23 @@ describe("prompt", () => {
     expect((events[1] as { error?: unknown }).error).toBe(failure);
   });
 
+  test("does not emit an extra terminal event after aborted", async () => {
+    const { harness } = createPromptHarness({
+      events: ({ ref }) =>
+        (async function* () {
+          yield { type: "run", phase: "started", ref } as const;
+          yield { type: "run", phase: "aborted", ref, reason: "aborted" } as const;
+          yield { type: "run", phase: "completed", ref, reason: "stop" } as const;
+        })(),
+    });
+
+    const events = await collectAsync(await promptEvents({ harness }));
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({ type: "run", phase: "started" });
+    expect(events[1]).toMatchObject({ type: "run", phase: "aborted", reason: "aborted" });
+  });
+
   test("emits synthetic started and aborted when the input signal is already aborted", async () => {
     const controller = new AbortController();
     const cause = new Error("already aborted");
@@ -390,5 +410,56 @@ describe("prompt", () => {
     resolveNext({ done: true, value: undefined as never });
     await Promise.resolve();
     expect(returns).toBe(1);
+  });
+
+  test("does not make concurrent next calls against the adapter iterator", async () => {
+    const ref = { harnessId: "pi", sessionId: "native-1" } as const;
+    const resolvers: ((value: IteratorResult<HarnessPromptEvent<"pi">>) => void)[] = [];
+    let nextCalls = 0;
+    let inFlight = false;
+    let concurrent = false;
+    const { harness } = createPromptHarness({
+      events: () => ({
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              if (inFlight) concurrent = true;
+              inFlight = true;
+              nextCalls += 1;
+              return new Promise<IteratorResult<HarnessPromptEvent<"pi">>>((resolve) => {
+                resolvers.push((value) => {
+                  inFlight = false;
+                  resolve(value);
+                });
+              });
+            },
+          };
+        },
+      }),
+    });
+
+    const stream = await promptEvents({ harness });
+    const iterator = stream[Symbol.asyncIterator]();
+    const first = iterator.next();
+    const second = iterator.next();
+
+    await Promise.resolve();
+    expect(nextCalls).toBe(1);
+
+    resolvers.shift()?.({ done: false, value: { type: "run", phase: "started", ref } });
+    await expect(first).resolves.toMatchObject({
+      value: { type: "run", phase: "started" },
+    });
+    await Promise.resolve();
+    expect(nextCalls).toBe(2);
+
+    resolvers.shift()?.({
+      done: false,
+      value: { type: "run", phase: "completed", ref, reason: "stop" },
+    });
+    await expect(second).resolves.toMatchObject({
+      value: { type: "run", phase: "completed" },
+    });
+    expect(concurrent).toBe(false);
   });
 });

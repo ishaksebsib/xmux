@@ -1,25 +1,23 @@
 import { Result } from "better-result";
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import {
   HarnessAdapterCreateSessionError,
   HarnessAdapterOpenError,
+  HarnessCloseError,
   InvalidWorkingDirectoryError,
   createHarness,
   defineHarnessAdapter,
   harnessLogEvents,
   type HarnessLogger,
 } from "../src";
-import { createTestAdapter, type PiAdapterInput, type PiAdapterSession } from "./test-utils";
-
-function createMockLogger() {
-  return {
-    trace: vi.fn(),
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  } satisfies HarnessLogger;
-}
+import {
+  createDeferred,
+  createMockLogger,
+  createTestAdapter,
+  createThrowingLogger,
+  type PiAdapterInput,
+  type PiAdapterSession,
+} from "./test-utils";
 
 describe("createHarness", () => {
   test("creates a session with the selected adapter", async () => {
@@ -114,23 +112,7 @@ describe("createHarness", () => {
   });
 
   test("logger failures do not affect harness operations", async () => {
-    const logger = {
-      trace: vi.fn(() => {
-        throw new Error("logger failed");
-      }),
-      debug: vi.fn(() => {
-        throw new Error("logger failed");
-      }),
-      info: vi.fn(() => {
-        throw new Error("logger failed");
-      }),
-      warn: vi.fn(() => {
-        throw new Error("logger failed");
-      }),
-      error: vi.fn(() => {
-        throw new Error("logger failed");
-      }),
-    } satisfies HarnessLogger;
+    const logger = createThrowingLogger();
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
       logger,
@@ -181,10 +163,7 @@ describe("createHarness", () => {
   test("deduplicates concurrent first runtime opens", async () => {
     let opens = 0;
     let closes = 0;
-    let releaseOpen!: () => void;
-    const canOpen = new Promise<void>((resolve) => {
-      releaseOpen = resolve;
-    });
+    const canOpen = createDeferred();
 
     const harness = createHarness({
       adapters: {
@@ -192,7 +171,7 @@ describe("createHarness", () => {
           id: "pi",
           async open() {
             opens += 1;
-            await canOpen;
+            await canOpen.promise;
 
             return Result.ok({
               id: "pi" as const,
@@ -242,7 +221,7 @@ describe("createHarness", () => {
     await Promise.resolve();
     expect(opens).toBe(1);
 
-    releaseOpen();
+    canOpen.resolve();
     const [listedResult, gotResult] = await Promise.all([listed, got]);
 
     expect(listedResult.isOk()).toBe(true);
@@ -256,10 +235,7 @@ describe("createHarness", () => {
   test("close waits for in-flight runtime opens", async () => {
     let opens = 0;
     let closes = 0;
-    let releaseOpen!: () => void;
-    const canOpen = new Promise<void>((resolve) => {
-      releaseOpen = resolve;
-    });
+    const canOpen = createDeferred();
 
     const harness = createHarness({
       adapters: {
@@ -267,7 +243,7 @@ describe("createHarness", () => {
           id: "pi",
           async open() {
             opens += 1;
-            await canOpen;
+            await canOpen.promise;
 
             return Result.ok({
               id: "pi" as const,
@@ -319,7 +295,7 @@ describe("createHarness", () => {
     await Promise.resolve();
     expect(closes).toBe(0);
 
-    releaseOpen();
+    canOpen.resolve();
     const [listedResult, closedResult] = await Promise.all([listed, closed]);
 
     expect(listedResult.isOk()).toBe(true);
@@ -351,7 +327,34 @@ describe("createHarness", () => {
     expect(handles.opens).toEqual([]);
   });
 
-  test("surfaces adapter session creation failures", async () => {
+  test("surfaces adapter session creation returned failures", async () => {
+    const cause = new Error("provider unavailable");
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () => Result.err(cause),
+        }),
+      },
+    });
+
+    const created = await harness.createSession({
+      harnessId: "pi",
+      cwd: process.cwd(),
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(created.isErr()).toBe(true);
+    if (created.isErr()) {
+      expect(created.error).toBeInstanceOf(HarnessAdapterCreateSessionError);
+      expect(created.error.cause).toBe(cause);
+    }
+  });
+
+  test("surfaces adapter session creation thrown failures", async () => {
+    const cause = new Error("provider exploded");
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
       adapters: {
@@ -359,7 +362,7 @@ describe("createHarness", () => {
           id: "pi",
           handles,
           createSession: async () => {
-            return Result.err(new Error("provider unavailable"));
+            throw cause;
           },
         }),
       },
@@ -374,6 +377,7 @@ describe("createHarness", () => {
     expect(created.isErr()).toBe(true);
     if (created.isErr()) {
       expect(created.error).toBeInstanceOf(HarnessAdapterCreateSessionError);
+      expect(created.error.cause).toBe(cause);
     }
   });
 
@@ -404,6 +408,35 @@ describe("createHarness", () => {
     expect(created.isErr()).toBe(true);
     if (created.isErr()) {
       expect(created.error).toBeInstanceOf(HarnessAdapterOpenError);
+    }
+    expect(handles.opens).toEqual(["pi"]);
+  });
+
+  test("wraps adapter open throws inside harness-core", async () => {
+    const cause = new Error("sdk boot threw");
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          openThrow: cause,
+          createSession: async () =>
+            Result.ok({ sessionId: "unused", adapterData: { sessionFile: "unused" } }),
+        }),
+      },
+    });
+
+    const created = await harness.createSession({
+      harnessId: "pi",
+      cwd: process.cwd(),
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(created.isErr()).toBe(true);
+    if (created.isErr()) {
+      expect(created.error).toBeInstanceOf(HarnessAdapterOpenError);
+      expect(created.error.cause).toBe(cause);
     }
     expect(handles.opens).toEqual(["pi"]);
   });
@@ -439,6 +472,81 @@ describe("createHarness", () => {
     const closed = await harness.close();
 
     expect(closed.isOk()).toBe(true);
+    expect(handles.closes.sort()).toEqual(["opencode", "pi"]);
+  });
+
+  test("close does not open never-used adapters and is idempotent after success", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "a" } }),
+        }),
+        unused: createTestAdapter<"unused", Record<never, never>, Record<never, never>>({
+          id: "unused",
+          handles,
+          createSession: async () => Result.ok({ sessionId: "unused-1", adapterData: {} }),
+        }),
+      },
+    });
+
+    await harness.createSession({
+      harnessId: "pi",
+      cwd: process.cwd(),
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    const first = await harness.close();
+    const second = await harness.close();
+
+    expect(first.isOk()).toBe(true);
+    expect(second.isOk()).toBe(true);
+    expect(handles.opens).toEqual(["pi"]);
+    expect(handles.closes).toEqual(["pi"]);
+  });
+
+  test("aggregates adapter close failures", async () => {
+    const piCloseCause = new Error("pi close failed");
+    const opencodeCloseCause = new Error("opencode close failed");
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          closeThrow: piCloseCause,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "a" } }),
+        }),
+        opencode: createTestAdapter<"opencode", Record<never, never>, Record<never, never>>({
+          id: "opencode",
+          handles,
+          closeThrow: opencodeCloseCause,
+          createSession: async () => Result.ok({ sessionId: "oc-1", adapterData: {} }),
+        }),
+      },
+    });
+
+    await harness.createSession({
+      harnessId: "pi",
+      cwd: process.cwd(),
+      adapterOptions: { sessionMode: "persistent" },
+    });
+    await harness.createSession({ harnessId: "opencode", cwd: process.cwd() });
+
+    const closed = await harness.close();
+
+    expect(closed.isErr()).toBe(true);
+    if (closed.isErr()) {
+      expect(closed.error).toBeInstanceOf(HarnessCloseError);
+      expect(closed.error.failures).toEqual([
+        { harnessId: "pi", cause: piCloseCause },
+        { harnessId: "opencode", cause: opencodeCloseCause },
+      ]);
+    }
     expect(handles.closes.sort()).toEqual(["opencode", "pi"]);
   });
 });

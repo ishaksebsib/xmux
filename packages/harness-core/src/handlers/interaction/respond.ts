@@ -33,6 +33,9 @@ export async function handleRespondInteraction<
     sessionId: args.input.ref.sessionId,
     run: () =>
       Result.gen(async function* () {
+        const cwd = args.input.cwd
+          ? yield* Result.await(createWorkingDirectoryPath(args.input.cwd))
+          : undefined;
         const runtime = yield* Result.await(
           args.getRuntime(args.input.ref.harnessId, args.input.signal),
         );
@@ -43,10 +46,6 @@ export async function handleRespondInteraction<
             operation: "respondInteraction",
           }),
         );
-
-        const cwd = args.input.cwd
-          ? yield* Result.await(createWorkingDirectoryPath(args.input.cwd))
-          : undefined;
 
         yield* Result.await(
           invokeAdapter({

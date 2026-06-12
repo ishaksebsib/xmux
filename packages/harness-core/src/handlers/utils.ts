@@ -189,10 +189,11 @@ export async function createAdapterSession<
 }): Promise<
   Result<HarnessAdapterCreateSessionResult<TAdapterSession>, HarnessAdapterCreateSessionError>
 > {
-  return Result.mapError(
-    await args.runtime.createSession(args.input),
-    (cause) => new HarnessAdapterCreateSessionError({ harnessId: args.harnessId, cause }),
-  );
+  return invokeAdapter({
+    run: () => args.runtime.createSession(args.input),
+    mapError: (cause) =>
+      new HarnessAdapterCreateSessionError({ harnessId: args.harnessId, cause }),
+  });
 }
 
 export async function createHarnessSessionInfo<

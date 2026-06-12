@@ -4,6 +4,7 @@ import {
   HarnessAdapterGetThinkingError,
   HarnessAdapterSetThinkingError,
   HarnessAdapterThinkingUnsupportedError,
+  UnknownHarnessError,
   createHarness,
   type HarnessThinkingLevel,
 } from "../src";
@@ -122,6 +123,36 @@ describe("thinking management", () => {
     expect(prompted.isOk()).toBe(true);
   });
 
+  test("returns unknown harness errors before opening adapters", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+        }),
+      },
+    });
+
+    const got = await harness.getThinking({
+      target: { type: "harness", harnessId: "missing" },
+      adapterOptions: { sessionMode: "memory" },
+    } as never);
+    const set = await harness.setThinking({
+      target: { type: "harness", harnessId: "missing" },
+      update: { type: "clear" },
+      adapterOptions: { sessionMode: "memory" },
+    } as never);
+
+    expect(got.isErr()).toBe(true);
+    expect(set.isErr()).toBe(true);
+    if (got.isErr()) expect(got.error).toBeInstanceOf(UnknownHarnessError);
+    if (set.isErr()) expect(set.error).toBeInstanceOf(UnknownHarnessError);
+    expect(handles.opens).toEqual([]);
+  });
+
   test("returns unsupported errors when an adapter has no thinking methods", async () => {
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
@@ -151,7 +182,7 @@ describe("thinking management", () => {
     if (set.isErr()) expect(set.error).toBeInstanceOf(HarnessAdapterThinkingUnsupportedError);
   });
 
-  test("wraps thinking adapter failures", async () => {
+  test("wraps thinking adapter returned failures", async () => {
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
       adapters: {
@@ -182,5 +213,50 @@ describe("thinking management", () => {
     if (set.isErr()) expect(set.error).toBeInstanceOf(HarnessAdapterSetThinkingError);
     expect(got.isErr()).toBe(true);
     expect(set.isErr()).toBe(true);
+  });
+
+  test("wraps thinking adapter thrown failures", async () => {
+    const getCause = new Error("get thinking exploded");
+    const setCause = new Error("set thinking exploded");
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            getThinking: async () => {
+              throw getCause;
+            },
+            setThinking: async () => {
+              throw setCause;
+            },
+          },
+        }),
+      },
+    });
+
+    const got = await harness.getThinking({
+      target: { type: "harness", harnessId: "pi" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const set = await harness.setThinking({
+      target: { type: "harness", harnessId: "pi" },
+      update: { type: "clear" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(got.isErr()).toBe(true);
+    expect(set.isErr()).toBe(true);
+    if (got.isErr()) {
+      expect(got.error).toBeInstanceOf(HarnessAdapterGetThinkingError);
+      expect(got.error.cause).toBe(getCause);
+    }
+    if (set.isErr()) {
+      expect(set.error).toBeInstanceOf(HarnessAdapterSetThinkingError);
+      expect(set.error.cause).toBe(setCause);
+    }
   });
 });

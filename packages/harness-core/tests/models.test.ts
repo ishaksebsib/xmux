@@ -5,6 +5,7 @@ import {
   HarnessAdapterListModelsError,
   HarnessAdapterModelUnsupportedError,
   HarnessAdapterSetModelError,
+  UnknownHarnessError,
   createHarness,
   type HarnessModelRef,
 } from "../src";
@@ -187,6 +188,42 @@ describe("model management", () => {
     expect(prompted.isOk()).toBe(true);
   });
 
+  test("returns unknown harness errors before opening adapters", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+        }),
+      },
+    });
+
+    const listed = await harness.listModels({
+      harnessId: "missing",
+      adapterOptions: { sessionMode: "memory" },
+    } as never);
+    const got = await harness.getModel({
+      target: { type: "harness", harnessId: "missing" },
+      adapterOptions: { sessionMode: "memory" },
+    } as never);
+    const set = await harness.setModel({
+      target: { type: "harness", harnessId: "missing" },
+      update: { type: "clear" },
+      adapterOptions: { sessionMode: "memory" },
+    } as never);
+
+    expect(listed.isErr()).toBe(true);
+    expect(got.isErr()).toBe(true);
+    expect(set.isErr()).toBe(true);
+    if (listed.isErr()) expect(listed.error).toBeInstanceOf(UnknownHarnessError);
+    if (got.isErr()) expect(got.error).toBeInstanceOf(UnknownHarnessError);
+    if (set.isErr()) expect(set.error).toBeInstanceOf(UnknownHarnessError);
+    expect(handles.opens).toEqual([]);
+  });
+
   test("returns unsupported errors when an adapter has no model methods", async () => {
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
@@ -222,7 +259,7 @@ describe("model management", () => {
     if (set.isErr()) expect(set.error).toBeInstanceOf(HarnessAdapterModelUnsupportedError);
   });
 
-  test("wraps model adapter failures", async () => {
+  test("wraps model adapter returned failures", async () => {
     const handles = { opens: [], closes: [] };
     const harness = createHarness({
       adapters: {
@@ -260,5 +297,63 @@ describe("model management", () => {
     expect(listed.isErr()).toBe(true);
     expect(got.isErr()).toBe(true);
     expect(set.isErr()).toBe(true);
+  });
+
+  test("wraps model adapter thrown failures", async () => {
+    const listCause = new Error("list exploded");
+    const getCause = new Error("get exploded");
+    const setCause = new Error("set exploded");
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            listModels: async () => {
+              throw listCause;
+            },
+            getModel: async () => {
+              throw getCause;
+            },
+            setModel: async () => {
+              throw setCause;
+            },
+          },
+        }),
+      },
+    });
+
+    const listed = await harness.listModels({
+      harnessId: "pi",
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const got = await harness.getModel({
+      target: { type: "harness", harnessId: "pi" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const set = await harness.setModel({
+      target: { type: "harness", harnessId: "pi" },
+      update: { type: "clear" },
+      adapterOptions: { sessionMode: "memory" },
+    });
+
+    expect(listed.isErr()).toBe(true);
+    expect(got.isErr()).toBe(true);
+    expect(set.isErr()).toBe(true);
+    if (listed.isErr()) {
+      expect(listed.error).toBeInstanceOf(HarnessAdapterListModelsError);
+      expect(listed.error.cause).toBe(listCause);
+    }
+    if (got.isErr()) {
+      expect(got.error).toBeInstanceOf(HarnessAdapterGetModelError);
+      expect(got.error.cause).toBe(getCause);
+    }
+    if (set.isErr()) {
+      expect(set.error).toBeInstanceOf(HarnessAdapterSetModelError);
+      expect(set.error.cause).toBe(setCause);
+    }
   });
 });
