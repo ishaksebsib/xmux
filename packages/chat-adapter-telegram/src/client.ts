@@ -113,6 +113,7 @@ export function createTelegramBotClient(args: {
   const bot = new Bot(args.token, args.options);
   bot.api.config.use(autoRetry());
   const stream = streamApi(bot.api.raw);
+  const apiRoot = (args.options?.client?.apiRoot ?? "https://api.telegram.org").replace(/\/$/, "");
 
   return {
     catch: bot.catch.bind(bot),
@@ -137,7 +138,7 @@ export function createTelegramBotClient(args: {
         input.signal as Parameters<DeleteMessage>[2],
       ),
     downloadFile: (input) =>
-      fetch(`https://api.telegram.org/file/bot${args.token}/${input.filePath}`, {
+      fetch(`${apiRoot}/file/bot${args.token}/${input.filePath}`, {
         signal: input.signal,
       }),
     getBotInfo: () => bot.botInfo,
