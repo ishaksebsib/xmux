@@ -6,6 +6,13 @@ import {
 } from "../errors";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatSentMessageFromInput, ChatStreamMessageInput } from "../inputs";
+import {
+  chatLogEvents,
+  logChatResult,
+  startChatLogTimer,
+  type ChatLogEventName,
+  type ChatLogScope,
+} from "../logger";
 import type { GetStartedRuntime, SendMessageHandler, SendMessageInputForStream } from "./types";
 import { createAdapterStreamMessageInput, sentMessageFromSameChatInput } from "./adapter-inputs";
 import { collectChatTextStream, hasStreamMessageRuntime } from "./stream";
@@ -15,15 +22,27 @@ export function createStreamMessageHandler<
 >(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
   readonly sendMessage: SendMessageHandler<TAdapters>;
+  readonly logger?: ChatLogScope<ChatLogEventName>;
 }) {
   return async function streamMessage<TInput extends ChatStreamMessageInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatStreamMessageFailure>> {
-    return Result.gen(async function* () {
+    const fallback = input.fallback ?? "send-message";
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      chatId: String(input.chatId),
+      operation: "streamMessage",
+      conversationId: input.conversationId,
+      format: input.content.format,
+      fallback,
+    } as const;
+
+    args.logger?.debug(chatLogEvents.operationBegin, metadata);
+
+    const result = await Result.gen(async function* () {
       const runtime = yield* Result.await(
         args.getStartedRuntime({ chatId: input.chatId, operation: "streamMessage" }),
       );
-      const fallback = input.fallback ?? "send-message";
 
       if (hasStreamMessageRuntime(runtime)) {
         const streamResult = yield* Result.await(
@@ -46,10 +65,28 @@ export function createStreamMessageHandler<
         );
       }
 
+      args.logger?.debug(chatLogEvents.operationFallback, {
+        chatId: String(input.chatId),
+        operation: "streamMessage",
+        conversationId: input.conversationId,
+        fallback,
+      });
+
       const collected = yield* Result.await(collectStreamForMessage<TAdapters, TInput>({ input }));
       const sent = yield* Result.await(args.sendMessage(collected));
       return Result.ok(sentMessageFromSameChatInput<TAdapters, TInput>(sent));
     });
+
+    logChatResult({
+      logger: args.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.operationSuccess,
+      failureEvent: chatLogEvents.operationFailure,
+    });
+
+    return result;
   };
 }
 

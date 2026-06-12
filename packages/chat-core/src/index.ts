@@ -9,6 +9,16 @@ export {
 export { defineChatAdapter } from "./adapter";
 export { createChat } from "./runtime/create-chat";
 export {
+  chatLogDurationMs,
+  chatLogEvents,
+  createChatLogScope,
+  dummyChatLogger,
+  logChatResult,
+  serializeChatLogError,
+  startChatLogTimer,
+  writeChatLog,
+} from "./logger";
+export {
   ChatAdapterOpenError,
   ChatAdapterStartError,
   ChatCloseError,
@@ -138,6 +148,15 @@ export type {
   ChatActionValuesFor,
 } from "./registry/actions";
 export type { Chat, CreateChatOptions } from "./runtime/create-chat";
+export type {
+  ChatLogErrorMetadata,
+  ChatLogEventName,
+  ChatLogLevel,
+  ChatLogger,
+  ChatLogMetadata,
+  ChatLogOperation,
+  ChatLogScope,
+} from "./logger";
 export type {
   ChatActionResponseFailure,
   ChatCloseFailure,

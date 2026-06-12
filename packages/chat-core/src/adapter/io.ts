@@ -1,4 +1,5 @@
 import type { ChatCommandRegistry } from "../registry/commands";
+import type { ChatLogger } from "../logger";
 import type {
   ChatActionContent,
   ChatButton,
@@ -15,6 +16,7 @@ import type { ChatReplyMode, ChatTypingAction } from "../contracts";
 /** Inputs available while an adapter creates SDK clients or other resources. */
 export interface OpenChatAdapterContext {
   readonly signal?: AbortSignal;
+  readonly logger?: ChatLogger;
 }
 
 /** Emits normalized adapter events into the chat facade. */
@@ -42,6 +44,7 @@ export interface ChatAdapterStartContext<
   readonly commands: TCommands;
   readonly emit: ChatAdapterEmit<TCommands, TChatId, TAdapterData, TAdapterError>;
   readonly signal?: AbortSignal;
+  readonly logger?: ChatLogger;
 }
 
 /** Common outbound message input every adapter receives. */

@@ -109,6 +109,9 @@ importers:
       better-result:
         specifier: ^2.9.1
         version: 2.9.1
+      ts-log:
+        specifier: ^3.0.2
+        version: 3.0.2
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -1530,6 +1533,10 @@ packages:
 
   trough@1.0.5:
     resolution: {integrity: sha512-rvuRbTarPXmMb79SmzEp8aqXNKcK+y0XaB298IXueQ8I2PsrATcPBCSPyK/dDNa2iWOhKlfNnOjdAOTBU/nkFA==}
+
+  ts-log@3.0.2:
+    resolution: {integrity: sha512-esq6hx2lM66sQV1YcFkIYTqrWWabmqBqobKHyn1CswdI5FgfQhkmiKiRWVGBNlIbdjBxEIkNvMIwLKKPgRYZLQ==}
+    engines: {node: '>=20', npm: '>=10'}
 
   tsdown@0.21.10:
     resolution: {integrity: sha512-3wk73yBhZe/wX7REqSdivNQ84TDs1mJ+IlnzrrEREP70xlJ/AEIzqaI04l/TzMKVIdkTdC3CPaADn2Lk/0SkdA==}
@@ -3009,6 +3016,8 @@ snapshots:
   tree-kill@1.2.2: {}
 
   trough@1.0.5: {}
+
+  ts-log@3.0.2: {}
 
   tsdown@0.21.10(@typescript/native-preview@7.0.0-dev.20260328.1)(typescript@6.0.3):
     dependencies:

@@ -1,3 +1,9 @@
+import {
+  chatLogEvents,
+  serializeChatLogError,
+  type ChatLogScope,
+  type ChatLogEventName,
+} from "../logger";
 import type { ChatEvent, ChatEventHandler, ChatEventType, Unsubscribe } from "./types";
 
 type StoredHandler = {
@@ -10,10 +16,17 @@ type StoredHandler = {
  * Event registry + dispatcher operating on the erased `ChatEvent` default.
  * The facade casts strong event types to this boundary once, in `emit`.
  */
-export function createEventBus() {
+export function createEventBus(args: { readonly logger?: ChatLogScope<ChatLogEventName> } = {}) {
   const handlers = new Set<StoredHandler>();
 
   function reportHandlerError(event: ChatEvent, cause: unknown) {
+    args.logger?.error(chatLogEvents.eventHandlerFailure, {
+      chatId: event.chatId,
+      eventType: event.type,
+      eventKey: keyFor(event),
+      error: serializeChatLogError(cause),
+    });
+
     if (event.type === "error") return;
     dispatch({ type: "error", chatId: event.chatId, error: cause });
   }

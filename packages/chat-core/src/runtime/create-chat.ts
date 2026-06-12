@@ -47,6 +47,13 @@ import type {
   ChatOn,
 } from "../events/types";
 import { createEventBus } from "../events/bus";
+import {
+  chatLogEvents,
+  createChatLogScope,
+  logChatResult,
+  startChatLogTimer,
+  type ChatLogger,
+} from "../logger";
 import type {
   ChatReplyInput,
   ChatSendActionInput,
@@ -85,6 +92,7 @@ export interface CreateChatOptions<
   readonly adapters: TAdapters;
   readonly commands: TCommands;
   readonly actions?: TActions;
+  readonly logger?: ChatLogger;
 }
 
 /** Runtime facade for lifecycle and inbound chat events. */
@@ -147,12 +155,16 @@ export function createChat<
     | ChatAdapterUnknownCommandEvent<TChatId>;
 
   const chatIds = Object.freeze(Object.keys(options.adapters) as TChatId[]);
+  const logger = createChatLogScope(options.logger, {
+    component: "@xmux/chat-core",
+    packageName: "@xmux/chat-core",
+  });
   const openedRuntimes = new Map<string, OpenedRuntime>();
   const pendingStartupEvents: AdapterEvent[] = [];
   let lifecycle: ChatLifecycleState = initialChatLifecycleState;
   let abortController: AbortController | undefined;
 
-  const bus = createEventBus();
+  const bus = createEventBus({ logger });
 
   function bindEvent(event: AdapterEvent): ChatEvent {
     if (event.type === "action") {
@@ -336,23 +348,45 @@ export function createChat<
     });
   }
 
-  const sendMessage = createSendMessageHandler<TAdapters>({ getStartedRuntime });
-  const sendAction = createSendActionHandler<TAdapters, TActions>({ getStartedRuntime });
-  const reply = createReplyHandler<TAdapters>({ getStartedRuntime });
-  const respondToAction = createRespondToActionHandler<TAdapters>({ getStartedRuntime });
+  const sendMessage = createSendMessageHandler<TAdapters>({ getStartedRuntime, logger });
+  const sendAction = createSendActionHandler<TAdapters, TActions>({ getStartedRuntime, logger });
+  const reply = createReplyHandler<TAdapters>({ getStartedRuntime, logger });
+  const respondToAction = createRespondToActionHandler<TAdapters>({ getStartedRuntime, logger });
   const streamMessage = createStreamMessageHandler<TAdapters>({
     getStartedRuntime,
     sendMessage,
+    logger,
   });
-  const streamReply = createStreamReplyHandler<TAdapters>({ getStartedRuntime, reply });
+  const streamReply = createStreamReplyHandler<TAdapters>({ getStartedRuntime, reply, logger });
   const typingIndicator = createTypingIndicatorHandler<TAdapters>({
     getStartedRuntime,
     getLifecycleSignal: () => abortController?.signal,
+    logger,
   });
 
   async function start(): Promise<Result<void, ChatStartError>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "start",
+      chatIds,
+      lifecycleStatus: lifecycle.status,
+    } as const;
+
+    logger.debug(chatLogEvents.startBegin, metadata);
+
     const canStart = ensureCanStart(lifecycle);
-    if (canStart.isErr()) return Result.err(canStart.error);
+    if (canStart.isErr()) {
+      const result: Result<void, ChatStartError> = Result.err(canStart.error);
+      logChatResult({
+        logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: chatLogEvents.startSuccess,
+        failureEvent: chatLogEvents.startFailure,
+      });
+      return result;
+    }
 
     lifecycle = { status: "starting" };
     abortController = new AbortController();
@@ -365,9 +399,11 @@ export function createChat<
             adapter: adapterForChatId(options.adapters, chatId),
             chatId,
             signal: abortController.signal,
+            logger,
+            adapterLogger: options.logger,
           });
 
-      if (runtimeResult.isErr()) return await failStart(runtimeResult.error);
+      if (runtimeResult.isErr()) return await failStart(runtimeResult.error, startedAt, metadata);
 
       const runtime = runtimeResult.value;
       openedRuntimes.set(chatId, runtime);
@@ -384,10 +420,12 @@ export function createChat<
             unknown
           >["emit"],
           signal: abortController.signal,
+          logger: options.logger,
         },
+        logger,
       });
 
-      if (started.isErr()) return await failStart(started.error);
+      if (started.isErr()) return await failStart(started.error, startedAt, metadata);
 
       bus.dispatch({ type: "ready", chatId });
     }
@@ -396,42 +434,115 @@ export function createChat<
     for (const event of pendingStartupEvents.splice(0)) {
       bus.dispatch(bindEvent(event));
     }
-    return Result.ok();
+
+    const result: Result<void, ChatStartError> = Result.ok();
+    logChatResult({
+      logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.startSuccess,
+      failureEvent: chatLogEvents.startFailure,
+    });
+    return result;
   }
 
   async function failStart(
     error: ChatAdapterOpenError | ChatAdapterStartError,
+    startedAt: number,
+    metadata: {
+      readonly operation: "start";
+      readonly chatIds: readonly TChatId[];
+      readonly lifecycleStatus: string;
+    },
   ): Promise<Result<void, ChatStartError>> {
     pendingStartupEvents.length = 0;
     await cleanupOpenedRuntimes();
     lifecycle = { status: "created" };
-    return Result.err(error);
+    const result: Result<void, ChatStartError> = Result.err(error);
+    logChatResult({
+      logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.startSuccess,
+      failureEvent: chatLogEvents.startFailure,
+    });
+    return result;
   }
 
   async function cleanupOpenedRuntimes() {
     const cleanupResults = await Promise.all(
       [...openedRuntimes.entries()].map(async ([chatId, runtime]) => {
+        const startedAt = startChatLogTimer();
+        const metadata = {
+          chatId,
+          operation: "closeAdapter",
+          reason: "startup_cleanup",
+        } as const;
+
+        logger.debug(chatLogEvents.adapterCloseBegin, metadata);
+
         const cleanup = await Result.tryPromise({
           try: async () => runtime.close(),
           catch: (cause) => ({ chatId, cause }),
         });
         openedRuntimes.delete(chatId);
-        return Result.map(cleanup, () => undefined);
+        const result = Result.map(cleanup, () => undefined);
+
+        logChatResult({
+          logger,
+          result,
+          startedAt,
+          metadata,
+          successEvent: chatLogEvents.adapterCloseSuccess,
+          failureEvent: chatLogEvents.adapterCloseFailure,
+        });
+
+        return result;
       }),
     );
     Result.partition(cleanupResults);
   }
 
   async function close(): Promise<Result<void, ChatCloseFailure>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "close",
+      chatIds,
+      lifecycleStatus: lifecycle.status,
+    } as const;
+
+    logger.debug(chatLogEvents.closeBegin, metadata);
+
     const canClose = ensureCanClose(lifecycle);
-    if (canClose.isErr()) return Result.err(canClose.error);
+    if (canClose.isErr()) {
+      const result: Result<void, ChatCloseFailure> = Result.err(canClose.error);
+      logChatResult({
+        logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: chatLogEvents.closeSuccess,
+        failureEvent: chatLogEvents.closeFailure,
+      });
+      return result;
+    }
 
     lifecycle = { status: "closing" };
     abortController?.abort();
 
     const closeResults = await Promise.all(
       [...openedRuntimes.entries()].map(async ([chatId, runtime]) => {
-        return Result.tryPromise({
+        const adapterStartedAt = startChatLogTimer();
+        const adapterMetadata = {
+          chatId,
+          operation: "closeAdapter",
+        } as const;
+
+        logger.debug(chatLogEvents.adapterCloseBegin, adapterMetadata);
+
+        const closeResult = await Result.tryPromise({
           try: async () => {
             try {
               await runtime.close();
@@ -442,6 +553,17 @@ export function createChat<
           },
           catch: (cause) => ({ chatId, cause }),
         });
+
+        logChatResult({
+          logger,
+          result: closeResult,
+          startedAt: adapterStartedAt,
+          metadata: adapterMetadata,
+          successEvent: chatLogEvents.adapterCloseSuccess,
+          failureEvent: chatLogEvents.adapterCloseFailure,
+        });
+
+        return closeResult;
       }),
     );
     const [, failures] = Result.partition(closeResults);
@@ -449,7 +571,19 @@ export function createChat<
     lifecycle = { status: "closed" };
     abortController = undefined;
 
-    return failures.length === 0 ? Result.ok() : Result.err(new ChatCloseError({ failures }));
+    const result: Result<void, ChatCloseFailure> =
+      failures.length === 0 ? Result.ok() : Result.err(new ChatCloseError({ failures }));
+
+    logChatResult({
+      logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.closeSuccess,
+      failureEvent: chatLogEvents.closeFailure,
+    });
+
+    return result;
   }
 
   return {

@@ -10,6 +10,7 @@ import {
   UnknownChatAdapterError,
   UnsupportedChatOperationError,
   actionValue,
+  chatLogEvents,
   createChat,
   defineChatAction,
   defineChatActions,
@@ -21,6 +22,8 @@ import {
   type ChatAttachment,
   type ChatCommandRegistry,
   type ChatAdapterStreamReplyInput,
+  type ChatLogger,
+  type OpenChatAdapterContext,
 } from "../src";
 
 const commands = defineChatCommands({
@@ -80,6 +83,16 @@ async function* bytesChunks(chunks: readonly Uint8Array[]) {
   yield* chunks;
 }
 
+function createMockLogger() {
+  return {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } satisfies ChatLogger;
+}
+
 function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly id: TId;
   readonly handles: Handles;
@@ -97,6 +110,7 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   readonly throwOnReply?: unknown;
   readonly typingError?: unknown;
   readonly throwOnTyping?: unknown;
+  readonly onOpen?: (context: OpenChatAdapterContext) => void;
   readonly onStart?: (context: ChatAdapterStartContext<ChatCommandRegistry, TId>) => void;
   readonly onSend?: (input: {
     readonly adapterOptions: Record<never, never>;
@@ -141,7 +155,8 @@ function createRuntimeAdapter<const TId extends "alpha" | "beta">(args: {
   return defineChatAdapter<TId, Record<never, never>, Record<never, never>, typeof capabilities>({
     id: args.id,
     capabilities,
-    async open() {
+    async open(context) {
+      args.onOpen?.(context);
       args.handles.opens.push(args.id);
       if (args.throwOnOpen !== undefined) {
         throw args.throwOnOpen;
@@ -297,6 +312,152 @@ describe("createChat lifecycle", () => {
     expect(handles.starts).toEqual(["alpha", "beta"]);
     expect(seenCommands).toEqual(["Start"]);
     expect(ready).toEqual(["alpha", "beta"]);
+  });
+
+  test("passes injected loggers to adapters and logs safe structured metadata", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const logger = createMockLogger();
+    let openLogger: ChatLogger | undefined;
+    let startLogger: ChatLogger | undefined;
+
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onOpen: (context) => {
+            openLogger = context.logger;
+          },
+          onStart: (context) => {
+            startLogger = context.logger;
+          },
+        }),
+      },
+      commands,
+      logger,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    expect(openLogger).toBe(logger);
+    expect(startLogger).toBe(logger);
+
+    const sent = await chat.sendMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      text: "do not log this secret text",
+    });
+
+    expect(sent.isOk()).toBe(true);
+    expect(logger.debug).toHaveBeenCalledWith(
+      chatLogEvents.startBegin,
+      expect.objectContaining({ component: "@xmux/chat-core", operation: "start" }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      chatLogEvents.operationBegin,
+      expect.objectContaining({
+        component: "@xmux/chat-core",
+        chatId: "alpha",
+        operation: "sendMessage",
+        conversationId: "conversation",
+        textLength: "do not log this secret text".length,
+      }),
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("do not log this secret text");
+  });
+
+  test("logger failures do not affect chat operations", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const logger = {
+      trace: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      debug: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      info: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      warn: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      error: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+    } satisfies ChatLogger;
+
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", handles }),
+      },
+      commands,
+      logger,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    expect(
+      (
+        await chat.sendMessage({
+          chatId: "alpha",
+          conversationId: "conversation",
+          text: "hello",
+        })
+      ).isOk(),
+    ).toBe(true);
+    expect((await chat.close()).isOk()).toBe(true);
+  });
+
+  test("logs event handler failures", async () => {
+    const handles = { opens: [], starts: [], closes: [] };
+    const logger = createMockLogger();
+    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
+    const errors: unknown[] = [];
+
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          handles,
+          onStart: (context) => {
+            startContext = context;
+          },
+        }),
+      },
+      commands,
+      logger,
+    });
+
+    chat.on("message", () => {
+      throw new Error("handler boom");
+    });
+    chat.on("error", (event) => {
+      errors.push(event.error);
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    startContext?.emit({
+      type: "message",
+      chatId: "alpha",
+      conversation: { chatId: "alpha", conversationId: "conversation" },
+      message: {
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "message",
+        actor: { kind: "user", actorId: "user", adapterData: {} },
+        text: "hello",
+        adapterData: {},
+        attachments: [],
+      },
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(logger.error).toHaveBeenCalledWith(
+      chatLogEvents.eventHandlerFailure,
+      expect.objectContaining({
+        chatId: "alpha",
+        eventType: "message",
+        error: expect.objectContaining({ message: "handler boom" }),
+      }),
+    );
   });
 
   test("delivers adapter-emitted message and command events", async () => {

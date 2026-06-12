@@ -11,6 +11,15 @@ import type {
   ChatTypingIndicatorInput,
   ChatTypingIndicatorResult,
 } from "../inputs";
+import {
+  chatLogEvents,
+  logChatResult,
+  serializeChatLogError,
+  startChatLogTimer,
+  type ChatLogEventName,
+  type ChatLogMetadata,
+  type ChatLogScope,
+} from "../logger";
 import type { GetStartedRuntime } from "./types";
 import { createAdapterTypingIndicatorInput } from "./adapter-inputs";
 
@@ -22,68 +31,105 @@ export function createTypingIndicatorHandler<
 >(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
   readonly getLifecycleSignal: () => AbortSignal | undefined;
+  readonly logger?: ChatLogScope<ChatLogEventName>;
 }) {
   return async function typingIndicator<TInput extends ChatTypingIndicatorInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatTypingIndicatorResult<TInput>, ChatTypingIndicatorFailure>> {
-    const runtimeResult = await args.getStartedRuntime({
-      chatId: input.chatId,
-      operation: "typingIndicator",
-    });
-    if (runtimeResult.isErr()) {
-      return Result.err(runtimeResult.error);
-    }
-
-    const runtime = runtimeResult.value;
     const fallback = input.fallback ?? "error";
     const mode = input.mode ?? "pulse";
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      chatId: String(input.chatId),
+      operation: "typingIndicator",
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      mode,
+      fallback,
+      action: input.action ?? "typing",
+    } as const;
 
-    if (runtime.sendTyping === undefined) {
-      if (fallback === "ignore") {
-        return Result.ok(
-          createNoopTypingIndicatorResult(mode) as ChatTypingIndicatorResult<TInput>,
+    args.logger?.debug(chatLogEvents.operationBegin, metadata);
+
+    const result = await (async (): Promise<
+      Result<ChatTypingIndicatorResult<TInput>, ChatTypingIndicatorFailure>
+    > => {
+      const runtimeResult = await args.getStartedRuntime({
+        chatId: input.chatId,
+        operation: "typingIndicator",
+      });
+      if (runtimeResult.isErr()) {
+        return Result.err(runtimeResult.error);
+      }
+
+      const runtime = runtimeResult.value;
+
+      if (runtime.sendTyping === undefined) {
+        if (fallback === "ignore") {
+          args.logger?.debug(chatLogEvents.operationFallback, {
+            ...metadata,
+            result: "ignored",
+            reason: "adapter_send_typing_missing",
+          });
+
+          return Result.ok(
+            createNoopTypingIndicatorResult(mode) as ChatTypingIndicatorResult<TInput>,
+          );
+        }
+
+        return Result.err(
+          new UnsupportedChatOperationError({
+            chatId: input.chatId,
+            operation: "typingIndicator",
+            mode,
+          }),
         );
       }
 
-      return Result.err(
-        new UnsupportedChatOperationError({
-          chatId: input.chatId,
-          operation: "typingIndicator",
-          mode,
-        }),
-      );
-    }
+      if (mode === "pulse") {
+        const pulse = await sendTypingPulse({ runtime, input });
+        return Result.map(pulse, () => undefined) as Result<
+          ChatTypingIndicatorResult<TInput>,
+          ChatTypingIndicatorFailure
+        >;
+      }
 
-    if (mode === "pulse") {
-      const pulse = await sendTypingPulse({ runtime, input });
-      return Result.map(pulse, () => undefined) as Result<
-        ChatTypingIndicatorResult<TInput>,
-        ChatTypingIndicatorFailure
-      >;
-    }
+      const timing = normalizeManagedTypingTiming({
+        timeoutMs: "timeoutMs" in input ? input.timeoutMs : undefined,
+        refreshIntervalMs: "refreshIntervalMs" in input ? input.refreshIntervalMs : undefined,
+      });
+      if (timing.isErr()) {
+        return Result.err(timing.error);
+      }
 
-    const timing = normalizeManagedTypingTiming({
-      timeoutMs: "timeoutMs" in input ? input.timeoutMs : undefined,
-      refreshIntervalMs: "refreshIntervalMs" in input ? input.refreshIntervalMs : undefined,
+      const firstPulse = await sendTypingPulse({ runtime, input });
+      if (firstPulse.isErr()) {
+        return Result.err(firstPulse.error);
+      }
+
+      const handle = createManagedTypingIndicator({
+        input,
+        timeoutMs: timing.value.timeoutMs,
+        refreshIntervalMs: timing.value.refreshIntervalMs,
+        sendPulse: () => sendTypingPulse({ runtime, input }),
+        lifecycleSignal: args.getLifecycleSignal(),
+        logger: args.logger,
+        metadata,
+      });
+
+      return Result.ok(handle as ChatTypingIndicatorResult<TInput>);
+    })();
+
+    logChatResult({
+      logger: args.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.operationSuccess,
+      failureEvent: chatLogEvents.operationFailure,
     });
-    if (timing.isErr()) {
-      return Result.err(timing.error);
-    }
 
-    const firstPulse = await sendTypingPulse({ runtime, input });
-    if (firstPulse.isErr()) {
-      return Result.err(firstPulse.error);
-    }
-
-    const handle = createManagedTypingIndicator({
-      input,
-      timeoutMs: timing.value.timeoutMs,
-      refreshIntervalMs: timing.value.refreshIntervalMs,
-      sendPulse: () => sendTypingPulse({ runtime, input }),
-      lifecycleSignal: args.getLifecycleSignal(),
-    });
-
-    return Result.ok(handle as ChatTypingIndicatorResult<TInput>);
+    return result;
   };
 }
 
@@ -162,6 +208,8 @@ function createManagedTypingIndicator<TInput extends { readonly signal?: AbortSi
   readonly refreshIntervalMs: number;
   readonly sendPulse: () => Promise<Result<void, ChatTypingIndicatorError>>;
   readonly lifecycleSignal?: AbortSignal;
+  readonly logger?: ChatLogScope<ChatLogEventName>;
+  readonly metadata: ChatLogMetadata;
 }): ChatTypingIndicatorHandle {
   let stopped = false;
   let inFlight = false;
@@ -194,11 +242,21 @@ function createManagedTypingIndicator<TInput extends { readonly signal?: AbortSi
       .sendPulse()
       .then((result) => {
         if (result.isErr() && !stopped) {
+          args.logger?.error(chatLogEvents.backgroundTaskFailure, {
+            ...args.metadata,
+            reason: "managed_typing_refresh_failed",
+            error: serializeChatLogError(result.error),
+          });
           stop();
         }
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (!stopped) {
+          args.logger?.error(chatLogEvents.backgroundTaskFailure, {
+            ...args.metadata,
+            reason: "managed_typing_refresh_rejected",
+            error: serializeChatLogError(cause),
+          });
           stop();
         }
       })

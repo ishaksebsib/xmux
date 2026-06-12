@@ -8,20 +8,41 @@ import {
 } from "../errors";
 import type { AdapterOptionsFor, ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatReplyInput, ChatSentMessageFromInput } from "../inputs";
+import {
+  chatLogEvents,
+  logChatResult,
+  startChatLogTimer,
+  type ChatLogEventName,
+  type ChatLogScope,
+} from "../logger";
 import type { GetStartedRuntime } from "./types";
 import { createAdapterSendMessageInput } from "./adapter-inputs";
 
 export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>>(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
+  readonly logger?: ChatLogScope<ChatLogEventName>;
 }) {
   return async function reply<TInput extends ChatReplyInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>> {
-    return Result.gen(async function* () {
+    const mode = input.mode ?? "auto";
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      chatId: String(input.chatId),
+      operation: "reply",
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      mode,
+      textLength: input.text.length,
+      format: input.format,
+    } as const;
+
+    args.logger?.debug(chatLogEvents.operationBegin, metadata);
+
+    const result = await Result.gen(async function* () {
       const runtime = yield* Result.await(
         args.getStartedRuntime({ chatId: input.chatId, operation: "reply" }),
       );
-      const mode = input.mode ?? "auto";
 
       if (runtime.reply) {
         const adapterReplyInput = {
@@ -74,6 +95,15 @@ export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAda
         );
       }
 
+      args.logger?.debug(chatLogEvents.operationFallback, {
+        chatId: String(input.chatId),
+        operation: "reply",
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+        mode,
+        fallback: "sendMessage",
+      });
+
       const sent = yield* Result.await(
         Result.tryPromise({
           try: async () =>
@@ -87,5 +117,16 @@ export function createReplyHandler<TAdapters extends ChatAdapterDefinitions<TAda
         (cause) => new ChatSendMessageError({ chatId: input.chatId, cause }),
       ) as Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>;
     });
+
+    logChatResult({
+      logger: args.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.operationSuccess,
+      failureEvent: chatLogEvents.operationFailure,
+    });
+
+    return result;
   };
 }
