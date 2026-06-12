@@ -6,12 +6,37 @@ import {
   stringOption,
 } from "@xmux/chat-core";
 import { createTelegramAdapter } from "../../src";
-import { TelegramWebhookModeUnsupportedError } from "../../src/errors";
+import { TelegramConfigurationError, TelegramWebhookModeUnsupportedError } from "../../src/errors";
 import { createMockLogger } from "../fixtures/collect";
 import { startFakeTelegramApi } from "../fixtures/fake-telegram-api";
 import { fakeBotInfo } from "../fixtures/telegram-builders";
 
 describe("Telegram lifecycle contract", () => {
+  test("start rejects an empty token before any Telegram API request", async () => {
+    const api = await startFakeTelegramApi();
+    const chat = createChat({
+      adapters: {
+        telegram: createTelegramAdapter({
+          token: "",
+          botOptions: { client: { apiRoot: api.url }, botInfo: fakeBotInfo() },
+        }),
+      },
+      commands: {},
+    });
+
+    try {
+      const started = await chat.start();
+      expect(started.isErr()).toBe(true);
+      if (started.isErr()) {
+        expect(started.error.cause).toBeInstanceOf(TelegramConfigurationError);
+      }
+      expect(api.requests).toHaveLength(0);
+    } finally {
+      await chat.close();
+      await api.close();
+    }
+  });
+
   test("start uses botInfo, registers commands, and starts polling with configured options", async () => {
     const api = await startFakeTelegramApi();
     const logger = createMockLogger();
