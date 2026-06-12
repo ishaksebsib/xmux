@@ -31,8 +31,13 @@ export function createTelegramAdapter<const TChatId extends string = "telegram">
   >({
     id: chatId,
     capabilities: telegramAdapterCapabilities,
-    async open() {
-      return openTelegramRuntime({ chatId, options, mode });
+    async open(context) {
+      return openTelegramRuntime({
+        chatId,
+        options,
+        mode,
+        logger: options.logger ?? context.logger,
+      });
     },
   });
 }

@@ -1,3 +1,4 @@
+import type { ChatLogger } from "@xmux/chat-core";
 import type { Bot, PollingOptions } from "grammy";
 
 /** Telegram update type accepted by `allowedUpdates`. */
@@ -38,4 +39,5 @@ export interface CreateTelegramAdapterOptions<TChatId extends string = "telegram
   readonly token: string;
   readonly mode?: TelegramAdapterMode;
   readonly botOptions?: TelegramBotOptions;
+  readonly logger?: ChatLogger;
 }

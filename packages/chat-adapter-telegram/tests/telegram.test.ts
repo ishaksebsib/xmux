@@ -21,6 +21,7 @@ import type {
   TelegramTextMessageContext,
 } from "../src/client";
 import { openTelegramRuntime } from "../src/runtime";
+import { telegramLogEvents } from "../src/logger";
 import {
   renderTelegramMarkdownFinal,
   renderTelegramMarkdownPreview,
@@ -36,6 +37,7 @@ import {
   type ChatAdapterDefinition,
   type ChatAdapterStartContext,
   type ChatCommandRegistry,
+  type ChatLogger,
 } from "@xmux/chat-core";
 
 function createStartContext<
@@ -325,13 +327,25 @@ function createFakeTelegramBot(
 function createRuntimeWithFakeBot(args: {
   readonly bot: FakeTelegramBot;
   readonly mode?: Parameters<typeof openTelegramRuntime<"telegram">>[0]["mode"];
+  readonly logger?: ChatLogger;
 }) {
   return openTelegramRuntime({
     chatId: "telegram",
     options: { token: "123:test" },
     mode: args.mode ?? { type: "polling" },
     createBot: () => args.bot,
+    logger: args.logger,
   });
+}
+
+function createMockLogger() {
+  return {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } satisfies ChatLogger;
 }
 
 async function* textChunks(parts: readonly string[]) {
@@ -563,6 +577,83 @@ describe("createTelegramAdapter", () => {
       expect(opened.value.capabilities?.messages.stream?.send).toBe(true);
       expect(opened.value.capabilities?.commands?.registration).toBe("dynamic");
     }
+  });
+
+  test("logs lifecycle and outbound operations without message text or token", async () => {
+    const bot = createFakeTelegramBot();
+    const logger = createMockLogger();
+    const opened = createRuntimeWithFakeBot({ bot, logger });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram" }));
+    expect(started.isOk()).toBe(true);
+
+    const sent = await opened.value.sendMessage({
+      chatId: "telegram",
+      conversationId: "123",
+      text: "do not log this telegram text",
+      adapterOptions: {},
+    });
+    expect(sent.isOk()).toBe(true);
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      telegramLogEvents.openBegin,
+      expect.objectContaining({
+        component: "@xmux/chat-adapter-telegram",
+        adapter: "telegram",
+        chatId: "telegram",
+        operation: "open",
+      }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      telegramLogEvents.outboundBegin,
+      expect.objectContaining({
+        operation: "sendMessage",
+        conversationId: "123",
+        textLength: "do not log this telegram text".length,
+      }),
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("do not log this telegram text");
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("123:test");
+  });
+
+  test("logs inbound events without raw updates or message text", async () => {
+    const bot = createFakeTelegramBot();
+    const logger = createMockLogger();
+    const events: unknown[] = [];
+    const opened = createRuntimeWithFakeBot({ bot, logger });
+    expect(opened.isOk()).toBe(true);
+    if (opened.isErr()) {
+      return;
+    }
+
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", events }));
+    expect(started.isOk()).toBe(true);
+
+    await bot.emitMessage(
+      createTelegramMessageContext({
+        chatId: 123,
+        messageId: 456,
+        updateId: 789,
+        message: { text: "private inbound text" },
+        from: { id: 1, is_bot: false, first_name: "Alice" },
+      }),
+    );
+
+    expect(events).toHaveLength(1);
+    expect(logger.debug).toHaveBeenCalledWith(
+      telegramLogEvents.inboundEvent,
+      expect.objectContaining({
+        eventType: "message",
+        conversationId: "123",
+        messageId: "456",
+        textLength: "private inbound text".length,
+      }),
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("private inbound text");
   });
 
   test("webhook mode is explicit but unsupported in this phase", async () => {

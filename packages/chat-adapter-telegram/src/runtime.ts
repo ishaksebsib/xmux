@@ -1,4 +1,5 @@
 import { Result } from "better-result";
+import { serializeChatLogError, startChatLogTimer, type ChatLogger } from "@xmux/chat-core";
 import type {
   ChatAdapterReplyInput,
   ChatAdapterRespondToActionInput,
@@ -19,6 +20,12 @@ import {
   type TelegramBotClient,
 } from "./client";
 import { parseTelegramBotToken } from "./config";
+import {
+  createTelegramLogScope,
+  logChatResult,
+  telegramLogEvents,
+  type TelegramLogScope,
+} from "./logger";
 import {
   TelegramActionResponseError,
   type TelegramAdapterError,
@@ -64,6 +71,7 @@ export function openTelegramRuntime<TChatId extends string>(args: {
   readonly options: CreateTelegramAdapterOptions<TChatId>;
   readonly mode: TelegramAdapterMode;
   readonly createBot?: CreateTelegramBotClient;
+  readonly logger?: ChatLogger;
 }): Result<
   OpenedChatAdapter<
     TChatId,
@@ -74,7 +82,17 @@ export function openTelegramRuntime<TChatId extends string>(args: {
   >,
   TelegramConfigurationError
 > {
-  return Result.gen(function* () {
+  const logger = createTelegramLogScope({
+    logger: args.logger,
+    chatId: args.chatId,
+    mode: args.mode.type,
+  });
+  const startedAt = startChatLogTimer();
+  const metadata = { operation: "open", mode: args.mode.type } as const;
+
+  logger.debug(telegramLogEvents.openBegin, metadata);
+
+  const result = Result.gen(function* () {
     const token = yield* parseTelegramBotToken(args.options.token);
     const bot = yield* Result.try({
       try: () =>
@@ -85,8 +103,19 @@ export function openTelegramRuntime<TChatId extends string>(args: {
       catch: (cause) => new TelegramConfigurationError({ field: "token", cause }),
     });
 
-    return Result.ok(new TelegramRuntime({ chatId: args.chatId, bot, mode: args.mode }));
+    return Result.ok(new TelegramRuntime({ chatId: args.chatId, bot, mode: args.mode, logger }));
   });
+
+  logChatResult({
+    logger,
+    result,
+    startedAt,
+    metadata,
+    successEvent: telegramLogEvents.openSuccess,
+    failureEvent: telegramLogEvents.openFailure,
+  });
+
+  return result;
 }
 
 class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
@@ -105,14 +134,17 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     readonly chatId: TChatId;
     readonly bot: TelegramBotClient;
     readonly mode: TelegramAdapterMode;
+    readonly logger: TelegramLogScope;
   }) {
     this.id = args.chatId;
     this.bot = args.bot;
     this.mode = args.mode;
+    this.logger = args.logger;
   }
 
   private readonly bot: TelegramBotClient;
   private readonly mode: TelegramAdapterMode;
+  private readonly logger: TelegramLogScope;
 
   async start<TCommands extends ChatCommandRegistry>(
     context: ChatAdapterStartContext<TCommands, TChatId, TelegramAdapterData>,
@@ -122,30 +154,77 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       TelegramCommandRegistrationError | TelegramStartError | TelegramWebhookModeUnsupportedError
     >
   > {
+    const startedAt = startChatLogTimer();
+    const metadata = { operation: "start", mode: this.mode.type } as const;
+
+    this.logger.debug(telegramLogEvents.startBegin, metadata);
+
     if (this.#state.status === "closed" || this.#state.status === "started") {
-      return Result.ok();
+      const result = Result.ok<void, never>(undefined);
+      logChatResult({
+        logger: this.logger,
+        result,
+        startedAt,
+        metadata: { ...metadata, result: "ignored", lifecycleStatus: this.#state.status },
+        successEvent: telegramLogEvents.startSuccess,
+        failureEvent: telegramLogEvents.startFailure,
+      });
+      return result;
     }
 
     const mode = this.mode;
     if (mode.type === "webhook") {
-      return Result.err(new TelegramWebhookModeUnsupportedError());
+      const result = Result.err(new TelegramWebhookModeUnsupportedError());
+      logChatResult({
+        logger: this.logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: telegramLogEvents.startSuccess,
+        failureEvent: telegramLogEvents.startFailure,
+      });
+      return result;
     }
 
-    registerInboundHandlers({ chatId: this.id, bot: this.bot, context });
+    registerInboundHandlers({ chatId: this.id, bot: this.bot, context, logger: this.logger });
 
     const started = await Result.gen(async function* () {
       yield* Result.await(initializeBot({ bot: this.bot, signal: context.signal }));
-      yield* Result.await(
-        registerCommands({
-          bot: this.bot,
-          commands: context.commands,
-          signal: context.signal,
-        }),
-      );
+      this.logger.debug(telegramLogEvents.commandsRegisterBegin, {
+        operation: "registerCommands",
+        commandCount: Object.keys(context.commands).length,
+      });
+      const commandsStartedAt = startChatLogTimer();
+      const registered = await registerCommands({
+        bot: this.bot,
+        commands: context.commands,
+        signal: context.signal,
+      });
+      logChatResult({
+        logger: this.logger,
+        result: registered,
+        startedAt: commandsStartedAt,
+        metadata: {
+          operation: "registerCommands",
+          commandCount: Object.keys(context.commands).length,
+        },
+        successEvent: telegramLogEvents.commandsRegisterSuccess,
+        failureEvent: telegramLogEvents.commandsRegisterFailure,
+      });
+      yield* registered;
+      this.logger.debug(telegramLogEvents.pollingStart, { operation: "startPolling" });
       const polling = yield* startPolling({ bot: this.bot, mode });
       return Result.ok(polling);
     }, this);
     if (started.isErr()) {
+      logChatResult({
+        logger: this.logger,
+        result: started,
+        startedAt,
+        metadata,
+        successEvent: telegramLogEvents.startSuccess,
+        failureEvent: telegramLogEvents.startFailure,
+      });
       return Result.err(started.error);
     }
 
@@ -153,6 +232,10 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       status: "started",
       polling: started.value.polling.catch((error: unknown) => {
         if (this.#state.status !== "closed") {
+          this.logger.error(telegramLogEvents.pollingFailure, {
+            operation: "polling",
+            error: serializeChatLogError(error),
+          });
           context.emit({ type: "error", chatId: this.id, error });
         }
       }),
@@ -162,6 +245,11 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       signal: context.signal,
       abort: () => {
         void this.close().catch((error: unknown) => {
+          this.logger.error(telegramLogEvents.backgroundFailure, {
+            operation: "close",
+            reason: "abort_close_failed",
+            error: serializeChatLogError(error),
+          });
           context.emit({ type: "error", chatId: this.id, error });
         });
       },
@@ -171,53 +259,182 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       this.#state = { ...this.#state, removeAbortListener };
     }
 
-    return Result.ok();
+    const result = Result.ok<void, never>(undefined);
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.startSuccess,
+      failureEvent: telegramLogEvents.startFailure,
+    });
+    return result;
   }
 
   async sendMessage(
     input: ChatAdapterSendMessageInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendMessageError>> {
-    return handleSendMessage({ chatId: this.id, bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = outboundMessageMetadata("sendMessage", input);
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleSendMessage({ chatId: this.id, bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async sendAction(
     input: ChatAdapterSendActionInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramSendActionError>> {
-    return handleSendAction({ chatId: this.id, bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("sendAction", input),
+      buttonRows: input.buttons.length,
+      buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
+    } as const;
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleSendAction({ chatId: this.id, bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async respondToAction(
     input: ChatAdapterRespondToActionInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<void, TelegramActionResponseError>> {
-    return handleRespondToAction({ bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "respondToAction",
+      conversationId: input.conversationId,
+      messageId: input.message.messageId,
+      interactionId: input.interactionId,
+      responseKind: input.response.kind,
+    } as const;
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleRespondToAction({ bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async reply(
     input: ChatAdapterReplyInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramReplyError>> {
-    return handleReply({ chatId: this.id, bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("reply", input),
+      messageId: input.message?.messageId,
+      mode: input.mode,
+    } as const;
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleReply({ chatId: this.id, bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async sendTyping(
     input: ChatAdapterSendTypingInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<void, TelegramSendTypingError>> {
-    return handleSendTyping({ bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "sendTyping",
+      conversationId: input.conversationId,
+      messageId: input.message?.messageId,
+      action: input.action,
+    } as const;
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleSendTyping({ bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async streamMessage(
     input: ChatAdapterStreamMessageInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramStreamMessageError>> {
-    return handleStreamMessage({ chatId: this.id, bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = outboundStreamMetadata("streamMessage", input);
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleStreamMessage({ chatId: this.id, bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async streamReply(
     input: ChatAdapterStreamReplyInput<TChatId, TelegramAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramStreamReplyError>> {
-    return handleStreamReply({ chatId: this.id, bot: this.bot, input });
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundStreamMetadata("streamReply", input),
+      messageId: input.message?.messageId,
+      mode: input.mode,
+    } as const;
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleStreamReply({ chatId: this.id, bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async close(): Promise<void> {
+    const startedAt = startChatLogTimer();
+    const metadata = { operation: "close", lifecycleStatus: this.#state.status } as const;
+
+    this.logger.debug(telegramLogEvents.closeBegin, metadata);
+
     if (this.#state.status === "closed") {
+      logChatResult({
+        logger: this.logger,
+        result: Result.ok<void, never>(undefined),
+        startedAt,
+        metadata: { ...metadata, result: "ignored" },
+        successEvent: telegramLogEvents.closeSuccess,
+        failureEvent: telegramLogEvents.closeFailure,
+      });
       return;
     }
 
@@ -228,10 +445,52 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       previousState.removeAbortListener?.();
     }
 
-    if (this.bot.isRunning()) {
-      await this.bot.stop();
+    const stopped = await Result.tryPromise({
+      try: async () => {
+        if (this.bot.isRunning()) {
+          await this.bot.stop();
+        }
+      },
+      catch: (cause) => cause,
+    });
+
+    logChatResult({
+      logger: this.logger,
+      result: stopped,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.closeSuccess,
+      failureEvent: telegramLogEvents.closeFailure,
+      failureLevel: "error",
+    });
+
+    if (stopped.isErr()) {
+      throw stopped.error;
     }
   }
+}
+
+function outboundMessageMetadata(
+  operation: string,
+  input: ChatAdapterSendMessageInput<string, TelegramAdapterOptions>,
+) {
+  return {
+    operation,
+    conversationId: input.conversationId,
+    textLength: input.text.length,
+    format: input.format,
+  } as const;
+}
+
+function outboundStreamMetadata(
+  operation: string,
+  input: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>,
+) {
+  return {
+    operation,
+    conversationId: input.conversationId,
+    format: input.content.format,
+  } as const;
 }
 
 function bindAbortSignal(args: {
