@@ -68,7 +68,11 @@ describe("Telegram reply contract", () => {
 
       expect(replied.isOk()).toBe(true);
       const request = await api.waitForMethod("sendMessage");
-      expect(request.body).toMatchObject({ chat_id: "12345", text: "hello", disable_notification: true });
+      expect(request.body).toMatchObject({
+        chat_id: "12345",
+        text: "hello",
+        disable_notification: true,
+      });
       expect(request.body).not.toMatchObject({ reply_parameters: expect.anything() });
     } finally {
       await chat.close();
@@ -93,7 +97,11 @@ describe("Telegram reply contract", () => {
       if (replied.isErr()) {
         expect(replied.error.cause).toBeInstanceOf(TelegramReplyError);
       }
-      expect(api.requests.slice(requestCount).some((request) => request.telegramMethod === "sendMessage")).toBe(false);
+      expect(
+        api.requests
+          .slice(requestCount)
+          .some((request) => request.telegramMethod === "sendMessage"),
+      ).toBe(false);
     } finally {
       await chat.close();
       await api.close();
@@ -127,7 +135,11 @@ describe("Telegram reply contract", () => {
       });
       expect(threaded.isOk()).toBe(true);
       const request = await api.waitForMethod("sendMessage");
-      expect(request.body).toMatchObject({ chat_id: "12345", text: "hello thread", message_thread_id: 7 });
+      expect(request.body).toMatchObject({
+        chat_id: "12345",
+        text: "hello thread",
+        message_thread_id: 7,
+      });
     } finally {
       await chat.close();
       await api.close();

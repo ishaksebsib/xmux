@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  createChat,
-  defineChatCommand,
-  defineChatCommands,
-  stringOption,
-} from "@xmux/chat-core";
+import { createChat, defineChatCommand, defineChatCommands, stringOption } from "@xmux/chat-core";
 import { createTelegramAdapter } from "../../src";
 import { TelegramConfigurationError, TelegramWebhookModeUnsupportedError } from "../../src/errors";
 import { createMockLogger } from "../fixtures/collect";

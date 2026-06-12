@@ -7,11 +7,7 @@ import {
   type ChatAdapterStartContext,
   type ChatCommandRegistry,
 } from "../src";
-import {
-  commands,
-  createMockLogger,
-  createRuntimeAdapter,
-} from "./fixtures/test-adapter";
+import { commands, createMockLogger, createRuntimeAdapter } from "./fixtures/test-adapter";
 
 describe("chat typing", () => {
   test("typingIndicator sends one native typing pulse", async () => {
@@ -62,7 +58,8 @@ describe("chat typing", () => {
     });
 
     expect(unsupported.isErr()).toBe(true);
-    if (unsupported.isErr()) expect(unsupported.error).toBeInstanceOf(UnsupportedChatOperationError);
+    if (unsupported.isErr())
+      expect(unsupported.error).toBeInstanceOf(UnsupportedChatOperationError);
     expect(ignored.isOk()).toBe(true);
     if (ignored.isOk()) ignored.value.stop();
     expect(logger.info).toHaveBeenCalledWith(

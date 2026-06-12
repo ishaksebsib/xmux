@@ -16,7 +16,9 @@ describe("OpenCode prompt content mapping", () => {
   });
 
   test("maps images to OpenCode data-url file parts", () => {
-    expect(toPromptParts([{ type: "image", data: "aW1n", mimeType: "image/png", name: "img.png" }])).toEqual([
+    expect(
+      toPromptParts([{ type: "image", data: "aW1n", mimeType: "image/png", name: "img.png" }]),
+    ).toEqual([
       { type: "file", mime: "image/png", filename: "img.png", url: "data:image/png;base64,aW1n" },
     ]);
   });

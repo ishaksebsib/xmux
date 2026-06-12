@@ -22,8 +22,25 @@ describe("chat logging", () => {
     });
 
     expect((await chat.start()).isOk()).toBe(true);
-    expect((await chat.sendMessage({ chatId: "alpha", conversationId: "conversation", text: "secret text" })).isOk()).toBe(true);
-    expect((await chat.reply({ chatId: "alpha", conversationId: "conversation", messageId: "message", text: "reply secret" })).isOk()).toBe(true);
+    expect(
+      (
+        await chat.sendMessage({
+          chatId: "alpha",
+          conversationId: "conversation",
+          text: "secret text",
+        })
+      ).isOk(),
+    ).toBe(true);
+    expect(
+      (
+        await chat.reply({
+          chatId: "alpha",
+          conversationId: "conversation",
+          messageId: "message",
+          text: "reply secret",
+        })
+      ).isOk(),
+    ).toBe(true);
 
     expect(logger.debug).toHaveBeenCalledWith(
       chatLogEvents.startBegin,
@@ -71,13 +88,31 @@ describe("chat logging", () => {
     });
 
     expect((await chat.start()).isOk()).toBe(true);
-    await chat.sendMessage({ chatId: "alpha", conversationId: "conversation", text: "raw-message-secret" });
-    await chat.streamMessage({ chatId: "alpha", conversationId: "conversation", content: { chunks: textChunks(["stream-secret"]) } });
+    await chat.sendMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      text: "raw-message-secret",
+    });
+    await chat.streamMessage({
+      chatId: "alpha",
+      conversationId: "conversation",
+      content: { chunks: textChunks(["stream-secret"]) },
+    });
     await chat.sendAction({
       chatId: "alpha",
       conversationId: "conversation",
       text: "action-secret-text",
-      buttons: [[{ id: "approve", label: "Approve", actionId: "deployment", value: "approve", payload: { token: "payload-secret" } }]],
+      buttons: [
+        [
+          {
+            id: "approve",
+            label: "Approve",
+            actionId: "deployment",
+            value: "approve",
+            payload: { token: "payload-secret" },
+          },
+        ],
+      ],
     });
 
     const logs = JSON.stringify([
@@ -154,7 +189,11 @@ describe("chat logging", () => {
     });
 
     expect((await chat.start()).isOk()).toBe(true);
-    expect((await chat.sendMessage({ chatId: "alpha", conversationId: "conversation", text: "hello" })).isOk()).toBe(true);
+    expect(
+      (
+        await chat.sendMessage({ chatId: "alpha", conversationId: "conversation", text: "hello" })
+      ).isOk(),
+    ).toBe(true);
     expect((await chat.close()).isOk()).toBe(true);
   });
 });

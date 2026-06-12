@@ -7,7 +7,9 @@ describe("OpenCode adapter config", () => {
   });
 
   test("preserves explicit external config", () => {
-    expect(normalizeOpenCodeAdapterConfig({ mode: "external", baseUrl: "http://127.0.0.1:4096" })).toEqual({
+    expect(
+      normalizeOpenCodeAdapterConfig({ mode: "external", baseUrl: "http://127.0.0.1:4096" }),
+    ).toEqual({
       mode: "external",
       baseUrl: "http://127.0.0.1:4096",
     });

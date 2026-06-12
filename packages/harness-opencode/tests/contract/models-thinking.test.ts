@@ -131,19 +131,28 @@ describe("OpenCode models and thinking contract", () => {
         target: { type: "harness", harnessId: "opencode" },
         update: { type: "set", level: "high" },
       });
-      expect(setHarness.unwrap("set harness thinking")).toMatchObject({ level: "high", source: "harness" });
+      expect(setHarness.unwrap("set harness thinking")).toMatchObject({
+        level: "high",
+        source: "harness",
+      });
 
       const clearedHarness = await harness.setThinking({
         target: { type: "harness", harnessId: "opencode" },
         update: { type: "clear" },
       });
-      expect(clearedHarness.unwrap("cleared harness thinking")).toMatchObject({ level: "off", source: "native" });
+      expect(clearedHarness.unwrap("cleared harness thinking")).toMatchObject({
+        level: "off",
+        source: "native",
+      });
 
       const setSession = await harness.setThinking({
         target: { type: "session", ref: { harnessId: "opencode", sessionId: "session-1" } },
         update: { type: "set", level: "low" },
       });
-      expect(setSession.unwrap("set session thinking")).toMatchObject({ level: "low", source: "session" });
+      expect(setSession.unwrap("set session thinking")).toMatchObject({
+        level: "low",
+        source: "session",
+      });
 
       const clearedSession = await harness.setThinking({
         target: { type: "session", ref: { harnessId: "opencode", sessionId: "session-1" } },

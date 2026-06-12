@@ -119,7 +119,9 @@ describe("Telegram inbound polling contract", () => {
   test("callback query updates with supported JSON data emit action events", async () => {
     const api = await startFakeTelegramApi();
     const actions = defineChatActions({
-      deployment: defineChatAction({ values: { approve: actionValue<{ deploymentId: string }>() } }),
+      deployment: defineChatAction({
+        values: { approve: actionValue<{ deploymentId: string }>() },
+      }),
     });
     const chat = createChat({
       adapters: { telegram: createAdapter(api) },

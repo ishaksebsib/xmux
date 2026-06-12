@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  actionValue,
-  createChat,
-  defineChatAction,
-  defineChatActions,
-} from "@xmux/chat-core";
+import { actionValue, createChat, defineChatAction, defineChatActions } from "@xmux/chat-core";
 import { createTelegramAdapter } from "../../src";
 import { TelegramSendMessageError, TelegramSendTypingError } from "../../src/errors";
 import { startFakeTelegramApi } from "../fixtures/fake-telegram-api";

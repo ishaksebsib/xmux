@@ -191,8 +191,7 @@ export async function createAdapterSession<
 > {
   return invokeAdapter({
     run: () => args.runtime.createSession(args.input),
-    mapError: (cause) =>
-      new HarnessAdapterCreateSessionError({ harnessId: args.harnessId, cause }),
+    mapError: (cause) => new HarnessAdapterCreateSessionError({ harnessId: args.harnessId, cause }),
   });
 }
 

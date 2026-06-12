@@ -227,7 +227,9 @@ describe("chat events", () => {
   });
 });
 
-function emitMessage(startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined) {
+function emitMessage(
+  startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined,
+) {
   startContext?.emit({
     type: "message",
     chatId: "alpha",

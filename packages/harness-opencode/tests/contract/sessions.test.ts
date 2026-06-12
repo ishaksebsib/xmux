@@ -78,7 +78,9 @@ describe("OpenCode session contract", () => {
         sessionId: "session-1",
         cwd: process.cwd(),
       });
-      const found = await harness.getSession({ ref: { harnessId: "opencode", sessionId: "session-1" } });
+      const found = await harness.getSession({
+        ref: { harnessId: "opencode", sessionId: "session-1" },
+      });
       const listed = await harness.listSessions({ harnessId: "opencode", cwd: process.cwd() });
 
       expect(resumed.unwrap("resumed")).toMatchObject({
@@ -98,7 +100,9 @@ describe("OpenCode session contract", () => {
   });
 
   test("deletes and aborts sessions through OpenCode routes", async () => {
-    const fakeOpenCode = await startFakeOpenCodeServer({ sessions: [nativeSession({ id: "session-1" })] });
+    const fakeOpenCode = await startFakeOpenCodeServer({
+      sessions: [nativeSession({ id: "session-1" })],
+    });
     const harness = createOpenCodeHarness(fakeOpenCode.url);
 
     try {
@@ -115,8 +119,16 @@ describe("OpenCode session contract", () => {
       expect(aborted.isOk()).toBe(true);
       expect(fakeOpenCode.requests).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ method: "DELETE", path: "/session/session-1", query: { workspace: "workspace-1" } }),
-          expect.objectContaining({ method: "POST", path: "/session/session-2/abort", query: { workspace: "workspace-1" } }),
+          expect.objectContaining({
+            method: "DELETE",
+            path: "/session/session-1",
+            query: { workspace: "workspace-1" },
+          }),
+          expect.objectContaining({
+            method: "POST",
+            path: "/session/session-2/abort",
+            query: { workspace: "workspace-1" },
+          }),
         ]),
       );
     } finally {
@@ -196,7 +208,9 @@ describe("OpenCode session contract", () => {
   });
 
   test("wraps boolean endpoints returning false", async () => {
-    const fakeOpenCode = await startFakeOpenCodeServer({ sessions: [nativeSession({ id: "session-1" })] });
+    const fakeOpenCode = await startFakeOpenCodeServer({
+      sessions: [nativeSession({ id: "session-1" })],
+    });
     fakeOpenCode.forceResponse("DELETE", "/session/session-1", {
       status: 200,
       body: false,
@@ -204,7 +218,9 @@ describe("OpenCode session contract", () => {
     const harness = createOpenCodeHarness(fakeOpenCode.url);
 
     try {
-      const deleted = await harness.deleteSession({ ref: { harnessId: "opencode", sessionId: "session-1" } });
+      const deleted = await harness.deleteSession({
+        ref: { harnessId: "opencode", sessionId: "session-1" },
+      });
 
       expect(deleted.isErr()).toBe(true);
       if (deleted.isErr()) expect(deleted.error).toBeInstanceOf(HarnessAdapterDeleteSessionError);

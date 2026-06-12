@@ -19,7 +19,8 @@ describe("chat replies", () => {
           id: "alpha",
           nativeReply: true,
           onSend: (input) => sends.push(input.text),
-          onReply: (input) => replies.push(`${input.message?.messageId}:${input.mode}:${input.text}`),
+          onReply: (input) =>
+            replies.push(`${input.message?.messageId}:${input.mode}:${input.text}`),
         }),
       },
       commands,
@@ -128,7 +129,9 @@ describe("chat replies", () => {
   test("reply wraps adapter returned and thrown failures", async () => {
     async function exercise(adapterFailure: { replyError?: unknown; replyThrow?: unknown }) {
       const chat = createChat({
-        adapters: { alpha: createRuntimeAdapter({ id: "alpha", nativeReply: true, ...adapterFailure }) },
+        adapters: {
+          alpha: createRuntimeAdapter({ id: "alpha", nativeReply: true, ...adapterFailure }),
+        },
         commands,
       });
 
@@ -151,7 +154,9 @@ describe("chat replies", () => {
 
   test("fallback send failures are reported as send-message failures", async () => {
     const chat = createChat({
-      adapters: { alpha: createRuntimeAdapter({ id: "alpha", sendError: new Error("send failed") }) },
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", sendError: new Error("send failed") }),
+      },
       commands,
     });
 
@@ -168,7 +173,9 @@ describe("chat replies", () => {
   });
 });
 
-function emitMessage(startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined) {
+function emitMessage(
+  startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined,
+) {
   startContext?.emit({
     type: "message",
     chatId: "alpha",

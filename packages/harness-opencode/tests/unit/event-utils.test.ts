@@ -10,12 +10,16 @@ import {
 
 describe("OpenCode event utilities", () => {
   test("normalizes raw, wrapped, sync, and malformed stream events safely", () => {
-    expect(normalizeOpenCodeStreamEvent({ type: "session.idle", properties: { sessionID: "s1" } })).toMatchObject({
+    expect(
+      normalizeOpenCodeStreamEvent({ type: "session.idle", properties: { sessionID: "s1" } }),
+    ).toMatchObject({
       type: "session.idle",
       properties: { sessionID: "s1" },
     });
     expect(
-      normalizeOpenCodeStreamEvent({ payload: { type: "session.idle", properties: { sessionID: "s1" } } }),
+      normalizeOpenCodeStreamEvent({
+        payload: { type: "session.idle", properties: { sessionID: "s1" } },
+      }),
     ).toMatchObject({ type: "session.idle" });
     expect(
       normalizeOpenCodeStreamEvent({
@@ -27,14 +31,21 @@ describe("OpenCode event utilities", () => {
   });
 
   test("extracts session ids from current and legacy event shapes", () => {
-    expect(getEventSessionId({ type: "session.idle", properties: { sessionID: "s1" } } as never)).toBe("s1");
     expect(
-      getEventSessionId({ type: "message.updated", properties: { info: { sessionID: "s2" } } } as never),
+      getEventSessionId({ type: "session.idle", properties: { sessionID: "s1" } } as never),
+    ).toBe("s1");
+    expect(
+      getEventSessionId({
+        type: "message.updated",
+        properties: { info: { sessionID: "s2" } },
+      } as never),
     ).toBe("s2");
   });
 
   test("maps usage, run reasons, tool input, and tool output", () => {
-    expect(toUsage({ input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 }, total: 6 })).toEqual({
+    expect(
+      toUsage({ input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 }, total: 6 }),
+    ).toEqual({
       input: 1,
       output: 2,
       reasoning: 3,
@@ -47,8 +58,9 @@ describe("OpenCode event utilities", () => {
     expect(toRunReason("stop")).toBe("stop");
     expect(parseToolInput('{"ok":true}')).toEqual({ ok: true });
     expect(parseToolInput("not-json")).toBe("not-json");
-    expect(
-      toToolOutputContent([{ type: "text", text: "done" }], { ok: true }),
-    ).toEqual([{ type: "text", text: "done" }, { type: "json", value: { ok: true } }]);
+    expect(toToolOutputContent([{ type: "text", text: "done" }], { ok: true })).toEqual([
+      { type: "text", text: "done" },
+      { type: "json", value: { ok: true } },
+    ]);
   });
 });

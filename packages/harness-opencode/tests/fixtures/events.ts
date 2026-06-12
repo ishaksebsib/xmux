@@ -24,10 +24,7 @@ export function wrapped<TValue>(payload: TValue): { readonly payload: TValue } {
   return { payload };
 }
 
-export function nextStepStarted(
-  sessionID: string,
-  overrides: Record<string, unknown> = {},
-) {
+export function nextStepStarted(sessionID: string, overrides: Record<string, unknown> = {}) {
   return event("session.next.step.started", {
     timestamp: 1,
     sessionID,
@@ -80,7 +77,14 @@ export function nextToolSuccessSequence(
     event("session.next.tool.input.started", { sessionID, timestamp: 30, callID, name }),
     event("session.next.tool.input.delta", { sessionID, timestamp: 31, callID, delta: rawInput }),
     event("session.next.tool.input.ended", { sessionID, timestamp: 32, callID, text: rawInput }),
-    event("session.next.tool.called", { sessionID, timestamp: 33, callID, tool: name, input, provider }),
+    event("session.next.tool.called", {
+      sessionID,
+      timestamp: 33,
+      callID,
+      tool: name,
+      input,
+      provider,
+    }),
     event("session.next.tool.success", {
       sessionID,
       timestamp: 34,
@@ -104,7 +108,14 @@ export function nextToolFailedSequence(
     event("session.next.tool.input.started", { sessionID, timestamp: 40, callID, name }),
     event("session.next.tool.input.delta", { sessionID, timestamp: 41, callID, delta: rawInput }),
     event("session.next.tool.input.ended", { sessionID, timestamp: 42, callID, text: rawInput }),
-    event("session.next.tool.called", { sessionID, timestamp: 43, callID, tool: name, input, provider }),
+    event("session.next.tool.called", {
+      sessionID,
+      timestamp: 43,
+      callID,
+      tool: name,
+      input,
+      provider,
+    }),
     event("session.next.tool.failed", { sessionID, timestamp: 44, callID, error, provider }),
   ];
 }

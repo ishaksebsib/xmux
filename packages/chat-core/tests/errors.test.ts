@@ -64,7 +64,11 @@ describe("chat-core errors", () => {
       commands,
     });
 
-    const sent = await chat.sendMessage({ chatId: "missing", conversationId: "c", text: "hello" } as never);
+    const sent = await chat.sendMessage({
+      chatId: "missing",
+      conversationId: "c",
+      text: "hello",
+    } as never);
 
     expect(sent.isErr()).toBe(true);
     if (sent.isErr()) {
@@ -77,7 +81,11 @@ describe("chat-core errors", () => {
   });
 
   test("unsupported operation errors are stable", () => {
-    const error = new UnsupportedChatOperationError({ chatId: "alpha", operation: "reply", mode: "thread" });
+    const error = new UnsupportedChatOperationError({
+      chatId: "alpha",
+      operation: "reply",
+      mode: "thread",
+    });
 
     expect(error.chatId).toBe("alpha");
     expect(error.operation).toBe("reply");

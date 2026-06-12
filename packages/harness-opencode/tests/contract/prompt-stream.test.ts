@@ -32,11 +32,29 @@ describe("OpenCode prompt stream contract", () => {
       ...nextTextSequence("session-1", "hello"),
       ...nextReasoningSequence("session-1", "reasoning-1", "because"),
       ...nextToolSuccessSequence("session-1", "call-1", "bash", { command: "pwd" }, "ok"),
-      ...nextToolFailedSequence("session-1", "call-2", "read", { file: "missing" }, { message: "not found" }),
+      ...nextToolFailedSequence(
+        "session-1",
+        "call-2",
+        "read",
+        { file: "missing" },
+        { message: "not found" },
+      ),
       event("session.next.retried", { sessionID: "session-1", attempt: 2, error: "try again" }),
-      event("session.next.compaction.started", { sessionID: "session-1", timestamp: 50, reason: "manual" }),
-      event("session.next.compaction.delta", { sessionID: "session-1", timestamp: 51, text: "summary" }),
-      event("session.next.compaction.ended", { sessionID: "session-1", timestamp: 52, text: "summary" }),
+      event("session.next.compaction.started", {
+        sessionID: "session-1",
+        timestamp: 50,
+        reason: "manual",
+      }),
+      event("session.next.compaction.delta", {
+        sessionID: "session-1",
+        timestamp: 51,
+        text: "summary",
+      }),
+      event("session.next.compaction.ended", {
+        sessionID: "session-1",
+        timestamp: 52,
+        text: "summary",
+      }),
       nextStepEnded("session-1"),
       sessionIdle("session-1"),
     );
@@ -56,12 +74,27 @@ describe("OpenCode prompt stream contract", () => {
       expect(events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ type: "turn", phase: "started", agent: "build" }),
-          expect.objectContaining({ type: "content", phase: "delta", kind: "text", delta: "hello" }),
-          expect.objectContaining({ type: "content", phase: "delta", kind: "reasoning", delta: "because" }),
+          expect.objectContaining({
+            type: "content",
+            phase: "delta",
+            kind: "text",
+            delta: "hello",
+          }),
+          expect.objectContaining({
+            type: "content",
+            phase: "delta",
+            kind: "reasoning",
+            delta: "because",
+          }),
           expect.objectContaining({ type: "tool", phase: "completed", callId: "call-1" }),
           expect.objectContaining({ type: "tool", phase: "failed", callId: "call-2" }),
           expect.objectContaining({ type: "retry", attempt: 2, error: "try again" }),
-          expect.objectContaining({ type: "content", phase: "completed", kind: "compaction", text: "summary" }),
+          expect.objectContaining({
+            type: "content",
+            phase: "completed",
+            kind: "compaction",
+            text: "summary",
+          }),
           expect.objectContaining({ type: "run", phase: "completed", reason: "stop" }),
         ]),
       );
@@ -104,8 +137,18 @@ describe("OpenCode prompt stream contract", () => {
           body: expect.objectContaining({
             parts: [
               { type: "text", text: "hello" },
-              { type: "file", mime: "image/png", filename: "img.png", url: "data:image/png;base64,aW1n" },
-              { type: "file", mime: "text/plain", filename: "readme.md", url: "file:///tmp/readme.md" },
+              {
+                type: "file",
+                mime: "image/png",
+                filename: "img.png",
+                url: "data:image/png;base64,aW1n",
+              },
+              {
+                type: "file",
+                mime: "text/plain",
+                filename: "readme.md",
+                url: "file:///tmp/readme.md",
+              },
             ],
           }),
         }),
@@ -119,7 +162,11 @@ describe("OpenCode prompt stream contract", () => {
   test("maps session.next.synthetic text into prompt content", async () => {
     const fakeOpenCode = await startFakeOpenCodeServer();
     fakeOpenCode.enqueueEvents(
-      event("session.next.synthetic", { sessionID: "session-1", timestamp: 10, text: "synthetic text" }),
+      event("session.next.synthetic", {
+        sessionID: "session-1",
+        timestamp: 10,
+        text: "synthetic text",
+      }),
       sessionIdle("session-1"),
     );
     const harness = createOpenCodeHarness(fakeOpenCode.url);
@@ -134,7 +181,12 @@ describe("OpenCode prompt stream contract", () => {
 
       expect(events).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ type: "content", phase: "completed", kind: "text", text: "synthetic text" }),
+          expect.objectContaining({
+            type: "content",
+            phase: "completed",
+            kind: "text",
+            text: "synthetic text",
+          }),
         ]),
       );
     } finally {

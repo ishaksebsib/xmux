@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  actionValue,
-  createChat,
-  defineChatAction,
-  defineChatActions,
-} from "@xmux/chat-core";
+import { actionValue, createChat, defineChatAction, defineChatActions } from "@xmux/chat-core";
 import { createTelegramAdapter } from "../../src";
 import { TelegramActionResponseError } from "../../src/errors";
 import { waitForCondition } from "../fixtures/collect";
@@ -65,7 +60,11 @@ describe("Telegram action response contract", () => {
 
       const request = await api.waitForMethod("answerCallbackQuery");
       await waitForCondition(() => results.length === 1);
-      expect(request.body).toMatchObject({ callback_query_id: "callback-401", text: "Done", show_alert: true });
+      expect(request.body).toMatchObject({
+        callback_query_id: "callback-401",
+        text: "Done",
+        show_alert: true,
+      });
       const result = results[0] as { readonly isOk?: () => boolean };
       expect(result.isOk?.()).toBe(true);
     } finally {
@@ -78,7 +77,10 @@ describe("Telegram action response contract", () => {
     const api = await startFakeTelegramApi();
     const chat = await startChat(api);
     chat.on("action", "deployment", async (event) => {
-      await event.reply({ text: "**approved**", format: "markdown" }, { adapterOptions: { disable_notification: true } });
+      await event.reply(
+        { text: "**approved**", format: "markdown" },
+        { adapterOptions: { disable_notification: true } },
+      );
     });
 
     try {
@@ -136,7 +138,10 @@ describe("Telegram action response contract", () => {
       enqueueAction(api, 404);
 
       await waitForCondition(() => results.length === 1);
-      const result = results[0] as { readonly isErr?: () => boolean; readonly error?: { readonly cause?: unknown } };
+      const result = results[0] as {
+        readonly isErr?: () => boolean;
+        readonly error?: { readonly cause?: unknown };
+      };
       expect(result.isErr?.()).toBe(true);
       if (typeof result.isErr === "function" && result.isErr()) {
         expect(result.error?.cause).toBeInstanceOf(TelegramActionResponseError);

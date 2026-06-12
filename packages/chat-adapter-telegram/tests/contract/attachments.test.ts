@@ -26,7 +26,10 @@ function createTelegramChat(api: Awaited<ReturnType<typeof startFakeTelegramApi>
 describe("Telegram attachments contract", () => {
   test("document attachments are lazy and download through fake Telegram file API", async () => {
     const api = await startFakeTelegramApi();
-    api.setMethodResult("getFile", telegramFile({ file_path: "documents/report.pdf", file_size: 3 }));
+    api.setMethodResult(
+      "getFile",
+      telegramFile({ file_path: "documents/report.pdf", file_size: 3 }),
+    );
     api.setFile("documents/report.pdf", new Uint8Array([1, 2, 3]), {
       contentType: "application/pdf",
     });
@@ -70,9 +73,11 @@ describe("Telegram attachments contract", () => {
       expect(opened?.isOk()).toBe(true);
       const getFile = await api.waitForMethod("getFile");
       expect(getFile.body).toMatchObject({ file_id: "doc-file-id" });
-      expect(api.requests.some((request) => request.pathname === `/file/bot${api.token}/documents/report.pdf`)).toBe(
-        true,
-      );
+      expect(
+        api.requests.some(
+          (request) => request.pathname === `/file/bot${api.token}/documents/report.pdf`,
+        ),
+      ).toBe(true);
       if (opened?.isOk()) {
         expect(opened.value.filename).toBe("report.pdf");
         expect(opened.value.mimeType).toBe("application/pdf");

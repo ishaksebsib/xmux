@@ -136,7 +136,9 @@ export function createRuntimeAdapter<const TId extends string>(args: {
     readonly mode?: string;
     readonly text: string;
   }) => void;
-  readonly onStreamMessage?: (input: { readonly content: { readonly chunks: AsyncIterable<unknown> } }) => void;
+  readonly onStreamMessage?: (input: {
+    readonly content: { readonly chunks: AsyncIterable<unknown> };
+  }) => void;
   readonly onStreamReply?: (input: {
     readonly message?: { readonly messageId: string };
     readonly mode?: string;
@@ -161,21 +163,24 @@ export function createRuntimeAdapter<const TId extends string>(args: {
     async open(context) {
       args.onOpen?.(context);
       handles.opens.push(args.id);
-      if ((args.throwOnOpen ?? args.openThrow) !== undefined) throw args.throwOnOpen ?? args.openThrow;
+      if ((args.throwOnOpen ?? args.openThrow) !== undefined)
+        throw args.throwOnOpen ?? args.openThrow;
       if (args.openError !== undefined) return Result.err(args.openError);
 
       return Result.ok({
         id: args.id,
         async start(context) {
           handles.starts.push(args.id);
-          if ((args.throwOnStart ?? args.startThrow) !== undefined) throw args.throwOnStart ?? args.startThrow;
+          if ((args.throwOnStart ?? args.startThrow) !== undefined)
+            throw args.throwOnStart ?? args.startThrow;
           if (args.startError !== undefined) return Result.err(args.startError);
           args.onStart?.(context);
           return Result.ok();
         },
         async sendMessage(input) {
           args.onSend?.(input);
-          if ((args.throwOnSend ?? args.sendThrow) !== undefined) throw args.throwOnSend ?? args.sendThrow;
+          if ((args.throwOnSend ?? args.sendThrow) !== undefined)
+            throw args.throwOnSend ?? args.sendThrow;
           if (args.sendError !== undefined) return Result.err(args.sendError);
           return Result.ok({
             chatId: args.id,
@@ -208,7 +213,8 @@ export function createRuntimeAdapter<const TId extends string>(args: {
         reply: args.nativeReply
           ? async (input) => {
               args.onReply?.(input);
-              if ((args.throwOnReply ?? args.replyThrow) !== undefined) throw args.throwOnReply ?? args.replyThrow;
+              if ((args.throwOnReply ?? args.replyThrow) !== undefined)
+                throw args.throwOnReply ?? args.replyThrow;
               if (args.replyError !== undefined) return Result.err(args.replyError);
               return Result.ok({
                 chatId: args.id,
@@ -223,7 +229,8 @@ export function createRuntimeAdapter<const TId extends string>(args: {
         sendTyping: args.nativeTyping
           ? async (input) => {
               args.onTyping?.(input);
-              if ((args.throwOnTyping ?? args.typingThrow) !== undefined) throw args.throwOnTyping ?? args.typingThrow;
+              if ((args.throwOnTyping ?? args.typingThrow) !== undefined)
+                throw args.throwOnTyping ?? args.typingThrow;
               if (args.typingError !== undefined) return Result.err(args.typingError);
               return Result.ok();
             }
@@ -233,7 +240,8 @@ export function createRuntimeAdapter<const TId extends string>(args: {
               async streamMessage(input: ChatAdapterStreamMessageInput<TId, Record<never, never>>) {
                 args.onStreamMessage?.(input);
                 if (args.streamMessageThrow !== undefined) throw args.streamMessageThrow;
-                if (args.streamMessageError !== undefined) return Result.err(args.streamMessageError);
+                if (args.streamMessageError !== undefined)
+                  return Result.err(args.streamMessageError);
                 return Result.ok({
                   chatId: args.id,
                   conversationId: input.conversationId,

@@ -108,7 +108,9 @@ describe("chat streams", () => {
       streamMessageThrow?: unknown;
     }) {
       const chat = createChat({
-        adapters: { alpha: createRuntimeAdapter({ id: "alpha", nativeStream: true, ...adapterFailure }) },
+        adapters: {
+          alpha: createRuntimeAdapter({ id: "alpha", nativeStream: true, ...adapterFailure }),
+        },
         commands,
       });
 
@@ -143,7 +145,8 @@ describe("chat streams", () => {
           onStart: (context) => {
             startContext = context;
           },
-          onReply: (input) => replies.push(`${input.message?.messageId}:${input.mode}:${input.text}`),
+          onReply: (input) =>
+            replies.push(`${input.message?.messageId}:${input.mode}:${input.text}`),
         }),
       },
       commands,
@@ -175,9 +178,14 @@ describe("chat streams", () => {
   });
 
   test("streamReply wraps adapter returned and thrown failures", async () => {
-    async function exercise(adapterFailure: { streamReplyError?: unknown; streamReplyThrow?: unknown }) {
+    async function exercise(adapterFailure: {
+      streamReplyError?: unknown;
+      streamReplyThrow?: unknown;
+    }) {
       const chat = createChat({
-        adapters: { alpha: createRuntimeAdapter({ id: "alpha", nativeStream: true, ...adapterFailure }) },
+        adapters: {
+          alpha: createRuntimeAdapter({ id: "alpha", nativeStream: true, ...adapterFailure }),
+        },
         commands,
       });
 
@@ -198,7 +206,9 @@ describe("chat streams", () => {
   });
 });
 
-function emitMessage(startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined) {
+function emitMessage(
+  startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined,
+) {
   startContext?.emit({
     type: "message",
     chatId: "alpha",

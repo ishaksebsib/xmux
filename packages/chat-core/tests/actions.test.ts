@@ -81,7 +81,10 @@ describe("chat actions", () => {
   });
 
   test("sendAction wraps adapter returned and thrown failures", async () => {
-    async function exercise(adapterFailure: { sendActionError?: unknown; sendActionThrow?: unknown }) {
+    async function exercise(adapterFailure: {
+      sendActionError?: unknown;
+      sendActionThrow?: unknown;
+    }) {
       const chat = createChat({
         adapters: { alpha: createRuntimeAdapter({ id: "alpha", ...adapterFailure }) },
         commands,

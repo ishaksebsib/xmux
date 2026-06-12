@@ -62,10 +62,12 @@ describe("Telegram action conversions", () => {
   });
 
   test("decodes only supported callback data shapes", () => {
-    expect(decodeTelegramActionCallbackData('{"actionId":"deployment","value":"approve"}')).toEqual({
-      actionId: "deployment",
-      value: "approve",
-    });
+    expect(decodeTelegramActionCallbackData('{"actionId":"deployment","value":"approve"}')).toEqual(
+      {
+        actionId: "deployment",
+        value: "approve",
+      },
+    );
     expect(decodeTelegramActionCallbackData("not json")).toBeUndefined();
     expect(decodeTelegramActionCallbackData('{"actionId":1,"value":"approve"}')).toBeUndefined();
   });

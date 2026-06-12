@@ -89,7 +89,8 @@ describe("OpenCode interaction contract", () => {
       });
 
       expect(responded.isErr()).toBe(true);
-      if (responded.isErr()) expect(responded.error).toBeInstanceOf(HarnessAdapterRespondInteractionError);
+      if (responded.isErr())
+        expect(responded.error).toBeInstanceOf(HarnessAdapterRespondInteractionError);
     } finally {
       await harness.close();
     }
@@ -110,7 +111,8 @@ describe("OpenCode interaction contract", () => {
       });
 
       expect(responded.isErr()).toBe(true);
-      if (responded.isErr()) expect(responded.error.name).toBe("HarnessAdapterRespondInteractionError");
+      if (responded.isErr())
+        expect(responded.error.name).toBe("HarnessAdapterRespondInteractionError");
     } finally {
       await harness.close();
       await fakeOpenCode.close();
@@ -132,7 +134,8 @@ describe("OpenCode interaction contract", () => {
       });
 
       expect(responded.isErr()).toBe(true);
-      if (responded.isErr()) expect(responded.error).toBeInstanceOf(HarnessAdapterRespondInteractionError);
+      if (responded.isErr())
+        expect(responded.error).toBeInstanceOf(HarnessAdapterRespondInteractionError);
     } finally {
       await harness.close();
       await fakeOpenCode.close();
@@ -148,7 +151,11 @@ describe("OpenCode interaction contract", () => {
         always: ["pnpm test"],
         tool: { messageID: "message-1", callID: "call-1" },
       }),
-      event("permission.replied", { sessionID: "session-1", requestID: "permission-1", reply: "once" }),
+      event("permission.replied", {
+        sessionID: "session-1",
+        requestID: "permission-1",
+        reply: "once",
+      }),
       questionAsked("session-1"),
       event("question.replied", { sessionID: "session-1", requestID: "question-1" }),
       event("question.rejected", { sessionID: "session-1", requestID: "question-2" }),
@@ -166,11 +173,36 @@ describe("OpenCode interaction contract", () => {
 
       expect(events).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ type: "interaction", kind: "permission", phase: "requested", requestId: "permission-1" }),
-          expect.objectContaining({ type: "interaction", kind: "permission", phase: "answered", requestId: "permission-1" }),
-          expect.objectContaining({ type: "interaction", kind: "question", phase: "requested", requestId: "question-1" }),
-          expect.objectContaining({ type: "interaction", kind: "question", phase: "answered", requestId: "question-1" }),
-          expect.objectContaining({ type: "interaction", kind: "question", phase: "rejected", requestId: "question-2" }),
+          expect.objectContaining({
+            type: "interaction",
+            kind: "permission",
+            phase: "requested",
+            requestId: "permission-1",
+          }),
+          expect.objectContaining({
+            type: "interaction",
+            kind: "permission",
+            phase: "answered",
+            requestId: "permission-1",
+          }),
+          expect.objectContaining({
+            type: "interaction",
+            kind: "question",
+            phase: "requested",
+            requestId: "question-1",
+          }),
+          expect.objectContaining({
+            type: "interaction",
+            kind: "question",
+            phase: "answered",
+            requestId: "question-1",
+          }),
+          expect.objectContaining({
+            type: "interaction",
+            kind: "question",
+            phase: "rejected",
+            requestId: "question-2",
+          }),
         ]),
       );
     } finally {

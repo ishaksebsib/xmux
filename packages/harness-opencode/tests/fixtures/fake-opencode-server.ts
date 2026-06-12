@@ -1,4 +1,9 @@
-import { createServer, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Provider, Session } from "@opencode-ai/sdk/v2";
 import { nativeSession, providerList } from "./builders";
@@ -97,7 +102,7 @@ export async function startFakeOpenCodeServer(options: StartFakeOpenCodeServerOp
       headers: request.headers,
     } satisfies RequestRecord;
     requests.push(record);
-    for (const waiter of [...requestWaiters]) {
+    for (const waiter of requestWaiters) {
       if (waiter.predicate(record)) {
         requestWaiters.delete(waiter);
         waiter.resolve(record);
@@ -124,7 +129,8 @@ export async function startFakeOpenCodeServer(options: StartFakeOpenCodeServerOp
     }
 
     if (method === "POST" && url.pathname === "/session") {
-      const input = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+      const input =
+        typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
       const id = `session-${sessions.size + 1}`;
       const session = nativeSession({
         id,
@@ -151,7 +157,14 @@ export async function startFakeOpenCodeServer(options: StartFakeOpenCodeServerOp
     const getSessionID = pathSessionID(url.pathname);
     if (method === "GET" && getSessionID) {
       const session = sessions.get(getSessionID);
-      writeJson(response, session ? 200 : 404, session ?? { name: "NotFoundError", data: { message: `Session not found: ${getSessionID}` } });
+      writeJson(
+        response,
+        session ? 200 : 404,
+        session ?? {
+          name: "NotFoundError",
+          data: { message: `Session not found: ${getSessionID}` },
+        },
+      );
       return;
     }
 
@@ -175,12 +188,20 @@ export async function startFakeOpenCodeServer(options: StartFakeOpenCodeServerOp
       return;
     }
 
-    if (method === "POST" && url.pathname.startsWith("/permission/") && url.pathname.endsWith("/reply")) {
+    if (
+      method === "POST" &&
+      url.pathname.startsWith("/permission/") &&
+      url.pathname.endsWith("/reply")
+    ) {
       writeJson(response, 200, true);
       return;
     }
 
-    if (method === "POST" && url.pathname.startsWith("/question/") && (url.pathname.endsWith("/reply") || url.pathname.endsWith("/reject"))) {
+    if (
+      method === "POST" &&
+      url.pathname.startsWith("/question/") &&
+      (url.pathname.endsWith("/reply") || url.pathname.endsWith("/reject"))
+    ) {
       writeJson(response, 200, true);
       return;
     }
@@ -190,7 +211,10 @@ export async function startFakeOpenCodeServer(options: StartFakeOpenCodeServerOp
       return;
     }
 
-    writeJson(response, 404, { name: "NotFoundError", data: { message: `${method} ${url.pathname} not found` } });
+    writeJson(response, 404, {
+      name: "NotFoundError",
+      data: { message: `${method} ${url.pathname} not found` },
+    });
   });
 
   const url = await new Promise<string>((resolve, reject) => {

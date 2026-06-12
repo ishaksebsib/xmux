@@ -24,12 +24,19 @@ export interface FakeTelegramApi {
     error: { readonly error_code: number; readonly description: string },
   ): void;
   setMethodResult(method: string, result: unknown): void;
-  setFile(path: string, content: Uint8Array | string, init?: { readonly contentType?: string }): void;
+  setFile(
+    path: string,
+    content: Uint8Array | string,
+    init?: { readonly contentType?: string },
+  ): void;
   waitForMethod(
     method: string,
     options?: { readonly timeoutMs?: number; readonly afterIndex?: number },
   ): Promise<FakeTelegramRequest>;
-  waitForNextMethod(method: string, options?: { readonly timeoutMs?: number }): Promise<FakeTelegramRequest>;
+  waitForNextMethod(
+    method: string,
+    options?: { readonly timeoutMs?: number },
+  ): Promise<FakeTelegramRequest>;
   close(): Promise<void>;
 }
 
@@ -44,7 +51,10 @@ export async function startFakeTelegramApi(
   const token = options.token ?? "123:test";
   const requests: FakeTelegramRequest[] = [];
   const methodResults = new Map<string, unknown>();
-  const methodErrors = new Map<string, { readonly error_code: number; readonly description: string }>();
+  const methodErrors = new Map<
+    string,
+    { readonly error_code: number; readonly description: string }
+  >();
   const files = new Map<string, { readonly content: Buffer; readonly contentType?: string }>();
   const updateQueue: Record<string, unknown>[] = [];
   const pendingGetUpdates: PendingGetUpdates[] = [];
@@ -69,7 +79,11 @@ export async function startFakeTelegramApi(
       notifyWaiters(waiters, recorded);
 
       if (request.method === "GET" && parsedUrl.pathname.startsWith(`/file/bot${token}/`)) {
-        respondWithFile(response, files, decodeURIComponent(parsedUrl.pathname.slice(`/file/bot${token}/`.length)));
+        respondWithFile(
+          response,
+          files,
+          decodeURIComponent(parsedUrl.pathname.slice(`/file/bot${token}/`.length)),
+        );
         return;
       }
 
@@ -89,7 +103,10 @@ export async function startFakeTelegramApi(
         return;
       }
 
-      writeJson(response, 200, { ok: true, result: resultForMethod(telegramMethod, body, methodResults) });
+      writeJson(response, 200, {
+        ok: true,
+        result: resultForMethod(telegramMethod, body, methodResults),
+      });
     } catch (error) {
       writeJson(response, 500, {
         ok: false,
@@ -212,7 +229,11 @@ function resultForMethod(
     const request = bodyAsRecord(body);
     return telegramSentMessage({
       message_id: 100,
-      chat: { id: request.chat_id ?? request.chatId ?? 12345, type: "private", first_name: "Alice" },
+      chat: {
+        id: request.chat_id ?? request.chatId ?? 12345,
+        type: "private",
+        first_name: "Alice",
+      },
       text: request.text ?? "",
       entities: request.entities,
     });
@@ -243,9 +264,10 @@ function handleGetUpdates(args: {
 }) {
   const requestBody = bodyAsRecord(args.request.body);
   const offset = typeof requestBody.offset === "number" ? requestBody.offset : undefined;
-  const readyUpdates = offset === undefined
-    ? args.updateQueue.splice(0)
-    : removeUpdatesAtOrAfter(args.updateQueue, offset);
+  const readyUpdates =
+    offset === undefined
+      ? args.updateQueue.splice(0)
+      : removeUpdatesAtOrAfter(args.updateQueue, offset);
 
   if (readyUpdates.length > 0) {
     writeJson(args.response, 200, { ok: true, result: readyUpdates });
@@ -263,7 +285,8 @@ function flushOnePendingGetUpdates(
   if (pending === undefined) return;
   const body = bodyAsRecord(pending.request.body);
   const offset = typeof body.offset === "number" ? body.offset : undefined;
-  const updates = offset === undefined ? updateQueue.splice(0) : removeUpdatesAtOrAfter(updateQueue, offset);
+  const updates =
+    offset === undefined ? updateQueue.splice(0) : removeUpdatesAtOrAfter(updateQueue, offset);
   writeJson(pending.response, 200, { ok: true, result: updates });
 }
 

@@ -30,7 +30,12 @@ describe("harness logging", () => {
                     ref: input.ref,
                     delta: "do not log stream delta",
                   } as const;
-                  yield { type: "run", phase: "completed", ref: input.ref, reason: "stop" } as const;
+                  yield {
+                    type: "run",
+                    phase: "completed",
+                    ref: input.ref,
+                    reason: "stop",
+                  } as const;
                 })(),
               ),
           },

@@ -1,10 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  createChat,
-  defineChatCommand,
-  defineChatCommands,
-  numberOption,
-} from "@xmux/chat-core";
+import { createChat, defineChatCommand, defineChatCommands, numberOption } from "@xmux/chat-core";
 import { createTelegramAdapter } from "../../src";
 import { waitForCondition } from "../fixtures/collect";
 import { startFakeTelegramApi } from "../fixtures/fake-telegram-api";
@@ -41,8 +36,20 @@ describe("Telegram inbound normalization contract", () => {
           update_id: 301,
           message: telegramPhotoMessage({
             photo: [
-              { file_id: "small", file_unique_id: "small-unique", width: 10, height: 10, file_size: 100 },
-              { file_id: "large", file_unique_id: "large-unique", width: 100, height: 100, file_size: 200 },
+              {
+                file_id: "small",
+                file_unique_id: "small-unique",
+                width: 10,
+                height: 10,
+                file_size: 100,
+              },
+              {
+                file_id: "large",
+                file_unique_id: "large-unique",
+                width: 100,
+                height: 100,
+                file_size: 200,
+              },
             ],
           }),
         }),
@@ -83,7 +90,12 @@ describe("Telegram inbound normalization contract", () => {
         telegramUpdate({
           update_id: 302,
           message: telegramTextMessage({
-            from: telegramUser({ id: 77, is_bot: true, first_name: "Helper", username: "helper_bot" }),
+            from: telegramUser({
+              id: 77,
+              is_bot: true,
+              first_name: "Helper",
+              username: "helper_bot",
+            }),
             text: "bot message",
           }),
         }),
@@ -100,8 +112,12 @@ describe("Telegram inbound normalization contract", () => {
       );
 
       await waitForCondition(() => messages.length === 2);
-      expect(messages[0]).toMatchObject({ message: { actor: { kind: "bot", actorId: "77", displayName: "Helper" } } });
-      expect(messages[1]).toMatchObject({ message: { actor: { kind: "system", actorId: "-100", displayName: "Team" } } });
+      expect(messages[0]).toMatchObject({
+        message: { actor: { kind: "bot", actorId: "77", displayName: "Helper" } },
+      });
+      expect(messages[1]).toMatchObject({
+        message: { actor: { kind: "system", actorId: "-100", displayName: "Team" } },
+      });
     } finally {
       await chat.close();
       await api.close();
@@ -161,8 +177,13 @@ describe("Telegram inbound normalization contract", () => {
         }),
       );
 
-      await waitForCondition(() => messages.length === 1 && unknown.length === 1 && invalid.length === 1);
-      expect(messages[0]).toMatchObject({ type: "message", message: { text: "/scale@other_bot --replicas 2" } });
+      await waitForCondition(
+        () => messages.length === 1 && unknown.length === 1 && invalid.length === 1,
+      );
+      expect(messages[0]).toMatchObject({
+        type: "message",
+        message: { text: "/scale@other_bot --replicas 2" },
+      });
       expect(unknown[0]).toMatchObject({ type: "command.unknown", commandName: "missing" });
       expect(invalid[0]).toMatchObject({
         type: "command.invalid",

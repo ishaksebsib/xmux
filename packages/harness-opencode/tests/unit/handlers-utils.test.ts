@@ -2,7 +2,11 @@ import { describe, expect, test } from "vitest";
 import { OpenCodeSessionResponseError } from "../../src/errors";
 import { expectTrueResponse, toResponseResult } from "../../src/handlers/utils";
 
-function toError(args: { readonly status: number; readonly detail?: unknown; readonly reason: string }) {
+function toError(args: {
+  readonly status: number;
+  readonly detail?: unknown;
+  readonly reason: string;
+}) {
   return new OpenCodeSessionResponseError({
     status: args.status,
     detail: args.detail === undefined ? undefined : JSON.stringify(args.detail),
