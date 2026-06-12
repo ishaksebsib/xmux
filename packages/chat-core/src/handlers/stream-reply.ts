@@ -6,24 +6,14 @@ import {
 } from "../errors";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatSentMessageFromInput, ChatStreamReplyInput } from "../inputs";
-import type {
-  GetStartedRuntime,
-  ReplyHandler,
-  ReplyInputForStream,
-  StreamFallbackDiagnosticEmit,
-} from "./types";
+import type { GetStartedRuntime, ReplyHandler, ReplyInputForStream } from "./types";
 import { createAdapterStreamReplyInput, sentMessageFromSameChatInput } from "./adapter-inputs";
-import {
-  collectChatTextStream,
-  emitStreamFallbackDiagnostic,
-  hasStreamReplyRuntime,
-} from "./stream";
+import { collectChatTextStream, hasStreamReplyRuntime } from "./stream";
 
 export function createStreamReplyHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
 >(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
-  readonly emit: StreamFallbackDiagnosticEmit<Extract<keyof TAdapters, string>>;
   readonly reply: ReplyHandler<TAdapters>;
 }) {
   return async function streamReply<TInput extends ChatStreamReplyInput<TAdapters>>(
@@ -56,11 +46,6 @@ export function createStreamReplyHandler<
         );
       }
 
-      emitStreamFallbackDiagnostic({
-        chatId: input.chatId,
-        operation: "streamReply",
-        emit: args.emit,
-      });
       const collected = yield* Result.await(collectStreamForReply<TAdapters, TInput>({ input }));
       const replied = yield* Result.await(args.reply(collected));
       return Result.ok(sentMessageFromSameChatInput<TAdapters, TInput>(replied));

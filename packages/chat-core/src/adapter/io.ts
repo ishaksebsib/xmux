@@ -9,19 +9,13 @@ import type {
   ChatTextInput,
   ChatTextStreamContent,
 } from "../contracts";
-import type { ChatAdapterEvent, ChatDiagnosticEvent } from "../events/types";
+import type { ChatAdapterEvent } from "../events/types";
 import type { ChatReplyMode, ChatTypingAction } from "../contracts";
 
 /** Inputs available while an adapter creates SDK clients or other resources. */
 export interface OpenChatAdapterContext {
   readonly signal?: AbortSignal;
 }
-
-/** Diagnostic input adapters use for non-fatal operational notes. */
-export type ChatAdapterDiagnosticInput<TChatId extends string = string> = Omit<
-  ChatDiagnosticEvent<TChatId>,
-  "type"
->;
 
 /** Emits normalized adapter events into the chat facade. */
 export type ChatAdapterEmit<
@@ -47,7 +41,6 @@ export interface ChatAdapterStartContext<
 > {
   readonly commands: TCommands;
   readonly emit: ChatAdapterEmit<TCommands, TChatId, TAdapterData, TAdapterError>;
-  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
   readonly signal?: AbortSignal;
 }
 

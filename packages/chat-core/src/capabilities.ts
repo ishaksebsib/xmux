@@ -1,6 +1,6 @@
 import type { ChatAttachmentKind } from "./contracts";
 
-/** Runtime feature map used for diagnostics and safe facade decisions. */
+/** Runtime feature map used for safe facade decisions. */
 export interface ChatAdapterCapabilities {
   readonly commands?: {
     readonly registration: "dynamic" | "manual" | "none";

@@ -16,23 +16,11 @@ import { createAdapterTypingIndicatorInput } from "./adapter-inputs";
 
 const defaultTypingIndicatorRefreshIntervalMs = 4_000;
 
-type TypingIndicatorDiagnosticEmit<TChatId extends string> = (event: {
-  readonly type: "diagnostic";
-  readonly chatId: TChatId;
-  readonly level: "info" | "warn";
-  readonly code:
-    | "CHAT_TYPING_INDICATOR_UNSUPPORTED_IGNORED"
-    | "CHAT_TYPING_INDICATOR_REFRESH_FAILED";
-  readonly message: string;
-  readonly cause?: unknown;
-}) => void;
-
 /** Creates the facade typing indicator operation over adapter typing pulses. */
 export function createTypingIndicatorHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
 >(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
-  readonly emit: TypingIndicatorDiagnosticEmit<Extract<keyof TAdapters, string>>;
   readonly getLifecycleSignal: () => AbortSignal | undefined;
 }) {
   return async function typingIndicator<TInput extends ChatTypingIndicatorInput<TAdapters>>(
@@ -52,13 +40,6 @@ export function createTypingIndicatorHandler<
 
     if (runtime.sendTyping === undefined) {
       if (fallback === "ignore") {
-        args.emit({
-          type: "diagnostic",
-          chatId: input.chatId,
-          level: "info",
-          code: "CHAT_TYPING_INDICATOR_UNSUPPORTED_IGNORED",
-          message: `Chat adapter "${input.chatId}" does not support typing indicators; ignoring request.`,
-        });
         return Result.ok(
           createNoopTypingIndicatorResult(mode) as ChatTypingIndicatorResult<TInput>,
         );
@@ -99,7 +80,6 @@ export function createTypingIndicatorHandler<
       timeoutMs: timing.value.timeoutMs,
       refreshIntervalMs: timing.value.refreshIntervalMs,
       sendPulse: () => sendTypingPulse({ runtime, input }),
-      emit: args.emit,
       lifecycleSignal: args.getLifecycleSignal(),
     });
 
@@ -176,15 +156,11 @@ function normalizeManagedTypingTiming(input: {
   });
 }
 
-function createManagedTypingIndicator<
-  TAdapters extends ChatAdapterDefinitions<TAdapters>,
-  TInput extends ChatTypingIndicatorInput<TAdapters>,
->(args: {
+function createManagedTypingIndicator<TInput extends { readonly signal?: AbortSignal }>(args: {
   readonly input: TInput;
   readonly timeoutMs?: number;
   readonly refreshIntervalMs: number;
   readonly sendPulse: () => Promise<Result<void, ChatTypingIndicatorError>>;
-  readonly emit: TypingIndicatorDiagnosticEmit<Extract<keyof TAdapters, string>>;
   readonly lifecycleSignal?: AbortSignal;
 }): ChatTypingIndicatorHandle {
   let stopped = false;
@@ -218,27 +194,11 @@ function createManagedTypingIndicator<
       .sendPulse()
       .then((result) => {
         if (result.isErr() && !stopped) {
-          args.emit({
-            type: "diagnostic",
-            chatId: args.input.chatId,
-            level: "warn",
-            code: "CHAT_TYPING_INDICATOR_REFRESH_FAILED",
-            message: `Stopped managed typing indicator for "${args.input.chatId}" because a refresh pulse failed.`,
-            cause: result.error,
-          });
           stop();
         }
       })
-      .catch((cause: unknown) => {
+      .catch(() => {
         if (!stopped) {
-          args.emit({
-            type: "diagnostic",
-            chatId: args.input.chatId,
-            level: "warn",
-            code: "CHAT_TYPING_INDICATOR_REFRESH_FAILED",
-            message: `Stopped managed typing indicator for "${args.input.chatId}" because a refresh pulse threw.`,
-            cause,
-          });
           stop();
         }
       })

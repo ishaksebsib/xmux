@@ -78,14 +78,6 @@ export type ChatRuntimeOperation =
   | "streamReply"
   | "typingIndicator";
 
-export type StreamFallbackDiagnosticEmit<TChatId extends string> = (event: {
-  readonly type: "diagnostic";
-  readonly chatId: TChatId;
-  readonly level: "info";
-  readonly code: "CHAT_STREAM_FALLBACK_TO_SEND_MESSAGE";
-  readonly message: string;
-}) => void;
-
 export type SendMessageHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>> = <
   TInput extends ChatSendMessageInput<TAdapters>,
 >(

@@ -429,56 +429,6 @@ describe("createChat lifecycle", () => {
     expect(openCount).toBe(1);
   });
 
-  test("routes diagnostics and supports unsubscribe", async () => {
-    const handles = { opens: [], starts: [], closes: [] };
-    let startContext: ChatAdapterStartContext<ChatCommandRegistry, "alpha"> | undefined;
-    const diagnostics: string[] = [];
-    const messages: string[] = [];
-
-    const chat = createChat({
-      adapters: {
-        alpha: createRuntimeAdapter({
-          id: "alpha",
-          handles,
-          onStart: (context) => {
-            startContext = context;
-            context.diagnostic({ level: "warn", code: "TEST", message: "diagnostic" });
-          },
-        }),
-      },
-      commands,
-    });
-
-    chat.on("diagnostic", (event) => {
-      diagnostics.push(`${event.chatId}:${event.code}`);
-    });
-    const unsubscribe = chat.on("message", (event) => {
-      messages.push(event.message.text);
-    });
-
-    const started = await chat.start();
-    expect(started.isOk()).toBe(true);
-    expect(diagnostics).toEqual(["alpha:TEST"]);
-
-    unsubscribe();
-    startContext?.emit({
-      type: "message",
-      chatId: "alpha",
-      conversation: { chatId: "alpha", conversationId: "conversation" },
-      message: {
-        chatId: "alpha",
-        conversationId: "conversation",
-        messageId: "message",
-        actor: { kind: "user", actorId: "user", adapterData: {} },
-        text: "hello",
-        adapterData: {},
-        attachments: [],
-      },
-    });
-
-    expect(messages).toEqual([]);
-  });
-
   test("wraps thrown adapter open failures", async () => {
     const handles = { opens: [], starts: [], closes: [] };
     const chat = createChat({
@@ -921,7 +871,6 @@ describe("createChat lifecycle", () => {
   test("streamMessage falls back to sendMessage when unsupported", async () => {
     const handles = { opens: [], starts: [], closes: [] };
     const sends: string[] = [];
-    const diagnostics: string[] = [];
     const chat = createChat({
       adapters: {
         alpha: createRuntimeAdapter({
@@ -935,10 +884,6 @@ describe("createChat lifecycle", () => {
       commands,
     });
 
-    chat.on("diagnostic", (event) => {
-      diagnostics.push(event.code);
-    });
-
     expect((await chat.start()).isOk()).toBe(true);
     const streamed = await chat.streamMessage({
       chatId: "alpha",
@@ -949,7 +894,6 @@ describe("createChat lifecycle", () => {
 
     expect(streamed.isOk()).toBe(true);
     expect(sends).toEqual(["hello"]);
-    expect(diagnostics).toContain("CHAT_STREAM_FALLBACK_TO_SEND_MESSAGE");
   });
 
   test("streamMessage can require adapter streaming", async () => {
@@ -1004,14 +948,9 @@ describe("createChat lifecycle", () => {
 
   test("typingIndicator returns unsupported errors or ignored no-op handles", async () => {
     const handles = { opens: [], starts: [], closes: [] };
-    const diagnostics: string[] = [];
     const chat = createChat({
       adapters: { alpha: createRuntimeAdapter({ id: "alpha", handles }) },
       commands,
-    });
-
-    chat.on("diagnostic", (event) => {
-      diagnostics.push(event.code);
     });
 
     expect((await chat.start()).isOk()).toBe(true);
@@ -1034,7 +973,6 @@ describe("createChat lifecycle", () => {
     if (ignored.isOk()) {
       ignored.value.stop();
     }
-    expect(diagnostics).toContain("CHAT_TYPING_INDICATOR_UNSUPPORTED_IGNORED");
   });
 
   test("managed typingIndicator refreshes until stopped", async () => {

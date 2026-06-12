@@ -1,7 +1,6 @@
 import { Result } from "better-result";
 import type {
   ChatActor,
-  ChatAdapterDiagnosticInput,
   ChatAdapterActionEvent,
   ChatAdapterEvent,
   ChatAdapterMessageEvent,
@@ -35,7 +34,6 @@ export function decodeTelegramMessageUpdate<
   readonly bot: TelegramBotClient;
   readonly botUserId: number;
   readonly botUsername: string;
-  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
 }): TelegramInboundDecodeResult<
   ChatAdapterEvent<
     TCommands,
@@ -62,7 +60,6 @@ export function decodeTelegramMessageUpdate<
     commands: args.commands,
     context: args.context,
     botUsername: args.botUsername,
-    diagnostic: args.diagnostic,
   });
 
   if (command.status === "unknown") {
@@ -129,7 +126,6 @@ export function decodeTelegramTextUpdate<
   readonly bot: TelegramBotClient;
   readonly botUserId: number;
   readonly botUsername: string;
-  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
 }): TelegramInboundDecodeResult<
   ChatAdapterEvent<
     TCommands,

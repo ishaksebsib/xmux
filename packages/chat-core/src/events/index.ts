@@ -16,8 +16,6 @@ export type {
   ChatClosedEvent,
   ChatCommandEvent,
   ChatCommandEventFor,
-  ChatDiagnosticEvent,
-  ChatDiagnosticLevel,
   ChatErrorEvent,
   ChatEvent,
   ChatEventByType,

@@ -42,10 +42,6 @@ export async function runTelegramDemo() {
     commands,
   });
 
-  chat.on("diagnostic", (event) => {
-    console.log(`[telegram:${event.level}] ${event.code}: ${event.message}`);
-  });
-
   chat.on("error", (event) => {
     console.error("[telegram:error]", event.error);
   });

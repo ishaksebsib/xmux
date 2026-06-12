@@ -100,7 +100,6 @@ export type ChatEventType =
   | "action"
   | "reaction.added"
   | "reaction.removed"
-  | "diagnostic"
   | "error"
   | "closed";
 
@@ -411,18 +410,6 @@ export interface ChatReactionRemovedEvent<TChatId extends string = string> {
   readonly reaction: string;
 }
 
-export type ChatDiagnosticLevel = "debug" | "info" | "warn" | "error";
-
-/** Non-fatal operational note for logs and observability. */
-export interface ChatDiagnosticEvent<TChatId extends string = string> {
-  readonly type: "diagnostic";
-  readonly chatId?: TChatId;
-  readonly level: ChatDiagnosticLevel;
-  readonly code: string;
-  readonly message: string;
-  readonly cause?: unknown;
-}
-
 /** Runtime failure not tied to a returned Result. */
 export interface ChatErrorEvent<TChatId extends string = string> {
   readonly type: "error";
@@ -462,7 +449,6 @@ export type ChatEvent<
   | ChatActionEventFor<TActions, keyof TActions, TChatId, TReplyResult, TAdapterOptionsByChatId>
   | ChatReactionAddedEvent<TChatId>
   | ChatReactionRemovedEvent<TChatId>
-  | ChatDiagnosticEvent<TChatId>
   | ChatErrorEvent<TChatId>
   | ChatClosedEvent<TChatId>;
 
@@ -535,7 +521,6 @@ export type ChatAdapterEvent<
   | ChatAdapterActionEvent<TChatId>
   | ChatReactionAddedEvent<TChatId>
   | ChatReactionRemovedEvent<TChatId>
-  | ChatDiagnosticEvent<TChatId>
   | ChatErrorEvent<TChatId>
   | ChatClosedEvent<TChatId>;
 

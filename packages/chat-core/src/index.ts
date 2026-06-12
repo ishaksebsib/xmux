@@ -27,7 +27,6 @@ export {
 export type {
   ChatAdapterCapabilities,
   ChatAdapterDefinition,
-  ChatAdapterDiagnosticInput,
   ChatAdapterEmit,
   ChatAdapterActionResponse,
   ChatAdapterReplyInput,
@@ -169,8 +168,6 @@ export type {
   ChatClosedEvent,
   ChatCommandEvent,
   ChatCommandEventFor,
-  ChatDiagnosticEvent,
-  ChatDiagnosticLevel,
   ChatErrorEvent,
   ChatEvent,
   ChatEventByType,

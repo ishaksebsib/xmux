@@ -139,7 +139,6 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
         registerCommands({
           bot: this.bot,
           commands: context.commands,
-          diagnostic: context.diagnostic,
           signal: context.signal,
         }),
       );

@@ -1,9 +1,4 @@
-import type {
-  ChatAdapterDiagnosticInput,
-  ChatCommandOption,
-  ChatCommandRegistry,
-  ChatCommandValues,
-} from "@xmux/chat-core";
+import type { ChatCommandOption, ChatCommandRegistry, ChatCommandValues } from "@xmux/chat-core";
 import type { TelegramTextMessageContext } from "../client";
 
 export type TelegramCommandParseResult<TCommands extends ChatCommandRegistry> =
@@ -20,14 +15,10 @@ export type TelegramCommandParseResult<TCommands extends ChatCommandRegistry> =
 
 type ParsedTelegramCommand<TCommands extends ChatCommandRegistry> = ChatCommandValues<TCommands>;
 
-export function parseTelegramCommand<
-  TCommands extends ChatCommandRegistry,
-  TChatId extends string,
->(args: {
+export function parseTelegramCommand<TCommands extends ChatCommandRegistry>(args: {
   readonly commands: TCommands;
   readonly context: TelegramTextMessageContext;
   readonly botUsername: string;
-  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
 }): TelegramCommandParseResult<TCommands> {
   const commandToken = readBotCommandToken(args.context.message);
   if (commandToken === undefined) {
@@ -48,7 +39,6 @@ export function parseTelegramCommand<
     commandName: parsedToken.name,
     definition: command,
     input: args.context.message.text.slice(commandToken.length).trim(),
-    diagnostic: args.diagnostic,
   });
   if (parsedOptions.status === "invalid") {
     return {
@@ -92,11 +82,10 @@ function parseCommandToken(args: {
   return { status: "current_bot", name };
 }
 
-function parseCommandOptions<TChatId extends string>(args: {
+function parseCommandOptions(args: {
   readonly commandName: string;
   readonly definition: ChatCommandRegistry[string];
   readonly input: string;
-  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
 }):
   | { readonly status: "valid"; readonly options: Record<string, unknown> }
   | { readonly status: "invalid"; readonly optionName: string; readonly reason: string } {
@@ -111,12 +100,6 @@ function parseCommandOptions<TChatId extends string>(args: {
     const rawValue = rawOptions.get(name);
     if (rawValue === undefined) {
       if (definition.required === true) {
-        emitCommandParseDiagnostic({
-          diagnostic: args.diagnostic,
-          commandName: args.commandName,
-          optionName: name,
-          reason: "required option is missing",
-        });
         return { status: "invalid", optionName: name, reason: "required option is missing" };
       }
 
@@ -126,23 +109,11 @@ function parseCommandOptions<TChatId extends string>(args: {
 
     const value = parseOptionValue({ rawValue, kind: definition.kind });
     if (value.status === "invalid") {
-      emitCommandParseDiagnostic({
-        diagnostic: args.diagnostic,
-        commandName: args.commandName,
-        optionName: name,
-        reason: value.reason,
-      });
       return { status: "invalid", optionName: name, reason: value.reason };
     }
 
     if (definition.choices !== undefined && !definition.choices.includes(value.value as never)) {
       const reason = `value must be one of: ${definition.choices.join(", ")}`;
-      emitCommandParseDiagnostic({
-        diagnostic: args.diagnostic,
-        commandName: args.commandName,
-        optionName: name,
-        reason,
-      });
       return { status: "invalid", optionName: name, reason };
     }
 
@@ -294,17 +265,4 @@ function parseOptionValue(args: {
   }
 
   return { status: "valid", value: args.rawValue };
-}
-
-function emitCommandParseDiagnostic<TChatId extends string>(args: {
-  readonly diagnostic: (diagnostic: ChatAdapterDiagnosticInput<TChatId>) => void;
-  readonly commandName: string;
-  readonly optionName: string;
-  readonly reason: string;
-}) {
-  args.diagnostic({
-    level: "warn",
-    code: "COMMAND_PARSE_FAILED",
-    message: `Telegram command /${args.commandName} option --${args.optionName} is invalid: ${args.reason}.`,
-  });
 }

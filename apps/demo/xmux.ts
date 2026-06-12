@@ -38,10 +38,6 @@ export async function runXmuxDemo() {
     console.log(`[xmux] chat ready: ${event.chatId}`);
   });
 
-  xmux.ctx.chat.on("diagnostic", (event) => {
-    console.log(`[xmux:${event.level}] ${event.code}: ${event.message}`);
-  });
-
   xmux.ctx.chat.on("message", (event) => {
     console.log(`[xmux] received message: ${event.message.text}`);
   });

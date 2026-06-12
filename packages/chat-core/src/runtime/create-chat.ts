@@ -289,7 +289,7 @@ export function createChat<
   }
 
   function emit(event: AdapterEvent) {
-    if (lifecycle.status === "starting" && event.type !== "diagnostic" && event.type !== "error") {
+    if (lifecycle.status === "starting" && event.type !== "error") {
       pendingStartupEvents.push(event);
       return;
     }
@@ -342,13 +342,11 @@ export function createChat<
   const respondToAction = createRespondToActionHandler<TAdapters>({ getStartedRuntime });
   const streamMessage = createStreamMessageHandler<TAdapters>({
     getStartedRuntime,
-    emit,
     sendMessage,
   });
-  const streamReply = createStreamReplyHandler<TAdapters>({ getStartedRuntime, emit, reply });
+  const streamReply = createStreamReplyHandler<TAdapters>({ getStartedRuntime, reply });
   const typingIndicator = createTypingIndicatorHandler<TAdapters>({
     getStartedRuntime,
-    emit,
     getLifecycleSignal: () => abortController?.signal,
   });
 
@@ -385,13 +383,6 @@ export function createChat<
             ChatAdapterObject,
             unknown
           >["emit"],
-          diagnostic: (diagnostic) => {
-            emit({
-              ...diagnostic,
-              type: "diagnostic",
-              chatId: (diagnostic.chatId ?? chatId) as TChatId,
-            });
-          },
           signal: abortController.signal,
         },
       });
@@ -412,12 +403,12 @@ export function createChat<
     error: ChatAdapterOpenError | ChatAdapterStartError,
   ): Promise<Result<void, ChatStartError>> {
     pendingStartupEvents.length = 0;
-    await cleanupOpenedRuntimes({ reason: "start_failed" });
+    await cleanupOpenedRuntimes();
     lifecycle = { status: "created" };
     return Result.err(error);
   }
 
-  async function cleanupOpenedRuntimes(args: { readonly reason: string }) {
+  async function cleanupOpenedRuntimes() {
     const cleanupResults = await Promise.all(
       [...openedRuntimes.entries()].map(async ([chatId, runtime]) => {
         const cleanup = await Result.tryPromise({
@@ -428,18 +419,7 @@ export function createChat<
         return Result.map(cleanup, () => undefined);
       }),
     );
-    const [, failures] = Result.partition(cleanupResults);
-
-    for (const failure of failures) {
-      emit({
-        type: "diagnostic",
-        chatId: failure.chatId as TChatId,
-        level: "warn",
-        code: "ADAPTER_CLEANUP_FAILED",
-        message: `Failed to clean up chat adapter after ${args.reason}`,
-        cause: failure.cause,
-      });
-    }
+    Result.partition(cleanupResults);
   }
 
   async function close(): Promise<Result<void, ChatCloseFailure>> {

@@ -6,24 +6,14 @@ import {
 } from "../errors";
 import type { ChatAdapterDefinitions } from "../adapter/registry";
 import type { ChatSentMessageFromInput, ChatStreamMessageInput } from "../inputs";
-import type {
-  GetStartedRuntime,
-  SendMessageHandler,
-  SendMessageInputForStream,
-  StreamFallbackDiagnosticEmit,
-} from "./types";
+import type { GetStartedRuntime, SendMessageHandler, SendMessageInputForStream } from "./types";
 import { createAdapterStreamMessageInput, sentMessageFromSameChatInput } from "./adapter-inputs";
-import {
-  collectChatTextStream,
-  emitStreamFallbackDiagnostic,
-  hasStreamMessageRuntime,
-} from "./stream";
+import { collectChatTextStream, hasStreamMessageRuntime } from "./stream";
 
 export function createStreamMessageHandler<
   TAdapters extends ChatAdapterDefinitions<TAdapters>,
 >(args: {
   readonly getStartedRuntime: GetStartedRuntime<TAdapters>;
-  readonly emit: StreamFallbackDiagnosticEmit<Extract<keyof TAdapters, string>>;
   readonly sendMessage: SendMessageHandler<TAdapters>;
 }) {
   return async function streamMessage<TInput extends ChatStreamMessageInput<TAdapters>>(
@@ -56,11 +46,6 @@ export function createStreamMessageHandler<
         );
       }
 
-      emitStreamFallbackDiagnostic({
-        chatId: input.chatId,
-        operation: "streamMessage",
-        emit: args.emit,
-      });
       const collected = yield* Result.await(collectStreamForMessage<TAdapters, TInput>({ input }));
       const sent = yield* Result.await(args.sendMessage(collected));
       return Result.ok(sentMessageFromSameChatInput<TAdapters, TInput>(sent));

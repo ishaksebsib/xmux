@@ -7,7 +7,6 @@ export type {
 } from "./definition";
 export type {
   ChatAdapterActionResponse,
-  ChatAdapterDiagnosticInput,
   ChatAdapterEmit,
   ChatAdapterReplyInput,
   ChatAdapterRespondToActionInput,

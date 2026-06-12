@@ -35,7 +35,6 @@ export function registerInboundHandlers<
       bot: args.bot,
       botUserId: botInfo.id,
       botUsername: botInfo.username,
-      diagnostic: args.context.diagnostic,
     });
 
     if (decoded.status === "event") {

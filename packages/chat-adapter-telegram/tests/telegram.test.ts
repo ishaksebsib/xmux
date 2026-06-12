@@ -45,7 +45,6 @@ function createStartContext<
   readonly chatId: TChatId;
   readonly commands?: TCommands;
   readonly signal?: AbortSignal;
-  readonly diagnostics?: string[];
   readonly errors?: unknown[];
   readonly events?: unknown[];
 }): ChatAdapterStartContext<TCommands, TChatId, TelegramAdapterData> {
@@ -56,9 +55,6 @@ function createStartContext<
       if (event.type === "error") {
         args.errors?.push(event.error);
       }
-    },
-    diagnostic: (diagnostic) => {
-      args.diagnostics?.push(diagnostic.code);
     },
     signal: args.signal,
   };
@@ -614,9 +610,8 @@ describe("createTelegramAdapter", () => {
     });
   });
 
-  test("polling start registers Telegram commands and emits capability diagnostics", async () => {
+  test("polling start registers Telegram commands", async () => {
     const bot = createFakeTelegramBot();
-    const diagnostics: string[] = [];
     const commands = defineChatCommands({
       start: defineChatCommand({
         description: "Start session",
@@ -632,20 +627,13 @@ describe("createTelegramAdapter", () => {
       return;
     }
 
-    const started = await opened.value.start(
-      createStartContext({ chatId: "telegram", commands, diagnostics }),
-    );
+    const started = await opened.value.start(createStartContext({ chatId: "telegram", commands }));
 
     expect(started.isOk()).toBe(true);
     expect(bot.setMyCommandsMock).toHaveBeenCalledWith({
       commands: [{ command: "start", description: "Start session" }],
       signal: undefined,
     });
-    expect(diagnostics).toEqual([
-      "COMMAND_NAME_INVALID",
-      "COMMAND_OPTIONS_NOT_SUPPORTED",
-      "COMMAND_CHOICES_NOT_SUPPORTED",
-    ]);
   });
 
   test("polling start returns typed command registration failures", async () => {
@@ -1138,9 +1126,8 @@ describe("createTelegramAdapter", () => {
     expect(events[0]).toMatchObject({ type: "command.unknown", commandName: "jfkdlfjd" });
   });
 
-  test("invalid slash command options emit diagnostics and invalid command events", async () => {
+  test("invalid slash command options emit invalid command events", async () => {
     const bot = createFakeTelegramBot();
-    const diagnostics: string[] = [];
     const events: unknown[] = [];
     const commands = defineChatCommands({
       start: defineChatCommand({
@@ -1157,7 +1144,7 @@ describe("createTelegramAdapter", () => {
     }
 
     const started = await opened.value.start(
-      createStartContext({ chatId: "telegram", commands, diagnostics, events }),
+      createStartContext({ chatId: "telegram", commands, events }),
     );
     expect(started.isOk()).toBe(true);
 
@@ -1168,7 +1155,6 @@ describe("createTelegramAdapter", () => {
       }),
     );
 
-    expect(diagnostics).toContain("COMMAND_PARSE_FAILED");
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({
       type: "command.invalid",
