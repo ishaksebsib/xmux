@@ -35,29 +35,30 @@ export async function handleSetThinking<
     operation: "setThinking",
     harnessId,
     sessionId,
-    run: () => Result.gen(async function* () {
-      const runtime = yield* Result.await(args.getRuntime(harnessId, args.input.signal));
-      const setThinking = yield* requireCapability(
-        runtime.setThinking,
-        new HarnessAdapterThinkingUnsupportedError({
-          harnessId,
-          operation: "setThinking",
-        }),
-      );
-      const thinking = yield* Result.await(
-        invokeAdapter({
-          run: () =>
-            setThinking({
-              target: args.input.target,
-              update: args.input.update,
-              adapterOptions: adapterOptionsFromInput<TAdapters, typeof harnessId>(args.input),
-              signal: args.input.signal,
-            }),
-          mapError: (cause) => new HarnessAdapterSetThinkingError({ harnessId, cause }),
-        }),
-      );
+    run: () =>
+      Result.gen(async function* () {
+        const runtime = yield* Result.await(args.getRuntime(harnessId, args.input.signal));
+        const setThinking = yield* requireCapability(
+          runtime.setThinking,
+          new HarnessAdapterThinkingUnsupportedError({
+            harnessId,
+            operation: "setThinking",
+          }),
+        );
+        const thinking = yield* Result.await(
+          invokeAdapter({
+            run: () =>
+              setThinking({
+                target: args.input.target,
+                update: args.input.update,
+                adapterOptions: adapterOptionsFromInput<TAdapters, typeof harnessId>(args.input),
+                signal: args.input.signal,
+              }),
+            mapError: (cause) => new HarnessAdapterSetThinkingError({ harnessId, cause }),
+          }),
+        );
 
-      return Result.ok(thinking as SetThinkingResultFromInput<TAdapters, TInput>);
-    }),
+        return Result.ok(thinking as SetThinkingResultFromInput<TAdapters, TInput>);
+      }),
   });
 }

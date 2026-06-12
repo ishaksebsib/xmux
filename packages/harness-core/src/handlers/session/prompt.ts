@@ -25,37 +25,38 @@ export async function handlePrompt<
     operation: "prompt",
     harnessId: args.input.ref.harnessId,
     sessionId: args.input.ref.sessionId,
-    run: () => Result.gen(async function* () {
-      const cwd = yield* Result.await(createWorkingDirectoryPath(args.input.cwd));
-      const runtime = yield* Result.await(
-        args.getRuntime(args.input.ref.harnessId, args.input.signal),
-      );
-      const adapterResult = yield* Result.await(
-        invokeAdapter({
-          run: () =>
-            runtime.prompt({
-              ref: args.input.ref,
-              cwd,
-              content: normalizePromptContent(args.input.content),
-              model: args.input.model,
-              thinking: args.input.thinking,
-              adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
-                args.input,
-              ),
-              signal: args.input.signal,
-            }),
-          mapError: (cause) =>
-            new HarnessAdapterPromptError({ harnessId: args.input.ref.harnessId, cause }),
-        }),
-      );
+    run: () =>
+      Result.gen(async function* () {
+        const cwd = yield* Result.await(createWorkingDirectoryPath(args.input.cwd));
+        const runtime = yield* Result.await(
+          args.getRuntime(args.input.ref.harnessId, args.input.signal),
+        );
+        const adapterResult = yield* Result.await(
+          invokeAdapter({
+            run: () =>
+              runtime.prompt({
+                ref: args.input.ref,
+                cwd,
+                content: normalizePromptContent(args.input.content),
+                model: args.input.model,
+                thinking: args.input.thinking,
+                adapterOptions: adapterOptionsFromInput<TAdapters, TInput["ref"]["harnessId"]>(
+                  args.input,
+                ),
+                signal: args.input.signal,
+              }),
+            mapError: (cause) =>
+              new HarnessAdapterPromptError({ harnessId: args.input.ref.harnessId, cause }),
+          }),
+        );
 
-      return Result.ok(
-        supervisePromptStream({
-          ref: args.input.ref,
-          events: adapterResult,
-          signal: args.input.signal,
-        }) as PromptResultFromInput<TAdapters, TInput>,
-      );
-    }),
+        return Result.ok(
+          supervisePromptStream({
+            ref: args.input.ref,
+            events: adapterResult,
+            signal: args.input.signal,
+          }) as PromptResultFromInput<TAdapters, TInput>,
+        );
+      }),
   });
 }

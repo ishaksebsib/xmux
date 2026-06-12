@@ -22,30 +22,33 @@ export async function handleListModels<
     logger: args.logger,
     operation: "listModels",
     harnessId: args.input.harnessId,
-    run: () => Result.gen(async function* () {
-      const runtime = yield* Result.await(args.getRuntime(args.input.harnessId, args.input.signal));
-      const listModels = yield* requireCapability(
-        runtime.listModels,
-        new HarnessAdapterModelUnsupportedError({
-          harnessId: args.input.harnessId,
-          operation: "listModels",
-        }),
-      );
-      const models = yield* Result.await(
-        invokeAdapter({
-          run: () =>
-            listModels({
-              cwd: args.input.cwd,
-              includeUnavailable: args.input.includeUnavailable,
-              adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
-              signal: args.input.signal,
-            }),
-          mapError: (cause) =>
-            new HarnessAdapterListModelsError({ harnessId: args.input.harnessId, cause }),
-        }),
-      );
+    run: () =>
+      Result.gen(async function* () {
+        const runtime = yield* Result.await(
+          args.getRuntime(args.input.harnessId, args.input.signal),
+        );
+        const listModels = yield* requireCapability(
+          runtime.listModels,
+          new HarnessAdapterModelUnsupportedError({
+            harnessId: args.input.harnessId,
+            operation: "listModels",
+          }),
+        );
+        const models = yield* Result.await(
+          invokeAdapter({
+            run: () =>
+              listModels({
+                cwd: args.input.cwd,
+                includeUnavailable: args.input.includeUnavailable,
+                adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
+                signal: args.input.signal,
+              }),
+            mapError: (cause) =>
+              new HarnessAdapterListModelsError({ harnessId: args.input.harnessId, cause }),
+          }),
+        );
 
-      return Result.ok(models as ListModelsResultFromInput<TAdapters, TInput>);
-    }),
+        return Result.ok(models as ListModelsResultFromInput<TAdapters, TInput>);
+      }),
   });
 }

@@ -32,29 +32,30 @@ export async function handleSetModel<
     operation: "setModel",
     harnessId,
     sessionId,
-    run: () => Result.gen(async function* () {
-      const runtime = yield* Result.await(args.getRuntime(harnessId, args.input.signal));
-      const setModel = yield* requireCapability(
-        runtime.setModel,
-        new HarnessAdapterModelUnsupportedError({
-          harnessId,
-          operation: "setModel",
-        }),
-      );
-      const model = yield* Result.await(
-        invokeAdapter({
-          run: () =>
-            setModel({
-              target: args.input.target,
-              update: args.input.update,
-              adapterOptions: adapterOptionsFromInput<TAdapters, typeof harnessId>(args.input),
-              signal: args.input.signal,
-            }),
-          mapError: (cause) => new HarnessAdapterSetModelError({ harnessId, cause }),
-        }),
-      );
+    run: () =>
+      Result.gen(async function* () {
+        const runtime = yield* Result.await(args.getRuntime(harnessId, args.input.signal));
+        const setModel = yield* requireCapability(
+          runtime.setModel,
+          new HarnessAdapterModelUnsupportedError({
+            harnessId,
+            operation: "setModel",
+          }),
+        );
+        const model = yield* Result.await(
+          invokeAdapter({
+            run: () =>
+              setModel({
+                target: args.input.target,
+                update: args.input.update,
+                adapterOptions: adapterOptionsFromInput<TAdapters, typeof harnessId>(args.input),
+                signal: args.input.signal,
+              }),
+            mapError: (cause) => new HarnessAdapterSetModelError({ harnessId, cause }),
+          }),
+        );
 
-      return Result.ok(model as SetModelResultFromInput<TAdapters, TInput>);
-    }),
+        return Result.ok(model as SetModelResultFromInput<TAdapters, TInput>);
+      }),
   });
 }

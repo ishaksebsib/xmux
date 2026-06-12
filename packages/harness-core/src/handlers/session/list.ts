@@ -19,40 +19,44 @@ export async function handleListSessions<
     logger: args.logger,
     operation: "listSessions",
     harnessId: args.input.harnessId,
-    run: () => Result.gen(async function* () {
-      const runtime = yield* Result.await(args.getRuntime(args.input.harnessId, args.input.signal));
-      const adapterSessions = yield* Result.await(
-        invokeAdapter({
-          run: () =>
-            runtime.listSessions({
-              cwd: args.input.cwd,
-              adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
-              signal: args.input.signal,
-            }),
-          mapError: (cause) =>
-            new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
-        }),
-      );
-
-      const sessions = [] as HarnessSessionInfo<
-        Extract<TInput["harnessId"], string>,
-        AdapterSessionFor<TAdapters, TInput["harnessId"]>
-      >[];
-      for (const adapterSession of adapterSessions) {
-        const created = await createHarnessSessionInfo({
-          harnessId: args.input.harnessId,
-          adapterSession: adapterSession as typeof adapterSession & {
-            readonly adapterData: HarnessAdapterObject;
-          },
-        });
-        const session = yield* Result.mapError(
-          created,
-          (cause) => new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
+    run: () =>
+      Result.gen(async function* () {
+        const runtime = yield* Result.await(
+          args.getRuntime(args.input.harnessId, args.input.signal),
         );
-        sessions.push(session as (typeof sessions)[number]);
-      }
+        const adapterSessions = yield* Result.await(
+          invokeAdapter({
+            run: () =>
+              runtime.listSessions({
+                cwd: args.input.cwd,
+                adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
+                signal: args.input.signal,
+              }),
+            mapError: (cause) =>
+              new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
+          }),
+        );
 
-      return Result.ok(sessions);
-    }),
+        const sessions = [] as HarnessSessionInfo<
+          Extract<TInput["harnessId"], string>,
+          AdapterSessionFor<TAdapters, TInput["harnessId"]>
+        >[];
+        for (const adapterSession of adapterSessions) {
+          const created = await createHarnessSessionInfo({
+            harnessId: args.input.harnessId,
+            adapterSession: adapterSession as typeof adapterSession & {
+              readonly adapterData: HarnessAdapterObject;
+            },
+          });
+          const session = yield* Result.mapError(
+            created,
+            (cause) =>
+              new HarnessAdapterListSessionsError({ harnessId: args.input.harnessId, cause }),
+          );
+          sessions.push(session as (typeof sessions)[number]);
+        }
+
+        return Result.ok(sessions);
+      }),
   });
 }
