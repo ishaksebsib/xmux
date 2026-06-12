@@ -1,7 +1,22 @@
 import { createServer, type IncomingMessage } from "node:http";
-import { HarnessAdapterCreateSessionError, createHarness } from "@xmux/harness-core";
-import { describe, expect, test } from "vitest";
+import {
+  HarnessAdapterCreateSessionError,
+  createHarness,
+  type HarnessLogger,
+} from "@xmux/harness-core";
+import { describe, expect, test, vi } from "vitest";
 import { createOpenCodeAdapter } from "../src";
+import { openCodeLogEvents } from "../src/logger";
+
+function createMockLogger() {
+  return {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } satisfies HarnessLogger;
+}
 
 function createNativeSession(args: { readonly directory: string; readonly title: string }) {
   return {
@@ -109,6 +124,52 @@ describe("createOpenCodeAdapter", () => {
           body: expect.objectContaining({ title: "xmux external session" }),
         }),
       ]);
+    } finally {
+      await harness.close();
+      await server.close();
+    }
+  });
+
+  test("logs adapter lifecycle and operations without sensitive payloads", async () => {
+    const server = await startSessionServer();
+    const logger = createMockLogger();
+    const harness = createHarness({
+      logger,
+      adapters: {
+        opencode: createOpenCodeAdapter({
+          mode: "external",
+          baseUrl: server.url,
+        }),
+      },
+    });
+
+    try {
+      const created = await harness.createSession({
+        harnessId: "opencode",
+        cwd: process.cwd(),
+        title: "do not log this title",
+      });
+
+      expect(created.isOk()).toBe(true);
+      expect(logger.debug).toHaveBeenCalledWith(
+        openCodeLogEvents.openBegin,
+        expect.objectContaining({
+          component: "@xmux/harness-opencode",
+          packageName: "@xmux/harness-opencode",
+          harnessId: "opencode",
+          operation: "openAdapter",
+          mode: "external",
+        }),
+      );
+      expect(logger.debug).toHaveBeenCalledWith(
+        openCodeLogEvents.operationBegin,
+        expect.objectContaining({
+          component: "@xmux/harness-opencode",
+          operation: "createSession",
+        }),
+      );
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("do not log this title");
+      expect(JSON.stringify(logger.debug.mock.calls)).not.toContain(server.url);
     } finally {
       await harness.close();
       await server.close();

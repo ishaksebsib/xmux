@@ -1,5 +1,7 @@
 import { Result } from "better-result";
 import { HarnessAdapterOpenError, HarnessCloseError, UnknownHarnessError } from "./errors";
+import { harnessLogEvents } from "./logger";
+import { createHarnessLogScope, logHarnessResult, startHarnessLogTimer } from "./logger-utils";
 import type {
   CreateHarnessOptions,
   Harness,
@@ -62,6 +64,10 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
   options: CreateHarnessOptions<TAdapters>,
 ): Harness<TAdapters> {
   const now = options.now ?? (() => new Date());
+  const logger = createHarnessLogScope(options.logger, {
+    component: "@xmux/harness-core",
+    packageName: "@xmux/harness-core",
+  });
   const harnessIds = Object.freeze(
     Object.keys(options.adapters) as Extract<keyof TAdapters, string>[],
   );
@@ -148,6 +154,8 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
           adapter: selectedAdapter,
           harnessId: key,
           signal,
+          logger,
+          adapterLogger: options.logger,
         }),
       );
 
@@ -191,74 +199,106 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
     harnessIds,
 
     async createSession<TInput extends CreateSessionInput<TAdapters>>(input: TInput) {
-      return handleCreateSession({ input, getRuntime, now });
+      return handleCreateSession({ input, getRuntime, now, logger });
     },
 
     async resumeSession<TInput extends ResumeSessionInput<TAdapters>>(input: TInput) {
-      return handleResumeSession({ input, getRuntime });
+      return handleResumeSession({ input, getRuntime, logger });
     },
 
     async listSessions<TInput extends ListSessionsInput<TAdapters>>(input: TInput) {
-      return handleListSessions({ input, getRuntime });
+      return handleListSessions({ input, getRuntime, logger });
     },
 
     async listModels<TInput extends ListModelsInput<TAdapters>>(input: TInput) {
-      return handleListModels({ input, getRuntime });
+      return handleListModels({ input, getRuntime, logger });
     },
 
     async getModel<TInput extends GetModelInput<TAdapters>>(input: TInput) {
-      return handleGetModel({ input, getRuntime });
+      return handleGetModel({ input, getRuntime, logger });
     },
 
     async setModel<TInput extends SetModelInput<TAdapters>>(input: TInput) {
-      return handleSetModel({ input, getRuntime });
+      return handleSetModel({ input, getRuntime, logger });
     },
 
     async getThinking<TInput extends GetThinkingInput<TAdapters>>(input: TInput) {
-      return handleGetThinking({ input, getRuntime });
+      return handleGetThinking({ input, getRuntime, logger });
     },
 
     async setThinking<TInput extends SetThinkingInput<TAdapters>>(input: TInput) {
-      return handleSetThinking({ input, getRuntime });
+      return handleSetThinking({ input, getRuntime, logger });
     },
 
     async getSession<TInput extends GetSessionInput<TAdapters>>(input: TInput) {
-      return handleGetSession({ input, getRuntime });
+      return handleGetSession({ input, getRuntime, logger });
     },
 
     async prompt<TInput extends PromptInput<TAdapters>>(input: TInput) {
-      return handlePrompt({ input, getRuntime });
+      return handlePrompt({ input, getRuntime, logger });
     },
 
     async deleteSession<TInput extends DeleteSessionInput<TAdapters>>(input: TInput) {
-      return handleDeleteSession({ input, getRuntime });
+      return handleDeleteSession({ input, getRuntime, logger });
     },
 
     async abort<TInput extends AbortInput<TAdapters>>(input: TInput) {
-      return handleAbort({ input, getRuntime });
+      return handleAbort({ input, getRuntime, logger });
     },
 
     async respondInteraction<TInput extends RespondInteractionInput<TAdapters>>(input: TInput) {
-      return handleRespondInteraction({ input, getRuntime });
+      return handleRespondInteraction({ input, getRuntime, logger });
     },
 
     async close() {
+      const startedAt = startHarnessLogTimer();
+      const metadata = { operation: "close" } as const;
+      logger.debug(harnessLogEvents.closeBegin, metadata);
+
       await Promise.all(openingRuntimes.values());
 
       const closeResults = await Promise.all(
         [...openedRuntimes.entries()].map(async ([harnessId, runtime]) => {
-          return Result.tryPromise({
+          const adapterStartedAt = startHarnessLogTimer();
+          const adapterMetadata = { harnessId, operation: "closeAdapter" } as const;
+          logger.debug(harnessLogEvents.adapterCloseBegin, adapterMetadata);
+
+          const result = await Result.tryPromise({
             try: async () => {
               await runtime.close();
               openedRuntimes.delete(harnessId);
             },
             catch: (cause) => ({ harnessId, cause }),
           });
+
+          logHarnessResult({
+            logger,
+            result,
+            startedAt: adapterStartedAt,
+            metadata: adapterMetadata,
+            successEvent: harnessLogEvents.adapterCloseSuccess,
+            failureEvent: harnessLogEvents.adapterCloseFailure,
+            failureLevel: "warn",
+          });
+
+          return result;
         }),
       );
       const [, failures] = Result.partition(closeResults);
+      const result =
+        failures.length === 0 ? Result.ok() : Result.err(new HarnessCloseError({ failures }));
 
-      return failures.length === 0 ? Result.ok() : Result.err(new HarnessCloseError({ failures }));
+      logHarnessResult({
+        logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: harnessLogEvents.closeSuccess,
+        failureEvent: harnessLogEvents.closeFailure,
+        failureLevel: "warn",
+      });
+
+      return result;
     },
   };
 }

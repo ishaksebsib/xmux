@@ -72,6 +72,24 @@ so consumers see a sane lifecycle: a started run event and exactly one terminal
 run event. Abort cleanup must not call iterator `.return()` while `.next()` is in
 flight.
 
+## Logging Pattern
+- `createHarness({ logger })` accepts the `ts-log` compatible `HarnessLogger`
+  type and remains silent by default through `dummyHarnessLogger`.
+- `logger.ts` owns the public logger contract and typed log event names.
+  `logger-utils.ts` owns safe log dispatch, timing, result logging, and bounded
+  error serialization.
+- Use `harnessLogEvents` constants instead of string literals for harness-core
+  log events.
+- Use `HarnessLogMetadata` for structured metadata. Prefer stable IDs,
+  operation names, result state, duration, and sanitized error metadata.
+- Never log prompt content, raw adapter options, credentials, API URLs, or
+  workspace-local payloads unless explicitly sanitized.
+- Logging is best-effort. Always use `createHarnessLogScope`,
+  `logHarnessOperation`, or `logHarnessResult` so a broken user logger cannot
+  change runtime behavior.
+- Pass the raw injected logger to adapter `open(context.logger)`. Adapter
+  packages should create their own package-scoped loggers and event names.
+
 ## Type And Error Safety
 - Use focused aliases for repeated derivations.
 - Cast only at real type boundaries.

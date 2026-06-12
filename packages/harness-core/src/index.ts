@@ -22,6 +22,15 @@ export {
   UnknownHarnessError,
 } from "./errors";
 export { createHarness, defineHarnessAdapter } from "./harness";
+export { dummyHarnessLogger, harnessLogEvents } from "./logger";
+export {
+  createHarnessLogScope,
+  harnessLogDurationMs,
+  logHarnessResult,
+  serializeHarnessLogError,
+  startHarnessLogTimer,
+  writeHarnessLog,
+} from "./logger-utils";
 export type {
   CreateHarnessOptions,
   Harness,
@@ -64,6 +73,15 @@ export type {
   SessionRef,
   WorkingDirectoryPath,
 } from "./contracts";
+export type {
+  HarnessLogger,
+  HarnessLogErrorMetadata,
+  HarnessLogEventName,
+  HarnessLogLevel,
+  HarnessLogMetadata,
+  HarnessLogOperation,
+  HarnessLogScope,
+} from "./logger";
 export type {
   HarnessContentEvent,
   HarnessContentKind,

@@ -1,4 +1,5 @@
 import type { Result } from "better-result";
+import type { HarnessLogger } from "./logger";
 import type {
   AbortError,
   CreateSessionError,
@@ -192,6 +193,7 @@ export interface HarnessSessionInfo<
 /** Shared runtime inputs passed to adapter startup. */
 export interface OpenHarnessAdapterContext {
   readonly signal?: AbortSignal;
+  readonly logger?: HarnessLogger;
 }
 
 /** Common session creation fields every adapter receives from harness-core. */
@@ -494,4 +496,5 @@ export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>>
 export interface CreateHarnessOptions<TAdapters extends HarnessAdapterDefinitions<TAdapters>> {
   readonly adapters: TAdapters;
   readonly now?: () => Date;
+  readonly logger?: HarnessLogger;
 }

@@ -1,4 +1,6 @@
 import { Result } from "better-result";
+import type { HarnessLogScope } from "../../logger";
+import { logHarnessOperation } from "../../logger-utils";
 import type {
   CreatedSessionFromInput,
   CreateSessionInput,
@@ -18,37 +20,43 @@ export async function handleCreateSession<
   readonly input: TInput;
   readonly getRuntime: HarnessRuntimeGetter<TAdapters>;
   readonly now: () => Date;
+  readonly logger?: HarnessLogScope;
 }) {
-  return Result.gen(async function* () {
-    const cwd = yield* Result.await(createWorkingDirectoryPath(args.input.cwd));
-    const runtime = yield* Result.await(args.getRuntime(args.input.harnessId, args.input.signal));
-    const created = yield* Result.await(
-      createAdapterSession({
-        runtime,
-        harnessId: args.input.harnessId,
-        input: {
-          cwd,
-          title: args.input.title,
-          model: args.input.model,
-          thinking: args.input.thinking,
-          adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
-          signal: args.input.signal,
+  return logHarnessOperation({
+    logger: args.logger,
+    operation: "createSession",
+    harnessId: args.input.harnessId,
+    run: () => Result.gen(async function* () {
+      const cwd = yield* Result.await(createWorkingDirectoryPath(args.input.cwd));
+      const runtime = yield* Result.await(args.getRuntime(args.input.harnessId, args.input.signal));
+      const created = yield* Result.await(
+        createAdapterSession({
+          runtime,
+          harnessId: args.input.harnessId,
+          input: {
+            cwd,
+            title: args.input.title,
+            model: args.input.model,
+            thinking: args.input.thinking,
+            adapterOptions: adapterOptionsFromInput<TAdapters, TInput["harnessId"]>(args.input),
+            signal: args.input.signal,
+          },
+        }),
+      );
+
+      const session = {
+        ref: {
+          harnessId: args.input.harnessId,
+          sessionId: created.sessionId,
         },
-      }),
-    );
+        cwd,
+        title: args.input.title,
+        model: created.model ?? args.input.model,
+        createdAt: args.now().toISOString(),
+        adapterData: created.adapterData,
+      } as CreatedSessionFromInput<TAdapters, TInput>;
 
-    const session = {
-      ref: {
-        harnessId: args.input.harnessId,
-        sessionId: created.sessionId,
-      },
-      cwd,
-      title: args.input.title,
-      model: created.model ?? args.input.model,
-      createdAt: args.now().toISOString(),
-      adapterData: created.adapterData,
-    } as CreatedSessionFromInput<TAdapters, TInput>;
-
-    return Result.ok(session);
+      return Result.ok(session);
+    }),
   });
 }

@@ -1,5 +1,13 @@
 import { defineHarnessAdapter, type OpenedHarnessAdapter } from "@xmux/harness-core";
 import { Result } from "better-result";
+import {
+  createOpenCodeLogScope,
+  logHarnessResult,
+  logOpenCodeOperation,
+  openCodeLogEvents,
+  startHarnessLogTimer,
+  type OpenCodeLogScope,
+} from "./logger";
 import { openRuntime, normalizeConfig, type OpenCodeRuntime } from "./runtime";
 import { abortSession } from "./handlers/abort";
 import { createSession } from "./handlers/create-session";
@@ -19,8 +27,32 @@ import type {
   OpenCodeSessionInfo,
 } from "./types";
 
+async function closeRuntime(runtime: OpenCodeRuntime, logger: OpenCodeLogScope): Promise<void> {
+  const startedAt = startHarnessLogTimer();
+  const metadata = { operation: "closeAdapter" } as const;
+  logger.debug(openCodeLogEvents.closeBegin, metadata);
+
+  const result = await Result.tryPromise({
+    try: () => runtime.close(),
+    catch: (cause) => cause,
+  });
+
+  logHarnessResult({
+    logger,
+    result,
+    startedAt,
+    metadata,
+    successEvent: openCodeLogEvents.closeSuccess,
+    failureEvent: openCodeLogEvents.closeFailure,
+    failureLevel: "warn",
+  });
+
+  if (result.isErr()) throw result.error;
+}
+
 async function createOpenedAdapter(
   runtime: OpenCodeRuntime,
+  logger: OpenCodeLogScope,
 ): Promise<
   Result<
     OpenedHarnessAdapter<"opencode", OpenCodeCreateOptions, OpenCodeSessionInfo, OpenCodeModelInfo>,
@@ -29,36 +61,129 @@ async function createOpenedAdapter(
 > {
   return Result.ok({
     id: "opencode",
-    createSession: async (input) => createSession(runtime, input),
-    resumeSession: async (input) => resumeSession(runtime, input),
-    listSessions: async (input) => listSessions(runtime, input),
-    getSession: async (input) => getSession(runtime, input),
-    prompt: async (input) => prompt(runtime, input),
-    listModels: async (input) => listModels(runtime, input),
-    getModel: async (input) => getModel(runtime, input),
-    setModel: async (input) => setModel(runtime, input),
-    getThinking: async (input) => getThinking(runtime, input),
-    setThinking: async (input) => setThinking(runtime, input),
-    deleteSession: async (input) => deleteSession(runtime, input),
-    abort: async (input) => abortSession(runtime, input),
-    respondInteraction: async (input) => respondInteraction(runtime, input),
-    close: async () => {
-      await runtime.close();
-    },
+    createSession: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "createSession",
+        run: () => createSession(runtime, input),
+      }),
+    resumeSession: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "resumeSession",
+        sessionId: input.sessionId,
+        run: () => resumeSession(runtime, input),
+      }),
+    listSessions: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "listSessions",
+        run: () => listSessions(runtime, input),
+      }),
+    getSession: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "getSession",
+        sessionId: input.ref.sessionId,
+        run: () => getSession(runtime, input),
+      }),
+    prompt: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "prompt",
+        sessionId: input.ref.sessionId,
+        run: () => prompt(runtime, input),
+      }),
+    listModels: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "listModels",
+        run: () => listModels(runtime, input),
+      }),
+    getModel: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "getModel",
+        sessionId: input.target.type === "session" ? input.target.ref.sessionId : undefined,
+        run: () => getModel(runtime, input),
+      }),
+    setModel: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "setModel",
+        sessionId: input.target.type === "session" ? input.target.ref.sessionId : undefined,
+        run: () => setModel(runtime, input),
+      }),
+    getThinking: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "getThinking",
+        sessionId: input.target.type === "session" ? input.target.ref.sessionId : undefined,
+        run: () => getThinking(runtime, input),
+      }),
+    setThinking: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "setThinking",
+        sessionId: input.target.type === "session" ? input.target.ref.sessionId : undefined,
+        run: () => setThinking(runtime, input),
+      }),
+    deleteSession: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "deleteSession",
+        sessionId: input.ref.sessionId,
+        run: () => deleteSession(runtime, input),
+      }),
+    abort: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "abort",
+        sessionId: input.ref.sessionId,
+        run: () => abortSession(runtime, input),
+      }),
+    respondInteraction: async (input) =>
+      logOpenCodeOperation({
+        logger,
+        operation: "respondInteraction",
+        sessionId: input.ref.sessionId,
+        run: () => respondInteraction(runtime, input),
+      }),
+    close: async () => closeRuntime(runtime, logger),
   });
 }
 
 export function createOpenCodeAdapter(config?: OpenCodeAdapterConfig): OpenCodeAdapter {
   const normalizedConfig = normalizeConfig(config);
+  const mode = normalizedConfig.mode ?? "embedded";
 
   return defineHarnessAdapter({
     id: "opencode",
-    async open() {
-      return Result.gen(async function* () {
+    async open(context) {
+      const logger = createOpenCodeLogScope({
+        logger: context.logger,
+        mode,
+      });
+      const startedAt = startHarnessLogTimer();
+      const metadata = { operation: "openAdapter", mode } as const;
+      logger.debug(openCodeLogEvents.openBegin, metadata);
+
+      const result = await Result.gen(async function* () {
         const runtime = yield* Result.await(openRuntime(normalizedConfig));
-        const adapter = yield* Result.await(createOpenedAdapter(runtime));
+        const adapter = yield* Result.await(createOpenedAdapter(runtime, logger));
         return Result.ok(adapter);
       });
+
+      logHarnessResult({
+        logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: openCodeLogEvents.openSuccess,
+        failureEvent: openCodeLogEvents.openFailure,
+      });
+
+      return result;
     },
   });
 }

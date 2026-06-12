@@ -1,13 +1,25 @@
 import { Result } from "better-result";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import {
   HarnessAdapterCreateSessionError,
   HarnessAdapterOpenError,
   InvalidWorkingDirectoryError,
   createHarness,
   defineHarnessAdapter,
+  harnessLogEvents,
+  type HarnessLogger,
 } from "../src";
 import { createTestAdapter, type PiAdapterInput, type PiAdapterSession } from "./test-utils";
+
+function createMockLogger() {
+  return {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  } satisfies HarnessLogger;
+}
 
 describe("createHarness", () => {
   test("creates a session with the selected adapter", async () => {
@@ -44,6 +56,98 @@ describe("createHarness", () => {
     expect(session.createdAt).toBe("2026-05-05T10:00:00.000Z");
     expect(session.adapterData.sessionFile).toContain(".pi/session.jsonl");
     expect(handles.opens).toEqual(["pi"]);
+  });
+
+  test("passes loggers to adapters and logs safe structured metadata", async () => {
+    const handles = { opens: [], closes: [] };
+    const logger = createMockLogger();
+    let openLogger: HarnessLogger | undefined;
+    const harness = createHarness({
+      logger,
+      now: () => new Date("2026-05-05T10:00:00.000Z"),
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          onOpenContext: (context) => {
+            openLogger = context.logger;
+          },
+          createSession: async (input) => {
+            return Result.ok({
+              sessionId: "pi-session-1",
+              adapterData: { sessionFile: `${input.cwd}/.pi/session.jsonl` },
+            });
+          },
+        }),
+      },
+    });
+
+    const created = await harness.createSession({
+      harnessId: "pi",
+      cwd: process.cwd(),
+      title: "do not log this",
+      adapterOptions: { sessionMode: "persistent" },
+    });
+
+    expect(created.isOk()).toBe(true);
+    expect(openLogger).toBe(logger);
+    expect(logger.debug).toHaveBeenCalledWith(
+      harnessLogEvents.operationBegin,
+      expect.objectContaining({
+        component: "@xmux/harness-core",
+        packageName: "@xmux/harness-core",
+        harnessId: "pi",
+        operation: "createSession",
+      }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(
+      harnessLogEvents.operationSuccess,
+      expect.objectContaining({
+        harnessId: "pi",
+        operation: "createSession",
+        result: "ok",
+        durationMs: expect.any(Number),
+      }),
+    );
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain("do not log this");
+    expect(JSON.stringify(logger.debug.mock.calls)).not.toContain(process.cwd());
+  });
+
+  test("logger failures do not affect harness operations", async () => {
+    const logger = {
+      trace: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      debug: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      info: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      warn: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+      error: vi.fn(() => {
+        throw new Error("logger failed");
+      }),
+    } satisfies HarnessLogger;
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      logger,
+      adapters: {
+        pi: createTestAdapter<"pi", Record<never, never>, Record<never, never>>({
+          id: "pi",
+          handles,
+          createSession: async () => Result.ok({ sessionId: "pi-session-1", adapterData: {} }),
+        }),
+      },
+    });
+
+    const created = await harness.createSession({ harnessId: "pi", cwd: process.cwd() });
+    const closed = await harness.close();
+
+    expect(created.isOk()).toBe(true);
+    expect(closed.isOk()).toBe(true);
   });
 
   test("reuses an opened adapter runtime across session creations", async () => {

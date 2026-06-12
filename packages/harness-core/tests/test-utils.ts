@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import {
   defineHarnessAdapter,
   type HarnessAdapterDefinition,
+  type OpenHarnessAdapterContext,
   type OpenedHarnessAdapter,
 } from "../src";
 
@@ -35,6 +36,7 @@ export function createTestAdapter<
   readonly id: THarnessId;
   readonly handles: OpenedAdapterHandles;
   readonly openError?: unknown;
+  readonly onOpenContext?: (context: OpenHarnessAdapterContext) => void;
   readonly createSession: OpenedHarnessAdapter<
     THarnessId,
     TAdapterOptions,
@@ -61,8 +63,9 @@ export function createTestAdapter<
 }): HarnessAdapterDefinition<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel> {
   return defineHarnessAdapter({
     id: args.id,
-    async open() {
+    async open(context) {
       args.handles.opens.push(args.id);
+      args.onOpenContext?.(context);
 
       if (args.openError !== undefined) {
         return Result.err(args.openError);

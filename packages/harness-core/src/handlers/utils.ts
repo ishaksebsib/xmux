@@ -7,6 +7,8 @@ import {
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
 } from "../errors";
+import { harnessLogEvents, type HarnessLogger, type HarnessLogScope } from "../logger";
+import { logHarnessResult, startHarnessLogTimer } from "../logger-utils";
 import type {
   HarnessAdapterCreateSessionInput,
   HarnessAdapterCreateSessionResult,
@@ -136,16 +138,44 @@ export async function openHarnessAdapter<
   >;
   readonly harnessId: THarnessId;
   readonly signal?: AbortSignal;
+  readonly logger?: HarnessLogScope;
+  readonly adapterLogger?: HarnessLogger;
 }): Promise<
   Result<
     OpenedHarnessAdapter<THarnessId, TAdapterOptions, TAdapterSession, TAdapterModel>,
     HarnessAdapterOpenError
   >
 > {
-  return Result.mapError(
-    await args.adapter.open({ signal: args.signal }),
-    (cause) => new HarnessAdapterOpenError({ harnessId: args.harnessId, cause }),
+  const startedAt = startHarnessLogTimer();
+  const metadata = {
+    harnessId: args.harnessId,
+    operation: "openAdapter",
+  } as const;
+
+  args.logger?.debug(harnessLogEvents.adapterOpenBegin, metadata);
+
+  const opened = await Result.tryPromise({
+    try: () => args.adapter.open({ signal: args.signal, logger: args.adapterLogger }),
+    catch: (cause) => new HarnessAdapterOpenError({ harnessId: args.harnessId, cause }),
+  });
+
+  const result = Result.andThen(opened, (adapterResult) =>
+    Result.mapError(
+      adapterResult,
+      (cause) => new HarnessAdapterOpenError({ harnessId: args.harnessId, cause }),
+    ),
   );
+
+  logHarnessResult({
+    logger: args.logger,
+    result,
+    startedAt,
+    metadata,
+    successEvent: harnessLogEvents.adapterOpenSuccess,
+    failureEvent: harnessLogEvents.adapterOpenFailure,
+  });
+
+  return result;
 }
 
 export async function createAdapterSession<
