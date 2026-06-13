@@ -1,3 +1,4 @@
+import { AllowedMentionsTypes } from "discord-api-types/v10";
 import { describe, expect, test } from "vitest";
 import {
   createSafeDiscordAllowedMentions,
@@ -19,6 +20,15 @@ describe("Discord adapter config", () => {
     }
   });
 
+  test("token is trimmed", () => {
+    const result = parseDiscordBotToken("  token  ");
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toBe("token");
+    }
+  });
+
   test("empty application id fails", () => {
     const result = parseDiscordApplicationId("");
 
@@ -26,6 +36,15 @@ describe("Discord adapter config", () => {
     if (result.isErr()) {
       expect(result.error).toBeInstanceOf(DiscordConfigurationError);
       expect(result.error.field).toBe("applicationId");
+    }
+  });
+
+  test("application id is trimmed", () => {
+    const result = parseDiscordApplicationId("  application  ");
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toBe("application");
     }
   });
 
@@ -37,6 +56,72 @@ describe("Discord adapter config", () => {
     const mentions = createSafeDiscordAllowedMentions();
 
     expect(mentions).toEqual({ parse: [], replied_user: false });
+  });
+
+  test("empty guild id fails", () => {
+    const result = parseDiscordAdapterConfig({
+      token: "token",
+      applicationId: "app",
+      commandRegistration: { scope: { type: "guild", guildId: "  " } },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.field).toBe("commandRegistration.scope.guildId");
+    }
+  });
+
+  test("guild id is trimmed", () => {
+    const result = parseDiscordAdapterConfig({
+      token: "token",
+      applicationId: "app",
+      commandRegistration: { scope: { type: "guild", guildId: "  guild  " } },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk() && result.value.commandRegistration.scope.type === "guild") {
+      expect(result.value.commandRegistration.scope.guildId).toBe("guild");
+    }
+  });
+
+  test("invalid stream interval fails", () => {
+    const result = parseDiscordAdapterConfig({
+      token: "token",
+      applicationId: "app",
+      stream: { editIntervalMs: 0 },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.field).toBe("stream.editIntervalMs");
+    }
+  });
+
+  test("custom allowed mentions are preserved", () => {
+    const allowedMentions = { parse: [AllowedMentionsTypes.User], replied_user: true };
+    const result = parseDiscordAdapterConfig({
+      token: "token",
+      applicationId: "app",
+      defaultAllowedMentions: allowedMentions,
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.defaultAllowedMentions).toBe(allowedMentions);
+    }
+  });
+
+  test("webhook mode empty public key fails", () => {
+    const result = parseDiscordAdapterConfig({
+      token: "token",
+      applicationId: "app",
+      mode: { type: "webhook", publicKey: "  " },
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.field).toBe("mode.publicKey");
+    }
   });
 
   test("normalizes runtime defaults", () => {

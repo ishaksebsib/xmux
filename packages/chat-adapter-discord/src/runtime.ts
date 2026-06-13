@@ -20,7 +20,11 @@ import {
   type CreateDiscordBotClient,
   type DiscordBotClient,
 } from "./client";
-import { parseDiscordAdapterConfig, type DiscordAdapterConfig } from "./config";
+import {
+  normalizeDiscordMode,
+  parseDiscordAdapterConfig,
+  type DiscordAdapterConfig,
+} from "./config";
 import {
   createDiscordLogScope,
   logChatResult,
@@ -46,7 +50,6 @@ import { startGateway } from "./handlers/start-gateway";
 import type {
   CreateDiscordAdapterOptions,
   DiscordAdapterData,
-  DiscordAdapterMode,
   DiscordAdapterOptions,
 } from "./types";
 
@@ -66,17 +69,19 @@ type DiscordOpenedAdapter<TChatId extends string> = OpenedChatAdapter<
 export function openDiscordRuntime<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly options: CreateDiscordAdapterOptions<TChatId>;
-  readonly mode: DiscordAdapterMode;
   readonly createClient?: CreateDiscordBotClient;
   readonly logger?: ChatLogger;
 }): Result<DiscordOpenedAdapter<TChatId>, DiscordConfigurationError> {
   const logger = createDiscordLogScope({
     logger: args.logger,
     chatId: args.chatId,
-    mode: args.mode.type,
+    mode: normalizeDiscordMode(args.options.mode).type,
   });
   const startedAt = startChatLogTimer();
-  const metadata = { operation: "open", mode: args.mode.type } as const;
+  const metadata = {
+    operation: "open",
+    mode: normalizeDiscordMode(args.options.mode).type,
+  } as const;
 
   logger.debug(discordLogEvents.openBegin, metadata);
 

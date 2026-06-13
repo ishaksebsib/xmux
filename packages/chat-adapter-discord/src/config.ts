@@ -75,27 +75,31 @@ export function parseDiscordAdapterConfig<TChatId extends string>(
 export function parseDiscordApplicationId(
   applicationId: string,
 ): Result<DiscordApplicationId, DiscordConfigurationError> {
-  return applicationId.trim().length === 0
+  const trimmed = applicationId.trim();
+
+  return trimmed.length === 0
     ? Result.err(
         new DiscordConfigurationError({
           field: "applicationId",
           reason: "Discord application id must not be empty",
         }),
       )
-    : Result.ok(applicationId as DiscordApplicationId);
+    : Result.ok(trimmed as DiscordApplicationId);
 }
 
 export function parseDiscordBotToken(
   token: string,
 ): Result<DiscordBotToken, DiscordConfigurationError> {
-  return token.trim().length === 0
+  const trimmed = token.trim();
+
+  return trimmed.length === 0
     ? Result.err(
         new DiscordConfigurationError({
           field: "token",
           reason: "Discord bot token must not be empty",
         }),
       )
-    : Result.ok(token as DiscordBotToken);
+    : Result.ok(trimmed as DiscordBotToken);
 }
 
 function normalizeDiscordCommandRegistration(
@@ -103,7 +107,12 @@ function normalizeDiscordCommandRegistration(
 ): Result<DiscordCommandRegistrationMode, DiscordConfigurationError> {
   const resolved = registration ?? defaultDiscordCommandRegistration;
 
-  if (resolved.scope.type === "guild" && resolved.scope.guildId.trim().length === 0) {
+  if (resolved.scope.type !== "guild") {
+    return Result.ok(resolved);
+  }
+
+  const guildId = resolved.scope.guildId.trim();
+  if (guildId.length === 0) {
     return Result.err(
       new DiscordConfigurationError({
         field: "commandRegistration.scope.guildId",
@@ -112,7 +121,7 @@ function normalizeDiscordCommandRegistration(
     );
   }
 
-  return Result.ok(resolved);
+  return Result.ok({ ...resolved, scope: { ...resolved.scope, guildId } });
 }
 
 function normalizeDiscordStreamOptions(
@@ -138,7 +147,12 @@ function normalizeDiscordStreamOptions(
 function validateDiscordMode(
   mode: DiscordAdapterMode,
 ): Result<DiscordAdapterMode, DiscordConfigurationError> {
-  if (mode.type === "webhook" && mode.publicKey.trim().length === 0) {
+  if (mode.type !== "webhook") {
+    return Result.ok(mode);
+  }
+
+  const publicKey = mode.publicKey.trim();
+  if (publicKey.length === 0) {
     return Result.err(
       new DiscordConfigurationError({
         field: "mode.publicKey",
@@ -147,5 +161,5 @@ function validateDiscordMode(
     );
   }
 
-  return Result.ok(mode);
+  return Result.ok({ ...mode, publicKey });
 }

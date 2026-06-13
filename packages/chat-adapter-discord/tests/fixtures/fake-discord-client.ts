@@ -1,6 +1,5 @@
 import type {
   DiscordBotClient,
-  DiscordCreateThreadRequest,
   DiscordDownloadAttachmentRequest,
   DiscordEditMessageRequest,
   DiscordInteractionHandler,

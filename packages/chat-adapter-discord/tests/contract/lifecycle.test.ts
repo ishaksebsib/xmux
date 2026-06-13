@@ -51,7 +51,6 @@ describe("Discord lifecycle contract", () => {
     const opened = openDiscordRuntime({
       chatId: "discord",
       options: { token: "token", applicationId: "application" },
-      mode: { type: "gateway" },
       createClient: () => fake,
     });
     expect(opened.isOk()).toBe(true);
@@ -73,7 +72,6 @@ describe("Discord lifecycle contract", () => {
     const opened = openDiscordRuntime({
       chatId: "discord",
       options: { token: "token", applicationId: "application" },
-      mode: { type: "gateway" },
       createClient: () => fake,
     });
     expect(opened.isOk()).toBe(true);
@@ -154,8 +152,6 @@ function createTestAdapter(
     applicationId: "application",
     ...options,
     createClient: (() => fake) satisfies CreateDiscordBotClient,
-  } as CreateDiscordAdapterOptions<"discord"> & {
-    readonly createClient: CreateDiscordBotClient;
   });
 }
 

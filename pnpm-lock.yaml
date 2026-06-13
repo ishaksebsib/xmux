@@ -23,6 +23,9 @@ importers:
 
   apps/demo:
     dependencies:
+      '@xmux/chat-adapter-discord':
+        specifier: workspace:^
+        version: link:../../packages/chat-adapter-discord
       '@xmux/chat-adapter-telegram':
         specifier: workspace:^
         version: link:../../packages/chat-adapter-telegram

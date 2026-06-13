@@ -2,6 +2,7 @@ import {
   Client,
   Events,
   GatewayIntentBits,
+  IntentsBitField,
   Partials,
   REST,
   Routes,
@@ -62,7 +63,6 @@ export interface DiscordRegisterCommandsRequest {
     | { readonly type: "global" }
     | { readonly type: "guild"; readonly guildId: string };
   readonly commands: readonly RESTPostAPIApplicationCommandsJSONBody[];
-  readonly strategy?: "upsert" | "bulk-overwrite";
   readonly signal?: AbortSignal;
 }
 
@@ -193,12 +193,23 @@ function createClientOptions(
   options: DiscordClientOptions | undefined,
 ): ClientOptions {
   const partials = mergePartials(defaultPartialsForMode(mode), options?.partials);
-
-  return {
+  const clientOptions = {
     ...options,
-    intents: options?.intents ?? defaultIntentsForMode(mode),
-    partials,
-  };
+    intents: mergeIntents(defaultIntentsForMode(mode), options?.intents),
+  } satisfies ClientOptions;
+
+  return partials === undefined ? clientOptions : { ...clientOptions, partials };
+}
+
+function mergeIntents(
+  defaults: readonly GatewayIntentBits[],
+  configured: ClientOptions["intents"] | undefined,
+): ClientOptions["intents"] {
+  if (configured === undefined) {
+    return defaults;
+  }
+
+  return new IntentsBitField(configured).add(...defaults).bitfield;
 }
 
 function defaultIntentsForMode(mode: DiscordAdapterMode): readonly GatewayIntentBits[] {
