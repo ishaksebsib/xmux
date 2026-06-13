@@ -31,7 +31,8 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "vitest run",
+    "test": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "RUN_INTEGRATION=true vitest run .integration.test.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
