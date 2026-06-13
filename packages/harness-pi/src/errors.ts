@@ -4,6 +4,7 @@ function causeDetail(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
+/** Reports Pi SDK runtime startup failures with the original cause intact. */
 export class PiRuntimeOpenError extends TaggedError("PiRuntimeOpenError")<{
   message: string;
   cause: unknown;
@@ -16,6 +17,7 @@ export class PiRuntimeOpenError extends TaggedError("PiRuntimeOpenError")<{
   }
 }
 
+/** Wraps throwing Pi session operations so harness-core can surface typed failures. */
 export class PiSessionRequestError extends TaggedError("PiSessionRequestError")<{
   message: string;
   cause: unknown;
@@ -28,6 +30,7 @@ export class PiSessionRequestError extends TaggedError("PiSessionRequestError")<
   }
 }
 
+/** Describes invalid or unexpected Pi session responses without throwing. */
 export class PiSessionResponseError extends TaggedError("PiSessionResponseError")<{
   message: string;
   reason: string;
@@ -41,6 +44,7 @@ export class PiSessionResponseError extends TaggedError("PiSessionResponseError"
   }
 }
 
+/** Identifies missing Pi sessions during resume, lookup, delete, or abort operations. */
 export class PiSessionNotFoundError extends TaggedError("PiSessionNotFoundError")<{
   sessionId: string;
   message: string;
@@ -53,6 +57,7 @@ export class PiSessionNotFoundError extends TaggedError("PiSessionNotFoundError"
   }
 }
 
+/** Prevents unsafe session resolution when the same Pi id matches multiple files. */
 export class PiSessionAmbiguousError extends TaggedError("PiSessionAmbiguousError")<{
   sessionId: string;
   matches: readonly string[];
@@ -66,6 +71,7 @@ export class PiSessionAmbiguousError extends TaggedError("PiSessionAmbiguousErro
   }
 }
 
+/** Wraps throwing Pi model registry operations with adapter context. */
 export class PiModelRequestError extends TaggedError("PiModelRequestError")<{
   message: string;
   cause: unknown;
@@ -78,6 +84,7 @@ export class PiModelRequestError extends TaggedError("PiModelRequestError")<{
   }
 }
 
+/** Explains why a requested xmux model ref cannot be selected in Pi. */
 export class PiModelSelectionError extends TaggedError("PiModelSelectionError")<{
   modelId: string;
   message: string;
@@ -90,6 +97,7 @@ export class PiModelSelectionError extends TaggedError("PiModelSelectionError")<
   }
 }
 
+/** Reports prompt content that cannot be converted into Pi prompt input. */
 export class PiPromptContentError extends TaggedError("PiPromptContentError")<{
   message: string;
   reason: string;
@@ -102,6 +110,7 @@ export class PiPromptContentError extends TaggedError("PiPromptContentError")<{
   }
 }
 
+/** Temporary Phase 1/2 marker for operations whose Pi SDK handlers are not wired yet. */
 export class PiNotImplementedError extends TaggedError("PiNotImplementedError")<{
   operation: string;
   message: string;

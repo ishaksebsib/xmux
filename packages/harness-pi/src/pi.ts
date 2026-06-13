@@ -140,6 +140,10 @@ async function createOpenedAdapter(
   });
 }
 
+/**
+ * Creates the Pi harness adapter so applications can access Pi through the
+ * unified `@xmux/harness-core` facade without depending on Pi SDK details.
+ */
 export function createPiAdapter(config?: PiAdapterConfig): PiAdapter {
   const normalizedConfig = normalizeConfig(config);
 
