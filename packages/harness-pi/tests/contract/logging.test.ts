@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Result } from "better-result";
 import { describe, expect, test, vi } from "vitest";
 import type { HarnessLogger, WorkingDirectoryPath } from "@xmux/harness-core";
@@ -63,18 +66,27 @@ describe("Pi logging contract", () => {
     );
   });
 
-  test("opened adapter operations log begin/failure with serialized errors", async () => {
+  test("opened adapter operations log begin and terminal metadata", async () => {
     const logger = createMockLogger();
     const opened = await openPiAdapter(logger);
+    const tempDir = await mkdtemp(join(tmpdir(), "xmux-pi-logging-"));
     const cwd = process.cwd() as WorkingDirectoryPath;
-    const ref = { harnessId: "pi", sessionId: "session-1" } as const;
+    const adapterOptions = {
+      agentDir: join(tempDir, "agent"),
+      sessionDir: join(tempDir, "sessions"),
+      noTools: "all" as const,
+    };
 
     try {
+      const created = await opened.createSession({ cwd, adapterOptions });
+      expect(created.isOk()).toBe(true);
+      const ref = { harnessId: "pi", sessionId: created.unwrap("created").sessionId } as const;
+      const missingRef = { harnessId: "pi", sessionId: "missing-session" } as const;
+
       const calls = [
-        ["createSession", () => opened.createSession({ cwd, adapterOptions: {} })],
-        ["resumeSession", () => opened.resumeSession({ sessionId: ref.sessionId, adapterOptions: {} })],
-        ["listSessions", () => opened.listSessions({ adapterOptions: {} })],
-        ["getSession", () => opened.getSession({ ref, adapterOptions: {} })],
+        ["resumeSession", () => opened.resumeSession({ sessionId: "missing-session", adapterOptions })],
+        ["listSessions", () => opened.listSessions({ adapterOptions })],
+        ["getSession", () => opened.getSession({ ref, adapterOptions })],
         [
           "prompt",
           () =>
@@ -82,62 +94,74 @@ describe("Pi logging contract", () => {
               ref,
               cwd,
               content: [{ type: "text", text: "do not log prompt text" }],
-              adapterOptions: {},
+              adapterOptions,
             }),
         ],
-        ["listModels", () => opened.listModels!({ adapterOptions: {} })],
-        ["getModel", () => opened.getModel!({ target: { type: "harness", harnessId: "pi" }, adapterOptions: {} })],
+        ["listModels", () => opened.listModels!({ adapterOptions })],
+        ["getModel", () => opened.getModel!({ target: { type: "harness", harnessId: "pi" }, adapterOptions })],
         [
           "setModel",
           () =>
             opened.setModel!({
               target: { type: "harness", harnessId: "pi" },
               update: { type: "set", model: { providerId: "faux", modelId: "faux-fast" } },
-              adapterOptions: {},
+              adapterOptions,
             }),
         ],
-        ["getThinking", () => opened.getThinking!({ target: { type: "harness", harnessId: "pi" }, adapterOptions: {} })],
+        ["getThinking", () => opened.getThinking!({ target: { type: "harness", harnessId: "pi" }, adapterOptions })],
         [
           "setThinking",
           () =>
             opened.setThinking!({
               target: { type: "harness", harnessId: "pi" },
               update: { type: "set", level: "medium" },
-              adapterOptions: {},
+              adapterOptions,
             }),
         ],
-        ["deleteSession", () => opened.deleteSession({ ref, adapterOptions: {} })],
-        ["abort", () => opened.abort({ ref, adapterOptions: {} })],
+        ["abort", () => opened.abort({ ref, adapterOptions })],
+        ["deleteSession", () => opened.deleteSession({ ref, adapterOptions })],
+        ["getSession", () => opened.getSession({ ref: missingRef, adapterOptions })],
       ] as const;
 
       for (const [, run] of calls) {
-        const result = await run();
-        expect(result.isErr()).toBe(true);
+        await run();
       }
 
-      for (const [operation] of calls) {
+      const operations = [
+        "createSession",
+        ...calls.map(([operation]) => operation),
+      ];
+      for (const operation of operations) {
         expect(logger.debug).toHaveBeenCalledWith(
           piLogEvents.operationBegin,
           expect.objectContaining({ operation, mode: "sdk" }),
         );
         expect(logger.debug).toHaveBeenCalledWith(
-          piLogEvents.operationFailure,
+          expect.stringMatching(/^xmux\.pi\.operation\.(success|failure)$/),
           expect.objectContaining({
             operation,
             mode: "sdk",
-            result: "error",
             durationMs: expect.any(Number),
-            error: expect.objectContaining({
-              message: expect.stringContaining(`Pi adapter operation is not implemented yet: ${operation}`),
-            }),
           }),
         );
       }
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        piLogEvents.operationFailure,
+        expect.objectContaining({
+          operation: "getSession",
+          result: "error",
+          error: expect.objectContaining({
+            message: expect.stringContaining("Pi session not found"),
+          }),
+        }),
+      );
 
       const serializedLogs = JSON.stringify(logger.debug.mock.calls);
       expect(serializedLogs).not.toContain("do not log prompt text");
     } finally {
       await opened.close();
+      await rm(tempDir, { recursive: true, force: true });
     }
   });
 

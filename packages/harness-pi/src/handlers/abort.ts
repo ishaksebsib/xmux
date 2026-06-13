@@ -1,12 +1,18 @@
 import type { HarnessAdapterAbortInput } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
-import { PiNotImplementedError } from "../errors";
+import { PiSessionNotFoundError, PiSessionRequestError } from "../errors";
 import type { PiRuntime } from "../runtime";
 import type { PiCreateOptions } from "../types";
 
 export async function abortSession(
-  _runtime: PiRuntime,
-  _input: HarnessAdapterAbortInput<"pi", PiCreateOptions>,
-): Promise<ResultType<void, PiNotImplementedError>> {
-  return Result.err(new PiNotImplementedError({ operation: "abort" }));
+  runtime: PiRuntime,
+  input: HarnessAdapterAbortInput<"pi", PiCreateOptions>,
+): Promise<ResultType<void, PiSessionNotFoundError | PiSessionRequestError>> {
+  const handle = runtime.sessions.get(input.ref.sessionId);
+  if (!handle) return Result.err(new PiSessionNotFoundError({ sessionId: input.ref.sessionId }));
+
+  return Result.tryPromise({
+    try: () => handle.session.abort(),
+    catch: (cause) => new PiSessionRequestError({ operation: "abort", cause }),
+  });
 }

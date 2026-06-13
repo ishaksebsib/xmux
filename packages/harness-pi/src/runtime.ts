@@ -1,3 +1,4 @@
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { HarnessModelRef, HarnessThinkingLevel } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import {
@@ -12,11 +13,12 @@ import type { PiAdapterConfig } from "./types";
  * SDK sessions and runtime shutdown can release every session it created.
  */
 export type PiSessionHandle = {
-  readonly session: unknown;
+  readonly session: AgentSession;
   readonly cwd: string;
   readonly sessionId: string;
   readonly sessionFile?: string;
   readonly sessionDir?: string;
+  readonly agentDir?: string;
   dispose(): void;
 };
 

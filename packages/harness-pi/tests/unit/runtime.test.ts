@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 import { normalizePiAdapterConfig } from "../../src/config";
 import { openRuntime, type PiSessionHandle } from "../../src/runtime";
+import type { AgentSession } from "@earendil-works/pi-coding-agent";
 
 describe("Pi runtime", () => {
   test("opens with normalized config and empty session state", async () => {
@@ -58,7 +59,7 @@ describe("Pi runtime", () => {
 
 function createHandle(sessionId: string, dispose: () => void): PiSessionHandle {
   return {
-    session: {},
+    session: {} as AgentSession,
     cwd: process.cwd(),
     sessionId,
     dispose,
