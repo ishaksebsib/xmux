@@ -1,8 +1,4 @@
-import {
-  AuthStorage,
-  ModelRegistry,
-  type AgentSession,
-} from "@earendil-works/pi-coding-agent";
+import { AuthStorage, ModelRegistry, type AgentSession } from "@earendil-works/pi-coding-agent";
 import type {
   HarnessAdapterGetModelInput,
   HarnessAdapterListModelsInput,
@@ -201,7 +197,11 @@ export function getEffectiveModel(args: {
   if (args.target.type === "harness") {
     return Result.ok(
       args.runtime.defaultModel
-        ? toSelectedModel({ target: args.target, model: args.runtime.defaultModel, source: "harness" })
+        ? toSelectedModel({
+            target: args.target,
+            model: args.runtime.defaultModel,
+            source: "harness",
+          })
         : toSelectedModel({ target: args.target, source: "unset" }),
     );
   }
@@ -213,9 +213,17 @@ export function getEffectiveModel(args: {
 
   return Result.ok(
     handle.session.model
-      ? toSelectedModel({ target: args.target, model: toPiModelRef(handle.session.model), source: "session" })
+      ? toSelectedModel({
+          target: args.target,
+          model: toPiModelRef(handle.session.model),
+          source: "session",
+        })
       : args.runtime.defaultModel
-        ? toSelectedModel({ target: args.target, model: args.runtime.defaultModel, source: "harness" })
+        ? toSelectedModel({
+            target: args.target,
+            model: args.runtime.defaultModel,
+            source: "harness",
+          })
         : toSelectedModel({ target: args.target, source: "unset" }),
   );
 }
@@ -231,7 +239,9 @@ export async function listModels(
       operation: "listModels",
       agentDir: options.agentDir,
     });
-    const models = (input.includeUnavailable ? registry.getAll() : registry.getAvailable()) as PiModel[];
+    const models = (
+      input.includeUnavailable ? registry.getAll() : registry.getAvailable()
+    ) as PiModel[];
 
     return Result.ok(
       sortModelInfos(models.map((model) => toHarnessModelInfo({ registry, model }))),
@@ -269,9 +279,9 @@ export async function setModel(
   const options = mergePiCreateOptions(runtime.config, input.adapterOptions);
 
   return Result.gen(async function* () {
-    const registry = yield* (input.target.type === "session"
+    const registry = yield* input.target.type === "session"
       ? getLiveSessionModelRegistry(runtime, input.target.ref.sessionId)
-      : createPiModelRegistry({ operation: "setModel", agentDir: options.agentDir }));
+      : createPiModelRegistry({ operation: "setModel", agentDir: options.agentDir });
     const model = yield* resolvePiModel({ registry, model: update.model });
     const selectedRef = toPiModelRef(model);
 
@@ -295,7 +305,11 @@ export async function setModel(
     );
 
     return Result.ok(
-      toSelectedModel({ target: input.target, model: toPiModelRef(handle.session.model), source: "session" }),
+      toSelectedModel({
+        target: input.target,
+        model: toPiModelRef(handle.session.model),
+        source: "session",
+      }),
     );
   });
 }

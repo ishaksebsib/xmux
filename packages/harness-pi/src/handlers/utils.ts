@@ -5,10 +5,7 @@ import {
   type AgentSession,
   type SessionInfo,
 } from "@earendil-works/pi-coding-agent";
-import type {
-  HarnessAdapterSessionInfo,
-  HarnessModelRef,
-} from "@xmux/harness-core";
+import type { HarnessAdapterSessionInfo, HarnessModelRef } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { mergePiCreateOptions } from "../config";
 import {
@@ -44,9 +41,7 @@ export function toModelRef(model: AgentSession["model"]): HarnessModelRef | unde
   return { providerId: model.provider, modelId: model.id };
 }
 
-export function mapLiveSession(
-  handle: PiSessionHandle,
-): HarnessAdapterSessionInfo<PiSessionInfo> {
+export function mapLiveSession(handle: PiSessionHandle): HarnessAdapterSessionInfo<PiSessionInfo> {
   return {
     sessionId: handle.sessionId,
     cwd: handle.cwd,

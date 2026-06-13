@@ -1,7 +1,4 @@
-import {
-  createAgentSession,
-  SessionManager,
-} from "@earendil-works/pi-coding-agent";
+import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
   HarnessAdapterResumeSessionInput,
   HarnessAdapterSessionInfo,
@@ -49,7 +46,10 @@ function openResolvedPiSession(args: {
     });
     let selectedModel: PiModel | undefined;
     if (args.runtime.defaultModel) {
-      selectedModel = yield* resolvePiModel({ registry: modelRegistry, model: args.runtime.defaultModel });
+      selectedModel = yield* resolvePiModel({
+        registry: modelRegistry,
+        model: args.runtime.defaultModel,
+      });
     }
 
     let selectedThinking: PiThinkingLevel | undefined;
@@ -68,7 +68,12 @@ function openResolvedPiSession(args: {
     }
 
     const sessionManager = yield* Result.try({
-      try: () => SessionManager.open(args.resolved.sessionFile as string, options.sessionDir, args.resolved.cwd),
+      try: () =>
+        SessionManager.open(
+          args.resolved.sessionFile as string,
+          options.sessionDir,
+          args.resolved.cwd,
+        ),
       catch: (cause) => new PiSessionRequestError({ operation: "resumeSession", cause }),
     });
 
@@ -93,7 +98,8 @@ function openResolvedPiSession(args: {
             thinkingLevel: selectedThinking,
             sessionManager,
             tools: options.tools === undefined ? undefined : [...options.tools],
-            excludeTools: options.excludeTools === undefined ? undefined : [...options.excludeTools],
+            excludeTools:
+              options.excludeTools === undefined ? undefined : [...options.excludeTools],
             noTools: options.noTools,
           }),
         catch: (cause) => new PiSessionRequestError({ operation: "resumeSession", cause }),

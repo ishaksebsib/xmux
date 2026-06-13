@@ -1,7 +1,4 @@
-import {
-  createAgentSession,
-  SessionManager,
-} from "@earendil-works/pi-coding-agent";
+import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
   HarnessAdapterCreateSessionInput,
   HarnessAdapterCreateSessionResult,
@@ -69,7 +66,8 @@ export async function createSession(
             thinkingLevel: selectedThinking,
             sessionManager,
             tools: options.tools === undefined ? undefined : [...options.tools],
-            excludeTools: options.excludeTools === undefined ? undefined : [...options.excludeTools],
+            excludeTools:
+              options.excludeTools === undefined ? undefined : [...options.excludeTools],
             noTools: options.noTools,
           }),
         catch: (cause) => new PiSessionRequestError({ operation: "createSession", cause }),

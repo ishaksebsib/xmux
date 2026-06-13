@@ -231,7 +231,10 @@ describe("Pi model and thinking contract", () => {
         adapterOptions: adapterOptions(),
       });
       expect(initial.isOk()).toBe(true);
-      expect(initial.unwrap("initial thinking")).toMatchObject({ level: "high", source: "session" });
+      expect(initial.unwrap("initial thinking")).toMatchObject({
+        level: "high",
+        source: "session",
+      });
 
       const updated = await harness.setThinking({
         target: { type: "session", ref },

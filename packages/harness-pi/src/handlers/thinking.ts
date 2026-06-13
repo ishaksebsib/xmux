@@ -11,7 +11,10 @@ import type { PiRuntime } from "../runtime";
 import type { PiCreateOptions } from "../types";
 import { toPiThinkingLevel } from "./models";
 
-type PiThinkingHandlerError = PiModelSelectionError | PiSessionNotFoundError | PiSessionRequestError;
+type PiThinkingHandlerError =
+  | PiModelSelectionError
+  | PiSessionNotFoundError
+  | PiSessionRequestError;
 
 function toHarnessThinkingLevel(level: string | undefined): HarnessThinkingLevel | undefined {
   switch (level) {
@@ -101,7 +104,8 @@ export async function setThinking(
       return Result.err(
         new PiModelSelectionError({
           modelId: input.target.ref.sessionId,
-          reason: "Pi does not support clearing a live session thinking level; set another level instead",
+          reason:
+            "Pi does not support clearing a live session thinking level; set another level instead",
         }),
       );
     }
@@ -115,9 +119,7 @@ export async function setThinking(
 
     if (input.target.type === "harness") {
       runtime.defaultThinking = level;
-      return Result.ok(
-        selectedThinking({ target: input.target, level, source: "harness" }),
-      );
+      return Result.ok(selectedThinking({ target: input.target, level, source: "harness" }));
     }
 
     const handle = runtime.sessions.get(input.target.ref.sessionId);

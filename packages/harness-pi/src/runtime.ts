@@ -1,10 +1,7 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { HarnessModelRef, HarnessThinkingLevel } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
-import {
-  normalizeConfig,
-  type NormalizedPiAdapterConfig,
-} from "./config";
+import { normalizeConfig, type NormalizedPiAdapterConfig } from "./config";
 import { PiRuntimeOpenError } from "./errors";
 import type { PiAdapterConfig } from "./types";
 

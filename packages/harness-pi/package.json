@@ -28,9 +28,6 @@
     },
     "./package.json": "./package.json"
   },
-  "engines": {
-    "node": ">=22.19.0"
-  },
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
@@ -50,5 +47,8 @@
     "tsdown": "^0.21.7",
     "typescript": "^6.0.2",
     "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

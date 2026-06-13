@@ -65,9 +65,4 @@ export type PiAdapterConfig = {
  * Concrete harness-core adapter definition for Pi, binding the `pi` id to Pi's
  * adapter options and native metadata types.
  */
-export type PiAdapter = HarnessAdapterDefinition<
-  "pi",
-  PiCreateOptions,
-  PiSessionInfo,
-  PiModelInfo
->;
+export type PiAdapter = HarnessAdapterDefinition<"pi", PiCreateOptions, PiSessionInfo, PiModelInfo>;

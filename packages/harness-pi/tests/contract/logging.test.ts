@@ -84,7 +84,10 @@ describe("Pi logging contract", () => {
       const missingRef = { harnessId: "pi", sessionId: "missing-session" } as const;
 
       const calls = [
-        ["resumeSession", () => opened.resumeSession({ sessionId: "missing-session", adapterOptions })],
+        [
+          "resumeSession",
+          () => opened.resumeSession({ sessionId: "missing-session", adapterOptions }),
+        ],
         ["listSessions", () => opened.listSessions({ adapterOptions })],
         ["getSession", () => opened.getSession({ ref, adapterOptions })],
         [
@@ -98,7 +101,10 @@ describe("Pi logging contract", () => {
             }),
         ],
         ["listModels", () => opened.listModels!({ adapterOptions })],
-        ["getModel", () => opened.getModel!({ target: { type: "harness", harnessId: "pi" }, adapterOptions })],
+        [
+          "getModel",
+          () => opened.getModel!({ target: { type: "harness", harnessId: "pi" }, adapterOptions }),
+        ],
         [
           "setModel",
           () =>
@@ -108,7 +114,11 @@ describe("Pi logging contract", () => {
               adapterOptions,
             }),
         ],
-        ["getThinking", () => opened.getThinking!({ target: { type: "harness", harnessId: "pi" }, adapterOptions })],
+        [
+          "getThinking",
+          () =>
+            opened.getThinking!({ target: { type: "harness", harnessId: "pi" }, adapterOptions }),
+        ],
         [
           "setThinking",
           () =>
@@ -127,10 +137,7 @@ describe("Pi logging contract", () => {
         await run();
       }
 
-      const operations = [
-        "createSession",
-        ...calls.map(([operation]) => operation),
-      ];
+      const operations = ["createSession", ...calls.map(([operation]) => operation)];
       for (const operation of operations) {
         expect(logger.debug).toHaveBeenCalledWith(
           piLogEvents.operationBegin,
@@ -208,7 +215,9 @@ describe("Pi logging contract", () => {
         mode: "sdk",
         result: "error",
         error: expect.objectContaining({
-          message: expect.stringContaining("Pi adapter operation is not implemented yet: getSession"),
+          message: expect.stringContaining(
+            "Pi adapter operation is not implemented yet: getSession",
+          ),
         }),
       }),
     );

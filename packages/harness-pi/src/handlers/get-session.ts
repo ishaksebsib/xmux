@@ -1,7 +1,4 @@
-import type {
-  HarnessAdapterGetSessionInput,
-  HarnessAdapterSessionInfo,
-} from "@xmux/harness-core";
+import type { HarnessAdapterGetSessionInput, HarnessAdapterSessionInfo } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import type { PiRuntime } from "../runtime";
 import type { PiCreateOptions, PiSessionInfo } from "../types";

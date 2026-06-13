@@ -54,7 +54,11 @@ type AssistantMessageEventLike = {
   readonly contentIndex?: number;
   readonly delta?: string;
   readonly content?: string;
-  readonly toolCall?: { readonly id?: string; readonly name?: string; readonly arguments?: unknown };
+  readonly toolCall?: {
+    readonly id?: string;
+    readonly name?: string;
+    readonly arguments?: unknown;
+  };
   readonly partial?: MessageLike;
   readonly message?: MessageLike;
   readonly error?: MessageLike;
@@ -140,7 +144,9 @@ function terminalRunEvent(args: {
   };
 }
 
-function roleForMessage(message: MessageLike): "user" | "assistant" | "tool" | "system" | undefined {
+function roleForMessage(
+  message: MessageLike,
+): "user" | "assistant" | "tool" | "system" | undefined {
   switch (message.role) {
     case "user":
     case "assistant":
@@ -272,12 +278,16 @@ function* mapContentCompleted(args: {
   };
 }
 
-function toolCallFromPartial(
-  event: AssistantMessageEventLike,
-): { readonly id: string; readonly name?: string; readonly arguments?: unknown } {
+function toolCallFromPartial(event: AssistantMessageEventLike): {
+  readonly id: string;
+  readonly name?: string;
+  readonly arguments?: unknown;
+} {
   const index = event.contentIndex ?? 0;
   const fromPartial = Array.isArray(event.partial?.content)
-    ? (event.partial.content[index] as { readonly id?: string; readonly name?: string; readonly arguments?: unknown } | undefined)
+    ? (event.partial.content[index] as
+        | { readonly id?: string; readonly name?: string; readonly arguments?: unknown }
+        | undefined)
     : undefined;
 
   return {
@@ -338,14 +348,23 @@ function* ensureToolCalled(args: {
 }
 
 function toToolOutput(result: unknown): readonly HarnessToolOutput[] {
-  const record = typeof result === "object" && result !== null ? (result as { readonly content?: unknown; readonly details?: unknown }) : {};
+  const record =
+    typeof result === "object" && result !== null
+      ? (result as { readonly content?: unknown; readonly details?: unknown })
+      : {};
   const output: HarnessToolOutput[] = [];
 
   if (Array.isArray(record.content)) {
     for (const item of record.content) {
       if (typeof item !== "object" || item === null) continue;
-      const content = item as { readonly type?: string; readonly text?: string; readonly data?: string; readonly mimeType?: string };
-      if (content.type === "text" && content.text) output.push({ type: "text", text: content.text });
+      const content = item as {
+        readonly type?: string;
+        readonly text?: string;
+        readonly data?: string;
+        readonly mimeType?: string;
+      };
+      if (content.type === "text" && content.text)
+        output.push({ type: "text", text: content.text });
       if (content.type === "image" && content.data && content.mimeType) {
         output.push({ type: "image", data: content.data, mimeType: content.mimeType });
       }
@@ -362,11 +381,19 @@ function* mapAssistantMessageEvent(args: {
   readonly event: AssistantMessageEventLike;
 }): Generator<PiPromptEvent> {
   const index = args.event.contentIndex ?? 0;
-  const id = assistantMessageId(args.event.partial ?? args.event.message ?? args.event.error, "assistant");
+  const id = assistantMessageId(
+    args.event.partial ?? args.event.message ?? args.event.error,
+    "assistant",
+  );
 
   switch (args.event.type) {
     case "start":
-      yield* ensureMessageStarted({ ref: args.ref, state: args.state, role: "assistant", messageId: id });
+      yield* ensureMessageStarted({
+        ref: args.ref,
+        state: args.state,
+        role: "assistant",
+        messageId: id,
+      });
       return;
     case "text_start":
       yield* ensureContentStarted({
@@ -434,14 +461,30 @@ function* mapAssistantMessageEvent(args: {
       return;
     case "toolcall_start": {
       const tool = toolCallFromPartial(args.event);
-      yield* ensureToolStarted({ ref: args.ref, state: args.state, callId: tool.id, name: tool.name });
+      yield* ensureToolStarted({
+        ref: args.ref,
+        state: args.state,
+        callId: tool.id,
+        name: tool.name,
+      });
       return;
     }
     case "toolcall_delta": {
       const tool = toolCallFromPartial(args.event);
-      yield* ensureToolStarted({ ref: args.ref, state: args.state, callId: tool.id, name: tool.name });
+      yield* ensureToolStarted({
+        ref: args.ref,
+        state: args.state,
+        callId: tool.id,
+        name: tool.name,
+      });
       if (args.event.delta) {
-        yield { type: "tool", phase: "input_delta", ref: args.ref, callId: tool.id, delta: args.event.delta };
+        yield {
+          type: "tool",
+          phase: "input_delta",
+          ref: args.ref,
+          callId: tool.id,
+          delta: args.event.delta,
+        };
       }
       return;
     }
@@ -500,7 +543,11 @@ export function* mapPiSessionEvent(args: {
       return;
     }
     case "message_start":
-      yield* mapMessageStart({ ref: args.ref, state: args.state, message: messageLike(args.event.message) });
+      yield* mapMessageStart({
+        ref: args.ref,
+        state: args.state,
+        message: messageLike(args.event.message),
+      });
       return;
     case "message_update":
       yield* mapAssistantMessageEvent({
@@ -510,7 +557,11 @@ export function* mapPiSessionEvent(args: {
       });
       return;
     case "message_end":
-      yield* mapMessageEnd({ ref: args.ref, state: args.state, message: messageLike(args.event.message) });
+      yield* mapMessageEnd({
+        ref: args.ref,
+        state: args.state,
+        message: messageLike(args.event.message),
+      });
       return;
     case "tool_execution_start":
       yield* ensureToolCalled({

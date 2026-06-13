@@ -135,7 +135,9 @@ describe("Pi prompt stream contract", () => {
 
   test("thinking and text chunks are mapped from Pi assistant events", async () => {
     const registration = await registerPromptModels();
-    registration.setResponses([fauxAssistantMessage([fauxThinking("private reasoning"), fauxText("public answer")])]);
+    registration.setResponses([
+      fauxAssistantMessage([fauxThinking("private reasoning"), fauxText("public answer")]),
+    ]);
     const harness = createHarness({ adapters: { pi: createPiAdapter() } });
 
     try {

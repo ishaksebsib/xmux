@@ -65,21 +65,35 @@ describe("Pi session contract", () => {
       expect(session.ref.harnessId).toBe("pi");
       expect(session.adapterData.name).toBe("Test session");
 
-      const listed = await harness.listSessions({ harnessId: "pi", adapterOptions: adapterOptions() });
+      const listed = await harness.listSessions({
+        harnessId: "pi",
+        adapterOptions: adapterOptions(),
+      });
       expect(listed.isOk()).toBe(true);
-      expect(listed.unwrap("sessions").some((item) => item.ref.sessionId === session.ref.sessionId)).toBe(true);
+      expect(
+        listed.unwrap("sessions").some((item) => item.ref.sessionId === session.ref.sessionId),
+      ).toBe(true);
 
-      const fetched = await harness.getSession({ ref: session.ref, adapterOptions: adapterOptions() });
+      const fetched = await harness.getSession({
+        ref: session.ref,
+        adapterOptions: adapterOptions(),
+      });
       expect(fetched.isOk()).toBe(true);
       expect(fetched.unwrap("fetched").title).toBe("Test session");
 
       const aborted = await harness.abort({ ref: session.ref, adapterOptions: adapterOptions() });
       expect(aborted.isOk()).toBe(true);
 
-      const deleted = await harness.deleteSession({ ref: session.ref, adapterOptions: adapterOptions() });
+      const deleted = await harness.deleteSession({
+        ref: session.ref,
+        adapterOptions: adapterOptions(),
+      });
       expect(deleted.isOk()).toBe(true);
 
-      const missing = await harness.getSession({ ref: session.ref, adapterOptions: adapterOptions() });
+      const missing = await harness.getSession({
+        ref: session.ref,
+        adapterOptions: adapterOptions(),
+      });
       expect(missing.isErr()).toBe(true);
     } finally {
       await harness.close();
@@ -120,9 +134,14 @@ describe("Pi session contract", () => {
       });
 
       expect(deleted.isOk()).toBe(true);
-      const listed = await harness.listSessions({ harnessId: "pi", adapterOptions: adapterOptions() });
+      const listed = await harness.listSessions({
+        harnessId: "pi",
+        adapterOptions: adapterOptions(),
+      });
       expect(listed.isOk()).toBe(true);
-      expect(listed.unwrap("sessions").some((item) => item.ref.sessionId === sessionId)).toBe(false);
+      expect(listed.unwrap("sessions").some((item) => item.ref.sessionId === sessionId)).toBe(
+        false,
+      );
     } finally {
       await harness.close();
     }
