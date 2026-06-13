@@ -17,6 +17,7 @@
     "@xmux/chat-core": "workspace:^",
     "@xmux/core": "workspace:^",
     "@xmux/harness-opencode": "workspace:^",
+    "@xmux/harness-pi": "workspace:^",
     "better-result": "^2.9.1",
     "dotenv": "^17.4.2"
   },

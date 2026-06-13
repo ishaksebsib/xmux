@@ -5,6 +5,7 @@ import {
   createTelegramAllowedUsersMiddleware,
   createTelegramTypingIndicatorMiddleware,
 } from "./middleware";
+import { createPiAdapter } from "@xmux/harness-pi";
 
 export async function runXmuxDemo() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -15,6 +16,7 @@ export async function runXmuxDemo() {
   const xmux = createXmux({
     harnesses: {
       opencode: createOpenCodeAdapter({ mode: "embedded" }),
+      pi: createPiAdapter(),
     },
     chats: {
       telegram: createTelegramAdapter({
