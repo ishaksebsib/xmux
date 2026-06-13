@@ -14,6 +14,8 @@ import {
   type DiscordChatInputInteractionLike,
 } from "../commands";
 import { decodeDiscordActionCustomId } from "../conversions/actions";
+import { decodeDiscordMessage } from "../conversions/inbound";
+import { decodeDiscordReaction } from "../conversions/reactions";
 import type {
   DiscordBotClient,
   DiscordInteractionHandler,
@@ -46,28 +48,44 @@ export function registerInboundHandlers<
   args.client.onInteractionCreate(createInteractionHandler(args));
 
   if (args.mode.type === "gateway" && args.mode.observeMessages) {
-    args.client.onMessageCreate(createIgnoredMessageHandler(args));
+    args.client.onMessageCreate(createMessageHandler(args));
   }
 
   if (args.mode.type === "gateway" && args.mode.observeReactions) {
-    const reactionHandler = createIgnoredReactionHandler(args);
-    args.client.onReactionAdd(reactionHandler);
-    args.client.onReactionRemove(reactionHandler);
+    args.client.onReactionAdd(createReactionHandler(args, "reaction.added"));
+    args.client.onReactionRemove(createReactionHandler(args, "reaction.removed"));
   }
 }
 
-function createIgnoredMessageHandler<TCommands extends ChatCommandRegistry, TChatId extends string>(
-  args: RegisterHandlerArgs<TCommands, TChatId>,
+function createMessageHandler<TCommands extends ChatCommandRegistry, TChatId extends string>(
+  args: RegisterHandlerArgs<TCommands, TChatId> & { readonly client: DiscordBotClient },
 ): DiscordMessageHandler {
-  return () => {
+  return (message) => {
     runGatewayHandler({
       ...args,
       eventType: "messageCreate",
       handle: async () => {
-        args.logger.debug(discordLogEvents.inboundIgnored, {
-          eventType: "messageCreate",
-          reason: "not_implemented",
+        const decoded = decodeDiscordMessage({
+          chatId: args.chatId,
+          client: args.client,
+          message,
+          botUserId: args.client.getBotUserId(),
         });
+
+        if (decoded.status === "ignored") {
+          args.logger.debug(discordLogEvents.inboundIgnored, {
+            eventType: "messageCreate",
+            reason: decoded.reason,
+          });
+          return;
+        }
+
+        args.logger.debug(discordLogEvents.inboundEvent, {
+          eventType: decoded.event.type,
+          conversationId: decoded.event.conversation.conversationId,
+          messageId: decoded.event.message.messageId,
+        });
+        args.context.emit(decoded.event);
       },
     });
   };
@@ -229,19 +247,38 @@ function putInteractionContext<
   });
 }
 
-function createIgnoredReactionHandler<
-  TCommands extends ChatCommandRegistry,
-  TChatId extends string,
->(args: RegisterHandlerArgs<TCommands, TChatId>): DiscordReactionHandler {
-  return () => {
+function createReactionHandler<TCommands extends ChatCommandRegistry, TChatId extends string>(
+  args: RegisterHandlerArgs<TCommands, TChatId> & { readonly client: DiscordBotClient },
+  type: "reaction.added" | "reaction.removed",
+): DiscordReactionHandler {
+  return (reaction, user) => {
     runGatewayHandler({
       ...args,
       eventType: "messageReaction",
       handle: async () => {
-        args.logger.debug(discordLogEvents.inboundIgnored, {
-          eventType: "messageReaction",
-          reason: "not_implemented",
+        const decoded = decodeDiscordReaction({
+          chatId: args.chatId,
+          type,
+          reaction,
+          user,
+          botUserId: args.client.getBotUserId(),
         });
+
+        if (decoded.status === "ignored") {
+          args.logger.debug(discordLogEvents.inboundIgnored, {
+            eventType: "messageReaction",
+            reason: decoded.reason,
+          });
+          return;
+        }
+
+        args.logger.debug(discordLogEvents.inboundEvent, {
+          eventType: decoded.event.type,
+          conversationId: decoded.event.message.conversationId,
+          messageId: decoded.event.message.messageId,
+          reaction: decoded.event.reaction,
+        });
+        args.context.emit(decoded.event);
       },
     });
   };

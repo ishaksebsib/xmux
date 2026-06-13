@@ -48,6 +48,7 @@ export type DiscordAdapterData = {
   readonly discordMessageId?: string;
   readonly discordInteractionId?: string;
   readonly discordUserId?: string;
+  readonly discordAttachmentId?: string;
   readonly raw: unknown;
 };
 

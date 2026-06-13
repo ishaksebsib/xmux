@@ -51,6 +51,8 @@ export function createFakeDiscordClient(
     readonly createThreadError?: unknown;
     readonly registerCommandsError?: unknown;
     readonly existingThreads?: Readonly<Record<string, string>>;
+    readonly attachmentResponses?: Readonly<Record<string, Response>>;
+    readonly downloadAttachmentError?: unknown;
   } = {},
 ): FakeDiscordBotClient {
   const readyHandlers: ((info: DiscordReadyInfo) => void)[] = [];
@@ -158,7 +160,10 @@ export function createFakeDiscordClient(
     },
     async downloadAttachment(input) {
       fake.downloadedAttachments.push(input);
-      return new Response("ok");
+      if (options.downloadAttachmentError !== undefined) {
+        throw options.downloadAttachmentError;
+      }
+      return options.attachmentResponses?.[input.url] ?? new Response("ok");
     },
     emitReady(info = {}) {
       const ready = { userId: "bot-user-id", username: "bot", ...info };
