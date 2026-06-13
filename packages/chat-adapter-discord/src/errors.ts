@@ -25,15 +25,169 @@ export class DiscordConfigurationError extends TaggedError("DiscordConfiguration
   }
 }
 
-/** Discord gateway runtime work is intentionally deferred beyond the scaffold phase. */
-export class DiscordNotImplementedError extends TaggedError("DiscordNotImplementedError")<{
-  readonly operation: string;
+/** Discord gateway runtime startup failed. */
+export class DiscordStartError extends TaggedError("DiscordStartError")<{
+  readonly operation: "login";
   readonly message: string;
+  readonly cause: unknown;
 }>() {
-  constructor(args: { readonly operation: string }) {
+  constructor(args: { readonly operation: "login"; readonly cause: unknown }) {
     super({
       ...args,
-      message: `Discord ${args.operation} is not implemented yet. Gateway runtime support is planned for the next phase.`,
+      message: `Discord ${args.operation} startup failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord slash-command registration failed. */
+export class DiscordCommandRegistrationError extends TaggedError(
+  "DiscordCommandRegistrationError",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord command registration failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord sendMessage failed. */
+export class DiscordSendMessageError extends TaggedError("DiscordSendMessageError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord sendMessage failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord reply failed. */
+export class DiscordReplyError extends TaggedError("DiscordReplyError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord reply failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord sendAction failed. */
+export class DiscordSendActionError extends TaggedError("DiscordSendActionError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord sendAction failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord action response failed. */
+export class DiscordActionResponseError extends TaggedError("DiscordActionResponseError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord action response failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord typing indicator failed. */
+export class DiscordSendTypingError extends TaggedError("DiscordSendTypingError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord typing indicator failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord streamMessage failed. */
+export class DiscordStreamMessageError extends TaggedError("DiscordStreamMessageError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord streamMessage failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord streamReply failed. */
+export class DiscordStreamReplyError extends TaggedError("DiscordStreamReplyError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord streamReply failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord attachment download/open failed. */
+export class DiscordAttachmentReadError extends TaggedError("DiscordAttachmentReadError")<{
+  readonly attachmentId: string;
+  readonly reason: "too_large" | "download" | "invalid_response" | "missing_body";
+  readonly maxBytes?: number;
+  readonly sizeBytes?: number;
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: {
+    readonly attachmentId: string;
+    readonly reason: "too_large" | "download" | "invalid_response" | "missing_body";
+    readonly maxBytes?: number;
+    readonly sizeBytes?: number;
+    readonly cause?: unknown;
+  }) {
+    const size = args.sizeBytes === undefined ? "unknown size" : `${args.sizeBytes} bytes`;
+    const limit = args.maxBytes === undefined ? "" : `; limit ${args.maxBytes} bytes`;
+
+    super({
+      ...args,
+      message: `Discord attachment ${args.attachmentId} read failed (${args.reason}; ${size}${limit}): ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Discord inbound gateway event decoding failed. */
+export class DiscordInboundDecodeError extends TaggedError("DiscordInboundDecodeError")<{
+  readonly eventType: string;
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: {
+    readonly eventType: string;
+    readonly reason?: string;
+    readonly cause?: unknown;
+  }) {
+    super({
+      eventType: args.eventType,
+      cause: args.cause,
+      message:
+        args.reason ??
+        `Discord inbound ${args.eventType} decode failed: ${describeCause(args.cause)}`,
     });
   }
 }
@@ -53,6 +207,16 @@ export class DiscordWebhookModeUnsupportedError extends TaggedError(
 }
 
 export type DiscordAdapterError =
+  | DiscordActionResponseError
+  | DiscordAttachmentReadError
+  | DiscordCommandRegistrationError
   | DiscordConfigurationError
-  | DiscordNotImplementedError
+  | DiscordInboundDecodeError
+  | DiscordReplyError
+  | DiscordSendActionError
+  | DiscordSendMessageError
+  | DiscordSendTypingError
+  | DiscordStartError
+  | DiscordStreamMessageError
+  | DiscordStreamReplyError
   | DiscordWebhookModeUnsupportedError;
