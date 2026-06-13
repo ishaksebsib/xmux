@@ -6,12 +6,14 @@ function causeDetail(cause: unknown): string {
 
 /** Reports Pi SDK runtime startup failures with the original cause intact. */
 export class PiRuntimeOpenError extends TaggedError("PiRuntimeOpenError")<{
+  mode: "sdk";
   message: string;
   cause: unknown;
 }>() {
   constructor(args: { readonly cause: unknown }) {
     super({
       ...args,
+      mode: "sdk",
       message: `Failed to open Pi SDK runtime: ${causeDetail(args.cause)}`,
     });
   }
@@ -19,27 +21,33 @@ export class PiRuntimeOpenError extends TaggedError("PiRuntimeOpenError")<{
 
 /** Wraps throwing Pi session operations so harness-core can surface typed failures. */
 export class PiSessionRequestError extends TaggedError("PiSessionRequestError")<{
+  operation: string;
   message: string;
   cause: unknown;
 }>() {
-  constructor(args: { readonly cause: unknown }) {
+  constructor(args: { readonly operation: string; readonly cause: unknown }) {
     super({
       ...args,
-      message: `Pi session request failed: ${causeDetail(args.cause)}`,
+      message: `Pi session ${args.operation} request failed: ${causeDetail(args.cause)}`,
     });
   }
 }
 
 /** Describes invalid or unexpected Pi session responses without throwing. */
 export class PiSessionResponseError extends TaggedError("PiSessionResponseError")<{
+  operation: string;
   message: string;
   reason: string;
   detail?: string;
 }>() {
-  constructor(args: { readonly reason: string; readonly detail?: string }) {
+  constructor(args: {
+    readonly operation: string;
+    readonly reason: string;
+    readonly detail?: string;
+  }) {
     super({
       ...args,
-      message: `${args.reason}${args.detail ? `: ${args.detail}` : ""}`,
+      message: `Pi session ${args.operation} response was invalid: ${args.reason}${args.detail ? `: ${args.detail}` : ""}`,
     });
   }
 }
@@ -47,9 +55,15 @@ export class PiSessionResponseError extends TaggedError("PiSessionResponseError"
 /** Identifies missing Pi sessions during resume, lookup, delete, or abort operations. */
 export class PiSessionNotFoundError extends TaggedError("PiSessionNotFoundError")<{
   sessionId: string;
+  cwd?: string;
+  sessionPath?: string;
   message: string;
 }>() {
-  constructor(args: { readonly sessionId: string }) {
+  constructor(args: {
+    readonly sessionId: string;
+    readonly cwd?: string;
+    readonly sessionPath?: string;
+  }) {
     super({
       ...args,
       message: `Pi session not found: ${args.sessionId}`,
@@ -73,26 +87,33 @@ export class PiSessionAmbiguousError extends TaggedError("PiSessionAmbiguousErro
 
 /** Wraps throwing Pi model registry operations with adapter context. */
 export class PiModelRequestError extends TaggedError("PiModelRequestError")<{
+  operation: string;
   message: string;
   cause: unknown;
 }>() {
-  constructor(args: { readonly cause: unknown }) {
+  constructor(args: { readonly operation: string; readonly cause: unknown }) {
     super({
       ...args,
-      message: `Pi model request failed: ${causeDetail(args.cause)}`,
+      message: `Pi model ${args.operation} request failed: ${causeDetail(args.cause)}`,
     });
   }
 }
 
 /** Explains why a requested xmux model ref cannot be selected in Pi. */
 export class PiModelSelectionError extends TaggedError("PiModelSelectionError")<{
+  providerId?: string;
   modelId: string;
   message: string;
 }>() {
-  constructor(args: { readonly modelId: string; readonly reason: string }) {
+  constructor(args: {
+    readonly providerId?: string;
+    readonly modelId: string;
+    readonly reason: string;
+  }) {
     super({
+      providerId: args.providerId,
       modelId: args.modelId,
-      message: `Invalid Pi model ${args.modelId}: ${args.reason}`,
+      message: `Invalid Pi model ${args.providerId ? `${args.providerId}/` : ""}${args.modelId}: ${args.reason}`,
     });
   }
 }
