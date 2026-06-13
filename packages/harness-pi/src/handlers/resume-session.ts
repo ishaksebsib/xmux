@@ -8,9 +8,21 @@ import type {
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { mergePiCreateOptions } from "../config";
-import { PiSessionRequestError, PiSessionResponseError } from "../errors";
+import {
+  PiModelRequestError,
+  PiModelSelectionError,
+  PiSessionRequestError,
+  PiSessionResponseError,
+} from "../errors";
 import type { PiRuntime, PiSessionHandle } from "../runtime";
 import type { PiCreateOptions, PiSessionInfo } from "../types";
+import {
+  createPiModelRegistry,
+  resolvePiModel,
+  toPiThinkingLevel,
+  type PiModel,
+  type PiThinkingLevel,
+} from "./models";
 import {
   createPiSessionHandle,
   mapLiveSession,
@@ -19,16 +31,32 @@ import {
   type ResolvedPiSession,
 } from "./utils";
 
+type PiResumeSessionError = PiSessionHandlerError | PiModelRequestError | PiModelSelectionError;
+
 function openResolvedPiSession(args: {
   readonly runtime: PiRuntime;
   readonly resolved: ResolvedPiSession;
   readonly adapterOptions?: PiCreateOptions;
-}): Promise<ResultType<PiSessionHandle, PiSessionHandlerError>> {
+}): Promise<ResultType<PiSessionHandle, PiResumeSessionError>> {
   if (args.resolved.handle) return Promise.resolve(Result.ok(args.resolved.handle));
 
   const options = mergePiCreateOptions(args.runtime.config, args.adapterOptions);
 
   return Result.gen(async function* () {
+    const modelRegistry = yield* createPiModelRegistry({
+      operation: "resumeSession",
+      agentDir: options.agentDir,
+    });
+    let selectedModel: PiModel | undefined;
+    if (args.runtime.defaultModel) {
+      selectedModel = yield* resolvePiModel({ registry: modelRegistry, model: args.runtime.defaultModel });
+    }
+
+    let selectedThinking: PiThinkingLevel | undefined;
+    if (args.runtime.defaultThinking) {
+      selectedThinking = yield* toPiThinkingLevel({ level: args.runtime.defaultThinking });
+    }
+
     if (!args.resolved.sessionFile) {
       return Result.err(
         new PiSessionResponseError({
@@ -60,6 +88,9 @@ function openResolvedPiSession(args: {
           createAgentSession({
             cwd: sessionManager.getCwd(),
             agentDir: options.agentDir,
+            modelRegistry,
+            model: selectedModel,
+            thinkingLevel: selectedThinking,
             sessionManager,
             tools: options.tools === undefined ? undefined : [...options.tools],
             excludeTools: options.excludeTools === undefined ? undefined : [...options.excludeTools],
@@ -84,7 +115,7 @@ function openResolvedPiSession(args: {
 export async function resumeSession(
   runtime: PiRuntime,
   input: HarnessAdapterResumeSessionInput<PiCreateOptions>,
-): Promise<ResultType<HarnessAdapterSessionInfo<PiSessionInfo>, PiSessionHandlerError>> {
+): Promise<ResultType<HarnessAdapterSessionInfo<PiSessionInfo>, PiResumeSessionError>> {
   return Result.gen(async function* () {
     const resolved = yield* Result.await(
       resolvePiSession({

@@ -8,7 +8,7 @@ import type {
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { mergePiCreateOptions } from "../config";
-import { PiSessionRequestError } from "../errors";
+import { PiModelRequestError, PiModelSelectionError, PiSessionRequestError } from "../errors";
 import type { PiRuntime } from "../runtime";
 import type { PiCreateOptions, PiSessionInfo } from "../types";
 import {
@@ -17,14 +17,39 @@ import {
   toModelRef,
   type PiSessionHandlerError,
 } from "./utils";
+import {
+  createPiModelRegistry,
+  resolvePiModel,
+  toPiThinkingLevel,
+  type PiModel,
+  type PiThinkingLevel,
+} from "./models";
+
+type PiCreateSessionError = PiSessionHandlerError | PiModelRequestError | PiModelSelectionError;
 
 export async function createSession(
   runtime: PiRuntime,
   input: HarnessAdapterCreateSessionInput<PiCreateOptions>,
-): Promise<ResultType<HarnessAdapterCreateSessionResult<PiSessionInfo>, PiSessionHandlerError>> {
+): Promise<ResultType<HarnessAdapterCreateSessionResult<PiSessionInfo>, PiCreateSessionError>> {
   const options = mergePiCreateOptions(runtime.config, input.adapterOptions);
 
   return Result.gen(async function* () {
+    const modelRegistry = yield* createPiModelRegistry({
+      operation: "createSession",
+      agentDir: options.agentDir,
+    });
+    const selectedModelRef = input.model ?? runtime.defaultModel;
+    let selectedModel: PiModel | undefined;
+    if (selectedModelRef) {
+      selectedModel = yield* resolvePiModel({ registry: modelRegistry, model: selectedModelRef });
+    }
+
+    const selectedThinkingRef = input.thinking ?? runtime.defaultThinking;
+    let selectedThinking: PiThinkingLevel | undefined;
+    if (selectedThinkingRef) {
+      selectedThinking = yield* toPiThinkingLevel({ level: selectedThinkingRef });
+    }
+
     const sessionManager = yield* Result.try({
       try: () =>
         SessionManager.create(input.cwd, options.sessionDir, {
@@ -39,6 +64,9 @@ export async function createSession(
           createAgentSession({
             cwd: input.cwd,
             agentDir: options.agentDir,
+            modelRegistry,
+            model: selectedModel,
+            thinkingLevel: selectedThinking,
             sessionManager,
             tools: options.tools === undefined ? undefined : [...options.tools],
             excludeTools: options.excludeTools === undefined ? undefined : [...options.excludeTools],
