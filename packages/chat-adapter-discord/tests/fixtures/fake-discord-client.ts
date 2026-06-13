@@ -49,6 +49,8 @@ export function createFakeDiscordClient(
     readonly sendMessageError?: unknown;
     readonly sendTypingError?: unknown;
     readonly createThreadError?: unknown;
+    readonly registerCommandsError?: unknown;
+    readonly existingThreads?: Readonly<Record<string, string>>;
   } = {},
 ): FakeDiscordBotClient {
   const readyHandlers: ((info: DiscordReadyInfo) => void)[] = [];
@@ -122,6 +124,15 @@ export function createFakeDiscordClient(
       return sentMessage(input.channelId, input.messageId, input);
     },
     async createMessageThread(input) {
+      const existingThreadId = options.existingThreads?.[input.messageId];
+      if (existingThreadId !== undefined) {
+        return {
+          channelId: existingThreadId,
+          parentChannelId: input.channelId,
+          raw: { reused: true, input },
+        } satisfies DiscordThreadInfo;
+      }
+
       fake.threadRequests.push(input);
       if (options.createThreadError !== undefined) {
         throw options.createThreadError;
@@ -141,6 +152,9 @@ export function createFakeDiscordClient(
     async registerCommands(input) {
       fake.callOrder.push("registerCommands");
       fake.registeredCommands.push(input);
+      if (options.registerCommandsError !== undefined) {
+        throw options.registerCommandsError;
+      }
     },
     async downloadAttachment(input) {
       fake.downloadedAttachments.push(input);

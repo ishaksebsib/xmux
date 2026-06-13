@@ -26,33 +26,58 @@ describe("Discord command conversions", () => {
 
     const payload = createDiscordCommandRegistration({ commands });
 
-    expect(payload).toEqual([
-      {
-        type: ApplicationCommandType.ChatInput,
-        name: "echo",
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands).toEqual([
+        {
+          type: ApplicationCommandType.ChatInput,
+          name: "echo",
+          description: "Echo text",
+          options: [
+            {
+              type: ApplicationCommandOptionType.String,
+              name: "text",
+              description: "Text",
+              required: true,
+            },
+            {
+              type: ApplicationCommandOptionType.Number,
+              name: "count",
+              description: "Count",
+              required: undefined,
+            },
+            {
+              type: ApplicationCommandOptionType.Boolean,
+              name: "loud",
+              description: "Loud",
+              required: undefined,
+            },
+          ],
+        },
+      ]);
+    }
+  });
+
+  test("required options are ordered before optional options", () => {
+    const commands = defineChatCommands({
+      echo: defineChatCommand({
         description: "Echo text",
-        options: [
-          {
-            type: ApplicationCommandOptionType.String,
-            name: "text",
-            description: "Text",
-            required: true,
-          },
-          {
-            type: ApplicationCommandOptionType.Number,
-            name: "count",
-            description: "Count",
-            required: undefined,
-          },
-          {
-            type: ApplicationCommandOptionType.Boolean,
-            name: "loud",
-            description: "Loud",
-            required: undefined,
-          },
-        ],
-      },
-    ]);
+        options: {
+          optional: stringOption(),
+          required: stringOption({ required: true }),
+        },
+      }),
+    });
+
+    const payload = createDiscordCommandRegistration({ commands });
+
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands[0]?.options?.map((option) => option.name)).toEqual([
+        "required",
+        "optional",
+      ]);
+    }
   });
 
   test("choices map correctly", () => {
@@ -67,12 +92,34 @@ describe("Discord command conversions", () => {
 
     const payload = createDiscordCommandRegistration({ commands });
 
-    expect(payload[0]?.options?.[0]).toMatchObject({
-      choices: [
-        { name: "dev", value: "dev" },
-        { name: "prod", value: "prod" },
-      ],
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands[0]?.options?.[0]).toMatchObject({
+        choices: [
+          { name: "dev", value: "dev" },
+          { name: "prod", value: "prod" },
+        ],
+      });
+    }
+  });
+
+  test("descriptions are trimmed and whitespace-only descriptions are skipped", () => {
+    const logger = createMockLogger();
+    const scope = createDiscordLogScope({ logger, chatId: "discord" });
+    const commands = defineChatCommands({
+      trim: defineChatCommand({ description: "  Trimmed  " }),
+      empty: defineChatCommand({ description: "   " }),
     });
+
+    const payload = createDiscordCommandRegistration({ commands, logger: scope });
+
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands).toMatchObject([{ name: "trim", description: "Trimmed" }]);
+      expect(payload.value.skipped).toEqual([
+        expect.objectContaining({ commandName: "empty", code: "COMMAND_DESCRIPTION_INVALID" }),
+      ]);
+    }
   });
 
   test("invalid command names are warned and skipped", () => {
@@ -85,7 +132,10 @@ describe("Discord command conversions", () => {
 
     const payload = createDiscordCommandRegistration({ commands, logger: scope });
 
-    expect(payload.map((command) => command.name)).toEqual(["good"]);
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands.map((command) => command.name)).toEqual(["good"]);
+    }
     expect(logger.warn).toHaveBeenCalledWith(
       "xmux.discord.commands.register.warning",
       expect.objectContaining({ code: "COMMAND_NAME_INVALID", commandName: "BadName" }),
@@ -105,11 +155,38 @@ describe("Discord command conversions", () => {
 
     const payload = createDiscordCommandRegistration({ commands, logger: scope });
 
-    expect(payload).toEqual([]);
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands).toEqual([]);
+    }
     expect(logger.warn).toHaveBeenCalledWith(
       "xmux.discord.commands.register.warning",
       expect.objectContaining({ code: "COMMAND_OPTION_CHOICES_TOO_MANY" }),
     );
+  });
+
+  test("invalid choice display names and non-finite number choices are skipped", () => {
+    const commands = defineChatCommands({
+      bad_name: defineChatCommand({
+        description: "Bad choice name",
+        options: { value: stringOption({ choices: ["   "] as const }) },
+      }),
+      bad_number: defineChatCommand({
+        description: "Bad number choice",
+        options: { value: numberOption({ choices: [Number.NaN] }) },
+      }),
+    });
+
+    const payload = createDiscordCommandRegistration({ commands });
+
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.commands).toEqual([]);
+      expect(payload.value.skipped.map((skip) => skip.code)).toEqual([
+        "COMMAND_OPTION_CHOICE_NAME_INVALID",
+        "COMMAND_OPTION_CHOICE_NUMBER_INVALID",
+      ]);
+    }
   });
 
   test("slash command options parse into typed command values", () => {

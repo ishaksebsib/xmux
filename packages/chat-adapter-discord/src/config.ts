@@ -107,11 +107,26 @@ function normalizeDiscordCommandRegistration(
 ): Result<DiscordCommandRegistrationMode, DiscordConfigurationError> {
   const resolved = registration ?? defaultDiscordCommandRegistration;
 
-  if (resolved.scope.type !== "guild") {
+  if (resolved.scope.type === "none") {
     return Result.ok(resolved);
   }
 
-  const guildId = resolved.scope.guildId.trim();
+  if (resolved.scope.type === "global") {
+    const globalRegistration = resolved as Extract<
+      DiscordCommandRegistrationMode,
+      { readonly scope: { readonly type: "global" } }
+    >;
+    return Result.ok({
+      ...globalRegistration,
+      strategy: globalRegistration.strategy ?? "upsert",
+    });
+  }
+
+  const guildRegistration = resolved as Extract<
+    DiscordCommandRegistrationMode,
+    { readonly scope: { readonly type: "guild" } }
+  >;
+  const guildId = guildRegistration.scope.guildId.trim();
   if (guildId.length === 0) {
     return Result.err(
       new DiscordConfigurationError({
@@ -121,7 +136,11 @@ function normalizeDiscordCommandRegistration(
     );
   }
 
-  return Result.ok({ ...resolved, scope: { ...resolved.scope, guildId } });
+  return Result.ok({
+    ...guildRegistration,
+    strategy: guildRegistration.strategy ?? "upsert",
+    scope: { ...guildRegistration.scope, guildId },
+  });
 }
 
 function normalizeDiscordStreamOptions(

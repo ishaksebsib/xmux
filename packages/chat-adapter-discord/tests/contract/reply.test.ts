@@ -85,6 +85,33 @@ describe("Discord reply contract", () => {
     }
   });
 
+  test("thread replies reuse an existing Discord thread when available", async () => {
+    const fake = createFakeDiscordClient({ existingThreads: { "message-1": "existing-thread" } });
+    const chat = createDiscordChat(fake);
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      const replied = await chat.reply({
+        chatId: "discord",
+        conversationId: "channel-1",
+        messageId: "message-1",
+        mode: "thread",
+        text: "hello existing thread",
+        adapterOptions: { threadName: "Support" },
+      });
+
+      expect(replied.isOk()).toBe(true);
+      expect(fake.threadRequests).toEqual([]);
+      expect(fake.sentMessages[0]).toMatchObject({
+        channelId: "existing-thread",
+        payload: { content: "hello existing thread" },
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("thread replies create a thread from the referenced message and send there", async () => {
     const fake = createFakeDiscordClient();
     const chat = createDiscordChat(fake);

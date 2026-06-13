@@ -71,7 +71,7 @@ describe("Discord adapter config", () => {
     }
   });
 
-  test("guild id is trimmed", () => {
+  test("guild id is trimmed and registration defaults to upsert", () => {
     const result = parseDiscordAdapterConfig({
       token: "token",
       applicationId: "app",
@@ -80,7 +80,11 @@ describe("Discord adapter config", () => {
 
     expect(result.isOk()).toBe(true);
     if (result.isOk() && result.value.commandRegistration.scope.type === "guild") {
-      expect(result.value.commandRegistration.scope.guildId).toBe("guild");
+      const registration = result.value.commandRegistration;
+      expect("guildId" in registration.scope ? registration.scope.guildId : undefined).toBe(
+        "guild",
+      );
+      expect("strategy" in registration ? registration.strategy : undefined).toBe("upsert");
     }
   });
 

@@ -63,6 +63,7 @@ export interface DiscordRegisterCommandsRequest {
     | { readonly type: "global" }
     | { readonly type: "guild"; readonly guildId: string };
   readonly commands: readonly RESTPostAPIApplicationCommandsJSONBody[];
+  readonly strategy: "upsert" | "bulk-overwrite";
   readonly signal?: AbortSignal;
 }
 
@@ -161,7 +162,8 @@ export function createDiscordBotClient(args: {
     createMessageThread: async (input) => {
       const channel = await fetchMessageChannel(client, input.channelId);
       const message = await channel.messages.fetch(input.messageId);
-      const thread = await message.startThread({ name: input.name });
+      const existingThread = getExistingMessageThread(message);
+      const thread = existingThread ?? (await message.startThread({ name: input.name }));
       return {
         channelId: thread.id,
         parentChannelId: thread.parentId ?? input.channelId,
@@ -179,10 +181,20 @@ export function createDiscordBotClient(args: {
           ? Routes.applicationGuildCommands(input.applicationId, input.scope.guildId)
           : Routes.applicationCommands(input.applicationId);
 
-      await rest.put(route, {
-        body: input.commands,
-        signal: input.signal,
-      } as Parameters<REST["put"]>[1]);
+      if (input.strategy === "bulk-overwrite") {
+        await rest.put(route, {
+          body: input.commands,
+          signal: input.signal,
+        } as Parameters<REST["put"]>[1]);
+        return;
+      }
+
+      for (const command of input.commands) {
+        await rest.post(route, {
+          body: command,
+          signal: input.signal,
+        } as Parameters<REST["post"]>[1]);
+      }
     },
     downloadAttachment: (input) => fetch(input.url, { signal: input.signal }),
   };
@@ -307,6 +319,22 @@ function isMessageChannel(channel: unknown): channel is MessageChannel {
 function isTypingChannel(channel: unknown): channel is TypingChannel {
   return isRecord(channel) && typeof channel.sendTyping === "function";
 }
+
+function getExistingMessageThread(message: Message): DiscordThread | undefined {
+  const candidate = message as unknown;
+  if (!isRecord(candidate) || candidate.hasThread !== true || !isRecord(candidate.thread)) {
+    return undefined;
+  }
+
+  const thread = candidate.thread;
+  return typeof thread.id === "string" ? (thread as unknown as DiscordThread) : undefined;
+}
+
+type DiscordThread = {
+  readonly id: string;
+  readonly parentId?: string | null;
+  readonly guildId?: string | null;
+};
 
 function encodeSentMessage(message: Message): DiscordSentMessage {
   return {
