@@ -268,6 +268,9 @@ importers:
         specifier: ^2.9.1
         version: 2.9.1
     devDependencies:
+      '@earendil-works/pi-ai':
+        specifier: ^0.79.3
+        version: 0.79.3(ws@8.21.0)(zod@4.4.3)
       '@types/node':
         specifier: ^25.5.0
         version: 25.6.0
