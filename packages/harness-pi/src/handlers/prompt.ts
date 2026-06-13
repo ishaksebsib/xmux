@@ -196,9 +196,6 @@ function createPiPromptStream(args: {
 
       const run = (async () => {
         try {
-          const selection = await applyPromptSelections({ handle: args.handle, input: args.input });
-          if (selection.isErr()) throw selection.error;
-
           await args.handle.session.prompt(args.content.text, {
             images: args.content.images,
             streamingBehavior: args.handle.session.isStreaming ? "followUp" : undefined,
@@ -246,6 +243,7 @@ export async function prompt(
   return Result.gen(async function* () {
     const content = yield* toPiPromptContent(input.content);
     const handle = yield* Result.await(ensureLiveSession({ runtime, input }));
+    yield* Result.await(applyPromptSelections({ handle, input }));
 
     return Result.ok(createPiPromptStream({ handle, input, content }));
   });
