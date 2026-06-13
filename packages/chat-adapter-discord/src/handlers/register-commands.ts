@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type { ChatCommandRegistry } from "@xmux/chat-core";
 import type { DiscordBotClient } from "../client";
 import type { DiscordApplicationId } from "../config";
+import { createDiscordCommandRegistration } from "../commands";
 import { DiscordCommandRegistrationError } from "../errors";
 import { discordLogEvents, type DiscordLogScope } from "../logger";
 import type { DiscordCommandRegistrationMode } from "../types";
@@ -31,10 +32,21 @@ export async function registerCommands<TCommands extends ChatCommandRegistry>(ar
     return Result.ok();
   }
 
-  return Result.err(
-    new DiscordCommandRegistrationError({
-      reason:
-        "Discord slash-command payload conversion is not implemented yet. Use commandRegistration scope none until command registration lands in the next phase.",
-    }),
-  );
+  const scope = args.registration.scope;
+  const commands = createDiscordCommandRegistration({
+    commands: args.commands,
+    logger: args.logger,
+  });
+
+  return Result.tryPromise({
+    try: async () => {
+      await args.client.registerCommands({
+        applicationId: args.applicationId,
+        scope,
+        commands,
+        signal: args.signal,
+      });
+    },
+    catch: (cause) => new DiscordCommandRegistrationError({ cause }),
+  });
 }

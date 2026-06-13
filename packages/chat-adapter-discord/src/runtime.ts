@@ -50,6 +50,10 @@ import { reply as handleReply } from "./handlers/reply";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { startGateway } from "./handlers/start-gateway";
+import {
+  createDiscordInteractionRegistry,
+  type DiscordInteractionRegistry,
+} from "./stores/interaction-registry";
 import type {
   CreateDiscordAdapterOptions,
   DiscordAdapterData,
@@ -105,6 +109,7 @@ export function openDiscordRuntime<TChatId extends string>(args: {
         chatId: args.chatId,
         client,
         config,
+        interactionRegistry: createDiscordInteractionRegistry(),
         logger,
       }) satisfies DiscordOpenedAdapter<TChatId>,
     );
@@ -132,16 +137,19 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
     readonly chatId: TChatId;
     readonly client: DiscordBotClient;
     readonly config: DiscordAdapterConfig;
+    readonly interactionRegistry: DiscordInteractionRegistry;
     readonly logger: DiscordLogScope;
   }) {
     this.id = args.chatId;
     this.client = args.client;
     this.config = args.config;
+    this.interactionRegistry = args.interactionRegistry;
     this.logger = args.logger;
   }
 
   private readonly client: DiscordBotClient;
   private readonly config: DiscordAdapterConfig;
+  private readonly interactionRegistry: DiscordInteractionRegistry;
   private readonly logger: DiscordLogScope;
 
   async start<TCommands extends ChatCommandRegistry>(
@@ -185,6 +193,7 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
       chatId: this.id,
       client: this.client,
       context,
+      interactionRegistry: this.interactionRegistry,
       logger: this.logger,
       mode: this.config.mode,
     });
@@ -323,6 +332,7 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
       chatId: this.id,
       client: this.client,
       config: this.config,
+      interactionRegistry: this.interactionRegistry,
       input,
     });
     logChatResult({
