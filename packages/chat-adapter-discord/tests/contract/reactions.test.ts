@@ -67,6 +67,50 @@ describe("Discord reactions contract", () => {
     }
   });
 
+  test("partial reactions, messages, and users are fetched before decoding", async () => {
+    const fake = createFakeDiscordClient();
+    const chat = createDiscordChat(fake);
+    const seen: string[] = [];
+    const fetches: string[] = [];
+    chat.on("reaction.added", (event) => {
+      seen.push(`${event.reaction}:${event.actor?.actorId}:${event.message.messageId}`);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitReactionAdd(
+        {
+          partial: true,
+          emoji: { name: "✨" },
+          message: {
+            partial: true,
+            async fetch() {
+              fetches.push("message");
+              return { id: "message-1", channelId: "channel-1" };
+            },
+          },
+          async fetch() {
+            fetches.push("reaction");
+            return this;
+          },
+        },
+        {
+          partial: true,
+          async fetch() {
+            fetches.push("user");
+            return discordUser();
+          },
+        },
+      );
+
+      await waitForCondition(() => seen.length === 1);
+      expect(fetches).toEqual(["reaction", "message", "user"]);
+      expect(seen).toEqual(["✨:user-1:message-1"]);
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("custom emoji is normalized consistently", async () => {
     const fake = createFakeDiscordClient();
     const chat = createDiscordChat(fake);

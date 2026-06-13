@@ -3,9 +3,10 @@ import { describe, expect, test } from "vitest";
 import {
   decodeDiscordActionCustomId,
   encodeDiscordActionCustomId,
+  encodeDiscordActionResponse,
   encodeDiscordSendAction,
 } from "../../src/conversions/actions";
-import { DiscordSendActionError } from "../../src/errors";
+import { DiscordActionResponseError, DiscordSendActionError } from "../../src/errors";
 import { createMemoryDiscordActionStore } from "../../src/stores/action-store";
 
 const defaults: { readonly allowedMentions: APIAllowedMentions } = {
@@ -86,6 +87,66 @@ describe("Discord action conversion", () => {
     });
   });
 
+  test("empty sendAction components and rows fail with typed errors", async () => {
+    const emptyComponents = await encodeDiscordSendAction(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        text: "Empty",
+        buttons: [],
+        adapterOptions: {},
+      },
+      defaults,
+    );
+    expect(emptyComponents.isErr()).toBe(true);
+    if (emptyComponents.isErr())
+      expect(emptyComponents.error).toBeInstanceOf(DiscordSendActionError);
+
+    const emptyRow = await encodeDiscordSendAction(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        text: "Empty",
+        buttons: [[]],
+        adapterOptions: {},
+      },
+      defaults,
+    );
+    expect(emptyRow.isErr()).toBe(true);
+  });
+
+  test("update allows clearing components but rejects empty rows", async () => {
+    const clear = await encodeDiscordActionResponse(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        interactionId: "interaction-1",
+        message: { chatId: "discord", conversationId: "channel-1", messageId: "message-1" },
+        response: { kind: "update", buttons: [] },
+        adapterOptions: {},
+      },
+      defaults,
+    );
+    expect(clear.isOk()).toBe(true);
+    if (clear.isOk() && clear.value.kind === "update") {
+      expect(clear.value.edit.components).toEqual([]);
+    }
+
+    const emptyRow = await encodeDiscordActionResponse(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        interactionId: "interaction-1",
+        message: { chatId: "discord", conversationId: "channel-1", messageId: "message-1" },
+        response: { kind: "update", buttons: [[]] },
+        adapterOptions: {},
+      },
+      defaults,
+    );
+    expect(emptyRow.isErr()).toBe(true);
+    if (emptyRow.isErr()) expect(emptyRow.error).toBeInstanceOf(DiscordActionResponseError);
+  });
+
   test("button row and total limits fail with typed errors", async () => {
     const tooManyRows = await encodeDiscordSendAction(
       {
@@ -148,6 +209,73 @@ describe("Discord action conversion", () => {
       defaults,
     );
     expect(badUrl.isErr()).toBe(true);
+  });
+
+  test("URL buttons require valid http(s) URLs", async () => {
+    for (const url of ["not a url", "ftp://example.com/file", "mailto:a@example.com"]) {
+      const encoded = await encodeDiscordSendAction(
+        {
+          chatId: "discord",
+          conversationId: "channel-1",
+          text: "Bad URL",
+          buttons: [[{ kind: "url", id: "u", label: "URL", url }]],
+          adapterOptions: {},
+        },
+        defaults,
+      );
+      expect(encoded.isErr()).toBe(true);
+    }
+  });
+
+  test("action button actionId and value must not be empty", async () => {
+    const emptyActionId = await encodeDiscordSendAction(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        text: "Bad",
+        buttons: [[{ id: "b", label: "Button", actionId: " ", value: "value" }]],
+        adapterOptions: {},
+      },
+      defaults,
+    );
+    expect(emptyActionId.isErr()).toBe(true);
+
+    const emptyValue = await encodeDiscordSendAction(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        text: "Bad",
+        buttons: [[{ id: "b", label: "Button", actionId: "action", value: "" }]],
+        adapterOptions: {},
+      },
+      defaults,
+    );
+    expect(emptyValue.isErr()).toBe(true);
+  });
+
+  test("ack showAlert fails explicitly", async () => {
+    const encoded = await encodeDiscordActionResponse(
+      {
+        chatId: "discord",
+        conversationId: "channel-1",
+        interactionId: "interaction-1",
+        message: { chatId: "discord", conversationId: "channel-1", messageId: "message-1" },
+        response: { kind: "ack", text: "Done", showAlert: true },
+        adapterOptions: {},
+      },
+      defaults,
+    );
+
+    expect(encoded.isErr()).toBe(true);
+    if (encoded.isErr()) expect(encoded.error).toBeInstanceOf(DiscordActionResponseError);
+  });
+
+  test("memory action store expires entries by default TTL", async () => {
+    const store = createMemoryDiscordActionStore({ defaultTtlMs: 1 });
+    await store.set("key", { actionId: "deployment", value: "approve" });
+    expect(await store.get("key")).toEqual({ actionId: "deployment", value: "approve" });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(await store.get("key")).toBeUndefined();
   });
 
   test("oversized custom id fails without store and round-trips with store", async () => {

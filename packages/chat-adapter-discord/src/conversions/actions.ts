@@ -55,6 +55,8 @@ export function encodeDiscordActionCustomIdInline(
   envelope: DiscordActionEnvelope,
 ): Result<string, DiscordSendActionError> {
   return Result.gen(function* () {
+    yield* validateDiscordActionEnvelopeForEncode(envelope);
+
     const encoded = yield* Result.try({
       try: () =>
         Buffer.from(JSON.stringify(compactDiscordActionEnvelope(envelope)), "utf8").toString(
@@ -67,9 +69,14 @@ export function encodeDiscordActionCustomIdInline(
   });
 }
 
+export function isDiscordActionCustomId(customId: string): boolean {
+  return customId.startsWith(customIdPrefix) || customId.startsWith(actionStorePrefix);
+}
+
 export async function encodeDiscordActionCustomId(args: {
   readonly envelope: DiscordActionEnvelope;
   readonly actionStore?: DiscordActionStore;
+  readonly actionStoreTtlMs?: number;
 }): Promise<Result<string, DiscordSendActionError>> {
   return Result.gen(async function* () {
     const inline = yield* encodeDiscordActionCustomIdInline(args.envelope);
@@ -100,7 +107,7 @@ export async function encodeDiscordActionCustomId(args: {
     yield* Result.await(
       Result.tryPromise({
         try: async () => {
-          await actionStore.set(key, args.envelope);
+          await actionStore.set(key, args.envelope, { ttlMs: args.actionStoreTtlMs });
         },
         catch: (cause) => new DiscordSendActionError({ cause }),
       }),
@@ -196,6 +203,7 @@ export async function encodeDiscordSendAction(
       encodeDiscordActionComponents({
         buttons: input.buttons,
         actionStore: defaults.actionStore,
+        requireButtons: true,
         createError: (reason, cause) => new DiscordSendActionError({ reason, cause }),
       }),
     );
@@ -223,6 +231,15 @@ export async function encodeDiscordActionResponse(
 ): Promise<Result<DiscordActionResponseRequest, DiscordActionResponseError>> {
   return Result.gen(async function* () {
     if (input.response.kind === "ack") {
+      if (input.response.showAlert === true) {
+        return Result.err(
+          new DiscordActionResponseError({
+            reason:
+              "Discord gateway button actions cannot display alert-style acknowledgements after deferUpdate",
+          }),
+        );
+      }
+
       if (input.response.text === undefined || input.response.text.length === 0) {
         return Result.ok({
           kind: "ack",
@@ -279,6 +296,7 @@ export async function encodeDiscordActionResponse(
             encodeDiscordActionComponents({
               buttons: input.response.buttons,
               actionStore: defaults.actionStore,
+              requireButtons: false,
               createError: (reason, cause) => new DiscordActionResponseError({ reason, cause }),
             }),
           );
@@ -304,10 +322,11 @@ async function encodeDiscordActionComponents<
 >(args: {
   readonly buttons: readonly (readonly ChatButton[])[];
   readonly actionStore?: DiscordActionStore;
+  readonly requireButtons: boolean;
   readonly createError: (reason: string, cause?: unknown) => TError;
 }): Promise<Result<DiscordActionComponents, TError>> {
   return Result.gen(async function* () {
-    const valid = validateDiscordButtonRows(args.buttons, args.createError);
+    const valid = validateDiscordButtonRows(args.buttons, args.requireButtons, args.createError);
     yield* valid;
 
     const rows: APIActionRowComponent<APIButtonComponent>[] = [];
@@ -333,8 +352,13 @@ async function encodeDiscordActionComponents<
 
 function validateDiscordButtonRows<TError>(
   rows: readonly (readonly ChatButton[])[],
+  requireButtons: boolean,
   createError: (reason: string) => TError,
 ): Result<void, TError> {
+  if (requireButtons && rows.length === 0) {
+    return Result.err(createError("Discord action messages require at least one button"));
+  }
+
   if (rows.length > discordMaxRows) {
     return Result.err(
       createError(`Discord action messages support at most ${discordMaxRows} button rows`),
@@ -343,6 +367,10 @@ function validateDiscordButtonRows<TError>(
 
   let total = 0;
   for (const [rowIndex, row] of rows.entries()) {
+    if (row.length === 0) {
+      return Result.err(createError(`Discord action row ${rowIndex + 1} must not be empty`));
+    }
+
     if (row.length > discordMaxButtonsPerRow) {
       return Result.err(
         createError(
@@ -378,19 +406,26 @@ async function encodeDiscordButton<
     }
 
     if (args.button.kind === "url") {
-      if (args.button.url.trim().length === 0 || args.button.url.length > discordUrlLimit) {
-        return Result.err(
-          args.createError(`Discord button URL must be 1-${discordUrlLimit} characters`),
-        );
+      const url = validateDiscordButtonUrl(args.button.url);
+      if (url.isErr()) {
+        return Result.err(args.createError(url.error));
       }
 
       return Result.ok({
         type: ComponentType.Button,
         style: ButtonStyle.Link,
         label,
-        url: args.button.url,
+        url: url.value,
         ...(args.button.disabled === undefined ? {} : { disabled: args.button.disabled }),
       } satisfies APIButtonComponent);
+    }
+
+    if (args.button.actionId.trim().length === 0) {
+      return Result.err(args.createError("Discord action button actionId must not be empty"));
+    }
+
+    if (args.button.value.trim().length === 0) {
+      return Result.err(args.createError("Discord action button value must not be empty"));
     }
 
     const customId = yield* Result.await(
@@ -414,6 +449,25 @@ async function encodeDiscordButton<
       ...(args.button.disabled === undefined ? {} : { disabled: args.button.disabled }),
     } satisfies APIButtonComponent);
   });
+}
+
+function validateDiscordButtonUrl(value: string): Result<string, string> {
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > discordUrlLimit) {
+    return Result.err(`Discord button URL must be 1-${discordUrlLimit} characters`);
+  }
+
+  const parsed = Result.try({
+    try: () => new URL(trimmed),
+    catch: () => undefined,
+  });
+  if (parsed.isErr()) {
+    return Result.err("Discord button URL must be a valid http(s) URL");
+  }
+
+  return parsed.value.protocol === "http:" || parsed.value.protocol === "https:"
+    ? Result.ok(trimmed)
+    : Result.err("Discord button URL must use http or https");
 }
 
 function encodeDiscordButtonStyle(
@@ -447,6 +501,22 @@ function encodeDiscordActionResponseText(args: {
   );
 }
 
+function validateDiscordActionEnvelopeForEncode(
+  envelope: DiscordActionEnvelope,
+): Result<void, DiscordSendActionError> {
+  if (envelope.actionId.trim().length === 0) {
+    return Result.err(new DiscordSendActionError({ reason: "Discord actionId must not be empty" }));
+  }
+
+  if (envelope.value.trim().length === 0) {
+    return Result.err(
+      new DiscordSendActionError({ reason: "Discord action value must not be empty" }),
+    );
+  }
+
+  return Result.ok();
+}
+
 function compactDiscordActionEnvelope(envelope: DiscordActionEnvelope) {
   return {
     a: envelope.actionId,
@@ -463,7 +533,7 @@ function parseDiscordActionEnvelope(
   }
 
   if (typeof value.actionId === "string" && typeof value.value === "string") {
-    return Result.ok({
+    return normalizeDecodedDiscordActionEnvelope({
       actionId: value.actionId,
       value: value.value,
       ...("payload" in value ? { payload: value.payload } : {}),
@@ -471,7 +541,7 @@ function parseDiscordActionEnvelope(
   }
 
   if (typeof value.a === "string" && typeof value.v === "string") {
-    return Result.ok({
+    return normalizeDecodedDiscordActionEnvelope({
       actionId: value.a,
       value: value.v,
       ...("p" in value ? { payload: value.p } : {}),
@@ -479,6 +549,16 @@ function parseDiscordActionEnvelope(
   }
 
   return invalidDiscordActionEnvelope();
+}
+
+function normalizeDecodedDiscordActionEnvelope(
+  envelope: DiscordActionEnvelope,
+): Result<DiscordActionEnvelope, DiscordInboundDecodeError> {
+  if (envelope.actionId.trim().length === 0 || envelope.value.trim().length === 0) {
+    return invalidDiscordActionEnvelope();
+  }
+
+  return Result.ok(envelope);
 }
 
 function invalidDiscordActionEnvelope(): Result<DiscordActionEnvelope, DiscordInboundDecodeError> {

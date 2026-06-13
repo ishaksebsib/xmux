@@ -99,6 +99,57 @@ describe("Discord action contract", () => {
     }
   });
 
+  test("event.ack with showAlert fails explicitly", async () => {
+    const fake = createFakeDiscordClient();
+    const chat = createDiscordChat(fake);
+    let responseError: unknown;
+
+    chat.on("action", "deployment", async (event) => {
+      const result = await event.ack({ text: "Done", showAlert: true });
+      if (result.isErr()) responseError = result.error;
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitInteraction(
+        createFakeButtonInteraction(await sendDeploymentActionAndGetCustomId(chat, fake)),
+      );
+
+      await waitForCondition(() => responseError !== undefined);
+      expect(responseError).toBeInstanceOf(ChatActionResponseError);
+      if (responseError instanceof ChatActionResponseError) {
+        expect(responseError.cause).toBeInstanceOf(DiscordActionResponseError);
+      }
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("non-xmux button custom_id is ignored without an error event", async () => {
+    const fake = createFakeDiscordClient();
+    const chat = createDiscordChat(fake);
+    const actionsSeen: unknown[] = [];
+    const errorsSeen: unknown[] = [];
+
+    chat.on("action", "deployment", (event) => {
+      actionsSeen.push(event);
+    });
+    chat.on("error", (event) => {
+      errorsSeen.push(event.error);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitInteraction(createFakeButtonInteraction("foreign:button"));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      expect(actionsSeen).toHaveLength(0);
+      expect(errorsSeen).toHaveLength(0);
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("event.reply sends a follow-up and event.update edits original message", async () => {
     const fake = createFakeDiscordClient();
     const chat = createDiscordChat(fake);

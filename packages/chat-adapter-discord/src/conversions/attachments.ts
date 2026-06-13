@@ -178,12 +178,43 @@ async function openDiscordAttachment(args: {
     );
   }
 
+  const sizeBytes = args.sizeBytes ?? contentLength;
+  const mimeType = args.mimeType ?? readContentType(response.value.headers);
+  const chunks = response.value.body as AsyncIterable<Uint8Array>;
+
   return Result.ok({
-    chunks: response.value.body,
+    chunks:
+      args.input?.maxBytes === undefined
+        ? chunks
+        : enforceDiscordAttachmentByteLimit({
+            chunks,
+            attachmentId: args.attachmentId,
+            maxBytes: args.input.maxBytes,
+          }),
     filename: args.filename,
-    mimeType: args.mimeType,
-    sizeBytes: args.sizeBytes ?? contentLength,
+    mimeType,
+    sizeBytes,
   });
+}
+
+async function* enforceDiscordAttachmentByteLimit(args: {
+  readonly chunks: AsyncIterable<Uint8Array>;
+  readonly attachmentId: string;
+  readonly maxBytes: number;
+}): AsyncIterable<Uint8Array> {
+  let sizeBytes = 0;
+  for await (const chunk of args.chunks) {
+    sizeBytes += chunk.byteLength;
+    if (sizeBytes > args.maxBytes) {
+      throw new DiscordAttachmentReadError({
+        attachmentId: args.attachmentId,
+        reason: "too_large",
+        maxBytes: args.maxBytes,
+        sizeBytes,
+      });
+    }
+    yield chunk;
+  }
 }
 
 function* iterateDiscordAttachments(value: unknown): Iterable<DiscordAttachmentLike> {
@@ -217,6 +248,10 @@ function readContentLength(headers: Headers): number | undefined {
   if (value === null) return undefined;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function readContentType(headers: Headers): string | undefined {
+  return headers.get("content-type") ?? undefined;
 }
 
 function isArchiveMimeType(mimeType: string | undefined): boolean {

@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { DiscordActionEnvelope, DiscordActionStore } from "../types";
 
+const defaultMemoryActionStoreTtlMs = 24 * 60 * 60 * 1_000;
+
 /** Creates a process-local action store for oversized Discord button payloads. */
-export function createMemoryDiscordActionStore(): DiscordActionStore {
+export function createMemoryDiscordActionStore(
+  options: {
+    readonly defaultTtlMs?: number;
+  } = {},
+): DiscordActionStore {
+  const defaultTtlMs = options.defaultTtlMs ?? defaultMemoryActionStoreTtlMs;
   const entries = new Map<
     string,
     { readonly envelope: DiscordActionEnvelope; readonly expiresAt?: number }
@@ -24,9 +31,10 @@ export function createMemoryDiscordActionStore(): DiscordActionStore {
     },
     set(key, envelope, options) {
       sweep();
+      const ttlMs = options?.ttlMs ?? defaultTtlMs;
       entries.set(key, {
         envelope,
-        ...(options?.ttlMs === undefined ? {} : { expiresAt: Date.now() + options.ttlMs }),
+        ...(ttlMs === undefined ? {} : { expiresAt: Date.now() + ttlMs }),
       });
     },
     delete(key) {

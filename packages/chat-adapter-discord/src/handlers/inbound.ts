@@ -13,7 +13,7 @@ import {
   parseDiscordCommand,
   type DiscordChatInputInteractionLike,
 } from "../commands";
-import { decodeDiscordActionCustomId } from "../conversions/actions";
+import { decodeDiscordActionCustomId, isDiscordActionCustomId } from "../conversions/actions";
 import { decodeDiscordMessage } from "../conversions/inbound";
 import { decodeDiscordReaction } from "../conversions/reactions";
 import type {
@@ -185,6 +185,14 @@ async function handleButtonInteraction<
   const actor = createDiscordInteractionActor(interaction);
   putInteractionContext({ args, interaction, conversationId });
 
+  if (!isDiscordActionCustomId(interaction.customId)) {
+    args.logger.debug(discordLogEvents.inboundIgnored, {
+      eventType: "interactionCreate",
+      reason: "foreign_button_custom_id",
+    });
+    return;
+  }
+
   const envelope = await decodeDiscordActionCustomId({
     customId: interaction.customId,
     actionStore: args.actionStore,
@@ -256,11 +264,12 @@ function createReactionHandler<TCommands extends ChatCommandRegistry, TChatId ex
       ...args,
       eventType: "messageReaction",
       handle: async () => {
+        const resolved = await resolveDiscordReactionPartials(reaction, user);
         const decoded = decodeDiscordReaction({
           chatId: args.chatId,
           type,
-          reaction,
-          user,
+          reaction: resolved.reaction,
+          user: resolved.user,
           botUserId: args.client.getBotUserId(),
         });
 
@@ -282,6 +291,43 @@ function createReactionHandler<TCommands extends ChatCommandRegistry, TChatId ex
       },
     });
   };
+}
+
+async function resolveDiscordReactionPartials(
+  reaction: unknown,
+  user: unknown,
+): Promise<{ readonly reaction: unknown; readonly user: unknown }> {
+  const resolvedReaction = await fetchDiscordPartial(reaction);
+  const resolvedMessage = isRecord(resolvedReaction)
+    ? await fetchDiscordPartial(resolvedReaction.message)
+    : undefined;
+  const resolvedUser = await fetchDiscordPartial(user);
+
+  return {
+    reaction:
+      resolvedMessage === undefined
+        ? resolvedReaction
+        : withResolvedDiscordReactionMessage(resolvedReaction, resolvedMessage),
+    user: resolvedUser,
+  };
+}
+
+async function fetchDiscordPartial(value: unknown): Promise<unknown> {
+  if (!isRecord(value) || value.partial !== true || typeof value.fetch !== "function") {
+    return value;
+  }
+
+  return (await value.fetch()) ?? value;
+}
+
+function withResolvedDiscordReactionMessage(reaction: unknown, message: unknown): unknown {
+  if (!isRecord(reaction)) return reaction;
+
+  return new Proxy(reaction, {
+    get(target, property, receiver) {
+      return property === "message" ? message : Reflect.get(target, property, receiver);
+    },
+  });
 }
 
 type RegisterHandlerArgs<TCommands extends ChatCommandRegistry, TChatId extends string> = {

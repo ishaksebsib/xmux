@@ -70,6 +70,65 @@ describe("Discord attachments contract", () => {
     }
   });
 
+  test("stream over maxBytes rejects while reading when size is unknown", async () => {
+    const fake = createFakeDiscordClient({
+      attachmentResponses: {
+        "https://cdn.example/report.pdf": new Response(new Uint8Array([1, 2, 3])),
+      },
+    });
+    const chat = createDiscordChat(fake);
+    const messages: Array<ChatMessageEvent<"discord", DiscordAdapterData>> = [];
+    chat.on("message", (event) => {
+      messages.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitMessage(discordMessageWithAttachment({ size: undefined, contentType: undefined }));
+
+      await waitForCondition(() => messages.length === 1);
+      const opened = await messages[0]?.message.attachments[0]?.open({ maxBytes: 2 });
+      expect(opened?.isOk()).toBe(true);
+      if (opened?.isOk()) {
+        await expect(new Response(opened.value.chunks).arrayBuffer()).rejects.toBeInstanceOf(
+          DiscordAttachmentReadError,
+        );
+      }
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("response headers fill missing attachment metadata", async () => {
+    const fake = createFakeDiscordClient({
+      attachmentResponses: {
+        "https://cdn.example/report.pdf": new Response(new Uint8Array([1, 2, 3]), {
+          headers: { "content-type": "application/pdf", "content-length": "3" },
+        }),
+      },
+    });
+    const chat = createDiscordChat(fake);
+    const messages: Array<ChatMessageEvent<"discord", DiscordAdapterData>> = [];
+    chat.on("message", (event) => {
+      messages.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitMessage(discordMessageWithAttachment({ size: undefined, contentType: undefined }));
+
+      await waitForCondition(() => messages.length === 1);
+      const opened = await messages[0]?.message.attachments[0]?.open();
+      expect(opened?.isOk()).toBe(true);
+      if (opened?.isOk()) {
+        expect(opened.value.mimeType).toBe("application/pdf");
+        expect(opened.value.sizeBytes).toBe(3);
+      }
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("content-length over limit rejects after response", async () => {
     const fake = createFakeDiscordClient({
       attachmentResponses: {
@@ -137,7 +196,10 @@ function createDiscordChat(fake: FakeDiscordBotClient) {
   });
 }
 
-function discordMessageWithAttachment(args: { readonly size?: number }) {
+function discordMessageWithAttachment(args: {
+  readonly size?: number;
+  readonly contentType?: string;
+}) {
   return {
     id: "message-1",
     channelId: "channel-1",
@@ -149,7 +211,7 @@ function discordMessageWithAttachment(args: { readonly size?: number }) {
         id: "attachment-1",
         url: "https://cdn.example/report.pdf",
         name: "report.pdf",
-        contentType: "application/pdf",
+        contentType: "contentType" in args ? args.contentType : "application/pdf",
         size: args.size,
       },
     ],
