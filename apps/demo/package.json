@@ -12,6 +12,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@xmux/chat-adapter-discord": "workspace:^",
     "@xmux/chat-adapter-telegram": "workspace:^",
     "@xmux/chat-core": "workspace:^",
     "@xmux/core": "workspace:^",
