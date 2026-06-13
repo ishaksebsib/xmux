@@ -54,6 +54,25 @@ export class DiscordCommandRegistrationError extends TaggedError(
   }
 }
 
+/** Discord text formatting failed before a message could be sent. */
+export class DiscordFormattingError extends TaggedError("DiscordFormattingError")<{
+  readonly format?: "plain" | "markdown" | "html";
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: {
+    readonly format?: "plain" | "markdown" | "html";
+    readonly reason?: string;
+    readonly cause?: unknown;
+  }) {
+    super({
+      format: args.format,
+      cause: args.cause,
+      message: args.reason ?? `Discord formatting failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Discord sendMessage failed. */
 export class DiscordSendMessageError extends TaggedError("DiscordSendMessageError")<{
   readonly message: string;
@@ -211,6 +230,7 @@ export type DiscordAdapterError =
   | DiscordAttachmentReadError
   | DiscordCommandRegistrationError
   | DiscordConfigurationError
+  | DiscordFormattingError
   | DiscordInboundDecodeError
   | DiscordReplyError
   | DiscordSendActionError

@@ -46,6 +46,9 @@ import {
 } from "./errors";
 import { registerInboundHandlers } from "./handlers/inbound";
 import { registerCommands } from "./handlers/register-commands";
+import { reply as handleReply } from "./handlers/reply";
+import { sendMessage as handleSendMessage } from "./handlers/send-message";
+import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { startGateway } from "./handlers/start-gateway";
 import type {
   CreateDiscordAdapterOptions,
@@ -263,14 +266,26 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
   }
 
   async sendMessage(
-    _input: ChatAdapterSendMessageInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterSendMessageInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, DiscordAdapterData>, DiscordSendMessageError>> {
-    return Result.err(
-      new DiscordSendMessageError({
-        reason:
-          "Discord sendMessage is not implemented yet. This operation is planned for Phase 3.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = outboundMessageMetadata("sendMessage", input);
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleSendMessage({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async sendAction(
@@ -295,24 +310,53 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
   }
 
   async reply(
-    _input: ChatAdapterReplyInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterReplyInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, DiscordAdapterData>, DiscordReplyError>> {
-    return Result.err(
-      new DiscordReplyError({
-        reason: "Discord replies are not implemented yet. This operation is planned for Phase 3.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("reply", input),
+      messageId: input.message?.messageId,
+      mode: input.mode,
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleReply({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async sendTyping(
-    _input: ChatAdapterSendTypingInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterSendTypingInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<void, DiscordSendTypingError>> {
-    return Result.err(
-      new DiscordSendTypingError({
-        reason:
-          "Discord typing indicators are not implemented yet. This operation is planned for Phase 3.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "sendTyping",
+      conversationId: input.conversationId,
+      messageId: input.message?.messageId,
+      action: input.action,
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleSendTyping({ client: this.client, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async streamMessage(
@@ -401,6 +445,18 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
       context.emit({ type: "error", chatId: this.id, error });
     });
   }
+}
+
+function outboundMessageMetadata(
+  operation: string,
+  input: ChatAdapterSendMessageInput<string, DiscordAdapterOptions>,
+) {
+  return {
+    operation,
+    conversationId: input.conversationId,
+    textLength: input.text.length,
+    format: input.format,
+  } as const;
 }
 
 function bindAbortSignal(args: {

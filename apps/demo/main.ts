@@ -1,8 +1,8 @@
 import "dotenv/config";
-//import { runXmuxDemo } from "./xmux";
-import { runDiscordLifecycleDemo } from "./discord";
-// import { runDiscordLifecycleDemo } from "./discord";
+// import { runXmuxDemo } from "./xmux";
+import { runDiscordDemo } from "./discord";
+// import { runTelegramDemo } from "./telegram";
 
-//await runXmuxDemo();
+// await runXmuxDemo();
 // await runTelegramDemo();
-await runDiscordLifecycleDemo();
+await runDiscordDemo();

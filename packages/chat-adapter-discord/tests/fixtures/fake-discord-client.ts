@@ -1,5 +1,6 @@
 import type {
   DiscordBotClient,
+  DiscordCreateThreadRequest,
   DiscordDownloadAttachmentRequest,
   DiscordEditMessageRequest,
   DiscordInteractionHandler,
@@ -20,6 +21,7 @@ export interface FakeDiscordBotClient extends DiscordBotClient {
   readonly sentMessages: DiscordSendMessageRequest[];
   readonly editedMessages: DiscordEditMessageRequest[];
   readonly typingRequests: DiscordSendTypingRequest[];
+  readonly threadRequests: DiscordCreateThreadRequest[];
   readonly registeredCommands: DiscordRegisterCommandsRequest[];
   readonly downloadedAttachments: DiscordDownloadAttachmentRequest[];
   readonly handlerCountsAtLogin: HandlerCounts[];
@@ -44,6 +46,9 @@ export interface HandlerCounts {
 export function createFakeDiscordClient(
   options: {
     readonly loginError?: unknown;
+    readonly sendMessageError?: unknown;
+    readonly sendTypingError?: unknown;
+    readonly createThreadError?: unknown;
   } = {},
 ): FakeDiscordBotClient {
   const readyHandlers: ((info: DiscordReadyInfo) => void)[] = [];
@@ -61,6 +66,7 @@ export function createFakeDiscordClient(
     sentMessages: [],
     editedMessages: [],
     typingRequests: [],
+    threadRequests: [],
     registeredCommands: [],
     downloadedAttachments: [],
     handlerCountsAtLogin: [],
@@ -106,6 +112,9 @@ export function createFakeDiscordClient(
     },
     async sendMessage(input) {
       fake.sentMessages.push(input);
+      if (options.sendMessageError !== undefined) {
+        throw options.sendMessageError;
+      }
       return sentMessage(input.channelId, `sent-${fake.sentMessages.length}`, input);
     },
     async editMessage(input) {
@@ -113,6 +122,10 @@ export function createFakeDiscordClient(
       return sentMessage(input.channelId, input.messageId, input);
     },
     async createMessageThread(input) {
+      fake.threadRequests.push(input);
+      if (options.createThreadError !== undefined) {
+        throw options.createThreadError;
+      }
       return {
         channelId: `thread-${input.messageId}`,
         parentChannelId: input.channelId,
@@ -121,6 +134,9 @@ export function createFakeDiscordClient(
     },
     async sendTyping(input) {
       fake.typingRequests.push(input);
+      if (options.sendTypingError !== undefined) {
+        throw options.sendTypingError;
+      }
     },
     async registerCommands(input) {
       fake.callOrder.push("registerCommands");
