@@ -47,6 +47,8 @@ import {
 import { registerInboundHandlers } from "./handlers/inbound";
 import { registerCommands } from "./handlers/register-commands";
 import { reply as handleReply } from "./handlers/reply";
+import { respondToAction as handleRespondToAction } from "./handlers/respond-action";
+import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { startGateway } from "./handlers/start-gateway";
@@ -194,6 +196,7 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
       client: this.client,
       context,
       interactionRegistry: this.interactionRegistry,
+      actionStore: this.config.actionStore,
       logger: this.logger,
       mode: this.config.mode,
     });
@@ -298,24 +301,58 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
   }
 
   async sendAction(
-    _input: ChatAdapterSendActionInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterSendActionInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, DiscordAdapterData>, DiscordSendActionError>> {
-    return Result.err(
-      new DiscordSendActionError({
-        reason: "Discord sendAction is not implemented yet. This operation is planned for Phase 5.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("sendAction", input),
+      buttonRows: input.buttons.length,
+      buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleSendAction({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async respondToAction(
-    _input: ChatAdapterRespondToActionInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterRespondToActionInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<void, DiscordActionResponseError>> {
-    return Result.err(
-      new DiscordActionResponseError({
-        reason:
-          "Discord action responses are not implemented yet. This operation is planned for Phase 5.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "respondToAction",
+      conversationId: input.conversationId,
+      messageId: input.message.messageId,
+      interactionId: input.interactionId,
+      responseKind: input.response.kind,
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleRespondToAction({
+      config: this.config,
+      interactionRegistry: this.interactionRegistry,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async reply(

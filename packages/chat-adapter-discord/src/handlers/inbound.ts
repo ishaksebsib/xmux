@@ -5,7 +5,7 @@ import {
   type ChatAdapterStartContext,
   type ChatCommandRegistry,
 } from "@xmux/chat-core";
-import type { MessageCreateOptions } from "discord.js";
+import type { MessageCreateOptions, MessageEditOptions } from "discord.js";
 import {
   createDiscordCommandEvent,
   createDiscordInvalidCommandEvent,
@@ -13,6 +13,7 @@ import {
   parseDiscordCommand,
   type DiscordChatInputInteractionLike,
 } from "../commands";
+import { decodeDiscordActionCustomId } from "../conversions/actions";
 import type {
   DiscordBotClient,
   DiscordInteractionHandler,
@@ -23,7 +24,7 @@ import type {
 import { DiscordInboundDecodeError, type DiscordAdapterError } from "../errors";
 import { discordLogEvents, type DiscordLogScope } from "../logger";
 import type { DiscordInteractionRegistry } from "../stores/interaction-registry";
-import type { DiscordAdapterData, DiscordAdapterMode } from "../types";
+import type { DiscordActionStore, DiscordAdapterData, DiscordAdapterMode } from "../types";
 
 export function registerInboundHandlers<
   TCommands extends ChatCommandRegistry,
@@ -38,6 +39,7 @@ export function registerInboundHandlers<
     DiscordAdapterError
   >;
   readonly interactionRegistry: DiscordInteractionRegistry;
+  readonly actionStore?: DiscordActionStore;
   readonly logger: DiscordLogScope;
   readonly mode: DiscordAdapterMode;
 }): void {
@@ -79,79 +81,152 @@ function createInteractionHandler<TCommands extends ChatCommandRegistry, TChatId
       ...args,
       eventType: "interactionCreate",
       handle: async () => {
-        if (!isChatInputCommandInteraction(interaction)) {
-          args.logger.debug(discordLogEvents.inboundIgnored, {
-            eventType: "interactionCreate",
-            reason: "unsupported_interaction",
-          });
+        if (isChatInputCommandInteraction(interaction)) {
+          await handleChatInputCommandInteraction(args, interaction);
           return;
         }
 
-        await interaction.deferReply();
+        if (isButtonInteraction(interaction)) {
+          await handleButtonInteraction(args, interaction);
+          return;
+        }
 
-        const conversationId = interaction.channelId;
-        const actor = createDiscordInteractionActor(interaction);
-        args.interactionRegistry.put({
-          interactionId: interaction.id,
-          channelId: conversationId,
-          guildId: interaction.guildId ?? undefined,
-          createdAt: Date.now(),
-          editReply: async (payload) =>
-            encodeInteractionSentMessage({
-              message: await interaction.editReply(payload),
-              fallbackChannelId: conversationId,
-              fallbackGuildId: interaction.guildId ?? undefined,
-            }),
-          followUp: async (payload) =>
-            encodeInteractionSentMessage({
-              message: await interaction.followUp(payload),
-              fallbackChannelId: conversationId,
-              fallbackGuildId: interaction.guildId ?? undefined,
-            }),
+        args.logger.debug(discordLogEvents.inboundIgnored, {
+          eventType: "interactionCreate",
+          reason: "unsupported_interaction",
         });
-
-        const parsed = parseDiscordCommand({
-          commands: args.context.commands,
-          interaction,
-          logger: args.logger,
-        });
-        const event =
-          parsed.status === "command"
-            ? createDiscordCommandEvent({
-                chatId: args.chatId,
-                conversationId,
-                interactionId: interaction.id,
-                actor,
-                command: parsed.command,
-              })
-            : parsed.status === "unknown"
-              ? createDiscordUnknownCommandEvent({
-                  chatId: args.chatId,
-                  conversationId,
-                  interactionId: interaction.id,
-                  actor,
-                  commandName: parsed.commandName,
-                })
-              : createDiscordInvalidCommandEvent({
-                  chatId: args.chatId,
-                  conversationId,
-                  interactionId: interaction.id,
-                  actor,
-                  commandName: parsed.commandName,
-                  reason: parsed.reason,
-                  optionName: parsed.optionName,
-                });
-
-        args.logger.debug(discordLogEvents.inboundEvent, {
-          eventType: event.type,
-          conversationId,
-          interactionId: interaction.id,
-          commandName: interaction.commandName,
-        });
-        args.context.emit(event);
       },
     });
   };
+}
+
+async function handleChatInputCommandInteraction<
+  TCommands extends ChatCommandRegistry,
+  TChatId extends string,
+>(
+  args: RegisterHandlerArgs<TCommands, TChatId>,
+  interaction: DiscordChatInputInteractionRuntime,
+): Promise<void> {
+  await interaction.deferReply();
+
+  const conversationId = interaction.channelId;
+  const actor = createDiscordInteractionActor(interaction);
+  putInteractionContext({ args, interaction, conversationId });
+
+  const parsed = parseDiscordCommand({
+    commands: args.context.commands,
+    interaction,
+    logger: args.logger,
+  });
+  const event =
+    parsed.status === "command"
+      ? createDiscordCommandEvent({
+          chatId: args.chatId,
+          conversationId,
+          interactionId: interaction.id,
+          actor,
+          command: parsed.command,
+        })
+      : parsed.status === "unknown"
+        ? createDiscordUnknownCommandEvent({
+            chatId: args.chatId,
+            conversationId,
+            interactionId: interaction.id,
+            actor,
+            commandName: parsed.commandName,
+          })
+        : createDiscordInvalidCommandEvent({
+            chatId: args.chatId,
+            conversationId,
+            interactionId: interaction.id,
+            actor,
+            commandName: parsed.commandName,
+            reason: parsed.reason,
+            optionName: parsed.optionName,
+          });
+
+  args.logger.debug(discordLogEvents.inboundEvent, {
+    eventType: event.type,
+    conversationId,
+    interactionId: interaction.id,
+    commandName: interaction.commandName,
+  });
+  args.context.emit(event);
+}
+
+async function handleButtonInteraction<
+  TCommands extends ChatCommandRegistry,
+  TChatId extends string,
+>(
+  args: RegisterHandlerArgs<TCommands, TChatId>,
+  interaction: DiscordButtonInteractionRuntime,
+): Promise<void> {
+  await interaction.deferUpdate();
+
+  const conversationId = interaction.channelId;
+  const actor = createDiscordInteractionActor(interaction);
+  putInteractionContext({ args, interaction, conversationId });
+
+  const envelope = await decodeDiscordActionCustomId({
+    customId: interaction.customId,
+    actionStore: args.actionStore,
+  });
+  if (envelope.isErr()) {
+    throw envelope.error;
+  }
+
+  const event = {
+    type: "action",
+    chatId: args.chatId,
+    conversation: { chatId: args.chatId, conversationId },
+    message: {
+      chatId: args.chatId,
+      conversationId,
+      messageId: interaction.message.id,
+    },
+    interactionId: interaction.id,
+    actor,
+    actionId: envelope.value.actionId,
+    value: envelope.value.value,
+    ...(envelope.value.payload === undefined ? {} : { payload: envelope.value.payload }),
+  } as const;
+
+  args.logger.debug(discordLogEvents.inboundEvent, {
+    eventType: event.type,
+    conversationId,
+    interactionId: interaction.id,
+    actionId: event.actionId,
+    value: event.value,
+  });
+  args.context.emit(event);
+}
+
+function putInteractionContext<
+  TCommands extends ChatCommandRegistry,
+  TChatId extends string,
+>(args: {
+  readonly args: RegisterHandlerArgs<TCommands, TChatId>;
+  readonly interaction: DiscordResponseInteractionRuntime;
+  readonly conversationId: string;
+}): void {
+  args.args.interactionRegistry.put({
+    interactionId: args.interaction.id,
+    channelId: args.conversationId,
+    guildId: args.interaction.guildId ?? undefined,
+    createdAt: Date.now(),
+    editReply: async (payload) =>
+      encodeInteractionSentMessage({
+        message: await args.interaction.editReply(payload),
+        fallbackChannelId: args.conversationId,
+        fallbackGuildId: args.interaction.guildId ?? undefined,
+      }),
+    followUp: async (payload) =>
+      encodeInteractionSentMessage({
+        message: await args.interaction.followUp(payload),
+        fallbackChannelId: args.conversationId,
+        fallbackGuildId: args.interaction.guildId ?? undefined,
+      }),
+  });
 }
 
 function createIgnoredReactionHandler<
@@ -181,6 +256,7 @@ type RegisterHandlerArgs<TCommands extends ChatCommandRegistry, TChatId extends 
     DiscordAdapterError
   >;
   readonly interactionRegistry: DiscordInteractionRegistry;
+  readonly actionStore?: DiscordActionStore;
   readonly logger: DiscordLogScope;
 };
 
@@ -213,7 +289,7 @@ function runGatewayHandler<TCommands extends ChatCommandRegistry, TChatId extend
   });
 }
 
-interface DiscordChatInputInteractionRuntime extends DiscordChatInputInteractionLike {
+interface DiscordResponseInteractionRuntime {
   readonly id: string;
   readonly channelId: string;
   readonly guildId?: string | null;
@@ -223,10 +299,21 @@ interface DiscordChatInputInteractionRuntime extends DiscordChatInputInteraction
     readonly globalName?: string | null;
     readonly bot?: boolean;
   };
+  editReply(payload: string | MessageCreateOptions | MessageEditOptions): Promise<unknown>;
+  followUp(payload: string | MessageCreateOptions): Promise<unknown>;
+}
+
+interface DiscordChatInputInteractionRuntime
+  extends DiscordResponseInteractionRuntime, DiscordChatInputInteractionLike {
   isChatInputCommand(): boolean;
   deferReply(): Promise<unknown>;
-  editReply(payload: string | MessageCreateOptions): Promise<unknown>;
-  followUp(payload: string | MessageCreateOptions): Promise<unknown>;
+}
+
+interface DiscordButtonInteractionRuntime extends DiscordResponseInteractionRuntime {
+  readonly customId: string;
+  readonly message: { readonly id: string };
+  isButton(): boolean;
+  deferUpdate(): Promise<unknown>;
 }
 
 function isChatInputCommandInteraction(
@@ -245,8 +332,24 @@ function isChatInputCommandInteraction(
   );
 }
 
+function isButtonInteraction(interaction: unknown): interaction is DiscordButtonInteractionRuntime {
+  return (
+    isRecord(interaction) &&
+    typeof interaction.id === "string" &&
+    typeof interaction.channelId === "string" &&
+    typeof interaction.customId === "string" &&
+    isRecord(interaction.message) &&
+    typeof interaction.message.id === "string" &&
+    typeof interaction.isButton === "function" &&
+    interaction.isButton() &&
+    typeof interaction.deferUpdate === "function" &&
+    typeof interaction.editReply === "function" &&
+    typeof interaction.followUp === "function"
+  );
+}
+
 function createDiscordInteractionActor(
-  interaction: DiscordChatInputInteractionRuntime,
+  interaction: DiscordResponseInteractionRuntime,
 ): ChatActor | undefined {
   const user = interaction.user;
   if (user?.id === undefined) {

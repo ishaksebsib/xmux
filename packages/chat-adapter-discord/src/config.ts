@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import { DiscordConfigurationError } from "./errors";
 import type {
   CreateDiscordAdapterOptions,
+  DiscordActionStore,
   DiscordAdapterMode,
   DiscordAllowedMentions,
   DiscordCommandRegistrationMode,
@@ -25,6 +26,7 @@ export interface DiscordAdapterConfig {
   readonly mode: DiscordAdapterMode;
   readonly commandRegistration: DiscordCommandRegistrationMode;
   readonly defaultAllowedMentions: DiscordAllowedMentions;
+  readonly actionStore?: DiscordActionStore;
   readonly stream: Required<DiscordStreamOptions>;
 }
 
@@ -67,6 +69,7 @@ export function parseDiscordAdapterConfig<TChatId extends string>(
       mode,
       commandRegistration,
       defaultAllowedMentions: options.defaultAllowedMentions ?? createSafeDiscordAllowedMentions(),
+      ...(options.actionStore === undefined ? {} : { actionStore: options.actionStore }),
       stream,
     });
   });

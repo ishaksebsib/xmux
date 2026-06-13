@@ -17,7 +17,7 @@ import { DiscordFormattingError, DiscordReplyError, DiscordSendMessageError } fr
 import type { DiscordAdapterData, DiscordAdapterOptions } from "../types";
 import { formatDiscordText } from "./formatting";
 
-const discordContentLimit = 2_000;
+export const discordContentLimit = 2_000;
 const defaultThreadName = "xmux reply";
 
 type DiscordSendMessagePayload = Omit<DiscordSendMessageRequest, "signal">;
@@ -158,7 +158,7 @@ export function encodeDiscordSentMessage<TChatId extends string>(args: {
   };
 }
 
-function encodeDiscordText(args: {
+export function encodeDiscordText(args: {
   readonly text: string;
   readonly format?: "plain" | "markdown" | "html";
   readonly adapterOptions: DiscordAdapterOptions;
@@ -176,7 +176,7 @@ function encodeDiscordText(args: {
   );
 }
 
-function encodeDiscordMessagePayload(args: {
+export function encodeDiscordMessagePayload(args: {
   readonly content: string;
   readonly adapterOptions: DiscordAdapterOptions;
   readonly defaults: { readonly allowedMentions: APIAllowedMentions };

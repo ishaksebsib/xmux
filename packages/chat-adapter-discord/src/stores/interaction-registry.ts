@@ -1,4 +1,4 @@
-import type { MessageCreateOptions } from "discord.js";
+import type { MessageCreateOptions, MessageEditOptions } from "discord.js";
 import type { DiscordSentMessage } from "../client";
 
 const defaultInteractionTtlMs = 14 * 60 * 1_000;
@@ -8,7 +8,9 @@ export interface DiscordInteractionContext {
   readonly channelId: string;
   readonly guildId?: string;
   readonly createdAt: number;
-  editReply(payload: string | MessageCreateOptions): Promise<DiscordSentMessage>;
+  editReply(
+    payload: string | MessageCreateOptions | MessageEditOptions,
+  ): Promise<DiscordSentMessage>;
   followUp(payload: string | MessageCreateOptions): Promise<DiscordSentMessage>;
 }
 
