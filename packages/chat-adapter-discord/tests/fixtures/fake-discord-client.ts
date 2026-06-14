@@ -48,6 +48,7 @@ export function createFakeDiscordClient(
     readonly loginError?: unknown;
     readonly sendMessageError?: unknown;
     readonly sendTypingError?: unknown;
+    readonly editMessageError?: unknown;
     readonly createThreadError?: unknown;
     readonly registerCommandsError?: unknown;
     readonly existingThreads?: Readonly<Record<string, string>>;
@@ -123,6 +124,9 @@ export function createFakeDiscordClient(
     },
     async editMessage(input) {
       fake.editedMessages.push(input);
+      if (options.editMessageError !== undefined) {
+        throw options.editMessageError;
+      }
       return sentMessage(input.channelId, input.messageId, input);
     },
     async createMessageThread(input) {

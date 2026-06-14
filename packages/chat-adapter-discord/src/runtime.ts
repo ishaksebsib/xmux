@@ -52,6 +52,8 @@ import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { startGateway } from "./handlers/start-gateway";
+import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
+import { streamReply as handleStreamReply } from "./handlers/stream-reply";
 import {
   createDiscordInteractionRegistry,
   type DiscordInteractionRegistry,
@@ -407,25 +409,62 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
   }
 
   async streamMessage(
-    _input: ChatAdapterStreamMessageInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterStreamMessageInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, DiscordAdapterData>, DiscordStreamMessageError>> {
-    return Result.err(
-      new DiscordStreamMessageError({
-        reason:
-          "Discord streamMessage is not implemented yet. This operation is planned for Phase 7.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "streamMessage",
+      conversationId: input.conversationId,
+      format: input.content.format,
+      strategy: "edit",
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleStreamMessage({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async streamReply(
-    _input: ChatAdapterStreamReplyInput<TChatId, DiscordAdapterOptions>,
+    input: ChatAdapterStreamReplyInput<TChatId, DiscordAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, DiscordAdapterData>, DiscordStreamReplyError>> {
-    return Result.err(
-      new DiscordStreamReplyError({
-        reason:
-          "Discord streamReply is not implemented yet. This operation is planned for Phase 7.",
-      }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "streamReply",
+      conversationId: input.conversationId,
+      messageId: input.message?.messageId,
+      mode: input.mode,
+      format: input.content.format,
+      strategy: "edit",
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleStreamReply({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      interactionRegistry: this.interactionRegistry,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async close(): Promise<void> {
