@@ -359,6 +359,48 @@ export function createChat<
     logger,
   });
 
+  async function startOneAdapter(
+    chatId: TChatId,
+  ): Promise<Result<TChatId, ChatAdapterOpenError | ChatAdapterStartError>> {
+    return Result.gen(async function* () {
+      const existing = openedRuntimes.get(chatId);
+      const runtime = existing
+        ? existing
+        : yield* Result.await(
+            openChatAdapter({
+              adapter: adapterForChatId(options.adapters, chatId),
+              chatId,
+              signal: abortController?.signal,
+              logger,
+              adapterLogger: options.logger,
+            }),
+          );
+
+      openedRuntimes.set(chatId, runtime);
+
+      yield* Result.await(
+        startChatAdapter({
+          chatId,
+          runtime,
+          context: {
+            commands: options.commands,
+            emit: emit as ChatAdapterStartContext<
+              TCommands,
+              TChatId,
+              ChatAdapterObject,
+              unknown
+            >["emit"],
+            signal: abortController?.signal,
+            logger: options.logger,
+          },
+          logger,
+        }),
+      );
+
+      return Result.ok(chatId);
+    });
+  }
+
   async function start(): Promise<Result<void, ChatStartError>> {
     const startedAt = startChatLogTimer();
     const metadata = {
@@ -386,46 +428,15 @@ export function createChat<
     lifecycle = { status: "starting" };
     abortController = new AbortController();
 
-    for (const chatId of chatIds) {
-      const existing = openedRuntimes.get(chatId);
-      const runtimeResult: Result<OpenedRuntime, ChatAdapterOpenError> = existing
-        ? Result.ok(existing)
-        : await openChatAdapter({
-            adapter: adapterForChatId(options.adapters, chatId),
-            chatId,
-            signal: abortController.signal,
-            logger,
-            adapterLogger: options.logger,
-          });
-
-      if (runtimeResult.isErr()) return await failStart(runtimeResult.error, startedAt, metadata);
-
-      const runtime = runtimeResult.value;
-      openedRuntimes.set(chatId, runtime);
-
-      const started = await startChatAdapter({
-        chatId,
-        runtime,
-        context: {
-          commands: options.commands,
-          emit: emit as ChatAdapterStartContext<
-            TCommands,
-            TChatId,
-            ChatAdapterObject,
-            unknown
-          >["emit"],
-          signal: abortController.signal,
-          logger: options.logger,
-        },
-        logger,
-      });
-
-      if (started.isErr()) return await failStart(started.error, startedAt, metadata);
-
-      bus.dispatch({ type: "ready", chatId });
-    }
+    const startupResults = await Promise.all(chatIds.map(startOneAdapter));
+    const [, startupErrors] = Result.partition(startupResults);
+    const startupError = startupErrors[0];
+    if (startupError !== undefined) return await failStart(startupError, startedAt, metadata);
 
     lifecycle = { status: "started" };
+    for (const chatId of chatIds) {
+      bus.dispatch({ type: "ready", chatId });
+    }
     for (const event of pendingStartupEvents.splice(0)) {
       bus.dispatch(bindEvent(event));
     }
