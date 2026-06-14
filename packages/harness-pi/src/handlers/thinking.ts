@@ -16,7 +16,7 @@ type PiThinkingHandlerError =
   | PiSessionNotFoundError
   | PiSessionRequestError;
 
-function toHarnessThinkingLevel(level: string | undefined): HarnessThinkingLevel | undefined {
+export function toHarnessThinkingLevel(level: string | undefined): HarnessThinkingLevel | undefined {
   switch (level) {
     case "off":
     case "minimal":
@@ -24,6 +24,7 @@ function toHarnessThinkingLevel(level: string | undefined): HarnessThinkingLevel
     case "medium":
     case "high":
     case "xhigh":
+    case "max":
       return level;
     default:
       return undefined;

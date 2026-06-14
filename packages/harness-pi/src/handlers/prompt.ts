@@ -1,4 +1,7 @@
-import type { HarnessAdapterPromptInput, HarnessAdapterPromptResult } from "@xmux/harness-core";
+import type {
+  HarnessAdapterPromptInput,
+  HarnessAdapterPromptResult,
+} from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import {
   PiModelRequestError,
@@ -10,8 +13,9 @@ import {
 import type { PiRuntime, PiSessionHandle } from "../runtime";
 import type { PiCreateOptions } from "../types";
 import { resolvePiModel, toPiThinkingLevel } from "./models";
+import { toHarnessThinkingLevel } from "./thinking";
 import { resumeSession } from "./resume-session";
-import { resolvePiSession, type PiSessionHandlerError } from "./utils";
+import { resolvePiSession, toModelRef, type PiSessionHandlerError } from "./utils";
 import {
   createPiPromptEventState,
   mapPiSessionEvent,
@@ -188,7 +192,15 @@ function createPiPromptStream(args: {
 
       const unsubscribe = args.handle.session.subscribe((event) => {
         for (const mapped of mapPiSessionEvent({ event, ref: args.input.ref, state })) {
-          queue.push(mapped);
+          queue.push(
+            mapped.type === "turn" && mapped.phase === "started"
+              ? {
+                  ...mapped,
+                  model: toModelRef(args.handle.session.model),
+                  thinking: toHarnessThinkingLevel(args.handle.session.thinkingLevel),
+                }
+              : mapped,
+          );
         }
       });
 

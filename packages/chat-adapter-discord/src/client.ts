@@ -45,6 +45,12 @@ export interface DiscordEditMessageRequest {
   readonly signal?: AbortSignal;
 }
 
+export interface DiscordDeleteMessageRequest {
+  readonly channelId: string;
+  readonly messageId: string;
+  readonly signal?: AbortSignal;
+}
+
 export interface DiscordCreateThreadRequest {
   readonly channelId: string;
   readonly messageId: string;
@@ -98,6 +104,7 @@ export interface DiscordBotClient {
   onReactionRemove(handler: DiscordReactionHandler): void;
   sendMessage(input: DiscordSendMessageRequest): Promise<DiscordSentMessage>;
   editMessage(input: DiscordEditMessageRequest): Promise<DiscordSentMessage>;
+  deleteMessage(input: DiscordDeleteMessageRequest): Promise<void>;
   createMessageThread(input: DiscordCreateThreadRequest): Promise<DiscordThreadInfo>;
   sendTyping(input: DiscordSendTypingRequest): Promise<void>;
   registerCommands(input: DiscordRegisterCommandsRequest): Promise<void>;
@@ -158,6 +165,11 @@ export function createDiscordBotClient(args: {
       const message = await channel.messages.fetch(input.messageId);
       const edited = await message.edit(input.payload);
       return encodeSentMessage(edited);
+    },
+    deleteMessage: async (input) => {
+      const channel = await fetchMessageChannel(client, input.channelId);
+      const message = await channel.messages.fetch(input.messageId);
+      await message.delete();
     },
     createMessageThread: async (input) => {
       const channel = await fetchMessageChannel(client, input.channelId);
