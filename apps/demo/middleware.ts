@@ -31,7 +31,9 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
   };
 }
 
-export function createTypingIndicatorMiddleware() {
+export function createTypingIndicatorMiddleware(input: { readonly delayMs?: number } = {}) {
+  const delayMs = input.delayMs ?? 1_000;
+
   return async (
     ctx: { readonly event: XmuxRoutedChatEvent },
     next: () => Promise<Result<void, unknown>>,
@@ -45,11 +47,41 @@ export function createTypingIndicatorMiddleware() {
       }
     ).typingIndicator;
 
-    const indicator = await typingIndicator?.({ mode: "managed", fallback: "ignore" });
+    let finished = false;
+    let indicator: Result<{ stop(): void }, unknown> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let resolveStartTyping: () => void = () => {};
+
+    const startTyping = new Promise<void>((resolve) => {
+      resolveStartTyping = resolve;
+      timer = setTimeout(() => {
+        if (finished || typingIndicator === undefined) {
+          resolve();
+          return;
+        }
+
+        void typingIndicator({ mode: "managed", fallback: "ignore" }).then((result) => {
+          if (finished && result.isOk()) {
+            result.value.stop();
+            resolve();
+            return;
+          }
+
+          indicator = result;
+          resolve();
+        });
+      }, delayMs);
+    });
 
     try {
       return await next();
     } finally {
+      finished = true;
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        resolveStartTyping();
+      }
+      await startTyping;
       if (indicator?.isOk()) {
         indicator.value.stop();
       }
