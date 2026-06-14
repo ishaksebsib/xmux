@@ -42,7 +42,7 @@ export interface CreateXmuxOptions<
   readonly store?: Store;
   readonly fs?: FileSystemHost;
   readonly middleware?: readonly XmuxMiddleware<TAdapters, TChats>[];
-	// TODO: change this to xmux logger later
+  // TODO: change this to xmux logger later
   readonly logger?: ChatLogger & HarnessLogger;
 }
 

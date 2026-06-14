@@ -41,6 +41,8 @@ export function harnessSelectionMessage(input: {
 }): ActionMessage {
   return {
     ...normalizeTextInput(formatHarnessChoice(input.prompt)),
-    buttons: formatActionButtonRows(input.prompt.harnessIds.map((harnessId) => input.button(harnessId))),
+    buttons: formatActionButtonRows(
+      input.prompt.harnessIds.map((harnessId) => input.button(harnessId)),
+    ),
   };
 }
