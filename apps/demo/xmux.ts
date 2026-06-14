@@ -3,14 +3,25 @@ import { createInMemoryStore, createXmux } from "@xmux/core";
 import { createOpenCodeAdapter } from "@xmux/harness-opencode";
 import {
   createTelegramAllowedUsersMiddleware,
-  createTelegramTypingIndicatorMiddleware,
+  createTypingIndicatorMiddleware,
 } from "./middleware";
 import { createPiAdapter } from "@xmux/harness-pi";
+import { createDiscordAdapter } from "@xmux/chat-adapter-discord";
 
 export async function runXmuxDemo() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
+  const discordToken = process.env.DISCORD_BOT_TOKEN;
+  const applicationId = process.env.DISCORD_APPLICATION_ID;
+  const guildId = process.env.DISCORD_GUILD_ID;
+
   if (!token) {
     throw new Error("TELEGRAM_BOT_TOKEN is required in apps/demo/.env");
+  }
+
+  if (!discordToken || !applicationId || !guildId) {
+    throw new Error(
+      "DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, and DISCORD_GUILD_ID are required in apps/demo/.env",
+    );
   }
 
   const xmux = createXmux({
@@ -23,6 +34,12 @@ export async function runXmuxDemo() {
         token,
         mode: { type: "polling", dropPendingUpdates: true },
       }),
+      discord: createDiscordAdapter({
+        token: discordToken,
+        applicationId,
+        mode: { type: "gateway", observeMessages: true, observeReactions: true },
+        commandRegistration: { scope: { type: "guild", guildId }, strategy: "bulk-overwrite" },
+      }),
     },
     config: {
       userName: "xmux",
@@ -32,7 +49,7 @@ export async function runXmuxDemo() {
     store: createInMemoryStore(),
     middleware: [
       createTelegramAllowedUsersMiddleware(process.env.XMUX_ALLOWED_TELEGRAM_USER_IDS),
-      createTelegramTypingIndicatorMiddleware(),
+      createTypingIndicatorMiddleware(),
     ],
   });
 
@@ -58,7 +75,7 @@ export async function runXmuxDemo() {
     return;
   }
 
-  console.log("[xmux] running. Send /new opencode in Telegram.");
+  console.log("[xmux] running. Send /new opencode in Telegram or Discord.");
 
   const shutdown = async () => {
     console.log("[xmux] shutting down...");
