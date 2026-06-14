@@ -1,5 +1,6 @@
 import type { ChatCommandOption, ChatCommandRegistry, ChatCommandValues } from "@xmux/chat-core";
 import { discordLogEvents, type DiscordLogScope } from "../logger";
+import { encodeDiscordCommandOptionName } from "./registration";
 
 export type DiscordCommandParseResult<TCommands extends ChatCommandRegistry> =
   | { readonly status: "unknown"; readonly commandName: string }
@@ -31,7 +32,8 @@ export function parseDiscordCommand<TCommands extends ChatCommandRegistry>(args:
 
   const options: Record<string, unknown> = {};
   for (const [name, option] of Object.entries(definition.options ?? {})) {
-    const rawValue = args.interaction.options?.get(name)?.value;
+    const discordName = encodeDiscordCommandOptionName(name);
+    const rawValue = args.interaction.options?.get(discordName)?.value;
     if (rawValue === undefined || rawValue === null) {
       if (option.required === true) {
         return invalidCommandOption({

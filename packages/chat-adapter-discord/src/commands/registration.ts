@@ -45,7 +45,15 @@ export function createDiscordCommandRegistration<TCommands extends ChatCommandRe
     }
 
     const options = command.options ?? {};
-    const entries = sortOptionEntries(Object.entries(options));
+    const normalized = normalizeDiscordCommandOptionEntries(Object.entries(options));
+    if (normalized.status === "invalid") {
+      const skip = { commandName: name, ...normalized.skipped };
+      skipped.push(skip);
+      warn(args.logger, skip);
+      continue;
+    }
+
+    const entries = sortOptionEntries(normalized.entries);
     if (entries.length > maxOptions) {
       const skip = {
         code: "COMMAND_OPTIONS_TOO_MANY",
@@ -80,7 +88,7 @@ export function createDiscordCommandRegistration<TCommands extends ChatCommandRe
 
 function createDiscordCommandOptions(args: {
   readonly commandName: string;
-  readonly entries: readonly (readonly [string, ChatCommandOption])[];
+  readonly entries: readonly DiscordCommandOptionEntry[];
   readonly logger?: DiscordLogScope;
 }):
   | {
@@ -90,28 +98,32 @@ function createDiscordCommandOptions(args: {
   | { readonly status: "invalid"; readonly skipped: DiscordSkippedCommandRegistration } {
   const discordOptions: NonNullable<RESTPostAPIApplicationCommandsJSONBody["options"]> = [];
 
-  for (const [name, option] of args.entries) {
-    const description = (option.description ?? name).trim();
-    const validation = validateOption({ name, option, description });
+  for (const entry of args.entries) {
+    const description = (entry.option.description ?? entry.sourceName).trim();
+    const validation = validateOption({
+      name: entry.discordName,
+      option: entry.option,
+      description,
+    });
     if (validation !== undefined) {
       const skipped = {
         commandName: args.commandName,
-        optionName: name,
+        optionName: entry.sourceName,
         ...validation,
       };
       warn(args.logger, skipped);
       return { status: "invalid", skipped };
     }
 
-    const choices = option.choices?.map((choice) => ({
+    const choices = entry.option.choices?.map((choice) => ({
       name: String(choice).trim(),
       value: choice,
     }));
     discordOptions.push({
-      type: optionType(option.kind),
-      name,
+      type: optionType(entry.option.kind),
+      name: entry.discordName,
       description,
-      required: option.required,
+      required: entry.option.required,
       ...(choices === undefined ? {} : { choices }),
     } as NonNullable<RESTPostAPIApplicationCommandsJSONBody["options"]>[number]);
   }
@@ -119,11 +131,56 @@ function createDiscordCommandOptions(args: {
   return { status: "valid", options: discordOptions };
 }
 
-function sortOptionEntries(
+interface DiscordCommandOptionEntry {
+  readonly sourceName: string;
+  readonly discordName: string;
+  readonly option: ChatCommandOption;
+}
+
+function normalizeDiscordCommandOptionEntries(
   entries: readonly (readonly [string, ChatCommandOption])[],
-): readonly (readonly [string, ChatCommandOption])[] {
+):
+  | { readonly status: "valid"; readonly entries: readonly DiscordCommandOptionEntry[] }
+  | {
+      readonly status: "invalid";
+      readonly skipped: Omit<DiscordSkippedCommandRegistration, "commandName">;
+    } {
+  const seen = new Set<string>();
+  const normalized: DiscordCommandOptionEntry[] = [];
+
+  for (const [sourceName, option] of entries) {
+    const discordName = encodeDiscordCommandOptionName(sourceName);
+    if (seen.has(discordName)) {
+      return {
+        status: "invalid",
+        skipped: {
+          optionName: sourceName,
+          code: "COMMAND_OPTION_NAME_COLLISION",
+          reason: "command_option_name_collision",
+        },
+      };
+    }
+
+    seen.add(discordName);
+    normalized.push({ sourceName, discordName, option });
+  }
+
+  return { status: "valid", entries: normalized };
+}
+
+export function encodeDiscordCommandOptionName(name: string): string {
+  return name
+    .replaceAll(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9_-]/g, "_")
+    .slice(0, 32);
+}
+
+function sortOptionEntries(
+  entries: readonly DiscordCommandOptionEntry[],
+): readonly DiscordCommandOptionEntry[] {
   return [...entries].sort(
-    ([, a], [, b]) => Number(b.required === true) - Number(a.required === true),
+    (a, b) => Number(b.option.required === true) - Number(a.option.required === true),
   );
 }
 

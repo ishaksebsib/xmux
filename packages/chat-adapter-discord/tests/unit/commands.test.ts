@@ -58,6 +58,29 @@ describe("Discord command conversions", () => {
     }
   });
 
+  test("camelCase option names are normalized for Discord registration", () => {
+    const commands = defineChatCommands({
+      new: defineChatCommand({
+        description: "New session",
+        options: {
+          harnessId: stringOption({ description: "Harness id", required: true }),
+          shortId: stringOption({ description: "Short id" }),
+        },
+      }),
+    });
+
+    const payload = createDiscordCommandRegistration({ commands });
+
+    expect(payload.isOk()).toBe(true);
+    if (payload.isOk()) {
+      expect(payload.value.skipped).toEqual([]);
+      expect(payload.value.commands[0]?.options?.map((option) => option.name)).toEqual([
+        "harness_id",
+        "short_id",
+      ]);
+    }
+  });
+
   test("required options are ordered before optional options", () => {
     const commands = defineChatCommands({
       echo: defineChatCommand({
@@ -187,6 +210,28 @@ describe("Discord command conversions", () => {
         "COMMAND_OPTION_CHOICE_NUMBER_INVALID",
       ]);
     }
+  });
+
+  test("slash command options parse normalized Discord option names into typed command values", () => {
+    const commands = defineChatCommands({
+      new: defineChatCommand({
+        description: "New session",
+        options: {
+          harnessId: stringOption({ required: true }),
+          shortId: stringOption(),
+        },
+      }),
+    });
+
+    const parsed = parseDiscordCommand({
+      commands,
+      interaction: interactionOptions("new", { harness_id: "opencode", short_id: "abc123" }),
+    });
+
+    expect(parsed).toEqual({
+      status: "command",
+      command: { name: "new", options: { harnessId: "opencode", shortId: "abc123" } },
+    });
   });
 
   test("slash command options parse into typed command values", () => {
