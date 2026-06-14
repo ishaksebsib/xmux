@@ -31,7 +31,7 @@ export function createTelegramAllowedUsersMiddleware(input: string | undefined) 
   };
 }
 
-export function createTelegramTypingIndicatorMiddleware() {
+export function createTypingIndicatorMiddleware() {
   return async (
     ctx: { readonly event: XmuxRoutedChatEvent },
     next: () => Promise<Result<void, unknown>>,
@@ -44,10 +44,8 @@ export function createTelegramTypingIndicatorMiddleware() {
         }) => Promise<Result<{ stop(): void }, unknown>>;
       }
     ).typingIndicator;
-    const indicator =
-      ctx.event.chatId === "telegram"
-        ? await typingIndicator?.({ mode: "managed", fallback: "ignore" })
-        : undefined;
+
+    const indicator = await typingIndicator?.({ mode: "managed", fallback: "ignore" });
 
     try {
       return await next();

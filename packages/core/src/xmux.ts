@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { createChat, type ChatAdapterDefinitions } from "@xmux/chat-core";
+import { createChat, type ChatAdapterDefinitions, type ChatLogger } from "@xmux/chat-core";
 import {
   createHarness,
   HarnessCloseError,
   type HarnessAdapterDefinitions,
+  type HarnessLogger,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { actions } from "./actions";
@@ -41,6 +42,8 @@ export interface CreateXmuxOptions<
   readonly store?: Store;
   readonly fs?: FileSystemHost;
   readonly middleware?: readonly XmuxMiddleware<TAdapters, TChats>[];
+	// TODO: change this to xmux logger later
+  readonly logger?: ChatLogger & HarnessLogger;
 }
 
 export type XmuxCloseCause = {
@@ -53,7 +56,7 @@ export function createXmux<
   const TChats extends ChatAdapterDefinitions<TChats>,
 >(options: CreateXmuxOptions<TAdapters, TChats>): Xmux<TAdapters, TChats> {
   const config = normalizeConfig(options.config);
-  const harness = createHarness({ adapters: options.harnesses });
+  const harness = createHarness({ adapters: options.harnesses, logger: options.logger });
   const chatIds = Object.freeze(Object.keys(options.chats) as Extract<keyof TChats, string>[]);
   const shutdownController = new AbortController();
   const store = options.store ?? createInMemoryStore();
@@ -63,6 +66,7 @@ export function createXmux<
     adapters: options.chats,
     commands,
     actions,
+    logger: options.logger,
   });
 
   const ctx: Context<TAdapters, TChats> = Object.freeze({

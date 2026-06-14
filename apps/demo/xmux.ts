@@ -1,12 +1,13 @@
+import type { ChatLogger } from "@xmux/chat-core";
+import { createDiscordAdapter } from "@xmux/chat-adapter-discord";
 import { createTelegramAdapter } from "@xmux/chat-adapter-telegram";
 import { createInMemoryStore, createXmux } from "@xmux/core";
 import { createOpenCodeAdapter } from "@xmux/harness-opencode";
+import { createPiAdapter } from "@xmux/harness-pi";
 import {
   createTelegramAllowedUsersMiddleware,
   createTypingIndicatorMiddleware,
 } from "./middleware";
-import { createPiAdapter } from "@xmux/harness-pi";
-import { createDiscordAdapter } from "@xmux/chat-adapter-discord";
 
 export async function runXmuxDemo() {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -24,6 +25,7 @@ export async function runXmuxDemo() {
     );
   }
 
+  const logger = createDemoLogger();
   const xmux = createXmux({
     harnesses: {
       opencode: createOpenCodeAdapter({ mode: "embedded" }),
@@ -51,40 +53,25 @@ export async function runXmuxDemo() {
       createTelegramAllowedUsersMiddleware(process.env.XMUX_ALLOWED_TELEGRAM_USER_IDS),
       createTypingIndicatorMiddleware(),
     ],
-  });
-
-  xmux.ctx.chat.on("ready", (event) => {
-    console.log(`[xmux] chat ready: ${event.chatId}`);
-  });
-
-  xmux.ctx.chat.on("message", (event) => {
-    console.log(`[xmux] received message: ${event.message.text}`);
-  });
-
-  xmux.ctx.chat.on("command", "new", (event) => {
-    console.log(`[xmux] received /new ${event.command.options.harnessId}`);
-  });
-
-  xmux.ctx.chat.on("error", (event) => {
-    console.error("[xmux] chat error", event.error);
+    logger,
   });
 
   const initialized = await xmux.initialize();
   if (initialized.isErr()) {
-    console.error("[xmux] failed to start", initialized.error);
+    logger.error("xmux.demo.initialize.failure", { error: initialized.error });
     return;
   }
 
-  console.log("[xmux] running. Send /new opencode in Telegram or Discord.");
+  logger.info("xmux.demo.running", { message: "Send /new opencode in Telegram or Discord." });
 
   const shutdown = async () => {
-    console.log("[xmux] shutting down...");
+    logger.info("xmux.demo.shutdown.begin");
     const closed = await xmux.shutdown();
     if (closed.isErr()) {
-      console.error("[xmux] failed to shut down", closed.error);
+      logger.error("xmux.demo.shutdown.failure", { error: closed.error });
       return;
     }
-    console.log("[xmux] stopped");
+    logger.info("xmux.demo.shutdown.success");
   };
 
   process.once("SIGINT", () => {
@@ -93,4 +80,20 @@ export async function runXmuxDemo() {
   process.once("SIGTERM", () => {
     void shutdown().finally(() => process.exit());
   });
+}
+
+function createDemoLogger(): ChatLogger {
+  const write = (level: "debug" | "error" | "info" | "trace" | "warn") =>
+    ((event: unknown, metadata?: unknown) => {
+      const output = metadata === undefined ? [event] : [event, metadata];
+      console[level](...output);
+    }) satisfies ChatLogger[typeof level];
+
+  return {
+    trace: write("trace"),
+    debug: write("debug"),
+    info: write("info"),
+    warn: write("warn"),
+    error: write("error"),
+  } satisfies ChatLogger;
 }
