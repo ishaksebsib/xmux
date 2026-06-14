@@ -7,10 +7,7 @@ import {
   encodeDiscordReplyMessage,
   encodeDiscordSentMessage,
 } from "../conversions/outbound";
-import {
-  encodeDiscordStreamText,
-  streamDiscordTextBySegments,
-} from "../conversions/streaming";
+import { encodeDiscordStreamText, streamDiscordTextBySegments } from "../conversions/streaming";
 import { DiscordStreamReplyError } from "../errors";
 import {
   parseDiscordInteractionMessageId,

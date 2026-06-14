@@ -98,7 +98,10 @@ describe("Discord streams contract", () => {
       const result = await chat.streamMessage({
         chatId: "discord",
         conversationId: "channel-1",
-        content: { chunks: singleChunk(`${"a".repeat(2_000)}${"b".repeat(120)}`), format: "markdown" },
+        content: {
+          chunks: singleChunk(`${"a".repeat(2_000)}${"b".repeat(120)}`),
+          format: "markdown",
+        },
         fallback: "error",
         adapterOptions: {},
       });
@@ -111,8 +114,12 @@ describe("Discord streams contract", () => {
       expect(fake.sentMessages).toHaveLength(2);
       expect(fake.editedMessages).toHaveLength(1);
       expect(fake.editedMessages[0]).toMatchObject({ channelId: "channel-1", messageId: "sent-1" });
-      expect((fake.editedMessages[0]?.payload as { content?: string } | undefined)?.content).toHaveLength(2_000);
-      expect((fake.sentMessages[1]?.payload as { content?: string } | undefined)?.content).toHaveLength(120);
+      expect(
+        (fake.editedMessages[0]?.payload as { content?: string } | undefined)?.content,
+      ).toHaveLength(2_000);
+      expect(
+        (fake.sentMessages[1]?.payload as { content?: string } | undefined)?.content,
+      ).toHaveLength(120);
     } finally {
       await chat.close();
     }
@@ -171,7 +178,9 @@ describe("Discord streams contract", () => {
       await vi.waitFor(() => expect(interaction.followUps).toHaveLength(1));
 
       expect(interaction.callOrder).toEqual(["deferReply", "editReply", "editReply", "followUp"]);
-      expect((interaction.editedReplies.at(-1) as { content?: string }).content).toHaveLength(2_000);
+      expect((interaction.editedReplies.at(-1) as { content?: string }).content).toHaveLength(
+        2_000,
+      );
       expect((interaction.followUps[0] as { content?: string }).content).toHaveLength(120);
       expect(fake.editedMessages).toHaveLength(0);
     } finally {

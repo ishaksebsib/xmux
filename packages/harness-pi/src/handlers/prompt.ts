@@ -1,7 +1,4 @@
-import type {
-  HarnessAdapterPromptInput,
-  HarnessAdapterPromptResult,
-} from "@xmux/harness-core";
+import type { HarnessAdapterPromptInput, HarnessAdapterPromptResult } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import {
   PiModelRequestError,

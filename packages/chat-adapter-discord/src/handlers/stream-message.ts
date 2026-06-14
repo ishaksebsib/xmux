@@ -3,10 +3,7 @@ import type { ChatAdapterStreamMessageInput, ChatSentMessage } from "@xmux/chat-
 import type { DiscordBotClient } from "../client";
 import type { DiscordAdapterConfig } from "../config";
 import { encodeDiscordMessagePayload, encodeDiscordSentMessage } from "../conversions/outbound";
-import {
-  encodeDiscordStreamText,
-  streamDiscordTextBySegments,
-} from "../conversions/streaming";
+import { encodeDiscordStreamText, streamDiscordTextBySegments } from "../conversions/streaming";
 import { DiscordStreamMessageError } from "../errors";
 import type { DiscordAdapterData, DiscordAdapterOptions } from "../types";
 import { createDiscordStreamOutput } from "./stream-output";
