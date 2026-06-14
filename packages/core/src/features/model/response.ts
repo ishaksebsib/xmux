@@ -36,6 +36,7 @@ import type {
   ModelUpdatedOutput,
 } from "./service";
 import { groupModelsByProvider } from "./service";
+import { formatActionButtonRows } from "../button-layout";
 import { formatModelSelector } from "./selector";
 
 export interface ModelFailureFormatOptions {
@@ -306,7 +307,7 @@ function formatModelWithoutVariant(model: HarnessModelRef): string {
 function formatProviderButtons(
   output: ModelShownOutput,
 ): readonly (readonly ChatButtonInput<Actions>[])[] {
-  return chunkButtons(
+  return formatActionButtonRows(
     output.providerGroups.map((provider, index) =>
       formatProviderButton({
         providerName: provider.providerName,
@@ -314,7 +315,6 @@ function formatProviderButtons(
         current: provider.models.some((model) => isSameBaseModel(model.ref, output.current.model)),
       }),
     ),
-    1,
   );
 }
 
@@ -336,14 +336,16 @@ function formatProviderButton(input: {
 function formatProviderModelButtons(
   output: ModelProviderOutput,
 ): readonly (readonly ChatButtonInput<Actions>[])[] {
-  return output.provider.models.slice(0, output.maxModelsPerProvider).map((model, modelIndex) => [
-    formatProviderModelButton({
-      model,
-      providerIndex: output.providerIndex,
-      modelIndex,
-      current: isSameBaseModel(model.ref, output.current.model),
-    }),
-  ]);
+  return formatActionButtonRows(
+    output.provider.models.slice(0, output.maxModelsPerProvider).map((model, modelIndex) =>
+      formatProviderModelButton({
+        model,
+        providerIndex: output.providerIndex,
+        modelIndex,
+        current: isSameBaseModel(model.ref, output.current.model),
+      }),
+    ),
+  );
 }
 
 function formatProviderModelButton(input: {
@@ -365,7 +367,7 @@ function formatProviderModelButton(input: {
 function formatThinkingButtons(
   output: ModelThinkingOutput,
 ): readonly (readonly ChatButtonInput<Actions>[])[] {
-  return chunkButtons(
+  return formatActionButtonRows(
     output.levels.map((level) =>
       formatThinkingButton({
         level,
@@ -374,7 +376,6 @@ function formatThinkingButtons(
         defaultLevel: output.defaultLevel,
       }),
     ),
-    1,
   );
 }
 
@@ -409,17 +410,6 @@ function isSameBaseModel(left: HarnessModelRef | undefined, right: HarnessModelR
     left.providerId === right.providerId &&
     left.modelId === right.modelId
   );
-}
-
-function chunkButtons(
-  buttons: readonly ChatButtonInput<Actions>[],
-  size: number,
-): readonly (readonly ChatButtonInput<Actions>[])[] {
-  const rows: ChatButtonInput<Actions>[][] = [];
-  for (let index = 0; index < buttons.length; index += size) {
-    rows.push(buttons.slice(index, index + size));
-  }
-  return rows;
 }
 
 function formatAvailableModels(input: {

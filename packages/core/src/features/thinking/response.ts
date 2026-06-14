@@ -19,6 +19,7 @@ import {
   ThinkingModelUnsetError,
 } from "./errors";
 import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { formatActionButtonRows } from "../button-layout";
 import { normalizeTextInput, type ActionMessage } from "../utils";
 import { formatModelSelector } from "../model/selector";
 import type {
@@ -278,9 +279,8 @@ function formatThinkingButtons(input: {
   readonly current?: HarnessThinkingLevel;
 }): readonly (readonly ChatButtonInput<Actions>[])[] {
   const levels = input.supportedLevels ?? thinkingLevels;
-  return chunkButtons(
+  return formatActionButtonRows(
     levels.map((level) => formatThinkingButton({ level, current: input.current })),
-    3,
   );
 }
 
@@ -347,17 +347,6 @@ function thinkingButtonView(
     label: `${level === current ? "✓ " : ""}${formatButtonLabel(level)}`,
     style: level === current ? "primary" : "secondary",
   };
-}
-
-function chunkButtons(
-  buttons: readonly ChatButtonInput<Actions>[],
-  size: number,
-): readonly (readonly ChatButtonInput<Actions>[])[] {
-  const rows: ChatButtonInput<Actions>[][] = [];
-  for (let index = 0; index < buttons.length; index += size) {
-    rows.push(buttons.slice(index, index + size));
-  }
-  return rows;
 }
 
 function formatButtonLabel(level: HarnessThinkingLevel): string {

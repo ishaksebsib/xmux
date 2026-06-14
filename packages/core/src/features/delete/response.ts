@@ -9,6 +9,7 @@ import {
   markdownText,
 } from "../../components";
 import { CommandHarnessNotConfiguredError } from "../errors";
+import { formatActionButtonRows } from "../button-layout";
 import {
   formatHarnessChoice,
   harnessSelectionMessage,
@@ -91,9 +92,11 @@ export function formatDeleteHarnessActionMessage(
 export function formatDeleteListActionMessage(output: DeleteListOutput): DeleteActionMessage {
   return {
     ...normalizeTextInput(formatDeleteList(output)),
-    buttons: output.group.sessions.map((session) => [
-      formatDeleteButton({ harnessId: session.harnessId, shortId: session.shortId }),
-    ]),
+    buttons: formatActionButtonRows(
+      output.group.sessions.map((session) =>
+        formatDeleteButton({ harnessId: session.harnessId, shortId: session.shortId }),
+      ),
+    ),
   };
 }
 

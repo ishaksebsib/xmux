@@ -2,6 +2,7 @@ import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
 import type { Actions } from "../../../actions";
 import { inlineCode, markdown } from "../../../components";
 import type { ActionMessage } from "../../utils";
+import { formatActionButtonRows } from "../../button-layout";
 import { normalizeTextInput } from "../../utils";
 
 /** Header text plus the per-state wording for a harness picker prompt. */
@@ -40,6 +41,6 @@ export function harnessSelectionMessage(input: {
 }): ActionMessage {
   return {
     ...normalizeTextInput(formatHarnessChoice(input.prompt)),
-    buttons: input.prompt.harnessIds.map((harnessId) => [input.button(harnessId)]),
+    buttons: formatActionButtonRows(input.prompt.harnessIds.map((harnessId) => input.button(harnessId))),
   };
 }

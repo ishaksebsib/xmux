@@ -8,6 +8,7 @@ import {
   markdownText,
 } from "../../components";
 import { CommandHarnessNotConfiguredError } from "../errors";
+import { formatActionButtonRows } from "../button-layout";
 import {
   formatHarnessChoice,
   harnessSelectionMessage,
@@ -90,9 +91,11 @@ export function formatResumeHarnessActionMessage(
 export function formatResumeListActionMessage(output: ResumeListOutput): ResumeActionMessage {
   return {
     ...normalizeTextInput(formatResumeList(output)),
-    buttons: output.group.sessions.map((session) => [
-      formatResumeButton({ harnessId: session.harnessId, shortId: session.shortId }),
-    ]),
+    buttons: formatActionButtonRows(
+      output.group.sessions.map((session) =>
+        formatResumeButton({ harnessId: session.harnessId, shortId: session.shortId }),
+      ),
+    ),
   };
 }
 

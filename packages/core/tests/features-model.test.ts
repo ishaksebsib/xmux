@@ -326,7 +326,11 @@ describe("/model command", () => {
     expect(providerMessage).toContain("**OpenAI models** (10/11)");
     expect(providerMessage).not.toContain("- OpenAI Model 10");
     expect(providerMessage).not.toContain("- OpenAI Model 11");
-    expect(actionResponses[1]?.response.buttons).toHaveLength(10);
+    const modelButtons = actionResponses[1]?.response.buttons as
+      | readonly (readonly unknown[])[]
+      | undefined;
+    expect(modelButtons).toHaveLength(2);
+    expect(modelButtons?.map((row) => row.length)).toEqual([5, 5]);
 
     await xmux.shutdown();
   });
