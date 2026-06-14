@@ -159,7 +159,10 @@ describe("createPiAdapter Pi SDK integration", () => {
       expect(selectedThinking.isOk()).toBe(true);
       expect(selectedThinking.unwrap("selected thinking").level).toBe("high");
 
-      const found = await harness.getSession({ ref: session.ref, adapterOptions: adapterOptions() });
+      const found = await harness.getSession({
+        ref: session.ref,
+        adapterOptions: adapterOptions(),
+      });
       expect(found.isOk()).toBe(true);
       expect(found.unwrap("found session")).toMatchObject({ ref: session.ref });
 
@@ -172,10 +175,15 @@ describe("createPiAdapter Pi SDK integration", () => {
       expect(resumed.isOk()).toBe(true);
       expect(resumed.unwrap("resumed session")).toMatchObject({ ref: session.ref });
 
-      const listed = await harness.listSessions({ harnessId: "pi", adapterOptions: adapterOptions() });
+      const listed = await harness.listSessions({
+        harnessId: "pi",
+        adapterOptions: adapterOptions(),
+      });
       expect(listed.isOk()).toBe(true);
       expect(
-        listed.unwrap("listed sessions").some((item) => item.ref.sessionId === session.ref.sessionId),
+        listed
+          .unwrap("listed sessions")
+          .some((item) => item.ref.sessionId === session.ref.sessionId),
       ).toBe(true);
 
       const prompted = await harness.prompt({
@@ -199,7 +207,10 @@ describe("createPiAdapter Pi SDK integration", () => {
       const aborted = await harness.abort({ ref: session.ref, adapterOptions: adapterOptions() });
       expect(aborted.isOk()).toBe(true);
 
-      const deleted = await harness.deleteSession({ ref: session.ref, adapterOptions: adapterOptions() });
+      const deleted = await harness.deleteSession({
+        ref: session.ref,
+        adapterOptions: adapterOptions(),
+      });
       expect(deleted.isOk()).toBe(true);
       createdRef = undefined;
     } finally {
