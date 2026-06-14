@@ -477,39 +477,53 @@ export function createChat<
     return result;
   }
 
+  async function closeRuntime(args: {
+    readonly chatId: string;
+    readonly runtime: OpenedRuntime;
+    readonly reason?: "startup_cleanup";
+    readonly failureLevel?: "error" | "warn";
+    readonly emitClosed?: boolean;
+  }): Promise<Result<void, { readonly chatId: string; readonly cause: unknown }>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      chatId: args.chatId,
+      operation: "closeAdapter",
+      ...(args.reason === undefined ? {} : { reason: args.reason }),
+    } as const;
+
+    logger.debug(chatLogEvents.adapterCloseBegin, metadata);
+
+    const result = await Result.tryPromise({
+      try: async () => {
+        try {
+          await args.runtime.close();
+        } finally {
+          openedRuntimes.delete(args.chatId);
+        }
+        if (args.emitClosed === true) emit({ type: "closed", chatId: args.chatId as TChatId });
+      },
+      catch: (cause) => ({ chatId: args.chatId, cause }),
+    });
+
+    logChatResult({
+      logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.adapterCloseSuccess,
+      failureEvent: chatLogEvents.adapterCloseFailure,
+      failureLevel: args.failureLevel,
+    });
+
+    return result;
+  }
+
   async function cleanupOpenedRuntimes() {
-    const cleanupResults = await Promise.all(
-      [...openedRuntimes.entries()].map(async ([chatId, runtime]) => {
-        const startedAt = startChatLogTimer();
-        const metadata = {
-          chatId,
-          operation: "closeAdapter",
-          reason: "startup_cleanup",
-        } as const;
-
-        logger.debug(chatLogEvents.adapterCloseBegin, metadata);
-
-        const cleanup = await Result.tryPromise({
-          try: async () => runtime.close(),
-          catch: (cause) => ({ chatId, cause }),
-        });
-        openedRuntimes.delete(chatId);
-        const result = Result.map(cleanup, () => undefined);
-
-        logChatResult({
-          logger,
-          result,
-          startedAt,
-          metadata,
-          successEvent: chatLogEvents.adapterCloseSuccess,
-          failureEvent: chatLogEvents.adapterCloseFailure,
-          failureLevel: "warn",
-        });
-
-        return result;
-      }),
+    await Promise.all(
+      [...openedRuntimes.entries()].map(([chatId, runtime]) =>
+        closeRuntime({ chatId, runtime, reason: "startup_cleanup", failureLevel: "warn" }),
+      ),
     );
-    Result.partition(cleanupResults);
   }
 
   async function close(): Promise<Result<void, ChatCloseFailure>> {
@@ -540,38 +554,9 @@ export function createChat<
     abortController?.abort();
 
     const closeResults = await Promise.all(
-      [...openedRuntimes.entries()].map(async ([chatId, runtime]) => {
-        const adapterStartedAt = startChatLogTimer();
-        const adapterMetadata = {
-          chatId,
-          operation: "closeAdapter",
-        } as const;
-
-        logger.debug(chatLogEvents.adapterCloseBegin, adapterMetadata);
-
-        const closeResult = await Result.tryPromise({
-          try: async () => {
-            try {
-              await runtime.close();
-            } finally {
-              openedRuntimes.delete(chatId);
-            }
-            emit({ type: "closed", chatId: chatId as TChatId });
-          },
-          catch: (cause) => ({ chatId, cause }),
-        });
-
-        logChatResult({
-          logger,
-          result: closeResult,
-          startedAt: adapterStartedAt,
-          metadata: adapterMetadata,
-          successEvent: chatLogEvents.adapterCloseSuccess,
-          failureEvent: chatLogEvents.adapterCloseFailure,
-        });
-
-        return closeResult;
-      }),
+      [...openedRuntimes.entries()].map(([chatId, runtime]) =>
+        closeRuntime({ chatId, runtime, emitClosed: true }),
+      ),
     );
     const [, failures] = Result.partition(closeResults);
 
