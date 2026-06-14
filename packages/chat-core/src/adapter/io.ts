@@ -63,6 +63,7 @@ export interface ChatAdapterSendActionInput<
   TAdapterOptions extends ChatAdapterObject = Record<never, never>,
 >
   extends ChatConversationRef<TChatId>, ChatActionContent {
+  readonly message?: ChatMessageRef<TChatId>;
   readonly adapterOptions: TAdapterOptions;
   readonly signal?: AbortSignal;
 }

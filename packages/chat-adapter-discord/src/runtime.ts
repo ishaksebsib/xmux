@@ -308,6 +308,7 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
     const startedAt = startChatLogTimer();
     const metadata = {
       ...outboundMessageMetadata("sendAction", input),
+      messageId: input.message?.messageId,
       buttonRows: input.buttons.length,
       buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
     } as const;
@@ -316,6 +317,7 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
       chatId: this.id,
       client: this.client,
       config: this.config,
+      interactionRegistry: this.interactionRegistry,
       input,
     });
     logChatResult({

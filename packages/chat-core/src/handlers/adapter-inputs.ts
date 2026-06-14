@@ -72,6 +72,15 @@ export function createAdapterSendActionInput<
   return {
     chatId: input.chatId,
     conversationId: input.conversationId,
+    ...(input.messageId === undefined
+      ? {}
+      : {
+          message: {
+            chatId: input.chatId,
+            conversationId: input.conversationId,
+            messageId: input.messageId,
+          },
+        }),
     text: input.text,
     format: input.format,
     buttons: input.buttons,

@@ -100,6 +100,7 @@ export type ChatSendActionInputFor<
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
+  readonly messageId?: string;
   readonly text: string;
   readonly format?: ChatMessageFormat;
   readonly buttons: readonly (readonly ChatButtonInput<TActions>[])[];

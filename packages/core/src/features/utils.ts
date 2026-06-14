@@ -5,6 +5,7 @@ import type {
   ChatButtonInput,
   ChatConversationRef,
   ChatMessageFormat,
+  ChatMessageRef,
   ChatSendActionInput,
   ChatTextInput,
   ChatTextStreamContent,
@@ -19,6 +20,7 @@ import { CommandResponseError } from "./errors";
 export interface ChatEventWithConversation<TChatId extends string = string> {
   readonly chatId: TChatId;
   readonly conversation: ChatConversationRef<TChatId>;
+  readonly message?: ChatMessageRef<TChatId>;
 }
 
 export interface ChatEventWithReply {
@@ -259,6 +261,7 @@ export function toSendActionInput<
   return {
     chatId: input.event.chatId,
     conversationId: input.event.conversation.conversationId,
+    ...(input.event.message === undefined ? {} : { messageId: input.event.message.messageId }),
     text: message.text,
     format: message.format,
     buttons: message.buttons,

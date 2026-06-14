@@ -23,6 +23,7 @@ export function createSendActionHandler<
       chatId: String(input.chatId),
       operation: "sendAction",
       conversationId: input.conversationId,
+      messageId: input.messageId,
       textLength: input.text.length,
       format: input.format,
       buttonRows: input.buttons.length,

@@ -1,7 +1,10 @@
 import {
   ChatAdapterStartError,
   ChatReplyError,
+  actionValue,
   createChat,
+  defineChatAction,
+  defineChatActions,
   defineChatCommand,
   defineChatCommands,
   stringOption,
@@ -23,6 +26,10 @@ const commands = defineChatCommands({
     description: "Echo text back to Discord",
     options: { text: stringOption({ required: true }) },
   }),
+});
+
+const commandActions = defineChatActions({
+  pick: defineChatAction({ values: { ok: actionValue<undefined>() } }),
 });
 
 describe("Discord command contract", () => {
@@ -189,6 +196,71 @@ describe("Discord command contract", () => {
       await waitForCondition(() => interaction.followUps.length === 1);
       expect(interaction.editedReplies[0]).toMatchObject({ content: "first" });
       expect(interaction.followUps[0]).toMatchObject({ content: "second" });
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("chat.sendAction after slash command edits the original deferred response", async () => {
+    const fake = createFakeDiscordClient();
+    const chat = createChat({
+      adapters: {
+        discord: createDiscordAdapter({
+          token: "token",
+          applicationId: "application",
+          commandRegistration: { scope: { type: "guild", guildId: "guild" } },
+          createClient: (() => fake) satisfies CreateDiscordBotClient,
+        }),
+      },
+      commands,
+      actions: commandActions,
+    });
+    const interaction = createFakeSlashCommandInteraction("echo", { text: "hello" });
+    let emittedError: unknown;
+    let observedMessageId: string | undefined;
+
+    chat.on("error", (event) => {
+      emittedError = event.error;
+    });
+
+    chat.on("command", "echo", async (event) => {
+      observedMessageId = event.message?.messageId;
+      const sent = await chat.sendAction({
+        chatId: event.chatId,
+        conversationId: event.conversation.conversationId,
+        messageId: event.message?.messageId,
+        text: "Pick one",
+        buttons: [
+          [
+            {
+              id: "pick-ok",
+              label: "OK",
+              actionId: "pick",
+              value: "ok",
+            },
+          ],
+        ],
+        adapterOptions: {},
+      });
+      if (sent.isErr()) throw sent.error;
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitInteraction(interaction);
+
+      await waitForCondition(
+        () =>
+          interaction.editedReplies.length === 1 ||
+          fake.sentMessages.length > 0 ||
+          emittedError !== undefined,
+      );
+      expect(emittedError).toBeUndefined();
+      expect(observedMessageId).toBe("discord-interaction:interaction-1");
+      expect(interaction.editedReplies).toHaveLength(1);
+      expect(fake.sentMessages).toHaveLength(0);
+      expect(interaction.editedReplies[0]).toMatchObject({ content: "Pick one" });
+      expect(interaction.callOrder).toEqual(["deferReply", "editReply"]);
     } finally {
       await chat.close();
     }
