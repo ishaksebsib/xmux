@@ -2,12 +2,22 @@ import { Result } from "better-result";
 import type { ChatTextStreamChunk } from "@xmux/chat-core";
 import { DiscordFormattingError } from "../errors";
 import type { DiscordAdapterOptions } from "../types";
+import { formatDiscordText } from "./formatting";
 import { discordContentLimit, encodeDiscordText } from "./outbound";
 
 export type DiscordEditStreamErrorFactory<TError> = (args: {
   readonly reason?: string;
   readonly cause?: unknown;
 }) => TError;
+
+interface DiscordTextStreamInput<TError> {
+  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
+  readonly initialFlushedText: string;
+  readonly editIntervalMs: number;
+  readonly signal?: AbortSignal;
+  readonly flushText: (text: string) => Promise<void>;
+  readonly createError: DiscordEditStreamErrorFactory<TError>;
+}
 
 export interface DiscordEditStreamInput<TError> {
   readonly chunks: AsyncIterable<ChatTextStreamChunk>;
@@ -20,6 +30,17 @@ export interface DiscordEditStreamInput<TError> {
   readonly createError: DiscordEditStreamErrorFactory<TError>;
 }
 
+export interface DiscordSegmentedStreamInput<TError> {
+  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
+  readonly format?: "plain" | "markdown" | "html";
+  readonly adapterOptions: DiscordAdapterOptions;
+  readonly initialFlushedText: string;
+  readonly editIntervalMs: number;
+  readonly signal?: AbortSignal;
+  readonly reconcile: (segments: readonly string[]) => Promise<void>;
+  readonly createError: DiscordEditStreamErrorFactory<TError>;
+}
+
 export function encodeDiscordStreamText(args: {
   readonly text: string;
   readonly format?: "plain" | "markdown" | "html";
@@ -28,11 +49,69 @@ export function encodeDiscordStreamText(args: {
   return encodeDiscordText(args);
 }
 
+export function encodeDiscordStreamSegments(args: {
+  readonly text: string;
+  readonly format?: "plain" | "markdown" | "html";
+  readonly adapterOptions: DiscordAdapterOptions;
+}): Result<readonly string[], DiscordFormattingError> {
+  return Result.map(formatDiscordText(args), splitDiscordStreamText);
+}
+
+export function splitDiscordStreamText(text: string): readonly string[] {
+  if (text.length === 0) return [];
+
+  const segments: string[] = [];
+  let start = 0;
+
+  while (start < text.length) {
+    const end = chooseDiscordStreamSplitEnd(text, start);
+    segments.push(text.slice(start, end));
+    start = end;
+  }
+
+  return segments;
+}
+
 export async function streamDiscordTextByEditing<TError>(
   args: DiscordEditStreamInput<TError>,
 ): Promise<Result<{ readonly text: string }, TError>> {
+  return streamDiscordText({
+    ...args,
+    flushText: async (text) => {
+      ensureDiscordStreamLengthOrThrow(text);
+      const encoded = encodeDiscordStreamText({
+        text,
+        format: args.format,
+        adapterOptions: args.adapterOptions,
+      });
+      if (encoded.isErr()) throw encoded.error;
+      await args.edit(encoded.value);
+    },
+  });
+}
+
+export async function streamDiscordTextBySegments<TError>(
+  args: DiscordSegmentedStreamInput<TError>,
+): Promise<Result<{ readonly text: string }, TError>> {
+  return streamDiscordText({
+    ...args,
+    flushText: async (text) => {
+      const segments = encodeDiscordStreamSegments({
+        text,
+        format: args.format,
+        adapterOptions: args.adapterOptions,
+      });
+      if (segments.isErr()) throw segments.error;
+      await args.reconcile(segments.value);
+    },
+  });
+}
+
+function streamDiscordText<TError>(
+  args: DiscordTextStreamInput<TError>,
+): Promise<Result<{ readonly text: string }, TError>> {
   return Result.tryPromise({
-    try: () => runDiscordEditStream(args),
+    try: () => runDiscordTextStream(args),
     catch: (cause) =>
       args.createError({
         reason: isAbortError(args.signal, cause) ? "Discord stream was aborted" : undefined,
@@ -41,8 +120,8 @@ export async function streamDiscordTextByEditing<TError>(
   });
 }
 
-async function runDiscordEditStream<TError>(
-  args: DiscordEditStreamInput<TError>,
+async function runDiscordTextStream<TError>(
+  args: DiscordTextStreamInput<TError>,
 ): Promise<{ readonly text: string }> {
   const iterator = args.chunks[Symbol.asyncIterator]();
   let text = "";
@@ -70,16 +149,7 @@ async function runDiscordEditStream<TError>(
     cancelTimer();
     if (!force && (!dirty || text === flushedText)) return;
 
-    const encoded = encodeDiscordStreamText({
-      text,
-      format: args.format,
-      adapterOptions: args.adapterOptions,
-    });
-    if (encoded.isErr()) {
-      throw encoded.error;
-    }
-
-    await args.edit(encoded.value);
+    await args.flushText(text);
     flushedText = text;
     dirty = false;
     lastFlushAt = Date.now();
@@ -104,7 +174,6 @@ async function runDiscordEditStream<TError>(
       }
 
       text = applyDiscordStreamChunk(text, event.result.value);
-      ensureDiscordStreamLengthOrThrow(text);
       dirty = true;
 
       if (event.result.value.type === "completed") {
@@ -149,6 +218,44 @@ export function ensureDiscordStreamLength(text: string): Result<void, DiscordFor
 function ensureDiscordStreamLengthOrThrow(text: string): void {
   const result = ensureDiscordStreamLength(text);
   if (result.isErr()) throw result.error;
+}
+
+function chooseDiscordStreamSplitEnd(text: string, start: number): number {
+  const hardEnd = Math.min(text.length, start + discordContentLimit);
+  if (hardEnd === text.length) return hardEnd;
+
+  const preferred = lastPreferredSplit(text, start, hardEnd);
+  return avoidDanglingEscape(text, start, avoidSurrogateSplit(text, start, preferred ?? hardEnd));
+}
+
+function lastPreferredSplit(text: string, start: number, hardEnd: number): number | undefined {
+  for (const separator of ["\n\n", "\n", " "]) {
+    const index = text.lastIndexOf(separator, hardEnd - 1);
+    if (index > start) return index + separator.length;
+  }
+
+  return undefined;
+}
+
+function avoidSurrogateSplit(text: string, start: number, end: number): number {
+  if (end <= start + 1) return end;
+
+  const previous = text.charCodeAt(end - 1);
+  const next = text.charCodeAt(end);
+  return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff
+    ? end - 1
+    : end;
+}
+
+function avoidDanglingEscape(text: string, start: number, end: number): number {
+  if (end >= text.length || end <= start + 1 || text[end - 1] !== "\\") return end;
+
+  let slashCount = 0;
+  for (let index = end - 1; index >= start && text[index] === "\\"; index -= 1) {
+    slashCount += 1;
+  }
+
+  return slashCount % 2 === 1 ? end - 1 : end;
 }
 
 function readNext(iterator: AsyncIterator<ChatTextStreamChunk>) {

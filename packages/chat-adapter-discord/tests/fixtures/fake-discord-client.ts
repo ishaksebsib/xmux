@@ -1,6 +1,7 @@
 import type {
   DiscordBotClient,
   DiscordCreateThreadRequest,
+  DiscordDeleteMessageRequest,
   DiscordDownloadAttachmentRequest,
   DiscordEditMessageRequest,
   DiscordInteractionHandler,
@@ -20,6 +21,7 @@ export interface FakeDiscordBotClient extends DiscordBotClient {
   readonly loginCalls: DiscordBotToken[];
   readonly sentMessages: DiscordSendMessageRequest[];
   readonly editedMessages: DiscordEditMessageRequest[];
+  readonly deletedMessages: DiscordDeleteMessageRequest[];
   readonly typingRequests: DiscordSendTypingRequest[];
   readonly threadRequests: DiscordCreateThreadRequest[];
   readonly registeredCommands: DiscordRegisterCommandsRequest[];
@@ -49,6 +51,7 @@ export function createFakeDiscordClient(
     readonly sendMessageError?: unknown;
     readonly sendTypingError?: unknown;
     readonly editMessageError?: unknown;
+    readonly deleteMessageError?: unknown;
     readonly createThreadError?: unknown;
     readonly registerCommandsError?: unknown;
     readonly existingThreads?: Readonly<Record<string, string>>;
@@ -70,6 +73,7 @@ export function createFakeDiscordClient(
     loginCalls: [],
     sentMessages: [],
     editedMessages: [],
+    deletedMessages: [],
     typingRequests: [],
     threadRequests: [],
     registeredCommands: [],
@@ -128,6 +132,12 @@ export function createFakeDiscordClient(
         throw options.editMessageError;
       }
       return sentMessage(input.channelId, input.messageId, input);
+    },
+    async deleteMessage(input) {
+      fake.deletedMessages.push(input);
+      if (options.deleteMessageError !== undefined) {
+        throw options.deleteMessageError;
+      }
     },
     async createMessageThread(input) {
       const existingThreadId = options.existingThreads?.[input.messageId];

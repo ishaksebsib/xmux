@@ -89,6 +89,35 @@ describe("Discord streams contract", () => {
     }
   });
 
+  test("chat.streamMessage rolls long streams over multiple Discord messages", async () => {
+    const fake = createFakeDiscordClient();
+    const chat = createDiscordChat(fake);
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      const result = await chat.streamMessage({
+        chatId: "discord",
+        conversationId: "channel-1",
+        content: { chunks: singleChunk(`${"a".repeat(2_000)}${"b".repeat(120)}`), format: "markdown" },
+        fallback: "error",
+        adapterOptions: {},
+      });
+
+      expect(result.isOk()).toBe(true);
+      if (result.isOk()) {
+        expect(result.value).toMatchObject({ messageId: "sent-2" });
+        expect(result.value.text).toHaveLength(2_120);
+      }
+      expect(fake.sentMessages).toHaveLength(2);
+      expect(fake.editedMessages).toHaveLength(1);
+      expect(fake.editedMessages[0]).toMatchObject({ channelId: "channel-1", messageId: "sent-1" });
+      expect((fake.editedMessages[0]?.payload as { content?: string } | undefined)?.content).toHaveLength(2_000);
+      expect((fake.sentMessages[1]?.payload as { content?: string } | undefined)?.content).toHaveLength(120);
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("event.replyStream after slash command edits the deferred original response", async () => {
     vi.useFakeTimers();
     const fake = createFakeDiscordClient();
@@ -120,6 +149,33 @@ describe("Discord streams contract", () => {
     } finally {
       await chat.close();
       vi.useRealTimers();
+    }
+  });
+
+  test("slash command stream replies send overflow segments as follow-ups", async () => {
+    const fake = createFakeDiscordClient();
+    const chat = createDiscordChat(fake);
+    const interaction = createFakeSlashCommandInteraction("stream_reply");
+
+    chat.on("command", "stream_reply", async (event) => {
+      const result = await event.replyStream(
+        { chunks: singleChunk(`${"a".repeat(2_000)}${"b".repeat(120)}`), format: "markdown" },
+        { mode: "conversation", fallback: "error", adapterOptions: {} },
+      );
+      if (result.isErr()) throw result.error;
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      fake.emitInteraction(interaction);
+      await vi.waitFor(() => expect(interaction.followUps).toHaveLength(1));
+
+      expect(interaction.callOrder).toEqual(["deferReply", "editReply", "editReply", "followUp"]);
+      expect((interaction.editedReplies.at(-1) as { content?: string }).content).toHaveLength(2_000);
+      expect((interaction.followUps[0] as { content?: string }).content).toHaveLength(120);
+      expect(fake.editedMessages).toHaveLength(0);
+    } finally {
+      await chat.close();
     }
   });
 
@@ -170,6 +226,10 @@ async function* delayedChunks() {
   yield { type: "delta" as const, delta: "hello" };
   await new Promise((resolve) => setTimeout(resolve, 1_500));
   yield { type: "delta" as const, delta: " world" };
+}
+
+async function* singleChunk(delta: string) {
+  yield { type: "delta" as const, delta };
 }
 
 function createFakeSlashCommandInteraction(commandName: string) {

@@ -7,14 +7,22 @@ import {
   encodeDiscordReplyMessage,
   encodeDiscordSentMessage,
 } from "../conversions/outbound";
-import { encodeDiscordStreamText, streamDiscordTextByEditing } from "../conversions/streaming";
+import {
+  encodeDiscordStreamText,
+  streamDiscordTextBySegments,
+} from "../conversions/streaming";
 import { DiscordStreamReplyError } from "../errors";
 import {
   parseDiscordInteractionMessageId,
   type DiscordInteractionRegistry,
 } from "../stores/interaction-registry";
 import type { DiscordAdapterData, DiscordAdapterOptions } from "../types";
-import { editDiscordStreamMessage } from "./stream-message";
+import { createDiscordStreamOutput } from "./stream-output";
+import {
+  deleteDiscordStreamSegment,
+  editDiscordStreamSegment,
+  sendDiscordStreamSegment,
+} from "./stream-segments";
 
 export async function streamReply<TChatId extends string>(args: {
   readonly chatId: TChatId;
@@ -34,10 +42,16 @@ export async function streamReply<TChatId extends string>(args: {
     );
 
     const initial = yield* Result.await(sendInitialStreamReply({ ...args, placeholder }));
-    let discordMessage = initial.discordMessage;
+    const output = createDiscordStreamOutput({
+      initialMessage: initial.discordMessage,
+      initialContent: placeholder,
+      editSegment: ({ content, message, index }) => initial.edit({ content, message, index }),
+      sendSegment: ({ content, index }) => initial.send({ content, index }),
+      deleteSegment: ({ message, index }) => initial.delete({ message, index }),
+    });
 
     const streamed = yield* Result.await(
-      streamDiscordTextByEditing({
+      streamDiscordTextBySegments({
         chunks: args.input.content.chunks,
         format: args.input.content.format,
         adapterOptions: args.input.adapterOptions,
@@ -45,8 +59,8 @@ export async function streamReply<TChatId extends string>(args: {
         editIntervalMs: args.config.stream.editIntervalMs,
         signal: args.input.signal,
         createError: ({ reason, cause }) => new DiscordStreamReplyError({ reason, cause }),
-        edit: async (content) => {
-          discordMessage = await initial.edit({ content, discordMessage });
+        reconcile: async (segments) => {
+          await output.reconcile(segments);
         },
       }),
     );
@@ -56,7 +70,7 @@ export async function streamReply<TChatId extends string>(args: {
         chatId: args.chatId,
         text: streamed.text,
         format: args.input.content.format,
-        discordMessage,
+        discordMessage: output.lastMessage,
       }),
     );
   });
@@ -78,30 +92,40 @@ function sendInitialStreamReply<TChatId extends string>(args: {
       interactionId === undefined ? undefined : args.interactionRegistry.get(interactionId);
 
     if (interactionId !== undefined && interactionContext !== undefined) {
-      args.interactionRegistry.markInitialResponseUsed(interactionId);
+      const useInitialReply = args.interactionRegistry.markInitialResponseUsed(interactionId);
+      const payload = (content: string) =>
+        encodeDiscordMessagePayload({
+          content,
+          adapterOptions: args.input.adapterOptions,
+          defaults: { allowedMentions: args.config.defaultAllowedMentions },
+        });
+
       const discordMessage = yield* Result.await(
         Result.tryPromise({
           try: () =>
-            interactionContext.editReply(
-              encodeDiscordMessagePayload({
-                content: args.placeholder,
-                adapterOptions: args.input.adapterOptions,
-                defaults: { allowedMentions: args.config.defaultAllowedMentions },
-              }),
-            ),
+            useInitialReply
+              ? interactionContext.editReply(payload(args.placeholder))
+              : interactionContext.followUp(payload(args.placeholder)),
           catch: (cause) => new DiscordStreamReplyError({ cause }),
         }),
       );
+
       return Result.ok({
         discordMessage,
-        edit: async ({ content }) =>
-          interactionContext.editReply(
-            encodeDiscordMessagePayload({
-              content,
-              adapterOptions: args.input.adapterOptions,
-              defaults: { allowedMentions: args.config.defaultAllowedMentions },
-            }),
-          ),
+        edit: ({ content, message, index }) =>
+          useInitialReply && index === 0
+            ? interactionContext.editReply(payload(content))
+            : editDiscordStreamSegment({
+                client: args.client,
+                message,
+                content,
+                adapterOptions: args.input.adapterOptions,
+                config: args.config,
+                signal: args.input.signal,
+              }),
+        send: ({ content }) => interactionContext.followUp(payload(content)),
+        delete: ({ message }) =>
+          deleteDiscordStreamSegment({ client: args.client, message, signal: args.input.signal }),
       } satisfies InitialStreamReply);
     }
 
@@ -142,15 +166,26 @@ function sendInitialStreamReply<TChatId extends string>(args: {
 
     return Result.ok({
       discordMessage,
-      edit: ({ content, discordMessage: message }) =>
-        editDiscordStreamMessage({
+      edit: ({ content, message }) =>
+        editDiscordStreamSegment({
           client: args.client,
-          discordMessage: message,
+          message,
           content,
           adapterOptions: args.input.adapterOptions,
           config: args.config,
           signal: args.input.signal,
         }),
+      send: ({ content }) =>
+        sendDiscordStreamSegment({
+          client: args.client,
+          conversationId: discordMessage.channelId,
+          content,
+          adapterOptions: args.input.adapterOptions,
+          config: args.config,
+          signal: args.input.signal,
+        }),
+      delete: ({ message }) =>
+        deleteDiscordStreamSegment({ client: args.client, message, signal: args.input.signal }),
     } satisfies InitialStreamReply);
   });
 }
@@ -159,6 +194,9 @@ interface InitialStreamReply {
   readonly discordMessage: DiscordSentMessage;
   edit(args: {
     readonly content: string;
-    readonly discordMessage: DiscordSentMessage;
+    readonly message: DiscordSentMessage;
+    readonly index: number;
   }): Promise<DiscordSentMessage>;
+  send(args: { readonly content: string; readonly index: number }): Promise<DiscordSentMessage>;
+  delete(args: { readonly message: DiscordSentMessage; readonly index: number }): Promise<void>;
 }

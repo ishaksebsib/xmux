@@ -1,11 +1,20 @@
 import { Result } from "better-result";
 import type { ChatAdapterStreamMessageInput, ChatSentMessage } from "@xmux/chat-core";
-import type { DiscordBotClient, DiscordSentMessage } from "../client";
+import type { DiscordBotClient } from "../client";
 import type { DiscordAdapterConfig } from "../config";
 import { encodeDiscordMessagePayload, encodeDiscordSentMessage } from "../conversions/outbound";
-import { encodeDiscordStreamText, streamDiscordTextByEditing } from "../conversions/streaming";
+import {
+  encodeDiscordStreamText,
+  streamDiscordTextBySegments,
+} from "../conversions/streaming";
 import { DiscordStreamMessageError } from "../errors";
 import type { DiscordAdapterData, DiscordAdapterOptions } from "../types";
+import { createDiscordStreamOutput } from "./stream-output";
+import {
+  deleteDiscordStreamSegment,
+  editDiscordStreamSegment,
+  sendDiscordStreamSegment,
+} from "./stream-segments";
 
 export async function streamMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
@@ -23,7 +32,7 @@ export async function streamMessage<TChatId extends string>(args: {
       (cause) => new DiscordStreamMessageError({ cause }),
     );
 
-    let discordMessage = yield* Result.await(
+    const initialMessage = yield* Result.await(
       Result.tryPromise({
         try: () =>
           args.client.sendMessage({
@@ -39,8 +48,33 @@ export async function streamMessage<TChatId extends string>(args: {
       }),
     );
 
+    const output = createDiscordStreamOutput({
+      initialMessage,
+      initialContent: placeholder,
+      editSegment: ({ message, content }) =>
+        editDiscordStreamSegment({
+          client: args.client,
+          message,
+          content,
+          adapterOptions: args.input.adapterOptions,
+          config: args.config,
+          signal: args.input.signal,
+        }),
+      sendSegment: ({ content }) =>
+        sendDiscordStreamSegment({
+          client: args.client,
+          conversationId: args.input.conversationId,
+          content,
+          adapterOptions: args.input.adapterOptions,
+          config: args.config,
+          signal: args.input.signal,
+        }),
+      deleteSegment: ({ message }) =>
+        deleteDiscordStreamSegment({ client: args.client, message, signal: args.input.signal }),
+    });
+
     const streamed = yield* Result.await(
-      streamDiscordTextByEditing({
+      streamDiscordTextBySegments({
         chunks: args.input.content.chunks,
         format: args.input.content.format,
         adapterOptions: args.input.adapterOptions,
@@ -48,15 +82,8 @@ export async function streamMessage<TChatId extends string>(args: {
         editIntervalMs: args.config.stream.editIntervalMs,
         signal: args.input.signal,
         createError: ({ reason, cause }) => new DiscordStreamMessageError({ reason, cause }),
-        edit: async (content) => {
-          discordMessage = await editDiscordStreamMessage({
-            client: args.client,
-            discordMessage,
-            content,
-            adapterOptions: args.input.adapterOptions,
-            config: args.config,
-            signal: args.input.signal,
-          });
+        reconcile: async (segments) => {
+          await output.reconcile(segments);
         },
       }),
     );
@@ -66,30 +93,8 @@ export async function streamMessage<TChatId extends string>(args: {
         chatId: args.chatId,
         text: streamed.text,
         format: args.input.content.format,
-        discordMessage,
+        discordMessage: output.lastMessage,
       }),
     );
-  });
-}
-
-export async function editDiscordStreamMessage(args: {
-  readonly client: DiscordBotClient;
-  readonly discordMessage: DiscordSentMessage;
-  readonly content: string;
-  readonly adapterOptions: DiscordAdapterOptions;
-  readonly config: Pick<DiscordAdapterConfig, "defaultAllowedMentions">;
-  readonly signal?: AbortSignal;
-}): Promise<DiscordSentMessage> {
-  const payload = encodeDiscordMessagePayload({
-    content: args.content,
-    adapterOptions: args.adapterOptions,
-    defaults: { allowedMentions: args.config.defaultAllowedMentions },
-  });
-
-  return args.client.editMessage({
-    channelId: args.discordMessage.channelId,
-    messageId: args.discordMessage.messageId,
-    payload: { content: payload.content, allowedMentions: payload.allowedMentions },
-    signal: args.signal,
   });
 }
