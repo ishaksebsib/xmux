@@ -40,7 +40,7 @@ describe("workspace utilities", () => {
 
   test("returns stored cwd when a thread workspace exists", async () => {
     const root = await mkdtemp(join(tmpdir(), "xmux-workspace-"));
-    const child = join(root, "packages", "core");
+    const child = join(root, "packages", "orchestrator");
 
     try {
       await mkdir(child, { recursive: true });
@@ -59,7 +59,7 @@ describe("workspace utilities", () => {
 
   test("resolves relative directories from the current thread cwd", async () => {
     const root = await mkdtemp(join(tmpdir(), "xmux-workspace-"));
-    const child = join(root, "packages", "core");
+    const child = join(root, "packages", "orchestrator");
 
     try {
       await mkdir(child, { recursive: true });
@@ -67,7 +67,7 @@ describe("workspace utilities", () => {
       const resolved = await resolveDirectoryForThread({
         ctx: xmux.ctx,
         thread,
-        path: "packages/core",
+        path: "packages/orchestrator",
       });
 
       expect(resolved.unwrap("expected directory resolution to succeed")).toBe(child);

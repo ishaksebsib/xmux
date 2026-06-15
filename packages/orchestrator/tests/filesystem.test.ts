@@ -116,16 +116,16 @@ describe("workspace filesystem", () => {
     const root = await mkdtemp(join(tmpdir(), "xmux-fs-"));
 
     try {
-      await mkdir(join(root, "packages", "core"), { recursive: true });
+      await mkdir(join(root, "packages", "orchestrator"), { recursive: true });
       const fs = createNodeFileSystemHost();
       const resolved = await resolveDirectory({
         fs,
         baseCwd: root,
-        inputPath: "packages/core",
+        inputPath: "packages/orchestrator",
       });
 
       expect(resolved.unwrap("expected directory resolution to succeed")).toBe(
-        join(root, "packages", "core"),
+        join(root, "packages", "orchestrator"),
       );
     } finally {
       await rm(root, { force: true, recursive: true });

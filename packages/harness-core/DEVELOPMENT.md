@@ -109,7 +109,7 @@ pnpm --filter @xmux/harness-core typecheck
 pnpm --filter @xmux/harness-core test -- --run
 pnpm --filter @xmux/harness-opencode typecheck
 pnpm --filter @xmux/harness-opencode test -- --run
-pnpm --filter @xmux/core typecheck
+pnpm --filter @xmux/orchestrator typecheck
 pnpm --filter @xmux/demo typecheck
 pnpm --filter @xmux/harness-core build
 pnpm --filter @xmux/harness-opencode build

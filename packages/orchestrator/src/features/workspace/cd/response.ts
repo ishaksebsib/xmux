@@ -44,6 +44,6 @@ export function formatCdCommandUsage(): ChatTextInput {
     summary: "change current directory",
     description: "Set the workspace directory for future commands in this chat thread.",
     usage: "/cd <path>",
-    examples: ["/cd packages/core", "/cd .."],
+    examples: ["/cd packages/orchestrator", "/cd .."],
   });
 }

@@ -1,7 +1,7 @@
 import type { ChatLogger } from "@xmux/chat-core";
 import { createDiscordAdapter } from "@xmux/chat-adapter-discord";
 import { createTelegramAdapter } from "@xmux/chat-adapter-telegram";
-import { createInMemoryStore, createXmux } from "@xmux/core";
+import { createInMemoryStore, createXmux } from "@xmux/orchestrator";
 import { createOpenCodeAdapter } from "@xmux/harness-opencode";
 import { createPiAdapter } from "@xmux/harness-pi";
 import {

@@ -96,7 +96,7 @@ describe("createInMemoryStore", () => {
     const fetched = await store.workspaces.get(workspace.thread);
     const updated = await store.workspaces.set({
       ...workspace,
-      cwd: "/repo/packages/core",
+      cwd: "/repo/packages/orchestrator",
       createdAt: "2026-05-08T10:00:00.000Z",
       updatedAt: "2026-05-08T10:05:00.000Z",
     });
@@ -104,7 +104,7 @@ describe("createInMemoryStore", () => {
     expect(set.unwrap("expected workspace set to succeed")).toEqual(workspace);
     expect(fetched.unwrap("expected workspace to exist")).toEqual(workspace);
     expect(updated.unwrap("expected workspace update to succeed")).toMatchObject({
-      cwd: "/repo/packages/core",
+      cwd: "/repo/packages/orchestrator",
       createdAt: "2026-05-08T10:00:00.000Z",
       updatedAt: "2026-05-08T10:05:00.000Z",
     });
@@ -119,7 +119,7 @@ describe("createInMemoryStore", () => {
     const afterMutation = await store.workspaces.get(workspace.thread);
     expect(afterMutation.unwrap("expected workspace lookup to succeed")).toMatchObject({
       thread: { chatId: "telegram", threadId: "thread-1" },
-      cwd: "/repo/packages/core",
+      cwd: "/repo/packages/orchestrator",
     });
 
     await store.workspaces.delete(workspace.thread);

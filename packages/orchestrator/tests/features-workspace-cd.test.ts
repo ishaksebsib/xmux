@@ -19,47 +19,36 @@ const capabilities = {
   },
 } as const;
 
-describe("/ls command", () => {
-  test("lists current cwd with directories before files", async () => {
-    const root = await mkdtemp(join(tmpdir(), "xmux-ls-"));
-
-    try {
-      await mkdir(join(root, "src"));
-      await writeFile(join(root, "README.md"), "hello");
-      const { replies, emitCommand, xmux } = await initializeTestXmux({
-        defaultWorkingDirectory: root,
-      });
-
-      emitCommand(lsEvent({ conversationId: "conversation-1" }));
-      await eventually(() => replies.length === 1);
-
-      expect(replies[0]).toBe(
-        `**Directory listing**\n\nPath: \`${root}\`\n\n- 📁 \`src/\`\n- 📄 \`README.md\``,
-      );
-
-      await xmux.shutdown();
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  test("lists a relative target path", async () => {
-    const root = await mkdtemp(join(tmpdir(), "xmux-ls-"));
-    const child = join(root, "packages", "core");
+describe("/cd command", () => {
+  test("changes from default cwd to a child directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "xmux-cd-"));
+    const child = join(root, "packages", "orchestrator");
 
     try {
       await mkdir(child, { recursive: true });
-      await writeFile(join(child, "package.json"), "{}");
-      const { replies, emitCommand, xmux } = await initializeTestXmux({
+      const replies: string[] = [];
+      let emitCommand: ((event: unknown) => void) | undefined;
+      const xmux = createTestXmux({
+        replies,
         defaultWorkingDirectory: root,
+        onEmit: (emit) => {
+          emitCommand = emit;
+        },
       });
 
-      emitCommand(lsEvent({ conversationId: "conversation-1", path: "packages/core" }));
+      const initialized = await xmux.initialize();
+      expect(initialized.isOk()).toBe(true);
+
+      emitCommand?.(cdEvent({ conversationId: "conversation-1", path: "packages/orchestrator" }));
+
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(
-        `**Directory listing**\n\nPath: \`${child}\`\n\n- 📄 \`package.json\``,
-      );
+      expect(replies[0]).toBe(`**Directory changed**\n\nCurrent directory: \`${child}\``);
+      expect(
+        (
+          await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
+        ).unwrap("expected workspace lookup to succeed"),
+      ).toMatchObject({ cwd: child });
 
       await xmux.shutdown();
     } finally {
@@ -67,69 +56,76 @@ describe("/ls command", () => {
     }
   });
 
-  test("hides dotfiles by default", async () => {
-    const root = await mkdtemp(join(tmpdir(), "xmux-ls-"));
+  test("supports relative navigation such as ..", async () => {
+    const root = await mkdtemp(join(tmpdir(), "xmux-cd-"));
+    const child = join(root, "packages", "orchestrator");
+    const parent = join(root, "packages");
 
     try {
-      await writeFile(join(root, ".env"), "SECRET=1");
+      await mkdir(child, { recursive: true });
+      const replies: string[] = [];
+      let emitCommand: ((event: unknown) => void) | undefined;
+      const xmux = createTestXmux({
+        replies,
+        defaultWorkingDirectory: root,
+        onEmit: (emit) => {
+          emitCommand = emit;
+        },
+      });
+
+      const initialized = await xmux.initialize();
+      expect(initialized.isOk()).toBe(true);
+
+      emitCommand?.(cdEvent({ conversationId: "conversation-1", path: "packages/orchestrator" }));
+      await eventually(() => replies.length === 1);
+
+      emitCommand?.(cdEvent({ conversationId: "conversation-1", path: ".." }));
+      await eventually(() => replies.length === 2);
+
+      expect(replies[1]).toBe(`**Directory changed**\n\nCurrent directory: \`${parent}\``);
+      expect(
+        (
+          await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
+        ).unwrap("expected workspace lookup to succeed"),
+      ).toMatchObject({ cwd: parent });
+
+      await xmux.shutdown();
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  test("rejects file targets and nonexistent paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "xmux-cd-"));
+
+    try {
       await writeFile(join(root, "README.md"), "hello");
-      const { replies, emitCommand, xmux } = await initializeTestXmux({
+      const replies: string[] = [];
+      let emitCommand: ((event: unknown) => void) | undefined;
+      const xmux = createTestXmux({
+        replies,
         defaultWorkingDirectory: root,
+        onEmit: (emit) => {
+          emitCommand = emit;
+        },
       });
 
-      emitCommand(lsEvent({ conversationId: "conversation-1" }));
+      const initialized = await xmux.initialize();
+      expect(initialized.isOk()).toBe(true);
+
+      emitCommand?.(cdEvent({ conversationId: "conversation-1", path: "README.md" }));
       await eventually(() => replies.length === 1);
 
-      expect(replies[0]).toBe(`**Directory listing**\n\nPath: \`${root}\`\n\n- 📄 \`README.md\``);
+      emitCommand?.(cdEvent({ conversationId: "conversation-1", path: "missing" }));
+      await eventually(() => replies.length === 2);
 
-      await xmux.shutdown();
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  test("shows dotfiles when config enables hidden files", async () => {
-    const root = await mkdtemp(join(tmpdir(), "xmux-ls-"));
-
-    try {
-      await writeFile(join(root, ".env"), "SECRET=1");
-      await writeFile(join(root, "README.md"), "hello");
-      const { replies, emitCommand, xmux } = await initializeTestXmux({
-        defaultWorkingDirectory: root,
-        showHiddenFiles: true,
-      });
-
-      emitCommand(lsEvent({ conversationId: "conversation-1" }));
-      await eventually(() => replies.length === 1);
-
-      expect(replies[0]).toBe(
-        `**Directory listing**\n\nPath: \`${root}\`\n\n- 📄 \`.env\`\n- 📄 \`README.md\``,
-      );
-
-      await xmux.shutdown();
-    } finally {
-      await rm(root, { force: true, recursive: true });
-    }
-  });
-
-  test("truncates long listings", async () => {
-    const root = await mkdtemp(join(tmpdir(), "xmux-ls-"));
-
-    try {
-      await writeFile(join(root, "a.txt"), "a");
-      await writeFile(join(root, "b.txt"), "b");
-      await writeFile(join(root, "c.txt"), "c");
-      const { replies, emitCommand, xmux } = await initializeTestXmux({
-        defaultWorkingDirectory: root,
-        maxListEntries: 2,
-      });
-
-      emitCommand(lsEvent({ conversationId: "conversation-1" }));
-      await eventually(() => replies.length === 1);
-
-      expect(replies[0]).toBe(
-        `**Directory listing**\n\nPath: \`${root}\`\n\n- 📄 \`a.txt\`\n- 📄 \`b.txt\`\n\n_Showing 2 of 3 entries._`,
-      );
+      expect(replies[0]).toBe(`**Error:** Not a directory\n\n\`${join(root, "README.md")}\``);
+      expect(replies[1]).toBe(`**Error:** Path not found\n\n\`${join(root, "missing")}\``);
+      expect(
+        (
+          await xmux.ctx.store.workspaces.get({ chatId: "telegram", threadId: "conversation-1" })
+        ).unwrap("expected workspace lookup to succeed"),
+      ).toBeNull();
 
       await xmux.shutdown();
     } finally {
@@ -138,47 +134,21 @@ describe("/ls command", () => {
   });
 });
 
-function lsEvent(input: { readonly conversationId: string; readonly path?: string }) {
+function cdEvent(input: { readonly conversationId: string; readonly path: string }) {
   return {
     type: "command",
     chatId: "telegram",
     conversation: { chatId: "telegram", conversationId: input.conversationId },
     command: {
-      name: "ls",
-      options: input.path === undefined ? {} : { path: input.path },
+      name: "cd",
+      options: { path: input.path },
     },
   };
-}
-
-async function initializeTestXmux(input: {
-  readonly defaultWorkingDirectory: string;
-  readonly showHiddenFiles?: boolean;
-  readonly maxListEntries?: number;
-}) {
-  const replies: string[] = [];
-  let emitCommand: ((event: unknown) => void) | undefined;
-  const xmux = createTestXmux({
-    replies,
-    defaultWorkingDirectory: input.defaultWorkingDirectory,
-    showHiddenFiles: input.showHiddenFiles,
-    maxListEntries: input.maxListEntries,
-    onEmit: (emit) => {
-      emitCommand = emit;
-    },
-  });
-
-  const initialized = await xmux.initialize();
-  expect(initialized.isOk()).toBe(true);
-  expect(emitCommand).toBeDefined();
-
-  return { replies, emitCommand: emitCommand as (event: unknown) => void, xmux };
 }
 
 function createTestXmux(input: {
   readonly replies: string[];
   readonly defaultWorkingDirectory: string;
-  readonly showHiddenFiles?: boolean;
-  readonly maxListEntries?: number;
   readonly onEmit: (emit: (event: unknown) => void) => void;
 }) {
   return createXmux({
@@ -258,10 +228,6 @@ function createTestXmux(input: {
       userName: "xmux",
       defaultWorkingDirectory: input.defaultWorkingDirectory,
       deliveryMode: "requester_only",
-      workspace: {
-        showHiddenFiles: input.showHiddenFiles,
-        maxListEntries: input.maxListEntries,
-      },
     },
   });
 }

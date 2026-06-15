@@ -47,7 +47,7 @@ describe("/pwd command", () => {
     const replies: string[] = [];
     let emitCommand: ((event: unknown) => void) | undefined;
     const defaultWorkingDirectory = process.cwd();
-    const storedCwd = `${process.cwd()}/packages/core`;
+    const storedCwd = `${process.cwd()}/packages/orchestrator`;
 
     const xmux = createTestXmux({
       replies,

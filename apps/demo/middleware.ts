@@ -1,4 +1,4 @@
-import type { XmuxRoutedChatEvent } from "@xmux/core";
+import type { XmuxRoutedChatEvent } from "@xmux/orchestrator";
 import { Result } from "better-result";
 
 const restrictedResponse = (userId: string) =>

@@ -56,7 +56,7 @@ export function formatLsCommandUsage(): ChatTextInput {
     summary: "list directory entries",
     description: "Show files and directories in the current workspace or a relative path.",
     usage: "/ls [path]",
-    examples: ["/ls", "/ls packages/core"],
+    examples: ["/ls", "/ls packages/orchestrator"],
   });
 }
 
