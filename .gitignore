@@ -149,3 +149,6 @@ vite.config.ts.timestamp-*
 AGENTS.md
 
 .direnv
+
+# reference repos
+.repos
