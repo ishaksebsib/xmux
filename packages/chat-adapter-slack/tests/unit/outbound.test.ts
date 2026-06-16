@@ -1,0 +1,92 @@
+import { describe, expect, test } from "vitest";
+import { encodeSlackReplyMessage, encodeSlackSendMessage } from "../../src/conversions/outbound";
+
+describe("Slack outbound conversion", () => {
+  test("sendMessage maps conversation and native options", () => {
+    const result = encodeSlackSendMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      text: "hello <@U123>",
+      format: "plain",
+      adapterOptions: {
+        unfurl_links: false,
+        unfurl_media: false,
+        metadata: { event_type: "xmux", event_payload: { id: "1" } },
+      },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({
+        channel: "C123",
+        text: "hello &lt;@U123&gt;",
+        mrkdwn: false,
+        unfurl_links: false,
+        unfurl_media: false,
+        metadata: { event_type: "xmux", event_payload: { id: "1" } },
+      });
+    }
+  });
+
+  test("auto replies use a Slack thread when a message id exists", () => {
+    const result = encodeSlackReplyMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      message: { chatId: "slack", conversationId: "C123", messageId: "171.000100" },
+      text: "thread reply",
+      adapterOptions: { replyBroadcast: true },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.thread_ts).toBe("171.000100");
+      expect(result.value.reply_broadcast).toBe(true);
+    }
+  });
+
+  test("conversation replies stay in the channel", () => {
+    const result = encodeSlackReplyMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      message: { chatId: "slack", conversationId: "C123", messageId: "171.000100" },
+      mode: "conversation",
+      text: "channel reply",
+      adapterOptions: { replyBroadcast: true },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.thread_ts).toBeUndefined();
+      expect(result.value.reply_broadcast).toBeUndefined();
+    }
+  });
+
+  test("thread mode requires a message id", () => {
+    const result = encodeSlackReplyMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      mode: "thread",
+      text: "missing thread",
+      adapterOptions: {},
+    });
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain("message id");
+    }
+  });
+
+  test("auto replies without a message id fall back to channel", () => {
+    const result = encodeSlackReplyMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      text: "channel",
+      adapterOptions: {},
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.thread_ts).toBeUndefined();
+    }
+  });
+});

@@ -1,12 +1,16 @@
 import { defineChatAdapter, type ChatAdapterDefinition } from "@xmux/chat-core";
 import { slackAdapterCapabilities } from "./capabilities";
+import type { CreateSlackBotClient } from "./client";
 import { openSlackRuntime } from "./runtime";
 import type { SlackAdapterError } from "./errors";
 import type { CreateSlackAdapterOptions, SlackAdapterData, SlackAdapterOptions } from "./types";
 
 /** Creates a Slack adapter for chat-core. */
 export function createSlackAdapter<const TChatId extends string = "slack">(
-  options: CreateSlackAdapterOptions<TChatId> = {},
+  options: CreateSlackAdapterOptions<TChatId> & {
+    /** @internal Test seam for deterministic runtime lifecycle tests. */
+    readonly createClient?: CreateSlackBotClient;
+  } = {},
 ): ChatAdapterDefinition<
   TChatId,
   SlackAdapterOptions,
@@ -29,6 +33,7 @@ export function createSlackAdapter<const TChatId extends string = "slack">(
       return openSlackRuntime({
         chatId,
         options,
+        createClient: options.createClient,
         logger: options.logger ?? context.logger,
       });
     },

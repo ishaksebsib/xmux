@@ -1,4 +1,5 @@
 import type { ChatLogger } from "@xmux/chat-core";
+import type { AppOptions } from "@slack/bolt";
 
 /** Selects how Slack events are delivered. Socket Mode is the supported v1 runtime. */
 export type SlackAdapterMode =
@@ -56,6 +57,12 @@ export interface SlackStreamOptions {
   readonly editIntervalMs?: number;
 }
 
+/** Options forwarded to Bolt's App constructor after Slack credentials are applied. */
+export type SlackClientOptions = Omit<
+  AppOptions,
+  "token" | "appToken" | "signingSecret" | "socketMode"
+>;
+
 /** Configuration for creating a Slack chat adapter. */
 export interface CreateSlackAdapterOptions<TChatId extends string = "slack"> {
   readonly id?: TChatId;
@@ -63,5 +70,6 @@ export interface CreateSlackAdapterOptions<TChatId extends string = "slack"> {
   readonly mode?: SlackAdapterMode;
   readonly commandMode?: SlackCommandMode;
   readonly stream?: SlackStreamOptions;
+  readonly clientOptions?: SlackClientOptions;
   readonly logger?: ChatLogger;
 }

@@ -5,6 +5,7 @@ export type {
   SlackAdapterMode,
   SlackAdapterOptions,
   SlackBlock,
+  SlackClientOptions,
   SlackCommandMode,
   SlackMessageMetadata,
   SlackStreamOptions,
