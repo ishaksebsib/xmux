@@ -12,7 +12,7 @@ import { formatSlackText, type SlackFormattedText } from "./formatting";
 export const slackTextLimit = 40_000;
 export const slackMarkdownTextLimit = 12_000;
 
-type SlackSendMessagePayload = Omit<SlackPostMessageRequest, "signal">;
+export type SlackSendMessagePayload = Omit<SlackPostMessageRequest, "signal">;
 
 export function encodeSlackSendMessage(
   input: ChatAdapterSendMessageInput<string, SlackAdapterOptions>,
@@ -116,7 +116,7 @@ export function encodeSlackText(args: {
   });
 }
 
-function encodeSlackMessagePayload(args: {
+export function encodeSlackMessagePayload(args: {
   readonly formatted: SlackFormattedText;
   readonly adapterOptions: SlackAdapterOptions;
 }): Omit<SlackSendMessagePayload, "channel" | "thread_ts" | "reply_broadcast"> {

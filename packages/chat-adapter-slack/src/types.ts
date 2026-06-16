@@ -39,6 +39,23 @@ export type SlackAdapterOptions = {
 };
 
 /** Native Slack metadata kept opaque by chat-core. */
+export interface SlackActionEnvelope {
+  readonly actionId: string;
+  readonly value: string;
+  readonly payload?: unknown;
+}
+
+/** Optional process-local or persistent store for Slack button action envelopes. */
+export interface SlackActionStore {
+  get(key: string): SlackActionEnvelope | undefined | Promise<SlackActionEnvelope | undefined>;
+  set(
+    key: string,
+    envelope: SlackActionEnvelope,
+    options?: { readonly ttlMs?: number },
+  ): void | Promise<void>;
+  delete?(key: string): void | Promise<void>;
+}
+
 export type SlackAdapterData = {
   readonly slackTeamId?: string;
   readonly slackEnterpriseId?: string;
@@ -69,6 +86,7 @@ export interface CreateSlackAdapterOptions<TChatId extends string = "slack"> {
   readonly botToken?: string;
   readonly mode?: SlackAdapterMode;
   readonly commandMode?: SlackCommandMode;
+  readonly actionStore?: SlackActionStore;
   readonly stream?: SlackStreamOptions;
   readonly clientOptions?: SlackClientOptions;
   readonly logger?: ChatLogger;

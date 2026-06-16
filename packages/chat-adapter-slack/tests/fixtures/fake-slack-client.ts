@@ -1,4 +1,5 @@
 import type {
+  SlackActionEvent,
   SlackActionHandler,
   SlackBotClient,
   SlackBotIdentity,
@@ -29,6 +30,9 @@ export interface FakeSlackHandlerCounts {
 export interface FakeSlackClientOptions {
   readonly startError?: unknown;
   readonly stopError?: unknown;
+  readonly postMessageError?: unknown;
+  readonly updateMessageError?: unknown;
+  readonly postEphemeralError?: unknown;
   readonly botIdentity?: SlackBotIdentity;
   readonly downloadFile?: (input: SlackDownloadFileRequest) => Promise<Response>;
 }
@@ -44,6 +48,14 @@ export interface FakeSlackClient extends SlackBotClient {
   emitMessage(
     event: SlackMessageEvent["event"],
     options?: Pick<SlackMessageEvent, "retryNum" | "retryReason">,
+  ): Promise<void>;
+  emitAction(
+    action: SlackActionEvent["action"],
+    body: SlackActionEvent["body"],
+    options?: { readonly ack?: () => Promise<void> } & Pick<
+      SlackActionEvent,
+      "retryNum" | "retryReason"
+    >,
   ): Promise<void>;
   emitCommand(
     payload: SlackCommandEvent["payload"],
@@ -135,14 +147,23 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
     },
     async postMessage(input) {
       postMessageCalls.push(input);
+      if (options.postMessageError !== undefined) {
+        throw options.postMessageError;
+      }
       return createSentMessage(input.channel, `${messageCounter++}.000000`, input.thread_ts, input);
     },
     async updateMessage(input) {
       updateMessageCalls.push(input);
+      if (options.updateMessageError !== undefined) {
+        throw options.updateMessageError;
+      }
       return createSentMessage(input.channel, input.ts, undefined, input);
     },
     async postEphemeral(input) {
       postEphemeralCalls.push(input);
+      if (options.postEphemeralError !== undefined) {
+        throw options.postEphemeralError;
+      }
       return createSentMessage(input.channel, `${messageCounter++}.000000`, input.thread_ts, input);
     },
     async openFile(input: SlackOpenFileRequest) {
@@ -157,6 +178,10 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
     async emitMessage(event, emitOptions = {}) {
       const messageEvent = createMessageEvent(event, emitOptions);
       await Promise.all(messageHandlers.map((handler) => handler(messageEvent)));
+    },
+    async emitAction(action, body, emitOptions = {}) {
+      const event = createActionEvent(action, body, emitOptions);
+      await Promise.all(actionHandlers.map((handler) => handler(event)));
     },
     async emitCommand(payload, emitOptions = {}) {
       const event = createCommandEvent(payload, emitOptions);
@@ -185,6 +210,26 @@ function createMessageEvent(
     body: {} as SlackMessageEvent["body"],
     raw: {} as SlackMessageEvent["raw"],
     ...options,
+  };
+}
+
+function createActionEvent(
+  action: SlackActionEvent["action"],
+  body: SlackActionEvent["body"],
+  options: { readonly ack?: () => Promise<void> } & Pick<
+    SlackActionEvent,
+    "retryNum" | "retryReason"
+  >,
+): SlackActionEvent {
+  return {
+    payload: action,
+    action,
+    body,
+    ack: options.ack ?? (async () => undefined),
+    respond: (async () => undefined) as SlackActionEvent["respond"],
+    raw: {} as SlackActionEvent["raw"],
+    retryNum: options.retryNum,
+    retryReason: options.retryReason,
   };
 }
 

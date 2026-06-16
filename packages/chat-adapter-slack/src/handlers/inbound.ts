@@ -10,12 +10,14 @@ import {
   parseSlackCommand,
 } from "../commands";
 import type {
+  SlackActionEvent,
   SlackBotClient,
   SlackBotIdentity,
   SlackCommandEvent,
   SlackReactionEvent,
   SlackRetryMetadata,
 } from "../client";
+import { decodeSlackActionEvent } from "../conversions/actions";
 import { decodeSlackMessageEvent } from "../conversions/inbound";
 import { decodeSlackReactionEvent } from "../conversions/reactions";
 import { slackLogEvents, type SlackLogScope } from "../logger";
@@ -23,7 +25,7 @@ import {
   createSlackCommandInteractionId,
   type SlackInteractionRegistry,
 } from "../stores/interaction-registry";
-import type { SlackAdapterData, SlackCommandMode } from "../types";
+import type { SlackActionStore, SlackAdapterData, SlackCommandMode } from "../types";
 import type { SlackAdapterError } from "../errors";
 
 export function registerInboundHandlers<
@@ -33,6 +35,7 @@ export function registerInboundHandlers<
   readonly chatId: TChatId;
   readonly client: SlackBotClient;
   readonly commandMode: SlackCommandMode;
+  readonly actionStore?: SlackActionStore;
   readonly botIdentity?: SlackBotIdentity;
   readonly context: ChatAdapterStartContext<
     TCommands,
@@ -100,24 +103,26 @@ export function registerInboundHandlers<
     }),
   );
 
-  args.client.onAction((event) => {
-    void ackImmediately({
-      chatId: args.chatId,
-      context: args.context,
-      logger: args.logger,
-      operation: "action",
-      ack: event.ack,
-    });
-    if (isSlackRetry(event)) {
-      logRetryIgnored({ logger: args.logger, operation: "action", event });
-      return;
-    }
-    args.logger.debug(slackLogEvents.inboundIgnored, {
-      operation: "action",
-      reason: "not_implemented_until_phase_6",
-      actionType: event.action.type,
-    });
-  });
+  args.client.onAction((event) =>
+    runInboundHandler({
+      ...args,
+      eventType: "action",
+      handle: async () => {
+        await ackImmediately({
+          chatId: args.chatId,
+          context: args.context,
+          logger: args.logger,
+          operation: "action",
+          ack: event.ack,
+        });
+        if (isSlackRetry(event)) {
+          logRetryIgnored({ logger: args.logger, operation: "action", event });
+          return;
+        }
+        await handleActionEvent({ ...args, event });
+      },
+    }),
+  );
 
   args.client.onReactionAdded((event) =>
     handleReactionEvent({ ...args, operation: "reaction_added", event }),
@@ -126,6 +131,52 @@ export function registerInboundHandlers<
   args.client.onReactionRemoved((event) =>
     handleReactionEvent({ ...args, operation: "reaction_removed", event }),
   );
+}
+
+async function handleActionEvent<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly chatId: TChatId;
+  readonly actionStore?: SlackActionStore;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackActionEvent;
+  readonly interactionRegistry: SlackInteractionRegistry;
+  readonly logger: SlackLogScope;
+}): Promise<void> {
+  const decoded = await decodeSlackActionEvent({
+    chatId: args.chatId,
+    event: args.event,
+    actionStore: args.actionStore,
+  });
+  if (decoded.isErr()) {
+    throw decoded.error;
+  }
+
+  if (decoded.value.status === "ignored") {
+    args.logger.debug(slackLogEvents.inboundIgnored, {
+      operation: "action",
+      reason: decoded.value.reason,
+      actionType: args.event.action.type,
+    });
+    return;
+  }
+
+  args.interactionRegistry.putAction(decoded.value.context);
+  args.logger.debug(slackLogEvents.inboundEvent, {
+    eventType: decoded.value.event.type,
+    conversationId: decoded.value.event.conversation.conversationId,
+    messageId: decoded.value.event.message.messageId,
+    interactionId: decoded.value.event.interactionId,
+    actionId: decoded.value.event.actionId,
+    value: decoded.value.event.value,
+  });
+  args.context.emit(decoded.value.event);
 }
 
 function handleReactionEvent<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {

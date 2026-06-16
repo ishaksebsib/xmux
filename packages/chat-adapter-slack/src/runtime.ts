@@ -30,6 +30,8 @@ import {
 } from "./errors";
 import { registerInboundHandlers } from "./handlers/inbound";
 import { reply as handleReply } from "./handlers/reply";
+import { respondToAction as handleRespondToAction } from "./handlers/respond-action";
+import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { startSocket } from "./handlers/start-socket";
 import {
@@ -179,6 +181,7 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       chatId: this.id,
       client: this.client,
       commandMode: this.config.commandMode,
+      actionStore: this.config.actionStore,
       botIdentity,
       context,
       interactionRegistry: this.interactionRegistry,
@@ -255,17 +258,59 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
   }
 
   async sendAction(
-    _input: ChatAdapterSendActionInput<TChatId, SlackAdapterOptions>,
+    input: ChatAdapterSendActionInput<TChatId, SlackAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackSendActionError>> {
-    return Result.err(new SlackSendActionError({ reason: phaseNotImplemented("sendAction", 6) }));
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("sendAction", input),
+      buttonRows: input.buttons.length,
+      buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
+    } as const;
+    this.logger.debug(slackLogEvents.outboundBegin, metadata);
+    const result = await handleSendAction({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: slackLogEvents.outboundSuccess,
+      failureEvent: slackLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async respondToAction(
-    _input: ChatAdapterRespondToActionInput<TChatId, SlackAdapterOptions>,
+    input: ChatAdapterRespondToActionInput<TChatId, SlackAdapterOptions>,
   ): Promise<Result<void, SlackActionResponseError>> {
-    return Result.err(
-      new SlackActionResponseError({ reason: phaseNotImplemented("respondToAction", 6) }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      operation: "respondToAction",
+      conversationId: input.conversationId,
+      messageId: input.message.messageId,
+      interactionId: input.interactionId,
+      responseKind: input.response.kind,
+    } as const;
+    this.logger.debug(slackLogEvents.outboundBegin, metadata);
+    const result = await handleRespondToAction({
+      client: this.client,
+      config: this.config,
+      interactionRegistry: this.interactionRegistry,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: slackLogEvents.outboundSuccess,
+      failureEvent: slackLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async reply(

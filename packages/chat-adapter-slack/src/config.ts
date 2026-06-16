@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import { SlackConfigurationError } from "./errors";
 import type {
   CreateSlackAdapterOptions,
+  SlackActionStore,
   SlackAdapterMode,
   SlackCommandMode,
   SlackStreamOptions,
@@ -29,6 +30,7 @@ export interface SlackAdapterConfig {
   readonly botToken: SlackBotToken;
   readonly mode: SlackAdapterConfigMode;
   readonly commandMode: SlackCommandMode;
+  readonly actionStore?: SlackActionStore;
   readonly stream: Required<SlackStreamOptions>;
 }
 
@@ -59,7 +61,13 @@ export function parseSlackAdapterConfig<TChatId extends string>(
     const commandMode = yield* normalizeSlackCommandMode(options.commandMode);
     const stream = yield* normalizeSlackStreamOptions(options.stream);
 
-    return Result.ok({ botToken, mode, commandMode, stream });
+    return Result.ok({
+      botToken,
+      mode,
+      commandMode,
+      ...(options.actionStore === undefined ? {} : { actionStore: options.actionStore }),
+      stream,
+    });
   });
 }
 
