@@ -1,5 +1,6 @@
 import type { ServerResponse } from "node:http";
 import { Effect } from "effect";
+import type { ConfigValidateResponse, EffectiveConfigResponse } from "../contracts/config";
 import {
   CONTROL_RESPONSE_VERSION,
   ControlErrorPayload,
@@ -14,6 +15,8 @@ export type ControlResponseBody =
   | HealthResponse
   | StatusResponse
   | ShutdownResponse
+  | EffectiveConfigResponse
+  | ConfigValidateResponse
   | ControlErrorResponse;
 
 /** HTTP response wrapper keeps router logic independent from Node's API. */

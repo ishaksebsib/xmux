@@ -12,6 +12,37 @@ export class ActiveServerError extends Schema.TaggedErrorClass<ActiveServerError
   },
 ) {}
 
+/** Config parse failures are safe to show because they never include secret values. */
+export class ConfigParseError extends Schema.TaggedErrorClass<ConfigParseError>()(
+  "ConfigParseError",
+  {
+    path: Schema.String,
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
+
+/** Config validation failures normalize Schema errors at the file boundary. */
+export class ConfigValidationError extends Schema.TaggedErrorClass<ConfigValidationError>()(
+  "ConfigValidationError",
+  {
+    path: Schema.String,
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
+
+/** Secret resolution failures identify the reference but never include the value. */
+export class ConfigSecretError extends Schema.TaggedErrorClass<ConfigSecretError>()(
+  "ConfigSecretError",
+  {
+    path: Schema.String,
+    message: Schema.String,
+    env: Schema.optionalKey(Schema.String),
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
+
 /** Server startup failures are public because CLI start/status needs stable labels. */
 export class ServerStartupError extends Schema.TaggedErrorClass<ServerStartupError>()(
   "ServerStartupError",
@@ -71,8 +102,11 @@ export class ControlServerError extends Schema.TaggedErrorClass<ControlServerErr
 ) {}
 
 /** Public server failure union for CLI/control surfaces. */
+export type ConfigError = ConfigParseError | ConfigValidationError | ConfigSecretError;
+
 export type ServerError =
   | ActiveServerError
+  | ConfigError
   | ServerStartupError
   | RuntimePathError
   | ManifestError

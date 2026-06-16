@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { ServerConfig } from "../config/service";
 import { CONTROL_PROTOCOL_VERSION, ManifestEndpoint } from "../contracts/manifest";
 import {
   CONTROL_RESPONSE_VERSION,
@@ -87,6 +88,18 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
     return routeResponse(200, response);
   }
 
+  if (pathname === "/v1/config/effective" && method === "GET") {
+    const config = yield* ServerConfig;
+    const response = yield* config.getRedacted;
+    return routeResponse(200, response);
+  }
+
+  if (pathname === "/v1/config/validate" && method === "POST") {
+    const config = yield* ServerConfig;
+    const response = yield* config.validateCurrent;
+    return routeResponse(response.valid ? 200 : 422, response);
+  }
+
   if (pathname === "/v1/shutdown" && method === "POST") {
     const result = yield* shutdown.beginShutdown;
     if (result.accepted) {
@@ -105,7 +118,13 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
     return routeResult;
   }
 
-  if (pathname === "/healthz" || pathname === "/v1/status" || pathname === "/v1/shutdown") {
+  if (
+    pathname === "/healthz" ||
+    pathname === "/v1/status" ||
+    pathname === "/v1/config/effective" ||
+    pathname === "/v1/config/validate" ||
+    pathname === "/v1/shutdown"
+  ) {
     return errorResponse(405, "method_not_allowed", `Unsupported method: ${method}`);
   }
 

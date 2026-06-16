@@ -1,9 +1,11 @@
 import { request as httpRequest } from "node:http";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
+import { ServerConfig } from "../src/config/service";
+import { ConfigValidateResponse, EffectiveConfigResponse } from "../src/contracts/config";
 import {
   ControlErrorResponse,
   HealthResponse,
@@ -30,6 +32,8 @@ const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJso
 const decodeHealthResponse = Schema.decodeUnknownOption(HealthResponse);
 const decodeStatusResponse = Schema.decodeUnknownOption(StatusResponse);
 const decodeShutdownResponse = Schema.decodeUnknownOption(ShutdownResponse);
+const decodeEffectiveConfigResponse = Schema.decodeUnknownOption(EffectiveConfigResponse);
+const decodeConfigValidateResponse = Schema.decodeUnknownOption(ConfigValidateResponse);
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-control-"))),
@@ -46,6 +50,15 @@ const waitForPath = (path: string): Effect.Effect<void> =>
       yield* Effect.sleep(Duration.millis(10));
     }
     assert.fail(`Timed out waiting for path: ${path}`);
+  });
+
+const waitForMissingPath = (path: string): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (!(yield* exists(path))) return;
+      yield* Effect.sleep(Duration.millis(10));
+    }
+    assert.fail(`Timed out waiting for path removal: ${path}`);
   });
 
 const requestUnix = (
@@ -100,6 +113,22 @@ const decodeStatus = (body: string): StatusResponse => {
   return decoded.value;
 };
 
+const decodeEffectiveConfig = (body: string): EffectiveConfigResponse => {
+  const json = decodeUnknownJsonOption(body);
+  if (Option.isNone(json)) assert.fail("Expected JSON effective config response");
+  const decoded = decodeEffectiveConfigResponse(json.value);
+  if (Option.isNone(decoded)) assert.fail("Expected schema-valid effective config response");
+  return decoded.value;
+};
+
+const decodeConfigValidate = (body: string): ConfigValidateResponse => {
+  const json = decodeUnknownJsonOption(body);
+  if (Option.isNone(json)) assert.fail("Expected JSON config validation response");
+  const decoded = decodeConfigValidateResponse(json.value);
+  if (Option.isNone(decoded)) assert.fail("Expected schema-valid config validation response");
+  return decoded.value;
+};
+
 const decodeShutdown = (body: string): ShutdownResponse => {
   const json = decodeUnknownJsonOption(body);
   if (Option.isNone(json)) assert.fail("Expected JSON shutdown response");
@@ -107,6 +136,13 @@ const decodeShutdown = (body: string): ShutdownResponse => {
   if (Option.isNone(decoded)) assert.fail("Expected schema-valid shutdown response");
   return decoded.value;
 };
+
+const ConfigServiceUnexpected = Layer.succeed(ServerConfig)({
+  loadCurrent: () => Effect.die("unexpected config load"),
+  getEffective: Effect.die("unexpected config access"),
+  getRedacted: Effect.die("unexpected config access"),
+  validateCurrent: Effect.die("unexpected config validation"),
+});
 
 const makePaths = (root: string): ServerRuntimePaths => ({
   configPath: join(root, "config.jsonc"),
@@ -124,7 +160,7 @@ const makePaths = (root: string): ServerRuntimePaths => ({
 });
 
 describe("control router", () => {
-  layer(Layer.mergeAll(StatusRegistryLive, ShutdownCoordinatorLive))((it) => {
+  layer(Layer.mergeAll(StatusRegistryLive, ShutdownCoordinatorLive, ConfigServiceUnexpected))((it) => {
     it.effect("returns schema-valid status and idempotent shutdown responses", () =>
       Effect.gen(function* () {
         const root = yield* makeTempRoot;
@@ -193,13 +229,29 @@ describe("control server", () => {
   it.live("serves health/status and shuts down over a Unix socket", () =>
     Effect.gen(function* () {
       const root = yield* makeTempRoot;
+      const configPath = join(root, "config.jsonc");
       const socketPath = join(root, "runtime", "server.sock");
       const manifestPath = join(root, "server.json");
       const startupLockPath = join(root, "startup.lock");
+      yield* Effect.promise(() =>
+        writeFile(
+          configPath,
+          `{
+  "userName": "control-test",
+  "defaultWorkingDirectory": "./workspace",
+  "chats": {
+    "telegram": {
+      "enabled": true,
+      "token": { "value": "inline-telegram-token" }
+    }
+  }
+}`,
+        ),
+      );
 
       const fiber = yield* Effect.forkScoped(
         runXmuxServer({
-          configPath: join(root, "config.jsonc"),
+          configPath,
           pathOverrides: {
             stateDir: join(root, "state"),
             runtimeDir: join(root, "runtime"),
@@ -216,7 +268,7 @@ describe("control server", () => {
 
       yield* waitForPath(manifestPath);
       yield* waitForPath(socketPath);
-      assert.isFalse(yield* exists(startupLockPath));
+      yield* waitForMissingPath(startupLockPath);
 
       const healthResponse = yield* requestUnix(socketPath, "GET", "/healthz");
       assert.strictEqual(healthResponse.statusCode, 200);
@@ -230,10 +282,22 @@ describe("control server", () => {
       const status = decodeStatus(statusResponse.body);
       assert.strictEqual(status.state, "ready");
       assert.strictEqual(status.endpoint.path, socketPath);
-      assert.strictEqual(status.configPath, join(root, "config.jsonc"));
+      assert.strictEqual(status.configPath, configPath);
+
+      const configResponse = yield* requestUnix(socketPath, "GET", "/v1/config/effective");
+      assert.strictEqual(configResponse.statusCode, 200);
+      const effectiveConfig = decodeEffectiveConfig(configResponse.body);
+      assert.strictEqual(effectiveConfig.config.userName, "control-test");
+      assert.strictEqual(effectiveConfig.config.chats.telegram.token?.source, "value");
+      assert.notInclude(configResponse.body, "inline-telegram-token");
+
+      const validateResponse = yield* requestUnix(socketPath, "POST", "/v1/config/validate");
+      assert.strictEqual(validateResponse.statusCode, 200);
+      const validation = decodeConfigValidate(validateResponse.body);
+      assert.isTrue(validation.valid);
 
       const duplicateError = yield* runXmuxServer({
-        configPath: join(root, "config.jsonc"),
+        configPath,
         pathOverrides: {
           stateDir: join(root, "state"),
           runtimeDir: join(root, "runtime"),
@@ -247,6 +311,14 @@ describe("control server", () => {
         shutdownSignal: Effect.never,
       }).pipe(Effect.flip);
       assert.strictEqual(duplicateError._tag, "ActiveServerError");
+
+      yield* Effect.promise(() =>
+        writeFile(configPath, `{ "server": { "logLevel": "verbose" } }`),
+      );
+      const invalidValidateResponse = yield* requestUnix(socketPath, "POST", "/v1/config/validate");
+      assert.strictEqual(invalidValidateResponse.statusCode, 422);
+      const invalidValidation = decodeConfigValidate(invalidValidateResponse.body);
+      assert.isFalse(invalidValidation.valid);
 
       const shutdownResponse = yield* requestUnix(socketPath, "POST", "/v1/shutdown");
       assert.strictEqual(shutdownResponse.statusCode, 202);

@@ -1,5 +1,6 @@
 import { createServer, type Server as HttpServer } from "node:http";
 import { Effect, FileSystem } from "effect";
+import { ServerConfig } from "../config/service";
 import { ControlServerError } from "../errors";
 import type { ServerClock } from "../options";
 import type { ServerRuntimePaths } from "../runtime-state/paths";
@@ -132,7 +133,7 @@ const acquireUnixControlServer = Effect.fn("server.acquireUnixControlServer")(fu
   }
 
   const socketPath = input.paths.controlEndpoint.path;
-  const requestContext = yield* Effect.context<StatusRegistry | ShutdownCoordinator>();
+  const requestContext = yield* Effect.context<StatusRegistry | ShutdownCoordinator | ServerConfig>();
   yield* removeSocketFile(socketPath, "bind");
 
   const server = createServer((request, response) => {

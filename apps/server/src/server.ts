@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Path, Scope } from "effect";
+import { ServerConfig, ServerConfigLive } from "./config/service";
+import { SecretResolverLive } from "./config/resolve-secrets";
 import { bindControlServer } from "./control/server";
 import type { ServerError } from "./errors";
 import {
@@ -38,6 +40,7 @@ export const ServerShellLive = Layer.effect(ServerShell)(
     const pathService = yield* Path.Path;
     const status = yield* StatusRegistry;
     const shutdown = yield* ShutdownCoordinator;
+    const config = yield* ServerConfig;
 
     return {
       acquire: (options: NormalizedServerOptions) =>
@@ -46,6 +49,7 @@ export const ServerShellLive = Layer.effect(ServerShell)(
           const sessionId = randomUUID();
           const paths = yield* resolveRuntimePaths(options);
           yield* ensureRuntimeDirectories(paths);
+          yield* config.loadCurrent(paths.configPath);
           yield* assertNoActiveServer(paths);
           yield* withStartupLock(
             {
@@ -78,13 +82,22 @@ export const ServerShellLive = Layer.effect(ServerShell)(
           Effect.provideService(Path.Path, pathService),
           Effect.provideService(StatusRegistry, status),
           Effect.provideService(ShutdownCoordinator, shutdown),
+          Effect.provideService(ServerConfig, config),
         ),
     };
   }),
 );
 
 const NodePlatformLive = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
-const ServerServicesLive = Layer.mergeAll(StatusRegistryLive, ShutdownCoordinatorLive);
+const ServerConfigWithPlatformLive = Layer.provide(
+  ServerConfigLive,
+  Layer.mergeAll(NodePlatformLive, SecretResolverLive),
+);
+const ServerServicesLive = Layer.mergeAll(
+  StatusRegistryLive,
+  ShutdownCoordinatorLive,
+  ServerConfigWithPlatformLive,
+);
 
 /** Default server layer wires Node platform and lifecycle services into the shell. */
 export const ServerLive = Layer.provide(

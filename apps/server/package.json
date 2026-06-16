@@ -37,7 +37,8 @@
   },
   "dependencies": {
     "@effect/platform-node": "beta",
-    "effect": "beta"
+    "effect": "beta",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@effect/vitest": "beta",

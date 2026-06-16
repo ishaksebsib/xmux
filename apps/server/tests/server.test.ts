@@ -1,4 +1,4 @@
-import { mkdtemp, rm, access } from "node:fs/promises";
+import { mkdtemp, rm, access, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
@@ -49,6 +49,35 @@ it.effect("constructs the server program with a fake shell layer", () =>
       "acquire:2026-06-16T00:00:00.000Z",
       "release:2026-06-16T00:00:00.000Z",
     ]);
+  }),
+);
+
+it.effect("fails config parse before publishing manifest or socket", () =>
+  Effect.gen(function* () {
+    const root = yield* makeTempRoot;
+    const configPath = join(root, "config.jsonc");
+    const manifestPath = join(root, "server.json");
+    const socketPath = join(root, "server.sock");
+    yield* Effect.promise(() => writeFile(configPath, "{ invalid json }"));
+
+    const error = yield* runXmuxServer({
+      configPath,
+      pathOverrides: {
+        stateDir: join(root, "state"),
+        runtimeDir: join(root, "runtime"),
+        logDir: join(root, "logs"),
+        dbPath: join(root, "state", "server.db"),
+        manifestPath,
+        startupLockPath: join(root, "startup.lock"),
+      },
+      controlEndpointOverride: { kind: "unix-socket", path: socketPath },
+      clock: fixedClock,
+      shutdownSignal: immediateShutdown,
+    }).pipe(Effect.flip);
+
+    assert.strictEqual(error._tag, "ConfigParseError");
+    assert.isFalse(yield* exists(manifestPath));
+    assert.isFalse(yield* exists(socketPath));
   }),
 );
 
