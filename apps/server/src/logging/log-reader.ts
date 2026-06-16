@@ -2,11 +2,12 @@ import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from 
 import { CONTROL_RESPONSE_VERSION } from "../contracts/control";
 import { LogEntry, LogsResponse } from "../contracts/logs";
 import { LogFileError } from "../errors";
-import { resolveServerLogFilePaths } from "./file-logger";
+import { DEFAULT_MAX_LOG_FILES, resolveServerLogFilePaths, rotatedLogPath } from "./file-logger";
 
 const DEFAULT_TAIL = 200;
 const MAX_TAIL = 1000;
 const MAX_READ_BYTES = 256 * 1024;
+const textEncoder = new TextEncoder();
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeLogEntry = Schema.decodeUnknownOption(LogEntry);
 
@@ -14,13 +15,23 @@ export interface ReadServerLogTailInput {
   readonly logDir: string;
   readonly tail?: number;
   readonly maxTail?: number;
+  /** Total bytes read across active and rotated log files. */
   readonly maxBytes?: number;
+  /** Total files considered per stream, including the active file. */
+  readonly maxFiles?: number;
 }
 
 const clampTail = (tail: number | undefined, maxTail: number): number => {
   if (tail === undefined || !Number.isInteger(tail) || tail < 1) return DEFAULT_TAIL;
   return Math.min(tail, maxTail);
 };
+
+const normalizeMaxFiles = (maxFiles: number | undefined): number =>
+  maxFiles === undefined || !Number.isInteger(maxFiles) || maxFiles < 1
+    ? DEFAULT_MAX_LOG_FILES
+    : maxFiles;
+
+const byteLength = (value: string): number => textEncoder.encode(value).byteLength;
 
 const decodeLine = (line: string): LogEntry | null => {
   const json = decodeUnknownJsonOption(line);
@@ -29,14 +40,14 @@ const decodeLine = (line: string): LogEntry | null => {
   return Option.isSome(decoded) ? decoded.value : null;
 };
 
-const parseLogLines = (raw: string, tail: number): readonly LogEntry[] => {
+const parseLogLines = (raw: string): readonly LogEntry[] => {
   const lines = raw.split("\n").filter((line) => line.trim().length > 0);
   const entries: LogEntry[] = [];
   for (const line of lines) {
     const entry = decodeLine(line);
     if (entry !== null) entries.push(entry);
   }
-  return entries.slice(-tail);
+  return entries;
 };
 
 const readBoundedFileTail = (
@@ -104,6 +115,36 @@ const readBoundedFileTail = (
     return newlineIndex < 0 ? text : text.slice(newlineIndex + 1);
   });
 
+const logPathsNewestFirst = (activePath: string, maxFiles: number): readonly string[] => {
+  const paths = [activePath];
+  for (let index = 1; index < maxFiles; index += 1) {
+    paths.push(rotatedLogPath(activePath, index));
+  }
+  return paths;
+};
+
+const readTailAcrossRotatedFiles = Effect.fn("server.readTailAcrossRotatedFiles")(function* (
+  input: {
+    readonly activePath: string;
+    readonly tail: number;
+    readonly maxFiles: number;
+    readonly maxBytes: number;
+  },
+) {
+  let remainingBytes = Math.max(input.maxBytes, 0);
+  let entries: readonly LogEntry[] = [];
+
+  for (const path of logPathsNewestFirst(input.activePath, input.maxFiles)) {
+    if (entries.length >= input.tail || remainingBytes <= 0) break;
+    const raw = yield* Effect.scoped(readBoundedFileTail(path, remainingBytes));
+    remainingBytes = Math.max(0, remainingBytes - byteLength(raw));
+    const fileEntries = parseLogLines(raw);
+    entries = [...fileEntries, ...entries].slice(-input.tail);
+  }
+
+  return entries.slice(-input.tail);
+});
+
 /** Read a bounded tail from the main server log and decode schema-valid entries. */
 export const readServerLogTail = Effect.fn("server.readServerLogTail")(function* (
   input: ReadServerLogTailInput,
@@ -111,13 +152,16 @@ export const readServerLogTail = Effect.fn("server.readServerLogTail")(function*
   const pathService = yield* Path.Path;
   const paths = resolveServerLogFilePaths(pathService, input.logDir);
   const tail = clampTail(input.tail, input.maxTail ?? MAX_TAIL);
-  const raw = yield* Effect.scoped(
-    readBoundedFileTail(paths.mainLogPath, input.maxBytes ?? MAX_READ_BYTES),
-  );
+  const entries = yield* readTailAcrossRotatedFiles({
+    activePath: paths.mainLogPath,
+    tail,
+    maxFiles: normalizeMaxFiles(input.maxFiles),
+    maxBytes: input.maxBytes ?? MAX_READ_BYTES,
+  });
 
   return LogsResponse.make({
     version: CONTROL_RESPONSE_VERSION,
-    entries: parseLogLines(raw, tail),
+    entries,
   });
 });
 

@@ -2,7 +2,11 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { LogEntry } from "../src/contracts/logs";
-import { withFileLogger, resolveServerLogFilePaths } from "../src/logging/file-logger";
+import {
+  resolveServerLogFilePaths,
+  rotatedLogPath,
+  withFileLogger,
+} from "../src/logging/file-logger";
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
 
@@ -67,6 +71,74 @@ describe("structured file logging", () => {
           if (firstLine === undefined) assert.fail("Expected at least one log line");
           const decoded = decodeJsonLine(firstLine);
           assert.oneOf(decoded.level, ["info", "error"]);
+        }),
+      ),
+    );
+
+    it.effect("respects configured minimum log level", () =>
+      withTempLogDir(({ logDir, paths }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* Effect.scoped(
+            withFileLogger(
+              { logDir, logLevel: "warn" },
+              Effect.gen(function* () {
+                yield* Effect.logInfo("filtered info");
+                yield* Effect.logWarning("kept warning");
+                yield* Effect.logError("kept error");
+              }),
+            ),
+          );
+
+          const mainLog = yield* fs.readFileString(paths.mainLogPath);
+          assert.notInclude(mainLog, "filtered info");
+          assert.include(mainLog, "kept warning");
+          assert.include(mainLog, "kept error");
+        }),
+      ),
+    );
+
+    it.effect("rotates logs by size and tails across rotated files", () =>
+      withTempLogDir(({ logDir, paths }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* Effect.scoped(
+            withFileLogger(
+              { logDir, maxBytes: 320, maxFiles: 3 },
+              Effect.gen(function* () {
+                for (let index = 0; index < 10; index += 1) {
+                  yield* Effect.logInfo(`rotation-${index}`, { payload: "x".repeat(160) });
+                }
+              }),
+            ),
+          );
+
+          assert.isTrue(yield* fs.exists(paths.mainLogPath));
+          assert.isTrue(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 1)));
+          assert.isTrue(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 2)));
+          assert.isFalse(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 3)));
+
+          const response = yield* readServerLogTail({
+            logDir,
+            tail: 3,
+            maxFiles: 3,
+            maxBytes: 5_000,
+          });
+          assert.lengthOf(response.entries, 3);
+          assert.deepStrictEqual(response.entries[0]?.message, [
+            "rotation-7",
+            { payload: "x".repeat(160) },
+          ]);
+          assert.deepStrictEqual(response.entries[1]?.message, [
+            "rotation-8",
+            { payload: "x".repeat(160) },
+          ]);
+          assert.deepStrictEqual(response.entries[2]?.message, [
+            "rotation-9",
+            { payload: "x".repeat(160) },
+          ]);
         }),
       ),
     );

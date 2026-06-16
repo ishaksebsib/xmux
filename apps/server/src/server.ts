@@ -52,10 +52,10 @@ export const ServerShellLive = Layer.effect(ServerShell)(
           const sessionId = randomUUID();
           const paths = yield* resolveRuntimePaths(options);
           yield* ensureRuntimeDirectories(paths);
+          const effectiveConfig = yield* config.loadCurrent(paths.configPath);
           return yield* withFileLogger(
-            { logDir: paths.logDir },
+            { logDir: paths.logDir, logLevel: effectiveConfig.server.logLevel },
             Effect.gen(function* () {
-              yield* config.loadCurrent(paths.configPath);
               yield* assertNoActiveServer(paths);
               yield* withStartupLock(
                 {
