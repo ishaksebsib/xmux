@@ -1,10 +1,12 @@
 import { Effect } from "effect";
 
+/** Clock seam keeps startup timestamps deterministic in lifecycle tests. */
 export interface ServerClock {
   readonly now: () => Date;
 }
 
-export type RunXmuxServerControlEndpoint =
+/** Control endpoint overrides let tests avoid binding real local sockets. */
+export type ServerControlEndpoint =
   | {
       readonly kind: "unix-socket";
       readonly path: string;
@@ -14,7 +16,8 @@ export type RunXmuxServerControlEndpoint =
       readonly id: string;
     };
 
-export interface RunXmuxServerPathOverrides {
+/** Path overrides are test seams; production paths are derived from config scope. */
+export interface ServerPathOverrides {
   readonly stateDir?: string;
   readonly runtimeDir?: string;
   readonly logDir?: string;
@@ -23,13 +26,14 @@ export interface RunXmuxServerPathOverrides {
   readonly startupLockPath?: string;
 }
 
+/** CLI-facing server options stay small while leaving test seams explicit. */
 export interface RunXmuxServerOptions {
   /** Real product input from `xmux server run --foreground --config <path>`. */
   readonly configPath?: string;
   /** Test/host seam for Phase 2 path resolution. */
-  readonly pathOverrides?: RunXmuxServerPathOverrides;
+  readonly pathOverrides?: ServerPathOverrides;
   /** Test/host seam for Phase 3 control binding. */
-  readonly controlEndpointOverride?: RunXmuxServerControlEndpoint;
+  readonly controlEndpointOverride?: ServerControlEndpoint;
   /** Test seam for deterministic timestamps. */
   readonly clock?: ServerClock;
   /**
@@ -39,21 +43,24 @@ export interface RunXmuxServerOptions {
   readonly shutdownSignal?: Effect.Effect<void>;
 }
 
-export interface NormalizedRunXmuxServerOptions {
+/** Normalized options remove defaults once so services do not repeat fallback logic. */
+export interface NormalizedServerOptions {
   readonly configPath?: string;
-  readonly pathOverrides?: RunXmuxServerPathOverrides;
-  readonly controlEndpointOverride?: RunXmuxServerControlEndpoint;
+  readonly pathOverrides?: ServerPathOverrides;
+  readonly controlEndpointOverride?: ServerControlEndpoint;
   readonly clock: ServerClock;
   readonly shutdownSignal: Effect.Effect<void>;
 }
 
+/** System clock is the production default outside deterministic tests. */
 export const SystemServerClock: ServerClock = {
   now: () => new Date(),
 };
 
-export const normalizeRunXmuxServerOptions = (
+/** Normalize at the boundary so downstream services receive explicit values. */
+export const normalizeServerOptions = (
   options: RunXmuxServerOptions,
-): NormalizedRunXmuxServerOptions => ({
+): NormalizedServerOptions => ({
   configPath: options.configPath,
   pathOverrides: options.pathOverrides,
   controlEndpointOverride: options.controlEndpointOverride,

@@ -36,6 +36,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@effect/platform-node": "beta",
     "effect": "beta"
   },
   "devDependencies": {
