@@ -18,6 +18,7 @@ export const slackLogEvents = {
   closeSuccess: "xmux.slack.close.success",
   closeFailure: "xmux.slack.close.failure",
   commandsManual: "xmux.slack.commands.manual",
+  commandParseFailure: "xmux.slack.command.parse.failure",
   inboundEvent: "xmux.slack.inbound.event",
   inboundIgnored: "xmux.slack.inbound.ignored",
   outboundBegin: "xmux.slack.outbound.begin",

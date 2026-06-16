@@ -1,6 +1,7 @@
 import type {
   SlackActionHandler,
   SlackBotClient,
+  SlackCommandEvent,
   SlackCommandHandler,
   SlackDownloadFileRequest,
   SlackErrorHandler,
@@ -35,6 +36,10 @@ export interface FakeSlackClient extends SlackBotClient {
   readonly postMessageCalls: SlackPostMessageRequest[];
   readonly updateMessageCalls: SlackUpdateMessageRequest[];
   readonly postEphemeralCalls: SlackPostEphemeralRequest[];
+  emitCommand(
+    payload: SlackCommandEvent["payload"],
+    options?: { readonly ack?: () => Promise<void> },
+  ): Promise<void>;
   emitError(error: unknown): Promise<void>;
 }
 
@@ -126,9 +131,25 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
     async downloadFile(_input: SlackDownloadFileRequest) {
       return new Response(new Uint8Array());
     },
+    async emitCommand(payload, emitOptions = {}) {
+      const event = createCommandEvent(payload, emitOptions.ack);
+      await Promise.all(commandHandlers.map((handler) => handler(event)));
+    },
     async emitError(error: unknown) {
       await Promise.all(errorHandlers.map((handler) => handler(error)));
     },
+  };
+}
+
+function createCommandEvent(
+  payload: SlackCommandEvent["payload"],
+  ack: (() => Promise<void>) | undefined,
+): SlackCommandEvent {
+  return {
+    payload,
+    ack: ack ?? (async () => undefined),
+    respond: (async () => undefined) as SlackCommandEvent["respond"],
+    raw: {} as SlackCommandEvent["raw"],
   };
 }
 

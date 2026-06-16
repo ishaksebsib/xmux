@@ -1,4 +1,5 @@
 export { createSlackAdapter } from "./adapter";
+export { createSlackCommandRegistration } from "./commands";
 export type {
   CreateSlackAdapterOptions,
   SlackAdapterData,
@@ -10,3 +11,4 @@ export type {
   SlackMessageMetadata,
   SlackStreamOptions,
 } from "./types";
+export type { SlackManualCommandRegistration, SlackManualSlashCommand } from "./commands";

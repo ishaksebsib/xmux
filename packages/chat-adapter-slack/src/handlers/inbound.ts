@@ -3,9 +3,19 @@ import {
   type ChatAdapterStartContext,
   type ChatCommandRegistry,
 } from "@xmux/chat-core";
-import type { SlackBotClient } from "../client";
+import {
+  createSlackCommandEvent,
+  createSlackInvalidCommandEvent,
+  createSlackUnknownCommandEvent,
+  parseSlackCommand,
+} from "../commands";
+import type { SlackBotClient, SlackCommandEvent } from "../client";
 import { slackLogEvents, type SlackLogScope } from "../logger";
-import type { SlackAdapterData } from "../types";
+import {
+  createSlackCommandInteractionId,
+  type SlackInteractionRegistry,
+} from "../stores/interaction-registry";
+import type { SlackAdapterData, SlackCommandMode } from "../types";
 import type { SlackAdapterError } from "../errors";
 
 export function registerInboundHandlers<
@@ -14,12 +24,14 @@ export function registerInboundHandlers<
 >(args: {
   readonly chatId: TChatId;
   readonly client: SlackBotClient;
+  readonly commandMode: SlackCommandMode;
   readonly context: ChatAdapterStartContext<
     TCommands,
     TChatId,
     SlackAdapterData,
     SlackAdapterError
   >;
+  readonly interactionRegistry: SlackInteractionRegistry;
   readonly logger: SlackLogScope;
 }): void {
   args.client.onMessage((event) => {
@@ -30,20 +42,22 @@ export function registerInboundHandlers<
     });
   });
 
-  args.client.onCommand((event) => {
-    void ackImmediately({
-      chatId: args.chatId,
-      context: args.context,
-      logger: args.logger,
-      operation: "command",
-      ack: event.ack,
-    });
-    args.logger.debug(slackLogEvents.inboundIgnored, {
-      operation: "command",
-      reason: "not_implemented_until_phase_4",
-      command: event.payload.command,
-    });
-  });
+  args.client.onCommand((event) =>
+    runInboundHandler({
+      ...args,
+      eventType: "command",
+      handle: async () => {
+        await ackImmediately({
+          chatId: args.chatId,
+          context: args.context,
+          logger: args.logger,
+          operation: "command",
+          ack: event.ack,
+        });
+        handleCommandEvent({ ...args, event });
+      },
+    }),
+  );
 
   args.client.onAction((event) => {
     void ackImmediately({
@@ -75,6 +89,110 @@ export function registerInboundHandlers<
       eventType: event.event.type,
     });
   });
+}
+
+function handleCommandEvent<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {
+  readonly chatId: TChatId;
+  readonly commandMode: SlackCommandMode;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackCommandEvent;
+  readonly interactionRegistry: SlackInteractionRegistry;
+  readonly logger: SlackLogScope;
+}): void {
+  putCommandInteractionContext(args);
+
+  const parsed = parseSlackCommand({
+    commands: args.context.commands,
+    payload: args.event.payload,
+    commandMode: args.commandMode,
+    logger: args.logger,
+  });
+  const event =
+    parsed.status === "command"
+      ? createSlackCommandEvent({
+          chatId: args.chatId,
+          payload: args.event.payload,
+          command: parsed.command,
+        })
+      : parsed.status === "unknown"
+        ? createSlackUnknownCommandEvent({
+            chatId: args.chatId,
+            payload: args.event.payload,
+            commandName: parsed.commandName,
+          })
+        : createSlackInvalidCommandEvent({
+            chatId: args.chatId,
+            payload: args.event.payload,
+            commandName: parsed.commandName,
+            reason: parsed.reason,
+            optionName: parsed.optionName,
+          });
+
+  args.logger.debug(slackLogEvents.inboundEvent, {
+    eventType: event.type,
+    conversationId: event.conversation.conversationId,
+    commandName: parsed.status === "command" ? parsed.command.name : parsed.commandName,
+  });
+  args.context.emit(event);
+}
+
+function putCommandInteractionContext<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackCommandEvent;
+  readonly interactionRegistry: SlackInteractionRegistry;
+}): void {
+  const interactionId = createSlackCommandInteractionId(args.event.payload);
+  args.interactionRegistry.putCommand({
+    interactionId,
+    commandId: args.event.payload.trigger_id,
+    commandName: args.event.payload.command,
+    responseUrl: args.event.payload.response_url,
+    channelId: args.event.payload.channel_id,
+    userId: args.event.payload.user_id,
+    triggerId: args.event.payload.trigger_id,
+    createdAt: Date.now(),
+    raw: args.event.payload,
+  });
+}
+
+async function runInboundHandler<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly chatId: TChatId;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly eventType: string;
+  readonly handle: () => Promise<void> | void;
+  readonly logger: SlackLogScope;
+}): Promise<void> {
+  try {
+    await args.handle();
+  } catch (error) {
+    args.logger.error(slackLogEvents.backgroundFailure, {
+      operation: "inbound",
+      eventType: args.eventType,
+      error: serializeChatLogError(error),
+    });
+    args.context.emit({ type: "error", chatId: args.chatId, error });
+  }
 }
 
 function ackImmediately<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {

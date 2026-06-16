@@ -15,6 +15,7 @@ import {
 } from "@xmux/chat-core";
 import { slackAdapterCapabilities } from "./capabilities";
 import { createSlackBotClient, type CreateSlackBotClient, type SlackBotClient } from "./client";
+import { createSlackCommandRegistration } from "./commands";
 import { normalizeSlackMode, parseSlackAdapterConfig, type SlackAdapterConfig } from "./config";
 import {
   SlackActionResponseError,
@@ -38,6 +39,10 @@ import {
   type ChatLogger,
   type SlackLogScope,
 } from "./logger";
+import {
+  createSlackInteractionRegistry,
+  type SlackInteractionRegistry,
+} from "./stores/interaction-registry";
 import type { CreateSlackAdapterOptions, SlackAdapterData, SlackAdapterOptions } from "./types";
 
 type SlackRuntimeState =
@@ -87,6 +92,7 @@ export function openSlackRuntime<TChatId extends string>(args: {
         chatId: args.chatId,
         client,
         config,
+        interactionRegistry: createSlackInteractionRegistry(),
         logger,
       }) satisfies SlackOpenedAdapter<TChatId>,
     );
@@ -115,16 +121,19 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
     readonly chatId: TChatId;
     readonly client: SlackBotClient;
     readonly config: SlackAdapterConfig;
+    readonly interactionRegistry: SlackInteractionRegistry;
     readonly logger: SlackLogScope;
   }) {
     this.id = args.chatId;
     this.client = args.client;
     this.config = args.config;
+    this.interactionRegistry = args.interactionRegistry;
     this.logger = args.logger;
   }
 
   private readonly client: SlackBotClient;
   private readonly config: SlackAdapterConfig;
+  private readonly interactionRegistry: SlackInteractionRegistry;
   private readonly logger: SlackLogScope;
 
   async start<TCommands extends ChatCommandRegistry>(
@@ -167,7 +176,14 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
     registerInboundHandlers({
       chatId: this.id,
       client: this.client,
+      commandMode: this.config.commandMode,
       context,
+      interactionRegistry: this.interactionRegistry,
+      logger: this.logger,
+    });
+    createSlackCommandRegistration({
+      commands: context.commands,
+      commandMode: this.config.commandMode,
       logger: this.logger,
     });
 
