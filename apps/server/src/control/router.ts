@@ -40,7 +40,7 @@ const makeStatusResponse = (
   if (input.paths.controlEndpoint.kind !== "unix-socket") return null;
   const uptimeMs = Math.max(0, input.clock.now().getTime() - input.startedAt.getTime());
 
-  return new StatusResponse({
+  return StatusResponse.make({
     version: CONTROL_RESPONSE_VERSION,
     protocolVersion: CONTROL_PROTOCOL_VERSION,
     pid: process.pid,
@@ -50,7 +50,7 @@ const makeStatusResponse = (
     configPath: input.paths.configPath,
     stateDir: input.paths.stateDir,
     scopeId: input.paths.scopeId,
-    endpoint: new ManifestEndpoint({
+    endpoint: ManifestEndpoint.make({
       kind: "unix-socket",
       path: input.paths.controlEndpoint.path,
     }),
@@ -70,7 +70,7 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
     const state = yield* status.getState;
     return routeResponse(
       200,
-      new HealthResponse({
+      HealthResponse.make({
         alive: true,
         ready: isReady(state),
         state,
@@ -95,7 +95,7 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
     const routeResult: ControlRouteResult = {
       response: {
         statusCode: 202,
-        body: new ShutdownResponse({
+        body: ShutdownResponse.make({
           accepted: result.accepted,
           alreadyStopping: result.alreadyStopping,
         }),

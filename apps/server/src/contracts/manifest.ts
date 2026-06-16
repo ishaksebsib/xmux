@@ -26,6 +26,7 @@ export class ServerManifest extends Schema.Class<ServerManifest>("ServerManifest
   version: Schema.Literal(SERVER_MANIFEST_VERSION),
   protocolVersion: Schema.Literal(CONTROL_PROTOCOL_VERSION),
   pid: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)),
+  sessionId: Schema.String,
   startedAt: Schema.String,
   configPath: Schema.String,
   stateDir: Schema.String,

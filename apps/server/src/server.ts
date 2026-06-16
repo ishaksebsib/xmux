@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Path, Scope } from "effect";
 import { bindControlServer } from "./control/server";
@@ -7,9 +8,10 @@ import {
   type NormalizedServerOptions,
   type RunXmuxServerOptions,
 } from "./options";
+import { assertNoActiveServer } from "./runtime-state/active-server";
 import { acquireManifestOwnership } from "./runtime-state/manifest";
 import { ensureRuntimeDirectories, resolveRuntimePaths } from "./runtime-state/paths";
-import { acquireStartupLock } from "./runtime-state/startup-lock";
+import { withStartupLock } from "./runtime-state/startup-lock";
 import { ShutdownCoordinator, ShutdownCoordinatorLive } from "./runtime/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLive } from "./runtime/status-registry";
 
@@ -41,14 +43,21 @@ export const ServerShellLive = Layer.effect(ServerShell)(
       acquire: (options: NormalizedServerOptions) =>
         Effect.gen(function* () {
           const startedAt = options.clock.now();
+          const sessionId = randomUUID();
           const paths = yield* resolveRuntimePaths(options);
           yield* ensureRuntimeDirectories(paths);
-          yield* acquireStartupLock({
-            startupLockPath: paths.startupLockPath,
-            clock: options.clock,
-          });
-          yield* bindControlServer({ paths, startedAt, clock: options.clock });
-          yield* acquireManifestOwnership({ paths, startedAt });
+          yield* assertNoActiveServer(paths);
+          yield* withStartupLock(
+            {
+              startupLockPath: paths.startupLockPath,
+              clock: options.clock,
+            },
+            Effect.gen(function* () {
+              yield* assertNoActiveServer(paths);
+              yield* bindControlServer({ paths, startedAt, clock: options.clock });
+              yield* acquireManifestOwnership({ paths, startedAt, sessionId });
+            }),
+          );
           yield* status.setState("ready");
           yield* Effect.addFinalizer(() =>
             Effect.gen(function* () {

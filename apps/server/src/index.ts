@@ -1,10 +1,10 @@
 export { runXmuxServer } from "./server";
 export type { RunXmuxServerOptions } from "./options";
 export {
+  ActiveServerError,
   ControlServerError,
   ManifestError,
   RuntimePathError,
-  ServerShutdownError,
   ServerStartupError,
   StartupLockError,
   type ServerError,

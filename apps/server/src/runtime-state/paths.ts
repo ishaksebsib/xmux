@@ -85,7 +85,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   const overrides = options.pathOverrides;
 
   if (process.platform === "win32" && options.controlEndpointOverride === undefined) {
-    return yield* new RuntimePathError({
+    return yield* RuntimePathError.make({
       message: "Windows control endpoints are not implemented yet.",
     });
   }
@@ -141,8 +141,19 @@ const makeDirectory = (directory: string): Effect.Effect<void, RuntimePathError,
     yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 }).pipe(
       Effect.mapError(
         (cause) =>
-          new RuntimePathError({
+          RuntimePathError.make({
             message: `Failed to create runtime directory: ${directory}`,
+            path: directory,
+            cause,
+          }),
+      ),
+    );
+    if (process.platform === "win32") return;
+    yield* fs.chmod(directory, 0o700).pipe(
+      Effect.mapError(
+        (cause) =>
+          RuntimePathError.make({
+            message: `Failed to secure runtime directory: ${directory}`,
             path: directory,
             cause,
           }),

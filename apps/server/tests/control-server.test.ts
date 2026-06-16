@@ -216,7 +216,7 @@ describe("control server", () => {
 
       yield* waitForPath(manifestPath);
       yield* waitForPath(socketPath);
-      assert.isTrue(yield* exists(startupLockPath));
+      assert.isFalse(yield* exists(startupLockPath));
 
       const healthResponse = yield* requestUnix(socketPath, "GET", "/healthz");
       assert.strictEqual(healthResponse.statusCode, 200);
@@ -231,6 +231,22 @@ describe("control server", () => {
       assert.strictEqual(status.state, "ready");
       assert.strictEqual(status.endpoint.path, socketPath);
       assert.strictEqual(status.configPath, join(root, "config.jsonc"));
+
+      const duplicateError = yield* runXmuxServer({
+        configPath: join(root, "config.jsonc"),
+        pathOverrides: {
+          stateDir: join(root, "state"),
+          runtimeDir: join(root, "runtime"),
+          logDir: join(root, "logs"),
+          dbPath: join(root, "state", "server.db"),
+          manifestPath,
+          startupLockPath,
+        },
+        controlEndpointOverride: { kind: "unix-socket", path: socketPath },
+        clock: fixedClock,
+        shutdownSignal: Effect.never,
+      }).pipe(Effect.flip);
+      assert.strictEqual(duplicateError._tag, "ActiveServerError");
 
       const shutdownResponse = yield* requestUnix(socketPath, "POST", "/v1/shutdown");
       assert.strictEqual(shutdownResponse.statusCode, 202);

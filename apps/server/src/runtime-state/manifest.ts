@@ -7,8 +7,8 @@ import {
   ServerOwnerMetadata,
 } from "../contracts/manifest";
 import { ManifestError } from "../errors";
+import { SERVER_PACKAGE_VERSION } from "../package-info";
 import type { ServerRuntimePaths } from "./paths";
-import { isPidAlive } from "./pid";
 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeManifest = Schema.decodeUnknownOption(ServerManifest);
@@ -17,6 +17,7 @@ const decodeManifest = Schema.decodeUnknownOption(ServerManifest);
 export interface ManifestOwnership {
   readonly path: string;
   readonly pid: number;
+  readonly sessionId: string;
   readonly wroteManifest: boolean;
 }
 
@@ -24,16 +25,16 @@ export interface ManifestOwnership {
 export interface CreateManifestInput {
   readonly paths: ServerRuntimePaths;
   readonly startedAt: Date;
+  readonly sessionId: string;
   readonly owner?: ServerOwnerMetadata;
 }
 
-/** Invalid or stale manifests return null so discovery never crashes the CLI. */
+/** Invalid manifests return null so discovery never crashes the CLI. */
 export const parseServerManifest = (raw: string): ServerManifest | null => {
   const json = decodeUnknownJsonOption(raw);
   if (Option.isNone(json)) return null;
   const decoded = decodeManifest(json.value);
   if (Option.isNone(decoded)) return null;
-  if (!isPidAlive(decoded.value.pid)) return null;
   return decoded.value;
 };
 
@@ -45,23 +46,24 @@ export const serializeServerManifest = (manifest: ServerManifest): string =>
 export const createServerManifest = (input: CreateManifestInput): ServerManifest | null => {
   if (input.paths.controlEndpoint.kind !== "unix-socket") return null;
 
-  return new ServerManifest({
+  return ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
     protocolVersion: CONTROL_PROTOCOL_VERSION,
     pid: process.pid,
+    sessionId: input.sessionId,
     startedAt: input.startedAt.toISOString(),
     configPath: input.paths.configPath,
     stateDir: input.paths.stateDir,
     scopeId: input.paths.scopeId,
-    endpoint: new ManifestEndpoint({
+    endpoint: ManifestEndpoint.make({
       kind: "unix-socket",
       path: input.paths.controlEndpoint.path,
     }),
     owner:
       input.owner ??
-      new ServerOwnerMetadata({
+      ServerOwnerMetadata.make({
         client: "server",
-        version: "0.0.0",
+        version: SERVER_PACKAGE_VERSION,
         executablePath: process.argv[1] ?? process.execPath,
       }),
   });
@@ -70,12 +72,23 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
 /** Read manifests defensively because the file is only discovery metadata. */
 export const readServerManifest = (
   manifestPath: string,
-): Effect.Effect<ServerManifest | null, never, FileSystem.FileSystem> =>
+): Effect.Effect<ServerManifest | null, ManifestError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const raw = yield* fs
-      .readFileString(manifestPath)
-      .pipe(Effect.catchCause(() => Effect.succeed(null)));
+    const raw = yield* fs.readFileString(manifestPath).pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound"
+          ? Effect.succeed(null)
+          : Effect.fail(
+              ManifestError.make({
+                operation: "read",
+                path: manifestPath,
+                message: `Failed to read server manifest: ${manifestPath}`,
+                cause: error,
+              }),
+            ),
+      ),
+    );
     if (raw === null) return null;
     return parseServerManifest(raw);
   });
@@ -93,7 +106,7 @@ export const writeServerManifest = (
     yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 }).pipe(
       Effect.mapError(
         (cause) =>
-          new ManifestError({
+          ManifestError.make({
             operation: "write",
             path: manifestPath,
             message: `Failed to create manifest directory: ${directory}`,
@@ -106,7 +119,7 @@ export const writeServerManifest = (
     }).pipe(
       Effect.mapError(
         (cause) =>
-          new ManifestError({
+          ManifestError.make({
             operation: "write",
             path: manifestPath,
             message: `Failed to write server manifest: ${manifestPath}`,
@@ -117,7 +130,7 @@ export const writeServerManifest = (
     yield* fs.chmod(manifestPath, 0o600).pipe(
       Effect.mapError(
         (cause) =>
-          new ManifestError({
+          ManifestError.make({
             operation: "write",
             path: manifestPath,
             message: `Failed to secure server manifest: ${manifestPath}`,
@@ -127,26 +140,35 @@ export const writeServerManifest = (
     );
   });
 
-/** Remove only the manifest owned by this PID to avoid deleting another server. */
-export const removeServerManifestIfOwnedBy = (input: {
-  readonly manifestPath: string;
-  readonly pid: number;
-}): Effect.Effect<void, ManifestError, FileSystem.FileSystem> =>
+/** Remove manifest files only after callers establish stale or owned status. */
+export const removeServerManifest = (
+  manifestPath: string,
+): Effect.Effect<void, ManifestError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
-    const manifest = yield* readServerManifest(input.manifestPath);
-    if (manifest?.pid !== input.pid) return;
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.remove(input.manifestPath, { force: true }).pipe(
+    yield* fs.remove(manifestPath, { force: true }).pipe(
       Effect.mapError(
         (cause) =>
-          new ManifestError({
+          ManifestError.make({
             operation: "remove",
-            path: input.manifestPath,
-            message: `Failed to remove server manifest: ${input.manifestPath}`,
+            path: manifestPath,
+            message: `Failed to remove server manifest: ${manifestPath}`,
             cause,
           }),
       ),
     );
+  });
+
+/** Remove only the manifest owned by this process/session pair. */
+export const removeServerManifestIfOwnedBy = (input: {
+  readonly manifestPath: string;
+  readonly pid: number;
+  readonly sessionId: string;
+}): Effect.Effect<void, ManifestError, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const manifest = yield* readServerManifest(input.manifestPath);
+    if (manifest?.pid !== input.pid || manifest.sessionId !== input.sessionId) return;
+    yield* removeServerManifest(input.manifestPath);
   });
 
 /** Acquire manifest ownership as a scoped resource to guarantee cleanup. */
@@ -155,7 +177,12 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
 ) {
   const manifest = createServerManifest(input);
   if (manifest === null) {
-    return { path: input.paths.manifestPath, pid: process.pid, wroteManifest: false };
+    return {
+      path: input.paths.manifestPath,
+      pid: process.pid,
+      sessionId: input.sessionId,
+      wroteManifest: false,
+    };
   }
 
   return yield* Effect.acquireRelease(
@@ -164,6 +191,7 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
         (): ManifestOwnership => ({
           path: input.paths.manifestPath,
           pid: process.pid,
+          sessionId: input.sessionId,
           wroteManifest: true,
         }),
       ),
@@ -172,6 +200,12 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
       removeServerManifestIfOwnedBy({
         manifestPath: ownership.path,
         pid: ownership.pid,
-      }).pipe(Effect.ignore),
+        sessionId: ownership.sessionId,
+      }).pipe(
+        Effect.tapError((error) =>
+          Effect.logWarning("failed to remove server manifest", { error }),
+        ),
+        Effect.ignore,
+      ),
   );
 });

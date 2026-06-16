@@ -1,5 +1,5 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
-import { assert, describe, it, layer } from "@effect/vitest";
+import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import {
   CONTROL_PROTOCOL_VERSION,
@@ -9,6 +9,8 @@ import {
   ServerOwnerMetadata,
 } from "../src/contracts/manifest";
 import { normalizeServerOptions } from "../src/options";
+import { SERVER_PACKAGE_VERSION } from "../src/package-info";
+import { assertNoActiveServer } from "../src/runtime-state/active-server";
 import {
   acquireManifestOwnership,
   createServerManifest,
@@ -27,6 +29,7 @@ const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedClock = {
   now: () => fixedStartedAt,
 };
+const fixedSessionId = "test-session";
 
 const findDeadPid = (): number => {
   let candidate = 9_999_999;
@@ -42,17 +45,19 @@ const makeManifest = (input: {
   readonly stateDir: string;
   readonly scopeId: string;
   readonly socketPath: string;
+  readonly sessionId?: string;
 }): ServerManifest =>
-  new ServerManifest({
+  ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
     protocolVersion: CONTROL_PROTOCOL_VERSION,
     pid: input.pid,
+    sessionId: input.sessionId ?? fixedSessionId,
     startedAt: fixedStartedAt.toISOString(),
     configPath: input.configPath,
     stateDir: input.stateDir,
     scopeId: input.scopeId,
-    endpoint: new ManifestEndpoint({ kind: "unix-socket", path: input.socketPath }),
-    owner: new ServerOwnerMetadata({
+    endpoint: ManifestEndpoint.make({ kind: "unix-socket", path: input.socketPath }),
+    owner: ServerOwnerMetadata.make({
       client: "test",
       version: "0.0.0",
       executablePath: process.execPath,
@@ -114,7 +119,11 @@ describe("manifest state", () => {
             },
           }),
         );
-        const manifest = createServerManifest({ paths, startedAt: fixedStartedAt });
+        const manifest = createServerManifest({
+          paths,
+          startedAt: fixedStartedAt,
+          sessionId: fixedSessionId,
+        });
         if (manifest === null) {
           assert.fail("expected a manifest for a Unix socket endpoint");
           return;
@@ -124,8 +133,10 @@ describe("manifest state", () => {
         const read = yield* readServerManifest(paths.manifestPath);
 
         assert.strictEqual(read?.pid, process.pid);
+        assert.strictEqual(read?.sessionId, fixedSessionId);
         assert.strictEqual(read?.scopeId, paths.scopeId);
         assert.strictEqual(read?.endpoint.path, manifest.endpoint.path);
+        assert.strictEqual(read?.owner.version, SERVER_PACKAGE_VERSION);
       }),
     );
 
@@ -143,8 +154,8 @@ describe("manifest state", () => {
       }),
     );
 
-    it.effect("returns null for stale manifest data", () =>
-      Effect.gen(function* () {
+    it.effect("does not treat PID liveness as manifest validity", () =>
+      Effect.sync(() => {
         const deadPid = findDeadPid();
         const raw = serializeServerManifest(
           makeManifest({
@@ -156,7 +167,38 @@ describe("manifest state", () => {
           }),
         );
 
-        assert.isNull(parseServerManifest(raw));
+        assert.strictEqual(parseServerManifest(raw)?.pid, deadPid);
+      }),
+    );
+
+    it.effect("removes unreachable manifests without trusting PID liveness", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const pathService = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-active-" });
+        const manifestPath = pathService.join(root, "server.json");
+        const paths = yield* resolveRuntimePaths(
+          normalizeServerOptions({
+            configPath: pathService.join(root, "config.jsonc"),
+            pathOverrides: {
+              stateDir: pathService.join(root, "state"),
+              runtimeDir: pathService.join(root, "runtime"),
+              manifestPath,
+            },
+          }),
+        );
+        const staleManifest = makeManifest({
+          pid: process.pid,
+          configPath: paths.configPath,
+          stateDir: paths.stateDir,
+          scopeId: paths.scopeId,
+          socketPath: pathService.join(root, "missing.sock"),
+        });
+
+        yield* writeServerManifest(manifestPath, staleManifest);
+        yield* assertNoActiveServer(paths);
+
+        assert.isFalse(yield* fs.exists(manifestPath));
       }),
     );
 
@@ -175,7 +217,37 @@ describe("manifest state", () => {
         });
 
         yield* writeServerManifest(manifestPath, otherManifest);
-        yield* removeServerManifestIfOwnedBy({ manifestPath, pid: process.pid });
+        yield* removeServerManifestIfOwnedBy({
+          manifestPath,
+          pid: process.pid,
+          sessionId: fixedSessionId,
+        });
+
+        assert.isTrue(yield* fs.exists(manifestPath));
+      }),
+    );
+
+    it.effect("does not remove another session for the same PID", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const pathService = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-session-" });
+        const manifestPath = pathService.join(root, "server.json");
+        const otherSessionManifest = makeManifest({
+          pid: process.pid,
+          configPath: pathService.join(root, "config.jsonc"),
+          stateDir: pathService.join(root, "state"),
+          scopeId: "samepid",
+          socketPath: pathService.join(root, "server.sock"),
+          sessionId: "other-session",
+        });
+
+        yield* writeServerManifest(manifestPath, otherSessionManifest);
+        yield* removeServerManifestIfOwnedBy({
+          manifestPath,
+          pid: process.pid,
+          sessionId: fixedSessionId,
+        });
 
         assert.isTrue(yield* fs.exists(manifestPath));
       }),
@@ -200,7 +272,11 @@ describe("manifest state", () => {
 
         yield* Effect.scoped(
           Effect.gen(function* () {
-            yield* acquireManifestOwnership({ paths, startedAt: fixedStartedAt });
+            yield* acquireManifestOwnership({
+              paths,
+              startedAt: fixedStartedAt,
+              sessionId: fixedSessionId,
+            });
             assert.isTrue(yield* fs.exists(manifestPath));
           }),
         );

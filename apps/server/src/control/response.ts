@@ -45,9 +45,9 @@ export const errorResponse = (
 ): ControlRouteResult =>
   routeResponse(
     statusCode,
-    new ControlErrorResponse({
+    ControlErrorResponse.make({
       version: CONTROL_RESPONSE_VERSION,
-      error: new ControlErrorPayload({ code, message }),
+      error: ControlErrorPayload.make({ code, message }),
     }),
   );
 

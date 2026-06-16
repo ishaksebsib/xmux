@@ -6,7 +6,7 @@ import type { ServerRuntimePaths } from "../runtime-state/paths";
 import { ShutdownCoordinator } from "../runtime/shutdown-coordinator";
 import { StatusRegistry } from "../runtime/status-registry";
 import { routeControlRequest } from "./router";
-import { writeControlResponse } from "./response";
+import { errorResponse, writeControlResponse } from "./response";
 
 /** Bound control server handle is intentionally tiny; resources are scoped. */
 export interface ControlServerHandle {
@@ -29,7 +29,7 @@ export interface BindControlServerInput {
 }
 
 const mapBindError = (path: string, cause: unknown): ControlServerError =>
-  new ControlServerError({
+  ControlServerError.make({
     operation: "bind",
     path,
     message: `Failed to bind control socket: ${path}`,
@@ -88,7 +88,7 @@ const closeServer = (
       if (cause !== undefined) {
         resume(
           Effect.fail(
-            new ControlServerError({
+            ControlServerError.make({
               operation: "close",
               path: socketPath,
               message: `Failed to close control socket: ${socketPath}`,
@@ -104,17 +104,27 @@ const closeServer = (
 
 const removeSocketFile = (
   socketPath: string,
-): Effect.Effect<void, never, FileSystem.FileSystem> =>
+  operation: "bind" | "close",
+): Effect.Effect<void, ControlServerError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.remove(socketPath, { force: true }).pipe(Effect.ignore);
+    yield* fs.remove(socketPath, { force: true }).pipe(
+      Effect.mapError((cause) =>
+        ControlServerError.make({
+          operation,
+          path: socketPath,
+          message: `Failed to remove control socket: ${socketPath}`,
+          cause,
+        }),
+      ),
+    );
   });
 
 const acquireUnixControlServer = Effect.fn("server.acquireUnixControlServer")(function* (
   input: BindControlServerInput,
 ) {
   if (input.paths.controlEndpoint.kind !== "unix-socket") {
-    return yield* new ControlServerError({
+    return yield* ControlServerError.make({
       operation: "bind",
       path: input.paths.runtimeDir,
       message: "Control server binding requires a Unix socket endpoint.",
@@ -122,11 +132,16 @@ const acquireUnixControlServer = Effect.fn("server.acquireUnixControlServer")(fu
   }
 
   const socketPath = input.paths.controlEndpoint.path;
-  const status = yield* StatusRegistry;
-  const shutdown = yield* ShutdownCoordinator;
-  yield* removeSocketFile(socketPath);
+  const requestContext = yield* Effect.context<StatusRegistry | ShutdownCoordinator>();
+  yield* removeSocketFile(socketPath, "bind");
 
   const server = createServer((request, response) => {
+    const internalError = errorResponse(
+      500,
+      "internal_error",
+      "Control request failed.",
+    ).response;
+    const writeInternalError = writeControlResponse(response, internalError);
     const program = routeControlRequest({
       method: request.method,
       url: request.url,
@@ -139,11 +154,21 @@ const acquireUnixControlServer = Effect.fn("server.acquireUnixControlServer")(fu
           Effect.andThen(routeResult.afterResponse),
         ),
       ),
-      Effect.provideService(StatusRegistry, status),
-      Effect.provideService(ShutdownCoordinator, shutdown),
+      Effect.catch((error) =>
+        Effect.logError("control request failed", { error }).pipe(
+          Effect.andThen(writeInternalError),
+        ),
+      ),
+      Effect.catchDefect((defect) =>
+        Effect.logError("control request defect", { defect }).pipe(
+          Effect.andThen(writeInternalError),
+        ),
+      ),
     );
 
-    void Effect.runPromise(program).catch(() => undefined);
+    void Effect.runPromiseWith(requestContext)(program).catch((cause: unknown) => {
+      process.emitWarning(`xmux control request failed: ${String(cause)}`);
+    });
   });
 
   yield* listenOnUnixSocket(server, socketPath);
@@ -167,7 +192,10 @@ export const bindControlServer = Effect.fn("server.bindControlServer")(function*
     acquireUnixControlServer(input),
     (handle: AcquiredUnixControlServer) =>
       closeServer(handle.server, handle.endpoint.path).pipe(
-        Effect.andThen(removeSocketFile(handle.endpoint.path)),
+        Effect.andThen(removeSocketFile(handle.endpoint.path, "close")),
+        Effect.tapError((error) =>
+          Effect.logWarning("failed to close control server", { error }),
+        ),
         Effect.ignore,
       ),
   );
