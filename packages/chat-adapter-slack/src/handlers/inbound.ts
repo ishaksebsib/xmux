@@ -9,7 +9,15 @@ import {
   createSlackUnknownCommandEvent,
   parseSlackCommand,
 } from "../commands";
-import type { SlackBotClient, SlackCommandEvent } from "../client";
+import type {
+  SlackBotClient,
+  SlackBotIdentity,
+  SlackCommandEvent,
+  SlackReactionEvent,
+  SlackRetryMetadata,
+} from "../client";
+import { decodeSlackMessageEvent } from "../conversions/inbound";
+import { decodeSlackReactionEvent } from "../conversions/reactions";
 import { slackLogEvents, type SlackLogScope } from "../logger";
 import {
   createSlackCommandInteractionId,
@@ -25,6 +33,7 @@ export function registerInboundHandlers<
   readonly chatId: TChatId;
   readonly client: SlackBotClient;
   readonly commandMode: SlackCommandMode;
+  readonly botIdentity?: SlackBotIdentity;
   readonly context: ChatAdapterStartContext<
     TCommands,
     TChatId,
@@ -34,13 +43,41 @@ export function registerInboundHandlers<
   readonly interactionRegistry: SlackInteractionRegistry;
   readonly logger: SlackLogScope;
 }): void {
-  args.client.onMessage((event) => {
-    args.logger.debug(slackLogEvents.inboundIgnored, {
-      operation: "message",
-      reason: "not_implemented_until_phase_5",
-      eventType: event.event.type,
-    });
-  });
+  args.client.onMessage((event) =>
+    runInboundHandler({
+      ...args,
+      eventType: "message",
+      handle: () => {
+        if (isSlackRetry(event)) {
+          logRetryIgnored({ logger: args.logger, operation: "message", event });
+          return;
+        }
+
+        const decoded = decodeSlackMessageEvent({
+          chatId: args.chatId,
+          client: args.client,
+          event: event.event,
+          botIdentity: args.botIdentity,
+        });
+
+        if (decoded.status === "ignored") {
+          args.logger.debug(slackLogEvents.inboundIgnored, {
+            operation: "message",
+            reason: decoded.reason,
+            eventType: event.event.type,
+          });
+          return;
+        }
+
+        args.logger.debug(slackLogEvents.inboundEvent, {
+          eventType: decoded.event.type,
+          conversationId: decoded.event.conversation.conversationId,
+          messageId: decoded.event.message.messageId,
+        });
+        args.context.emit(decoded.event);
+      },
+    }),
+  );
 
   args.client.onCommand((event) =>
     runInboundHandler({
@@ -54,6 +91,10 @@ export function registerInboundHandlers<
           operation: "command",
           ack: event.ack,
         });
+        if (isSlackRetry(event)) {
+          logRetryIgnored({ logger: args.logger, operation: "command", event });
+          return;
+        }
         handleCommandEvent({ ...args, event });
       },
     }),
@@ -67,6 +108,10 @@ export function registerInboundHandlers<
       operation: "action",
       ack: event.ack,
     });
+    if (isSlackRetry(event)) {
+      logRetryIgnored({ logger: args.logger, operation: "action", event });
+      return;
+    }
     args.logger.debug(slackLogEvents.inboundIgnored, {
       operation: "action",
       reason: "not_implemented_until_phase_6",
@@ -74,20 +119,60 @@ export function registerInboundHandlers<
     });
   });
 
-  args.client.onReactionAdded((event) => {
-    args.logger.debug(slackLogEvents.inboundIgnored, {
-      operation: "reaction_added",
-      reason: "not_implemented_until_phase_5",
-      eventType: event.event.type,
-    });
-  });
+  args.client.onReactionAdded((event) =>
+    handleReactionEvent({ ...args, operation: "reaction_added", event }),
+  );
 
-  args.client.onReactionRemoved((event) => {
-    args.logger.debug(slackLogEvents.inboundIgnored, {
-      operation: "reaction_removed",
-      reason: "not_implemented_until_phase_5",
-      eventType: event.event.type,
-    });
+  args.client.onReactionRemoved((event) =>
+    handleReactionEvent({ ...args, operation: "reaction_removed", event }),
+  );
+}
+
+function handleReactionEvent<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {
+  readonly chatId: TChatId;
+  readonly botIdentity?: SlackBotIdentity;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackReactionEvent;
+  readonly logger: SlackLogScope;
+  readonly operation: "reaction_added" | "reaction_removed";
+}): void {
+  void runInboundHandler({
+    ...args,
+    eventType: args.operation,
+    handle: () => {
+      if (isSlackRetry(args.event)) {
+        logRetryIgnored({ logger: args.logger, operation: args.operation, event: args.event });
+        return;
+      }
+
+      const decoded = decodeSlackReactionEvent({
+        chatId: args.chatId,
+        event: args.event.event,
+        botIdentity: args.botIdentity,
+      });
+
+      if (decoded.status === "ignored") {
+        args.logger.debug(slackLogEvents.inboundIgnored, {
+          operation: args.operation,
+          reason: decoded.reason,
+          eventType: args.event.event.type,
+        });
+        return;
+      }
+
+      args.logger.debug(slackLogEvents.inboundEvent, {
+        eventType: decoded.event.type,
+        conversationId: decoded.event.message.conversationId,
+        messageId: decoded.event.message.messageId,
+        reaction: decoded.event.reaction,
+      });
+      args.context.emit(decoded.event);
+    },
   });
 }
 
@@ -193,6 +278,23 @@ async function runInboundHandler<
     });
     args.context.emit({ type: "error", chatId: args.chatId, error });
   }
+}
+
+function isSlackRetry(event: SlackRetryMetadata): boolean {
+  return event.retryNum !== undefined && event.retryNum > 0;
+}
+
+function logRetryIgnored(args: {
+  readonly logger: SlackLogScope;
+  readonly operation: string;
+  readonly event: SlackRetryMetadata;
+}): void {
+  args.logger.debug(slackLogEvents.inboundIgnored, {
+    operation: args.operation,
+    reason: "slack_retry",
+    retryNum: args.event.retryNum,
+    retryReason: args.event.retryReason,
+  });
 }
 
 function ackImmediately<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {

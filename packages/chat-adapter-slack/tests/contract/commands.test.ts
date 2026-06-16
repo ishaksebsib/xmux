@@ -85,6 +85,35 @@ describe("Slack slash command contract", () => {
     }
   });
 
+  test("acks and ignores retried slash commands", async () => {
+    const fake = createFakeSlackClient();
+    const order: string[] = [];
+    const events: SlackCommandEventForTest[] = [];
+    const chat = createTestChat(fake);
+
+    chat.on("command", (event) => {
+      order.push("handler");
+      events.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitCommand(slashCommand({ command: "/deploy", text: "--service api" }), {
+        retryNum: 1,
+        retryReason: "timeout",
+        ack: async () => {
+          order.push("ack");
+        },
+      });
+
+      expect(order).toEqual(["ack"]);
+      expect(events).toHaveLength(0);
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("root mode emits command.unknown for unknown subcommands", async () => {
     const fake = createFakeSlackClient();
     const events: SlackUnknownCommandEventForTest[] = [];

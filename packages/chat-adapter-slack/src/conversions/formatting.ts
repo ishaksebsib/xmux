@@ -3,8 +3,11 @@ import { SlackFormattingError } from "../errors";
 import type { SlackAdapterOptions } from "../types";
 
 export interface SlackFormattedText {
+  /** Fallback Slack mrkdwn/plain text, used when blocks are present or markdown_text is too long. */
   readonly text: string;
   readonly mrkdwn: boolean;
+  /** Native Slack markdown. Cannot be combined with text or blocks. */
+  readonly markdown_text?: string;
 }
 
 export function formatSlackText(args: {
@@ -17,7 +20,11 @@ export function formatSlackText(args: {
     case "plain":
       return Result.ok({ text: escapeSlackText(args.text), mrkdwn: false });
     case "markdown":
-      return Result.ok({ text: convertMarkdownToSlackMrkdwn(args.text), mrkdwn: true });
+      return Result.ok({
+        text: convertMarkdownToSlackMrkdwn(args.text),
+        markdown_text: args.text,
+        mrkdwn: true,
+      });
     case "html":
       return Result.ok({ text: stripSlackHtml(args.text), mrkdwn: false });
   }
@@ -39,6 +46,10 @@ export function convertMarkdownToSlackMrkdwn(text: string): string {
       isMarkdownLinkPlaceholder(segment) ? restoreLink(segment) : escapeMarkdownSegment(segment),
     )
     .join("");
+}
+
+export function unescapeSlackText(text: string): string {
+  return text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 }
 
 export function stripSlackHtml(html: string): string {

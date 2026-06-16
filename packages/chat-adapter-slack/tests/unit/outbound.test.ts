@@ -28,6 +28,44 @@ describe("Slack outbound conversion", () => {
     }
   });
 
+  test("markdown sendMessage uses Slack markdown_text without blocks", () => {
+    const result = encodeSlackSendMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      text: "hello **slack**",
+      format: "markdown",
+      adapterOptions: {},
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({
+        channel: "C123",
+        markdown_text: "hello **slack**",
+      });
+    }
+  });
+
+  test("markdown sendMessage falls back to mrkdwn when blocks are present", () => {
+    const result = encodeSlackSendMessage({
+      chatId: "slack",
+      conversationId: "C123",
+      text: "hello **slack**",
+      format: "markdown",
+      adapterOptions: { blocks: [{ type: "section", text: { type: "mrkdwn", text: "block" } }] },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({
+        channel: "C123",
+        text: "hello *slack*",
+        mrkdwn: true,
+        blocks: [{ type: "section", text: { type: "mrkdwn", text: "block" } }],
+      });
+    }
+  });
+
   test("auto replies use a Slack thread when a message id exists", () => {
     const result = encodeSlackReplyMessage({
       chatId: "slack",

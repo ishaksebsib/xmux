@@ -25,10 +25,10 @@ describe("Slack outbound contract", () => {
       expect(fake.postMessageCalls).toHaveLength(1);
       expect(fake.postMessageCalls[0]).toMatchObject({
         channel: "C123",
-        text: "hello *slack*",
-        mrkdwn: true,
+        markdown_text: "hello **slack**",
         unfurl_links: false,
       });
+      expect(fake.postMessageCalls[0]?.text).toBeUndefined();
       if (sent.isOk()) {
         expect(sent.value).toMatchObject({
           chatId: "slack",

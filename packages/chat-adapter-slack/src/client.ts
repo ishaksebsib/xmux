@@ -1,10 +1,12 @@
 import {
   App,
+  type AllMiddlewareArgs,
   type SlackActionMiddlewareArgs,
   type SlackCommandMiddlewareArgs,
   type SlackEventMiddlewareArgs,
 } from "@slack/bolt";
 import type {
+  AuthTestResponse,
   ChatPostEphemeralArguments,
   ChatPostEphemeralResponse,
   ChatPostMessageArguments,
@@ -17,9 +19,12 @@ import type {
 import type { SlackAdapterConfigMode, SlackBotToken } from "./config";
 import type { SlackBlock, SlackClientOptions, SlackMessageMetadata } from "./types";
 
-type SlackBoltMessageArgs = SlackEventMiddlewareArgs<"message">;
-type SlackBoltReactionAddedArgs = SlackEventMiddlewareArgs<"reaction_added">;
-type SlackBoltReactionRemovedArgs = SlackEventMiddlewareArgs<"reaction_removed">;
+type SlackBoltMessageArgs = SlackEventMiddlewareArgs<"message"> & AllMiddlewareArgs;
+type SlackBoltCommandArgs = SlackCommandMiddlewareArgs & AllMiddlewareArgs;
+type SlackBoltActionArgs = SlackActionMiddlewareArgs & AllMiddlewareArgs;
+type SlackBoltReactionAddedArgs = SlackEventMiddlewareArgs<"reaction_added"> & AllMiddlewareArgs;
+type SlackBoltReactionRemovedArgs = SlackEventMiddlewareArgs<"reaction_removed"> &
+  AllMiddlewareArgs;
 
 export type SlackMessageHandler = (event: SlackMessageEvent) => void | Promise<void>;
 export type SlackCommandHandler = (event: SlackCommandEvent) => void | Promise<void>;
@@ -27,29 +32,34 @@ export type SlackActionHandler = (event: SlackActionEvent) => void | Promise<voi
 export type SlackReactionHandler = (event: SlackReactionEvent) => void | Promise<void>;
 export type SlackErrorHandler = (error: unknown) => void | Promise<void>;
 
-export interface SlackMessageEvent {
+export interface SlackRetryMetadata {
+  readonly retryNum?: number;
+  readonly retryReason?: string;
+}
+
+export interface SlackMessageEvent extends SlackRetryMetadata {
   readonly event: SlackBoltMessageArgs["event"];
   readonly body: SlackBoltMessageArgs["body"];
   readonly raw: SlackBoltMessageArgs;
 }
 
-export interface SlackCommandEvent {
-  readonly payload: SlackCommandMiddlewareArgs["command"];
+export interface SlackCommandEvent extends SlackRetryMetadata {
+  readonly payload: SlackBoltCommandArgs["command"];
   readonly ack: () => Promise<void>;
-  readonly respond: SlackCommandMiddlewareArgs["respond"];
-  readonly raw: SlackCommandMiddlewareArgs;
+  readonly respond: SlackBoltCommandArgs["respond"];
+  readonly raw: SlackBoltCommandArgs;
 }
 
-export interface SlackActionEvent {
-  readonly payload: SlackActionMiddlewareArgs["payload"];
-  readonly action: SlackActionMiddlewareArgs["action"];
-  readonly body: SlackActionMiddlewareArgs["body"];
+export interface SlackActionEvent extends SlackRetryMetadata {
+  readonly payload: SlackBoltActionArgs["payload"];
+  readonly action: SlackBoltActionArgs["action"];
+  readonly body: SlackBoltActionArgs["body"];
   readonly ack: () => Promise<void>;
-  readonly respond: SlackActionMiddlewareArgs["respond"];
-  readonly raw: SlackActionMiddlewareArgs;
+  readonly respond: SlackBoltActionArgs["respond"];
+  readonly raw: SlackBoltActionArgs;
 }
 
-export interface SlackReactionEvent {
+export interface SlackReactionEvent extends SlackRetryMetadata {
   readonly event: SlackBoltReactionAddedArgs["event"] | SlackBoltReactionRemovedArgs["event"];
   readonly body: SlackBoltReactionAddedArgs["body"] | SlackBoltReactionRemovedArgs["body"];
   readonly raw: SlackBoltReactionAddedArgs | SlackBoltReactionRemovedArgs;
@@ -57,7 +67,8 @@ export interface SlackReactionEvent {
 
 export interface SlackPostMessageRequest {
   readonly channel: string;
-  readonly text: string;
+  readonly text?: string;
+  readonly markdown_text?: string;
   readonly mrkdwn?: boolean;
   readonly blocks?: readonly SlackBlock[];
   readonly metadata?: SlackMessageMetadata;
@@ -71,7 +82,8 @@ export interface SlackPostMessageRequest {
 export interface SlackUpdateMessageRequest {
   readonly channel: string;
   readonly ts: string;
-  readonly text: string;
+  readonly text?: string;
+  readonly markdown_text?: string;
   readonly blocks?: readonly SlackBlock[];
   readonly metadata?: SlackMessageMetadata;
   readonly link_names?: boolean;
@@ -83,7 +95,8 @@ export interface SlackUpdateMessageRequest {
 export interface SlackPostEphemeralRequest {
   readonly channel: string;
   readonly user: string;
-  readonly text: string;
+  readonly text?: string;
+  readonly markdown_text?: string;
   readonly mrkdwn?: boolean;
   readonly blocks?: readonly SlackBlock[];
   readonly thread_ts?: string;
@@ -98,6 +111,14 @@ export interface SlackOpenFileRequest {
 export interface SlackDownloadFileRequest {
   readonly url: string;
   readonly signal?: AbortSignal;
+}
+
+export interface SlackBotIdentity {
+  readonly botUserId?: string;
+  readonly botId?: string;
+  readonly teamId?: string;
+  readonly enterpriseId?: string;
+  readonly raw: unknown;
 }
 
 export interface SlackSentMessage {
@@ -122,6 +143,7 @@ export interface SlackBotClient {
   postEphemeral(input: SlackPostEphemeralRequest): Promise<SlackSentMessage>;
   openFile(input: SlackOpenFileRequest): Promise<FilesInfoResponse>;
   downloadFile(input: SlackDownloadFileRequest): Promise<Response>;
+  getBotIdentity(): Promise<SlackBotIdentity>;
 }
 
 export type CreateSlackBotClient = (args: {
@@ -146,7 +168,12 @@ export function createSlackBotClient(args: {
     },
     onMessage: (handler) => {
       app.message(async (event) => {
-        await handler({ event: event.event, body: event.body, raw: event });
+        await handler({
+          event: event.event,
+          body: event.body,
+          raw: event,
+          ...retryMetadata(event),
+        });
       });
     },
     onCommand: (handler) => {
@@ -156,6 +183,7 @@ export function createSlackBotClient(args: {
           ack: () => event.ack(),
           respond: event.respond,
           raw: event,
+          ...retryMetadata(event),
         });
       });
     },
@@ -168,17 +196,28 @@ export function createSlackBotClient(args: {
           ack: () => event.ack(),
           respond: event.respond,
           raw: event,
+          ...retryMetadata(event),
         });
       });
     },
     onReactionAdded: (handler) => {
       app.event("reaction_added", async (event) => {
-        await handler({ event: event.event, body: event.body, raw: event });
+        await handler({
+          event: event.event,
+          body: event.body,
+          raw: event,
+          ...retryMetadata(event),
+        });
       });
     },
     onReactionRemoved: (handler) => {
       app.event("reaction_removed", async (event) => {
-        await handler({ event: event.event, body: event.body, raw: event });
+        await handler({
+          event: event.event,
+          body: event.body,
+          raw: event,
+          ...retryMetadata(event),
+        });
       });
     },
     onError: (handler) => {
@@ -204,6 +243,7 @@ export function createSlackBotClient(args: {
         headers: { Authorization: `Bearer ${args.botToken}` },
         signal: input.signal,
       }),
+    getBotIdentity: async () => encodeAuthTestResponse(await app.client.auth.test()),
   };
 }
 
@@ -228,6 +268,7 @@ function toChatPostMessageArguments(input: SlackPostMessageRequest): ChatPostMes
   const base = removeUndefined({
     channel: input.channel,
     text: input.text,
+    markdown_text: input.markdown_text,
     mrkdwn: input.mrkdwn,
     metadata: input.metadata,
     unfurl_links: input.unfurl_links,
@@ -246,6 +287,7 @@ function toChatUpdateArguments(input: SlackUpdateMessageRequest): ChatUpdateArgu
     channel: input.channel,
     ts: input.ts,
     text: input.text,
+    markdown_text: input.markdown_text,
     metadata: input.metadata,
     link_names: input.link_names,
     parse: input.parse,
@@ -264,6 +306,7 @@ function toChatPostEphemeralArguments(
     channel: input.channel,
     user: input.user,
     text: input.text,
+    markdown_text: input.markdown_text,
     mrkdwn: input.mrkdwn,
     thread_ts: input.thread_ts,
   });
@@ -279,6 +322,23 @@ function toFilesInfoArguments(input: SlackOpenFileRequest): FilesInfoArguments {
 
 function mutableBlocks(blocks: readonly SlackBlock[]): SlackBlock[] {
   return [...blocks];
+}
+
+function retryMetadata(event: { readonly context?: SlackRetryMetadata }): SlackRetryMetadata {
+  return {
+    retryNum: event.context?.retryNum,
+    retryReason: event.context?.retryReason,
+  };
+}
+
+function encodeAuthTestResponse(response: AuthTestResponse): SlackBotIdentity {
+  return {
+    botUserId: response.user_id ?? response.user,
+    botId: response.bot_id,
+    teamId: response.team_id,
+    enterpriseId: response.enterprise_id,
+    raw: response,
+  };
 }
 
 function encodePostMessageResponse(

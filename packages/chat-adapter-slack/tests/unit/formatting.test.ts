@@ -22,18 +22,33 @@ describe("Slack formatting", () => {
     }
   });
 
-  test("markdown converts a conservative subset to Slack mrkdwn", () => {
+  test("markdown keeps native markdown and builds a conservative mrkdwn fallback", () => {
     expect(convertMarkdownToSlackMrkdwn("**hi** [site](https://example.com?a=1&b=2)")).toBe(
       "*hi* <https://example.com?a=1&amp;b=2|site>",
     );
+
+    const result = formatSlackText({
+      text: "**hi** [site](https://example.com?a=1&b=2)",
+      format: "markdown",
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toEqual({
+        text: "*hi* <https://example.com?a=1&amp;b=2|site>",
+        markdown_text: "**hi** [site](https://example.com?a=1&b=2)",
+        mrkdwn: true,
+      });
+    }
   });
 
-  test("markdown still escapes raw Slack mention syntax", () => {
+  test("markdown fallback still escapes raw Slack mention syntax", () => {
     const result = formatSlackText({ text: "hello <@U123> and <!here>", format: "markdown" });
 
     expect(result.isOk()).toBe(true);
     if (result.isOk()) {
       expect(result.value.text).toBe("hello &lt;@U123&gt; and &lt;!here&gt;");
+      expect(result.value.markdown_text).toBe("hello <@U123> and <!here>");
       expect(result.value.mrkdwn).toBe(true);
     }
   });

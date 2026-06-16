@@ -1,14 +1,17 @@
 import type {
   SlackActionHandler,
   SlackBotClient,
+  SlackBotIdentity,
   SlackCommandEvent,
   SlackCommandHandler,
   SlackDownloadFileRequest,
   SlackErrorHandler,
+  SlackMessageEvent,
   SlackMessageHandler,
   SlackOpenFileRequest,
   SlackPostEphemeralRequest,
   SlackPostMessageRequest,
+  SlackReactionEvent,
   SlackReactionHandler,
   SlackSentMessage,
   SlackUpdateMessageRequest,
@@ -26,6 +29,8 @@ export interface FakeSlackHandlerCounts {
 export interface FakeSlackClientOptions {
   readonly startError?: unknown;
   readonly stopError?: unknown;
+  readonly botIdentity?: SlackBotIdentity;
+  readonly downloadFile?: (input: SlackDownloadFileRequest) => Promise<Response>;
 }
 
 export interface FakeSlackClient extends SlackBotClient {
@@ -36,9 +41,24 @@ export interface FakeSlackClient extends SlackBotClient {
   readonly postMessageCalls: SlackPostMessageRequest[];
   readonly updateMessageCalls: SlackUpdateMessageRequest[];
   readonly postEphemeralCalls: SlackPostEphemeralRequest[];
+  emitMessage(
+    event: SlackMessageEvent["event"],
+    options?: Pick<SlackMessageEvent, "retryNum" | "retryReason">,
+  ): Promise<void>;
   emitCommand(
     payload: SlackCommandEvent["payload"],
-    options?: { readonly ack?: () => Promise<void> },
+    options?: { readonly ack?: () => Promise<void> } & Pick<
+      SlackCommandEvent,
+      "retryNum" | "retryReason"
+    >,
+  ): Promise<void>;
+  emitReactionAdded(
+    event: SlackReactionEvent["event"],
+    options?: Pick<SlackReactionEvent, "retryNum" | "retryReason">,
+  ): Promise<void>;
+  emitReactionRemoved(
+    event: SlackReactionEvent["event"],
+    options?: Pick<SlackReactionEvent, "retryNum" | "retryReason">,
   ): Promise<void>;
   emitError(error: unknown): Promise<void>;
 }
@@ -128,12 +148,27 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
     async openFile(input: SlackOpenFileRequest) {
       return { ok: true, file: { id: input.fileId } };
     },
-    async downloadFile(_input: SlackDownloadFileRequest) {
-      return new Response(new Uint8Array());
+    async downloadFile(input: SlackDownloadFileRequest) {
+      return options.downloadFile?.(input) ?? new Response(new Uint8Array());
+    },
+    async getBotIdentity() {
+      return options.botIdentity ?? { botUserId: "U_BOT", botId: "B_BOT", teamId: "T123", raw: {} };
+    },
+    async emitMessage(event, emitOptions = {}) {
+      const messageEvent = createMessageEvent(event, emitOptions);
+      await Promise.all(messageHandlers.map((handler) => handler(messageEvent)));
     },
     async emitCommand(payload, emitOptions = {}) {
-      const event = createCommandEvent(payload, emitOptions.ack);
+      const event = createCommandEvent(payload, emitOptions);
       await Promise.all(commandHandlers.map((handler) => handler(event)));
+    },
+    async emitReactionAdded(event, emitOptions = {}) {
+      const reactionEvent = createReactionEvent(event, emitOptions);
+      await Promise.all(reactionAddedHandlers.map((handler) => handler(reactionEvent)));
+    },
+    async emitReactionRemoved(event, emitOptions = {}) {
+      const reactionEvent = createReactionEvent(event, emitOptions);
+      await Promise.all(reactionRemovedHandlers.map((handler) => handler(reactionEvent)));
     },
     async emitError(error: unknown) {
       await Promise.all(errorHandlers.map((handler) => handler(error)));
@@ -141,15 +176,44 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
   };
 }
 
+function createMessageEvent(
+  event: SlackMessageEvent["event"],
+  options: Pick<SlackMessageEvent, "retryNum" | "retryReason">,
+): SlackMessageEvent {
+  return {
+    event,
+    body: {} as SlackMessageEvent["body"],
+    raw: {} as SlackMessageEvent["raw"],
+    ...options,
+  };
+}
+
 function createCommandEvent(
   payload: SlackCommandEvent["payload"],
-  ack: (() => Promise<void>) | undefined,
+  options: { readonly ack?: () => Promise<void> } & Pick<
+    SlackCommandEvent,
+    "retryNum" | "retryReason"
+  >,
 ): SlackCommandEvent {
   return {
     payload,
-    ack: ack ?? (async () => undefined),
+    ack: options.ack ?? (async () => undefined),
     respond: (async () => undefined) as SlackCommandEvent["respond"],
     raw: {} as SlackCommandEvent["raw"],
+    retryNum: options.retryNum,
+    retryReason: options.retryReason,
+  };
+}
+
+function createReactionEvent(
+  event: SlackReactionEvent["event"],
+  options: Pick<SlackReactionEvent, "retryNum" | "retryReason">,
+): SlackReactionEvent {
+  return {
+    event,
+    body: {} as SlackReactionEvent["body"],
+    raw: {} as SlackReactionEvent["raw"],
+    ...options,
   };
 }
 

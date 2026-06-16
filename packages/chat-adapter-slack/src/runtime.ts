@@ -172,11 +172,14 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       return result;
     }
 
+    const botIdentity = await this.loadBotIdentity(context);
+
     this.registerSocketLifecycleHandlers(context);
     registerInboundHandlers({
       chatId: this.id,
       client: this.client,
       commandMode: this.config.commandMode,
+      botIdentity,
       context,
       interactionRegistry: this.interactionRegistry,
       logger: this.logger,
@@ -347,6 +350,27 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
     if (stopped.isErr()) {
       throw stopped.error;
     }
+  }
+
+  private async loadBotIdentity<TCommands extends ChatCommandRegistry>(
+    context: ChatAdapterStartContext<TCommands, TChatId, SlackAdapterData, SlackAdapterError>,
+  ) {
+    const result = await Result.tryPromise({
+      try: () => this.client.getBotIdentity(),
+      catch: (cause) => cause,
+    });
+
+    if (result.isOk()) {
+      return result.value;
+    }
+
+    this.logger.warn(slackLogEvents.inboundIgnored, {
+      operation: "auth.test",
+      reason: "bot_identity_unavailable",
+      error: serializeChatLogError(result.error),
+    });
+    context.emit({ type: "error", chatId: this.id, error: result.error });
+    return undefined;
   }
 
   private registerSocketLifecycleHandlers<TCommands extends ChatCommandRegistry>(

@@ -10,6 +10,7 @@ import type { SlackAdapterData, SlackAdapterOptions } from "../types";
 import { formatSlackText, type SlackFormattedText } from "./formatting";
 
 export const slackTextLimit = 40_000;
+export const slackMarkdownTextLimit = 12_000;
 
 type SlackSendMessagePayload = Omit<SlackPostMessageRequest, "signal">;
 
@@ -96,26 +97,30 @@ export function encodeSlackText(args: {
 }): Result<SlackFormattedText, SlackFormattingError> {
   const formatted = formatSlackText(args);
 
-  return Result.andThen(formatted, (content) =>
-    content.text.length > slackTextLimit
-      ? Result.err(
-          new SlackFormattingError({
-            format: args.format,
-            reason: `Slack message text exceeds ${slackTextLimit} characters`,
-          }),
-        )
-      : Result.ok(content),
-  );
+  return Result.andThen(formatted, (content) => {
+    const willUseNativeMarkdown = shouldUseNativeMarkdown({
+      formatted: content,
+      adapterOptions: args.adapterOptions,
+    });
+
+    if (!willUseNativeMarkdown && content.text.length > slackTextLimit) {
+      return Result.err(
+        new SlackFormattingError({
+          format: args.format,
+          reason: `Slack message text exceeds ${slackTextLimit} characters`,
+        }),
+      );
+    }
+
+    return Result.ok(content);
+  });
 }
 
 function encodeSlackMessagePayload(args: {
-  readonly formatted: { readonly text: string; readonly mrkdwn: boolean };
+  readonly formatted: SlackFormattedText;
   readonly adapterOptions: SlackAdapterOptions;
 }): Omit<SlackSendMessagePayload, "channel" | "thread_ts" | "reply_broadcast"> {
-  return {
-    text: args.formatted.text,
-    mrkdwn: args.formatted.mrkdwn,
-    ...(args.adapterOptions.blocks === undefined ? {} : { blocks: args.adapterOptions.blocks }),
+  const shared = {
     ...(args.adapterOptions.metadata === undefined
       ? {}
       : { metadata: args.adapterOptions.metadata }),
@@ -126,6 +131,34 @@ function encodeSlackMessagePayload(args: {
       ? {}
       : { unfurl_media: args.adapterOptions.unfurl_media }),
   };
+
+  if (shouldUseNativeMarkdown(args)) {
+    return {
+      ...shared,
+      markdown_text: args.formatted.markdown_text,
+    };
+  }
+
+  return {
+    ...shared,
+    text: args.formatted.text,
+    mrkdwn: args.formatted.mrkdwn,
+    ...(args.adapterOptions.blocks === undefined ? {} : { blocks: args.adapterOptions.blocks }),
+  };
+}
+
+function shouldUseNativeMarkdown(args: {
+  readonly formatted: SlackFormattedText;
+  readonly adapterOptions: SlackAdapterOptions;
+}): args is {
+  readonly formatted: SlackFormattedText & { readonly markdown_text: string };
+  readonly adapterOptions: SlackAdapterOptions;
+} {
+  return (
+    args.formatted.markdown_text !== undefined &&
+    args.formatted.markdown_text.length <= slackMarkdownTextLimit &&
+    args.adapterOptions.blocks === undefined
+  );
 }
 
 function resolveSlackReplyThreadTs(
