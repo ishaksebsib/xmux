@@ -4,6 +4,8 @@ import { Context, Effect, FileSystem, Layer, Path, Scope } from "effect";
 import { ServerConfig, ServerConfigLive } from "./config/service";
 import { SecretResolverLive } from "./config/resolve-secrets";
 import { bindControlServer } from "./control/server";
+import { withFileLogger } from "./logging/file-logger";
+import { LogReader, LogReaderLive } from "./logging/log-reader";
 import type { ServerError } from "./errors";
 import {
   normalizeServerOptions,
@@ -41,6 +43,7 @@ export const ServerShellLive = Layer.effect(ServerShell)(
     const status = yield* StatusRegistry;
     const shutdown = yield* ShutdownCoordinator;
     const config = yield* ServerConfig;
+    const logReader = yield* LogReader;
 
     return {
       acquire: (options: NormalizedServerOptions) =>
@@ -49,40 +52,46 @@ export const ServerShellLive = Layer.effect(ServerShell)(
           const sessionId = randomUUID();
           const paths = yield* resolveRuntimePaths(options);
           yield* ensureRuntimeDirectories(paths);
-          yield* config.loadCurrent(paths.configPath);
-          yield* assertNoActiveServer(paths);
-          yield* withStartupLock(
-            {
-              startupLockPath: paths.startupLockPath,
-              clock: options.clock,
-            },
+          return yield* withFileLogger(
+            { logDir: paths.logDir },
             Effect.gen(function* () {
+              yield* config.loadCurrent(paths.configPath);
               yield* assertNoActiveServer(paths);
-              yield* bindControlServer({ paths, startedAt, clock: options.clock });
-              yield* acquireManifestOwnership({ paths, startedAt, sessionId });
+              yield* withStartupLock(
+                {
+                  startupLockPath: paths.startupLockPath,
+                  clock: options.clock,
+                },
+                Effect.gen(function* () {
+                  yield* assertNoActiveServer(paths);
+                  yield* bindControlServer({ paths, startedAt, clock: options.clock });
+                  yield* acquireManifestOwnership({ paths, startedAt, sessionId });
+                }),
+              );
+              yield* status.setState("ready");
+              yield* Effect.addFinalizer(() =>
+                Effect.gen(function* () {
+                  yield* status.setState("stopping");
+                  yield* Effect.logInfo("server shell stopped", {
+                    startedAt: startedAt.toISOString(),
+                  });
+                }).pipe(Effect.ignore),
+              );
+              yield* Effect.logInfo("server shell started", {
+                startedAt: startedAt.toISOString(),
+                manifestPath: paths.manifestPath,
+                scopeId: paths.scopeId,
+              });
+              return { startedAt, shutdownSignal: shutdown.awaitShutdown };
             }),
           );
-          yield* status.setState("ready");
-          yield* Effect.addFinalizer(() =>
-            Effect.gen(function* () {
-              yield* status.setState("stopping");
-              yield* Effect.logInfo("server shell stopped", {
-                startedAt: startedAt.toISOString(),
-              });
-            }).pipe(Effect.ignore),
-          );
-          yield* Effect.logInfo("server shell started", {
-            startedAt: startedAt.toISOString(),
-            manifestPath: paths.manifestPath,
-            scopeId: paths.scopeId,
-          });
-          return { startedAt, shutdownSignal: shutdown.awaitShutdown };
         }).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
           Effect.provideService(Path.Path, pathService),
           Effect.provideService(StatusRegistry, status),
           Effect.provideService(ShutdownCoordinator, shutdown),
           Effect.provideService(ServerConfig, config),
+          Effect.provideService(LogReader, logReader),
         ),
     };
   }),
@@ -93,10 +102,12 @@ const ServerConfigWithPlatformLive = Layer.provide(
   ServerConfigLive,
   Layer.mergeAll(NodePlatformLive, SecretResolverLive),
 );
+const LogReaderWithPlatformLive = Layer.provide(LogReaderLive, NodePlatformLive);
 const ServerServicesLive = Layer.mergeAll(
   StatusRegistryLive,
   ShutdownCoordinatorLive,
   ServerConfigWithPlatformLive,
+  LogReaderWithPlatformLive,
 );
 
 /** Default server layer wires Node platform and lifecycle services into the shell. */

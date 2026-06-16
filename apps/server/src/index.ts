@@ -6,6 +6,7 @@ export {
   ConfigSecretError,
   ConfigValidationError,
   ControlServerError,
+  LogFileError,
   ManifestError,
   RuntimePathError,
   ServerStartupError,

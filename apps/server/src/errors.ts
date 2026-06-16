@@ -90,6 +90,14 @@ export class StartupLockError extends Schema.TaggedErrorClass<StartupLockError>(
   },
 ) {}
 
+/** Log file failures keep diagnostics setup and tailing errors typed. */
+export class LogFileError extends Schema.TaggedErrorClass<LogFileError>()("LogFileError", {
+  operation: Schema.Literals(["setup", "read", "write"]),
+  path: Schema.String,
+  message: Schema.String,
+  cause: Schema.optionalKey(Schema.Unknown),
+}) {}
+
 /** Control server failures isolate local transport setup from runtime startup. */
 export class ControlServerError extends Schema.TaggedErrorClass<ControlServerError>()(
   "ControlServerError",
@@ -111,4 +119,5 @@ export type ServerError =
   | RuntimePathError
   | ManifestError
   | StartupLockError
+  | LogFileError
   | ControlServerError;

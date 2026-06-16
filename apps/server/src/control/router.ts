@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { ServerConfig } from "../config/service";
 import { CONTROL_PROTOCOL_VERSION, ManifestEndpoint } from "../contracts/manifest";
+import { LogReader } from "../logging/log-reader";
 import {
   CONTROL_RESPONSE_VERSION,
   HealthResponse,
@@ -23,13 +24,20 @@ export interface ControlRouteInput {
   readonly clock: ServerClock;
 }
 
-const parsePathname = (url: string | undefined): string => {
-  if (url === undefined) return "/";
+const parseRouteUrl = (url: string | undefined): URL => {
+  if (url === undefined) return new URL("/", "http://xmux.local");
   try {
-    return new URL(url, "http://xmux.local").pathname;
+    return new URL(url, "http://xmux.local");
   } catch {
-    return "/";
+    return new URL("/", "http://xmux.local");
   }
+};
+
+const parseTailQuery = (url: URL): number | undefined => {
+  const raw = url.searchParams.get("tail");
+  if (raw === null) return undefined;
+  const value = Number(raw);
+  return Number.isInteger(value) ? value : undefined;
 };
 
 const isReady = (state: string): boolean => state === "ready";
@@ -65,7 +73,8 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
   const status = yield* StatusRegistry;
   const shutdown = yield* ShutdownCoordinator;
   const method = input.method?.toUpperCase() ?? "GET";
-  const pathname = parsePathname(input.url);
+  const routeUrl = parseRouteUrl(input.url);
+  const pathname = routeUrl.pathname;
 
   if (pathname === "/healthz" && method === "GET") {
     const state = yield* status.getState;
@@ -100,6 +109,18 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
     return routeResponse(response.valid ? 200 : 422, response);
   }
 
+  if (pathname === "/v1/logs" && method === "GET") {
+    const logs = yield* LogReader;
+    return yield* logs
+      .readTail({ logDir: input.paths.logDir, tail: parseTailQuery(routeUrl) })
+      .pipe(
+        Effect.match({
+          onFailure: (error) => errorResponse(500, "log_read_failed", error.message),
+          onSuccess: (response) => routeResponse(200, response),
+        }),
+      );
+  }
+
   if (pathname === "/v1/shutdown" && method === "POST") {
     const result = yield* shutdown.beginShutdown;
     if (result.accepted) {
@@ -123,6 +144,7 @@ export const routeControlRequest = Effect.fn("server.routeControlRequest")(funct
     pathname === "/v1/status" ||
     pathname === "/v1/config/effective" ||
     pathname === "/v1/config/validate" ||
+    pathname === "/v1/logs" ||
     pathname === "/v1/shutdown"
   ) {
     return errorResponse(405, "method_not_allowed", `Unsupported method: ${method}`);

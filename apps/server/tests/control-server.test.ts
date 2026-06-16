@@ -6,6 +6,7 @@ import { assert, describe, it, layer } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { ServerConfig } from "../src/config/service";
 import { ConfigValidateResponse, EffectiveConfigResponse } from "../src/contracts/config";
+import { LogsResponse } from "../src/contracts/logs";
 import {
   ControlErrorResponse,
   HealthResponse,
@@ -13,6 +14,7 @@ import {
   StatusResponse,
 } from "../src/contracts/control";
 import { routeControlRequest } from "../src/control/router";
+import { LogReader } from "../src/logging/log-reader";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { ShutdownCoordinator, ShutdownCoordinatorLive } from "../src/runtime/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLive } from "../src/runtime/status-registry";
@@ -34,6 +36,7 @@ const decodeStatusResponse = Schema.decodeUnknownOption(StatusResponse);
 const decodeShutdownResponse = Schema.decodeUnknownOption(ShutdownResponse);
 const decodeEffectiveConfigResponse = Schema.decodeUnknownOption(EffectiveConfigResponse);
 const decodeConfigValidateResponse = Schema.decodeUnknownOption(ConfigValidateResponse);
+const decodeLogsResponse = Schema.decodeUnknownOption(LogsResponse);
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-control-"))),
@@ -129,6 +132,14 @@ const decodeConfigValidate = (body: string): ConfigValidateResponse => {
   return decoded.value;
 };
 
+const decodeLogs = (body: string): LogsResponse => {
+  const json = decodeUnknownJsonOption(body);
+  if (Option.isNone(json)) assert.fail("Expected JSON logs response");
+  const decoded = decodeLogsResponse(json.value);
+  if (Option.isNone(decoded)) assert.fail("Expected schema-valid logs response");
+  return decoded.value;
+};
+
 const decodeShutdown = (body: string): ShutdownResponse => {
   const json = decodeUnknownJsonOption(body);
   if (Option.isNone(json)) assert.fail("Expected JSON shutdown response");
@@ -142,6 +153,10 @@ const ConfigServiceUnexpected = Layer.succeed(ServerConfig)({
   getEffective: Effect.die("unexpected config access"),
   getRedacted: Effect.die("unexpected config access"),
   validateCurrent: Effect.die("unexpected config validation"),
+});
+
+const LogReaderUnexpected = Layer.succeed(LogReader)({
+  readTail: () => Effect.die("unexpected log read"),
 });
 
 const makePaths = (root: string): ServerRuntimePaths => ({
@@ -160,7 +175,14 @@ const makePaths = (root: string): ServerRuntimePaths => ({
 });
 
 describe("control router", () => {
-  layer(Layer.mergeAll(StatusRegistryLive, ShutdownCoordinatorLive, ConfigServiceUnexpected))((it) => {
+  layer(
+    Layer.mergeAll(
+      StatusRegistryLive,
+      ShutdownCoordinatorLive,
+      ConfigServiceUnexpected,
+      LogReaderUnexpected,
+    ),
+  )((it) => {
     it.effect("returns schema-valid status and idempotent shutdown responses", () =>
       Effect.gen(function* () {
         const root = yield* makeTempRoot;
@@ -319,6 +341,13 @@ describe("control server", () => {
       assert.strictEqual(invalidValidateResponse.statusCode, 422);
       const invalidValidation = decodeConfigValidate(invalidValidateResponse.body);
       assert.isFalse(invalidValidation.valid);
+
+      yield* Effect.sleep(Duration.millis(150));
+      const logsResponse = yield* requestUnix(socketPath, "GET", "/v1/logs?tail=5");
+      assert.strictEqual(logsResponse.statusCode, 200);
+      const logs = decodeLogs(logsResponse.body);
+      assert.isAtMost(logs.entries.length, 5);
+      assert.notInclude(logsResponse.body, "inline-telegram-token");
 
       const shutdownResponse = yield* requestUnix(socketPath, "POST", "/v1/shutdown");
       assert.strictEqual(shutdownResponse.statusCode, 202);
