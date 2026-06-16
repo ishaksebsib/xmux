@@ -28,7 +28,7 @@ it.effect("constructs the server program with a fake shell layer", () =>
           Effect.sync(() => {
             const startedAt = options.clock.now();
             events.push(`acquire:${startedAt.toISOString()}`);
-            return { startedAt };
+            return { startedAt, shutdownSignal: Effect.never };
           }),
           (handle) =>
             Effect.sync(() => {

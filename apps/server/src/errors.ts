@@ -47,10 +47,22 @@ export class StartupLockError extends Schema.TaggedErrorClass<StartupLockError>(
   },
 ) {}
 
+/** Control server failures isolate local transport setup from runtime startup. */
+export class ControlServerError extends Schema.TaggedErrorClass<ControlServerError>()(
+  "ControlServerError",
+  {
+    operation: Schema.Literals(["bind", "close"]),
+    path: Schema.String,
+    message: Schema.String,
+    cause: Schema.optional(Schema.Unknown),
+  },
+) {}
+
 /** Public server failure union for CLI/control surfaces. */
 export type ServerError =
   | ServerStartupError
   | ServerShutdownError
   | RuntimePathError
   | ManifestError
-  | StartupLockError;
+  | StartupLockError
+  | ControlServerError;

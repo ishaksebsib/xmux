@@ -1,5 +1,6 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Context, Effect, FileSystem, Layer, Path, Scope } from "effect";
+import { bindControlServer } from "./control/server";
 import type { ServerError } from "./errors";
 import {
   normalizeServerOptions,
@@ -8,10 +9,14 @@ import {
 } from "./options";
 import { acquireManifestOwnership } from "./runtime-state/manifest";
 import { ensureRuntimeDirectories, resolveRuntimePaths } from "./runtime-state/paths";
+import { acquireStartupLock } from "./runtime-state/startup-lock";
+import { ShutdownCoordinator, ShutdownCoordinatorLive } from "./runtime/shutdown-coordinator";
+import { StatusRegistry, StatusRegistryLive } from "./runtime/status-registry";
 
 /** Shell handles expose only lifecycle facts; owned resources stay scoped. */
 export interface ServerShellHandle {
   readonly startedAt: Date;
+  readonly shutdownSignal: Effect.Effect<void>;
 }
 
 /** ServerShell isolates process ownership from future runtime graph creation. */
@@ -24,43 +29,59 @@ export class ServerShell extends Context.Service<
   }
 >()("@xmux/server/ServerShell") {}
 
-/** Live shell owns paths and manifest files before adapters or DB are introduced. */
+/** Live shell owns paths, lock, control socket, and manifest before runtime graph work. */
 export const ServerShellLive = Layer.effect(ServerShell)(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
+    const status = yield* StatusRegistry;
+    const shutdown = yield* ShutdownCoordinator;
 
     return {
       acquire: (options: NormalizedServerOptions) =>
-        Effect.acquireRelease(
-          Effect.gen(function* () {
-            const startedAt = options.clock.now();
-            const paths = yield* resolveRuntimePaths(options);
-            yield* ensureRuntimeDirectories(paths);
-            yield* acquireManifestOwnership({ paths, startedAt });
-            yield* Effect.logInfo("server shell started", {
-              startedAt: startedAt.toISOString(),
-              manifestPath: paths.manifestPath,
-              scopeId: paths.scopeId,
-            });
-            return { startedAt };
-          }).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-            Effect.provideService(Path.Path, pathService),
-          ),
-          (handle) =>
-            Effect.logInfo("server shell stopped", {
-              startedAt: handle.startedAt.toISOString(),
-            }),
+        Effect.gen(function* () {
+          const startedAt = options.clock.now();
+          const paths = yield* resolveRuntimePaths(options);
+          yield* ensureRuntimeDirectories(paths);
+          yield* acquireStartupLock({
+            startupLockPath: paths.startupLockPath,
+            clock: options.clock,
+          });
+          yield* bindControlServer({ paths, startedAt, clock: options.clock });
+          yield* acquireManifestOwnership({ paths, startedAt });
+          yield* status.setState("ready");
+          yield* Effect.addFinalizer(() =>
+            Effect.gen(function* () {
+              yield* status.setState("stopping");
+              yield* Effect.logInfo("server shell stopped", {
+                startedAt: startedAt.toISOString(),
+              });
+            }).pipe(Effect.ignore),
+          );
+          yield* Effect.logInfo("server shell started", {
+            startedAt: startedAt.toISOString(),
+            manifestPath: paths.manifestPath,
+            scopeId: paths.scopeId,
+          });
+          return { startedAt, shutdownSignal: shutdown.awaitShutdown };
+        }).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, pathService),
+          Effect.provideService(StatusRegistry, status),
+          Effect.provideService(ShutdownCoordinator, shutdown),
         ),
     };
   }),
 );
 
 const NodePlatformLive = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+const ServerServicesLive = Layer.mergeAll(StatusRegistryLive, ShutdownCoordinatorLive);
 
-/** Default server layer wires Node filesystem services into the shell. */
-export const ServerLive = Layer.provide(ServerShellLive, NodePlatformLive);
+/** Default server layer wires Node platform and lifecycle services into the shell. */
+export const ServerLive = Layer.provide(
+  ServerShellLive,
+  Layer.mergeAll(NodePlatformLive, ServerServicesLive),
+);
 
 /** Program is exported for tests so fake shell layers can avoid real resources. */
 export const serverProgram = Effect.fn("server.program")(function* (
@@ -69,8 +90,8 @@ export const serverProgram = Effect.fn("server.program")(function* (
   const normalizedOptions = normalizeServerOptions(options);
   const shell = yield* ServerShell;
 
-  yield* shell.acquire(normalizedOptions);
-  yield* normalizedOptions.shutdownSignal;
+  const handle = yield* shell.acquire(normalizedOptions);
+  yield* Effect.race(normalizedOptions.shutdownSignal, handle.shutdownSignal);
 });
 
 /** Public Effect boundary imported by the CLI foreground server command. */
