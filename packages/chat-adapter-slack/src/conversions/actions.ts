@@ -267,7 +267,9 @@ export async function encodeSlackActionResponse(
           ...encodeSlackEphemeralResponse({
             channelId: args.interaction.channelId,
             userId: args.interaction.userId,
+            threadTs: args.interaction.threadTs,
             formatted,
+            adapterOptions: input.adapterOptions,
           }),
           signal: input.signal,
         },
@@ -287,7 +289,9 @@ export async function encodeSlackActionResponse(
               ...encodeSlackEphemeralResponse({
                 channelId: args.interaction.channelId,
                 userId: args.interaction.userId,
+                threadTs: args.interaction.threadTs,
                 formatted,
+                adapterOptions: input.adapterOptions,
               }),
               signal: input.signal,
             },
@@ -297,6 +301,7 @@ export async function encodeSlackActionResponse(
             postMessage: {
               channel: input.conversationId,
               ...encodeSlackMessagePayload({ formatted, adapterOptions: input.adapterOptions }),
+              thread_ts: args.interaction.threadTs,
               signal: input.signal,
             },
           } satisfies SlackActionResponseRequest);
@@ -322,7 +327,10 @@ export async function encodeSlackActionResponse(
           ts: input.message.messageId,
           ...(formatted === undefined
             ? {}
-            : encodeSlackMessagePayload({ formatted, adapterOptions: input.adapterOptions })),
+            : encodeSlackUpdateMessagePayload({
+                formatted,
+                adapterOptions: input.adapterOptions,
+              })),
           signal: input.signal,
         },
       } satisfies SlackActionResponseRequest);
@@ -352,7 +360,7 @@ export async function encodeSlackActionResponse(
       update: {
         channel: input.conversationId,
         ts: input.message.messageId,
-        ...(formatted === undefined ? {} : { text: formatted.text, mrkdwn: formatted.mrkdwn }),
+        ...(formatted === undefined ? {} : { text: formatted.text }),
         blocks,
         signal: input.signal,
       },
@@ -408,11 +416,13 @@ export async function decodeSlackActionEvent<TChatId extends string>(args: {
     }
 
     const interactionId = createSlackActionInteractionId(args.event);
+    const threadTs = resolveSlackActionThreadTs({ body, messageTs });
     const context: SlackActionInteractionContext = {
       interactionId,
       channelId,
       userId,
       messageTs,
+      threadTs,
       responseUrl: stringAt(body, "response_url"),
       teamId: stringAt(recordAt(body, "team"), "id"),
       enterpriseId: stringAt(recordAt(body, "enterprise"), "id"),
@@ -670,25 +680,80 @@ function encodeSlackActionResponseText(args: {
 function encodeSlackEphemeralResponse(args: {
   readonly channelId: string;
   readonly userId: string;
+  readonly threadTs?: string;
   readonly formatted: SlackFormattedText;
+  readonly adapterOptions: SlackAdapterOptions;
 }): SlackPostEphemeralRequest {
+  const base = {
+    channel: args.channelId,
+    user: args.userId,
+    ...(args.threadTs === undefined ? {} : { thread_ts: args.threadTs }),
+  };
+
+  if (args.adapterOptions.blocks !== undefined) {
+    return {
+      ...base,
+      text: args.formatted.text,
+      blocks: args.adapterOptions.blocks,
+    };
+  }
+
   if (
     args.formatted.markdown_text !== undefined &&
     args.formatted.markdown_text.length <= slackMarkdownTextLimit
   ) {
     return {
-      channel: args.channelId,
-      user: args.userId,
+      ...base,
       markdown_text: args.formatted.markdown_text,
     };
   }
 
   return {
-    channel: args.channelId,
-    user: args.userId,
+    ...base,
     text: args.formatted.text,
-    mrkdwn: args.formatted.mrkdwn,
   };
+}
+
+function encodeSlackUpdateMessagePayload(args: {
+  readonly formatted: SlackFormattedText;
+  readonly adapterOptions: SlackAdapterOptions;
+}): Omit<SlackUpdateMessageRequest, "channel" | "ts" | "signal"> {
+  const shared =
+    args.adapterOptions.metadata === undefined ? {} : { metadata: args.adapterOptions.metadata };
+
+  if (args.adapterOptions.blocks !== undefined) {
+    return {
+      ...shared,
+      text: args.formatted.text,
+      blocks: args.adapterOptions.blocks,
+    };
+  }
+
+  if (
+    args.formatted.markdown_text !== undefined &&
+    args.formatted.markdown_text.length <= slackMarkdownTextLimit
+  ) {
+    return {
+      ...shared,
+      markdown_text: args.formatted.markdown_text,
+    };
+  }
+
+  return {
+    ...shared,
+    text: args.formatted.text,
+  };
+}
+
+function resolveSlackActionThreadTs(args: {
+  readonly body: Record<string, unknown>;
+  readonly messageTs: string;
+}): string {
+  return (
+    stringAt(recordAt(args.body, "message"), "thread_ts") ??
+    stringAt(recordAt(args.body, "container"), "thread_ts") ??
+    args.messageTs
+  );
 }
 
 function sharedSlackMessageOptions(adapterOptions: SlackAdapterOptions) {

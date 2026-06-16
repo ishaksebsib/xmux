@@ -96,6 +96,24 @@ describe("Slack action conversion", () => {
     }
   });
 
+  test("sendAction rejects caller-supplied native blocks", async () => {
+    const result = await encodeSlackSendAction(
+      {
+        chatId: "slack",
+        conversationId: "C123",
+        text: "Pick",
+        buttons: [[{ id: "b", label: "Button", actionId: "choice", value: "ok" }]],
+        adapterOptions: { blocks: [{ type: "section", text: { type: "mrkdwn", text: "native" } }] },
+      },
+      {},
+    );
+
+    expect(result.isErr()).toBe(true);
+    if (result.isErr()) {
+      expect(result.error.message).toContain("adapterOptions.blocks");
+    }
+  });
+
   test("button layout and unsupported disabled buttons fail with typed errors", async () => {
     const empty = await encodeSlackSendAction(
       {

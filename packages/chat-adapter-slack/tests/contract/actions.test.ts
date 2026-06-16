@@ -111,15 +111,144 @@ describe("Slack action contract", () => {
       expect(fake.postEphemeralCalls[0]).toMatchObject({
         channel: "C123",
         user: "U123",
+        thread_ts: "1.000000",
         text: "Done",
       });
-      expect(fake.postMessageCalls[1]).toMatchObject({ channel: "C123", text: "Queued" });
+      expect(fake.postEphemeralCalls[0]).not.toHaveProperty("mrkdwn");
+      expect(fake.postMessageCalls[1]).toMatchObject({
+        channel: "C123",
+        thread_ts: "1.000000",
+        text: "Queued",
+      });
       expect(fake.updateMessageCalls[0]).toMatchObject({
         channel: "C123",
         ts: "1.000000",
         text: "approve clicked",
         blocks: [{ type: "section", text: { text: "approve clicked" } }],
       });
+      expect(fake.updateMessageCalls[0]).not.toHaveProperty("mrkdwn");
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("ephemeral action replies preserve caller-supplied blocks", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createSlackChat(fake);
+
+    chat.on("action", "deployment", async (event) => {
+      const result = await event.reply("Fallback", {
+        adapterOptions: {
+          ephemeral: true,
+          blocks: [{ type: "section", text: { type: "mrkdwn", text: "*Block*" } }],
+        },
+      });
+      if (result.isErr()) throw result.error;
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      await fake.emitAction(
+        ...slackButtonAction(await sendDeploymentActionAndGetValue(chat, fake)),
+      );
+
+      await waitForCondition(() => fake.postEphemeralCalls.length === 1);
+      expect(fake.postEphemeralCalls[0]).toMatchObject({
+        channel: "C123",
+        user: "U123",
+        thread_ts: "1.000000",
+        text: "Fallback",
+        blocks: [{ type: "section", text: { type: "mrkdwn", text: "*Block*" } }],
+      });
+      expect(fake.postEphemeralCalls[0]).not.toHaveProperty("mrkdwn");
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("event.ack with showAlert fails explicitly", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createSlackChat(fake);
+    let responseError: unknown;
+
+    chat.on("action", "deployment", async (event) => {
+      const result = await event.ack({ text: "Done", showAlert: true, adapterOptions: {} });
+      if (result.isErr()) responseError = result.error;
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      await fake.emitAction(
+        ...slackButtonAction(await sendDeploymentActionAndGetValue(chat, fake)),
+      );
+
+      await waitForCondition(() => responseError !== undefined);
+      expect(responseError).toBeInstanceOf(ChatActionResponseError);
+      if (responseError instanceof ChatActionResponseError) {
+        expect(responseError.cause).toBeInstanceOf(SlackActionResponseError);
+      }
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("event.update rejects conflicting native blocks when buttons are generated", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createSlackChat(fake);
+    let responseError: unknown;
+
+    chat.on("action", "deployment", async (event) => {
+      const result = await event.update({
+        message: "Choose again",
+        buttons: [[deploymentButton("reject")]],
+        adapterOptions: { blocks: [{ type: "section", text: { type: "mrkdwn", text: "native" } }] },
+      });
+      if (result.isErr()) responseError = result.error;
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      await fake.emitAction(
+        ...slackButtonAction(await sendDeploymentActionAndGetValue(chat, fake)),
+      );
+
+      await waitForCondition(() => responseError !== undefined);
+      expect(responseError).toBeInstanceOf(ChatActionResponseError);
+      if (responseError instanceof ChatActionResponseError) {
+        expect(responseError.cause).toBeInstanceOf(SlackActionResponseError);
+      }
+      expect(fake.updateMessageCalls).toHaveLength(0);
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("retried Slack actions are acked and ignored", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createSlackChat(fake);
+    const order: string[] = [];
+    const actionsSeen: unknown[] = [];
+
+    chat.on("action", "deployment", (event) => {
+      actionsSeen.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      await fake.emitAction(
+        ...slackButtonAction(await sendDeploymentActionAndGetValue(chat, fake)),
+        {
+          retryNum: 1,
+          retryReason: "timeout",
+          ack: async () => {
+            order.push("ack");
+          },
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 25));
+
+      expect(order).toEqual(["ack"]);
+      expect(actionsSeen).toHaveLength(0);
     } finally {
       await chat.close();
     }
@@ -143,12 +272,17 @@ describe("Slack action contract", () => {
       expect((await chat.start()).isOk()).toBe(true);
       await fake.emitAction(...slackButtonAction("foreign:value"), {
         ack: async () => {
-          order.push("ack");
+          order.push("ack-value");
+        },
+      });
+      await fake.emitAction(...slackUrlButtonAction(), {
+        ack: async () => {
+          order.push("ack-url");
         },
       });
       await new Promise((resolve) => setTimeout(resolve, 25));
 
-      expect(order).toEqual(["ack"]);
+      expect(order).toEqual(["ack-value", "ack-url"]);
       expect(actionsSeen).toHaveLength(0);
       expect(errorsSeen).toHaveLength(0);
     } finally {
@@ -247,6 +381,24 @@ function slackButtonAction(value: string): [SlackActionEvent["action"], SlackAct
     value,
     text: { type: "plain_text", text: "Approve" },
   };
+  return slackActionPayload(action);
+}
+
+function slackUrlButtonAction(): [SlackActionEvent["action"], SlackActionEvent["body"]] {
+  const action = {
+    type: "button",
+    block_id: "xmux_actions_1",
+    action_id: "xmux_docs",
+    action_ts: "173.000000",
+    url: "https://example.com/docs",
+    text: { type: "plain_text", text: "Docs" },
+  };
+  return slackActionPayload(action);
+}
+
+function slackActionPayload(
+  action: Record<string, unknown>,
+): [SlackActionEvent["action"], SlackActionEvent["body"]] {
   const body = {
     type: "block_actions",
     team: { id: "T123", domain: "test" },

@@ -20,6 +20,7 @@ export interface SlackActionInteractionContext {
   readonly channelId: string;
   readonly userId: string;
   readonly messageTs: string;
+  readonly threadTs?: string;
   readonly teamId?: string;
   readonly enterpriseId?: string;
   readonly triggerId?: string;
