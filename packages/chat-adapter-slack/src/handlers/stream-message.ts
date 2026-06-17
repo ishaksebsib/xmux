@@ -4,7 +4,9 @@ import type { SlackBotClient } from "../client";
 import type { SlackAdapterConfig } from "../config";
 import {
   encodeSlackStreamedMessage,
+  nonEmptySlackStreamValue,
   streamSlackNativeText,
+  validateSlackNativeStreamTarget,
   type SlackNativeStreamTarget,
 } from "../conversions/streaming";
 import { SlackStreamMessageError } from "../errors";
@@ -51,7 +53,7 @@ export async function streamMessage<TChatId extends string>(args: {
 function resolveSlackStreamMessageTarget(
   input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>,
 ): Result<SlackNativeStreamTarget, SlackStreamMessageError> {
-  const threadTs = input.adapterOptions.stream?.threadTs?.trim();
+  const threadTs = nonEmptySlackStreamValue(input.adapterOptions.stream?.threadTs);
   if (threadTs === undefined || threadTs.length === 0) {
     return Result.err(
       new SlackStreamMessageError({
@@ -61,37 +63,10 @@ function resolveSlackStreamMessageTarget(
     );
   }
 
-  return validateSlackStreamRecipientTarget({
+  return validateSlackNativeStreamTarget({
     conversationId: input.conversationId,
     threadTs,
     stream: input.adapterOptions.stream,
     createError: (reason) => new SlackStreamMessageError({ reason }),
-  });
-}
-
-function validateSlackStreamRecipientTarget<TError>(args: {
-  readonly conversationId: string;
-  readonly threadTs: string;
-  readonly stream: SlackAdapterOptions["stream"];
-  readonly createError: (reason: string) => TError;
-}): Result<SlackNativeStreamTarget, TError> {
-  const recipientTeamId = args.stream?.recipientTeamId?.trim();
-  const recipientUserId = args.stream?.recipientUserId?.trim();
-  const isDm = args.conversationId.startsWith("D");
-
-  if (!isDm && (recipientTeamId === undefined || recipientUserId === undefined)) {
-    return Result.err(
-      args.createError(
-        "Slack native streaming to channels requires adapterOptions.stream.recipientTeamId and recipientUserId",
-      ),
-    );
-  }
-
-  return Result.ok({
-    channel: args.conversationId,
-    threadTs: args.threadTs,
-    recipientTeamId,
-    recipientUserId,
-    taskDisplayMode: args.stream?.taskDisplayMode,
   });
 }

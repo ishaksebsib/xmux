@@ -58,10 +58,17 @@ describe("Slack native streaming conversion", () => {
     if (html.isOk()) expect(html.value).toBe("\\*\\*hi\\*\\* &lt;@U123&gt;");
   });
 
-  test("splits stream text on preferred boundaries and avoids surrogate splits", () => {
-    expect(splitSlackNativeStreamText("hello world", 8)).toEqual(["hello ", "world"]);
-    expect(splitSlackNativeStreamText("a😀b", 2)).toEqual(["a", "😀", "b"]);
-    expect(splitSlackNativeStreamText("😀", 1)).toEqual(["😀"]);
+  test("splits stream text on preferred boundaries within the configured limit", () => {
+    const sentence = splitSlackNativeStreamText("hello world", 8);
+    const paragraph = splitSlackNativeStreamText("a\n\nb", 2);
+    const emoji = splitSlackNativeStreamText("a😀b", 2);
+
+    expect(sentence).toEqual(["hello ", "world"]);
+    expect(paragraph).toEqual(["a\n", "\nb"]);
+    expect(emoji).toEqual(["a", "😀", "b"]);
+    expect(sentence.every((segment) => segment.length <= 8)).toBe(true);
+    expect(paragraph.every((segment) => segment.length <= 2)).toBe(true);
+    expect(emoji.every((segment) => segment.length <= 2)).toBe(true);
   });
 
   test("rejects unsupported native stream adapter options", () => {

@@ -1,7 +1,8 @@
 import { Result } from "better-result";
 import type { ChatMessageFormat, ChatSentMessage, ChatTextStreamChunk } from "@xmux/chat-core";
 import type { SlackBotClient, SlackNativeStreamChunk, SlackSentMessage } from "../client";
-import { slackStreamMarkdownTextLimit, type SlackAdapterConfig } from "../config";
+import { slackMarkdownTextLimit } from "../constants";
+import type { SlackAdapterConfig } from "../config";
 import { SlackFormattingError } from "../errors";
 import type { SlackAdapterData, SlackAdapterOptions } from "../types";
 import { escapeSlackText, stripSlackHtml } from "./formatting";
@@ -55,12 +56,12 @@ export function resolveSlackNativeStreamConfig(args: {
     yield* validatePositiveStreamInteger({
       field: "adapterOptions.stream.bufferSize",
       value: bufferSize,
-      limit: slackStreamMarkdownTextLimit,
+      limit: slackMarkdownTextLimit,
     });
     yield* validatePositiveStreamInteger({
       field: "adapterOptions.stream.maxSegmentChars",
       value: maxSegmentChars,
-      limit: slackStreamMarkdownTextLimit,
+      limit: slackMarkdownTextLimit,
     });
 
     return Result.ok({ bufferSize, maxSegmentChars });
@@ -113,7 +114,7 @@ export function encodeSlackNativeStreamText(args: {
 
 export function splitSlackNativeStreamText(
   text: string,
-  limit = slackStreamMarkdownTextLimit,
+  limit = slackMarkdownTextLimit,
 ): readonly string[] {
   if (text.length === 0) return [];
 
@@ -167,6 +168,46 @@ export function encodeSlackStreamedMessage<TChatId extends string>(args: {
   });
 }
 
+export function nonEmptySlackStreamValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
+}
+
+export function validateSlackNativeStreamTarget<TError>(args: {
+  readonly conversationId: string;
+  readonly threadTs: string;
+  readonly stream: SlackAdapterOptions["stream"];
+  readonly createError: (reason: string) => TError;
+}): Result<SlackNativeStreamTarget, TError> {
+  const threadTs = nonEmptySlackStreamValue(args.threadTs);
+  const recipientTeamId = nonEmptySlackStreamValue(args.stream?.recipientTeamId);
+  const recipientUserId = nonEmptySlackStreamValue(args.stream?.recipientUserId);
+  const taskDisplayMode = nonEmptySlackStreamValue(args.stream?.taskDisplayMode);
+  const isDm = args.conversationId.startsWith("D");
+
+  if (threadTs === undefined) {
+    return Result.err(
+      args.createError("Slack native streaming requires a non-empty thread timestamp"),
+    );
+  }
+
+  if (!isDm && (recipientTeamId === undefined || recipientUserId === undefined)) {
+    return Result.err(
+      args.createError(
+        "Slack native streaming to channels requires adapterOptions.stream.recipientTeamId and recipientUserId",
+      ),
+    );
+  }
+
+  return Result.ok({
+    channel: args.conversationId,
+    threadTs,
+    recipientTeamId,
+    recipientUserId,
+    taskDisplayMode,
+  });
+}
+
 async function runSlackNativeTextStream<TError>(
   args: SlackNativeStreamInput<TError>,
 ): Promise<SlackNativeStreamResult> {
@@ -184,11 +225,21 @@ async function runSlackNativeTextStream<TError>(
     maxSegmentChars: resolved.value.maxSegmentChars,
     signal: args.signal,
   });
+  const iterator = args.chunks[Symbol.asyncIterator]();
+  const abortSignal = createAbortSignalPromise(args.signal);
   let text = "";
+  let next = readNext(iterator);
 
   try {
-    for await (const chunk of args.chunks) {
+    while (true) {
       throwIfAborted(args.signal);
+      const event = await Promise.race([next, abortSignal.promise]);
+
+      if (event.result.done === true) {
+        break;
+      }
+
+      const chunk = event.result.value;
       const applied = appendSlackNativeStreamChunk({ currentText: text, chunk });
       if (applied.isErr()) throw applied.error;
 
@@ -205,6 +256,8 @@ async function runSlackNativeTextStream<TError>(
       if (chunk.type === "completed") {
         break;
       }
+
+      next = readNext(iterator);
     }
 
     if (text.length === 0 && args.config.stream.emptyText.length > 0) {
@@ -222,6 +275,10 @@ async function runSlackNativeTextStream<TError>(
   } catch (cause) {
     await writer.stopOpenStreamBestEffort();
     throw cause;
+  } finally {
+    abortSignal.cancel();
+    const returned = iterator.return?.();
+    if (returned !== undefined) void returned.catch(() => undefined);
   }
 }
 
@@ -245,8 +302,9 @@ class SlackNativeStreamWriter {
   async write(text: string): Promise<void> {
     if (text.length === 0) return;
 
+    const shouldFlushFirstChunk = this.current === undefined && this.stoppedMessages.length === 0;
     this.buffer += text;
-    if (this.buffer.length >= this.args.bufferSize) {
+    if (shouldFlushFirstChunk || this.buffer.length >= this.args.bufferSize) {
       await this.flush();
     }
   }
@@ -289,11 +347,7 @@ class SlackNativeStreamWriter {
       }
 
       const remainingInSegment = this.args.maxSegmentChars - this.currentSegmentChars;
-      const hardLimit = Math.min(
-        this.buffer.length,
-        remainingInSegment,
-        slackStreamMarkdownTextLimit,
-      );
+      const hardLimit = Math.min(this.buffer.length, remainingInSegment, slackMarkdownTextLimit);
       const end = chooseSlackStreamSplitEnd(this.buffer, 0, hardLimit);
       if (end > remainingInSegment && this.currentSegmentChars > 0) {
         await this.stopCurrent({ final: false });
@@ -444,8 +498,11 @@ function lastBoundaryAfter(
   start: number,
   hardEnd: number,
 ): number | undefined {
-  const found = text.lastIndexOf(needle, hardEnd - 1);
-  return found < start ? undefined : previousGraphemeBoundary(text, start, found + needle.length);
+  const found = text.lastIndexOf(needle, hardEnd - needle.length);
+  if (found < start) return undefined;
+
+  const boundary = found + needle.length;
+  return boundary > hardEnd ? undefined : previousGraphemeBoundary(text, start, boundary);
 }
 
 function lastSentenceBoundary(text: string, start: number, hardEnd: number): number | undefined {
@@ -463,18 +520,14 @@ function lastSentenceBoundary(text: string, start: number, hardEnd: number): num
 function previousGraphemeBoundary(text: string, start: number, hardEnd: number): number {
   const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
   let best: number | undefined;
-  let nextAfterStart: number | undefined;
 
   for (const segment of segmenter.segment(text)) {
     const boundary = segment.index + segment.segment.length;
-    if (boundary > start && nextAfterStart === undefined) {
-      nextAfterStart = boundary;
-    }
     if (boundary > hardEnd) break;
     if (boundary > start) best = boundary;
   }
 
-  return best ?? nextAfterStart ?? avoidSurrogateSplit(text, start, hardEnd);
+  return best ?? avoidSurrogateSplit(text, start, hardEnd);
 }
 
 function avoidSurrogateSplit(text: string, start: number, hardEnd: number): number {
@@ -485,6 +538,33 @@ function avoidSurrogateSplit(text: string, start: number, hardEnd: number): numb
   return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff
     ? hardEnd - 1
     : hardEnd;
+}
+
+function readNext(iterator: AsyncIterator<ChatTextStreamChunk>) {
+  return iterator.next().then((result) => ({ type: "next" as const, result }));
+}
+
+interface AbortSignalPromise {
+  readonly promise: Promise<never>;
+  cancel(): void;
+}
+
+function createAbortSignalPromise(signal: AbortSignal | undefined): AbortSignalPromise {
+  let removeAbortListener: (() => void) | undefined;
+  const promise = new Promise<never>((_, reject) => {
+    if (signal === undefined || signal.aborted) return;
+
+    const abort = () => reject(signal.reason ?? new Error("Slack native stream aborted"));
+    signal.addEventListener("abort", abort, { once: true });
+    removeAbortListener = () => signal.removeEventListener("abort", abort);
+  });
+
+  return {
+    promise,
+    cancel() {
+      removeAbortListener?.();
+    },
+  };
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

@@ -5,12 +5,12 @@ import type {
   ChatSentMessage,
 } from "@xmux/chat-core";
 import type { SlackPostMessageRequest, SlackSentMessage } from "../client";
+import { slackMarkdownTextLimit, slackTextLimit } from "../constants";
 import { SlackFormattingError, SlackReplyError, SlackSendMessageError } from "../errors";
 import type { SlackAdapterData, SlackAdapterOptions } from "../types";
 import { formatSlackText, type SlackFormattedText } from "./formatting";
 
-export const slackTextLimit = 40_000;
-export const slackMarkdownTextLimit = 12_000;
+export { slackMarkdownTextLimit, slackTextLimit } from "../constants";
 
 export type SlackSendMessagePayload = Omit<SlackPostMessageRequest, "signal">;
 

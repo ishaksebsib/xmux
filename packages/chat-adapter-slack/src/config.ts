@@ -1,4 +1,5 @@
 import { Result } from "better-result";
+import { slackMarkdownTextLimit } from "./constants";
 import { SlackConfigurationError } from "./errors";
 import type {
   CreateSlackAdapterOptions,
@@ -43,11 +44,9 @@ export const defaultSlackCommandMode = {
   type: "direct",
 } as const satisfies SlackCommandMode;
 
-export const slackStreamMarkdownTextLimit = 12_000;
-
 export const defaultSlackStreamOptions = {
   bufferSize: 256,
-  maxSegmentChars: slackStreamMarkdownTextLimit,
+  maxSegmentChars: slackMarkdownTextLimit,
   emptyText: "",
 } as const satisfies Required<SlackStreamOptions>;
 
@@ -203,11 +202,11 @@ function normalizeSlackStreamOptions(
     );
   }
 
-  if (bufferSize > slackStreamMarkdownTextLimit) {
+  if (bufferSize > slackMarkdownTextLimit) {
     return Result.err(
       new SlackConfigurationError({
         field: "stream.bufferSize",
-        reason: `Slack native stream buffer size must not exceed ${slackStreamMarkdownTextLimit} characters`,
+        reason: `Slack native stream buffer size must not exceed ${slackMarkdownTextLimit} characters`,
       }),
     );
   }
@@ -225,11 +224,11 @@ function normalizeSlackStreamOptions(
     );
   }
 
-  if (maxSegmentChars > slackStreamMarkdownTextLimit) {
+  if (maxSegmentChars > slackMarkdownTextLimit) {
     return Result.err(
       new SlackConfigurationError({
         field: "stream.maxSegmentChars",
-        reason: `Slack native stream segment size must not exceed ${slackStreamMarkdownTextLimit} characters`,
+        reason: `Slack native stream segment size must not exceed ${slackMarkdownTextLimit} characters`,
       }),
     );
   }
