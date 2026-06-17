@@ -43,7 +43,7 @@ describe("Slack adapter definition", () => {
         reply: true,
         typing: false,
         markdown: true,
-        stream: { send: true, reply: true, strategy: "edit" },
+        stream: { send: true, reply: true, strategy: "native" },
         attachments: {
           receive: true,
           send: false,

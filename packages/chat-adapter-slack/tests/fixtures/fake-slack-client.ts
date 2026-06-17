@@ -15,6 +15,9 @@ import type {
   SlackReactionEvent,
   SlackReactionHandler,
   SlackSentMessage,
+  SlackAppendStreamRequest,
+  SlackStartStreamRequest,
+  SlackStopStreamRequest,
   SlackUpdateMessageRequest,
 } from "../../src/client";
 
@@ -33,6 +36,9 @@ export interface FakeSlackClientOptions {
   readonly postMessageError?: unknown;
   readonly updateMessageError?: unknown;
   readonly postEphemeralError?: unknown;
+  readonly startStreamError?: unknown;
+  readonly appendStreamError?: unknown;
+  readonly stopStreamError?: unknown;
   readonly botIdentity?: SlackBotIdentity;
   readonly downloadFile?: (input: SlackDownloadFileRequest) => Promise<Response>;
 }
@@ -45,6 +51,9 @@ export interface FakeSlackClient extends SlackBotClient {
   readonly postMessageCalls: SlackPostMessageRequest[];
   readonly updateMessageCalls: SlackUpdateMessageRequest[];
   readonly postEphemeralCalls: SlackPostEphemeralRequest[];
+  readonly startStreamCalls: SlackStartStreamRequest[];
+  readonly appendStreamCalls: SlackAppendStreamRequest[];
+  readonly stopStreamCalls: SlackStopStreamRequest[];
   emitMessage(
     event: SlackMessageEvent["event"],
     options?: Pick<SlackMessageEvent, "retryNum" | "retryReason">,
@@ -89,6 +98,9 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
   const postMessageCalls: SlackPostMessageRequest[] = [];
   const updateMessageCalls: SlackUpdateMessageRequest[] = [];
   const postEphemeralCalls: SlackPostEphemeralRequest[] = [];
+  const startStreamCalls: SlackStartStreamRequest[] = [];
+  const appendStreamCalls: SlackAppendStreamRequest[] = [];
+  const stopStreamCalls: SlackStopStreamRequest[] = [];
   let messageCounter = 1;
 
   return {
@@ -99,6 +111,9 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
     postMessageCalls,
     updateMessageCalls,
     postEphemeralCalls,
+    startStreamCalls,
+    appendStreamCalls,
+    stopStreamCalls,
     async start() {
       callOrder.push("start");
       startCalls.push(Date.now());
@@ -165,6 +180,27 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
         throw options.postEphemeralError;
       }
       return createSentMessage(input.channel, `${messageCounter++}.000000`, input.thread_ts, input);
+    },
+    async startStream(input) {
+      startStreamCalls.push(input);
+      if (options.startStreamError !== undefined) {
+        throw options.startStreamError;
+      }
+      return createSentMessage(input.channel, `${messageCounter++}.000000`, input.thread_ts, input);
+    },
+    async appendStream(input) {
+      appendStreamCalls.push(input);
+      if (options.appendStreamError !== undefined) {
+        throw options.appendStreamError;
+      }
+      return createSentMessage(input.channel, input.ts, undefined, input);
+    },
+    async stopStream(input) {
+      stopStreamCalls.push(input);
+      if (options.stopStreamError !== undefined) {
+        throw options.stopStreamError;
+      }
+      return createSentMessage(input.channel, input.ts, input.thread_ts, input);
     },
     async openFile(input: SlackOpenFileRequest) {
       return { ok: true, file: { id: input.fileId } };

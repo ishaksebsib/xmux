@@ -122,17 +122,33 @@ describe("Slack adapter config", () => {
     }
   });
 
-  test("invalid stream interval fails", () => {
+  test("invalid stream buffer size fails", () => {
     const result = parseSlackAdapterConfig({
       botToken: "xoxb-token",
       mode: { type: "socket", appToken: "xapp-token" },
-      stream: { editIntervalMs: 0 },
+      stream: { bufferSize: 0 },
     });
 
     expect(result.isErr()).toBe(true);
     if (result.isErr()) {
-      expect(result.error.field).toBe("stream.editIntervalMs");
+      expect(result.error.field).toBe("stream.bufferSize");
     }
+  });
+
+  test("stream buffer and segment sizes cannot exceed Slack markdown_text limit", () => {
+    const buffer = parseSlackAdapterConfig({
+      botToken: "xoxb-token",
+      mode: { type: "socket", appToken: "xapp-token" },
+      stream: { bufferSize: 12_001 },
+    });
+    const segment = parseSlackAdapterConfig({
+      botToken: "xoxb-token",
+      mode: { type: "socket", appToken: "xapp-token" },
+      stream: { maxSegmentChars: 12_001 },
+    });
+
+    expect(buffer.isErr()).toBe(true);
+    expect(segment.isErr()).toBe(true);
   });
 
   test("normalizes runtime defaults", () => {
@@ -145,7 +161,11 @@ describe("Slack adapter config", () => {
     if (result.isOk()) {
       expect(result.value.mode).toEqual({ type: "socket", appToken: "xapp-token" });
       expect(result.value.commandMode).toEqual({ type: "direct" });
-      expect(result.value.stream).toEqual({ placeholderText: "…", editIntervalMs: 1_500 });
+      expect(result.value.stream).toEqual({
+        bufferSize: 256,
+        maxSegmentChars: 12_000,
+        emptyText: "",
+      });
     }
   });
 });

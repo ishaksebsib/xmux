@@ -7,10 +7,16 @@ import {
 } from "@slack/bolt";
 import type {
   AuthTestResponse,
+  ChatAppendStreamArguments,
+  ChatAppendStreamResponse,
   ChatPostEphemeralArguments,
   ChatPostEphemeralResponse,
   ChatPostMessageArguments,
   ChatPostMessageResponse,
+  ChatStartStreamArguments,
+  ChatStartStreamResponse,
+  ChatStopStreamArguments,
+  ChatStopStreamResponse,
   ChatUpdateArguments,
   ChatUpdateResponse,
   FilesInfoArguments,
@@ -102,6 +108,39 @@ export interface SlackPostEphemeralRequest {
   readonly signal?: AbortSignal;
 }
 
+export type SlackNativeStreamChunk = NonNullable<ChatStartStreamArguments["chunks"]>[number];
+
+export interface SlackStartStreamRequest {
+  readonly channel: string;
+  readonly thread_ts: string;
+  readonly markdown_text?: string;
+  readonly chunks?: readonly SlackNativeStreamChunk[];
+  readonly recipient_team_id?: string;
+  readonly recipient_user_id?: string;
+  readonly task_display_mode?: string;
+  readonly signal?: AbortSignal;
+}
+
+export interface SlackAppendStreamRequest {
+  readonly channel: string;
+  readonly ts: string;
+  readonly markdown_text?: string;
+  readonly chunks?: readonly SlackNativeStreamChunk[];
+  readonly signal?: AbortSignal;
+}
+
+export interface SlackStopStreamRequest {
+  readonly channel: string;
+  readonly ts: string;
+  /** Local-only preservation of the parent thread target; not sent to Slack. */
+  readonly thread_ts?: string;
+  readonly markdown_text?: string;
+  readonly chunks?: readonly SlackNativeStreamChunk[];
+  readonly blocks?: readonly SlackBlock[];
+  readonly metadata?: SlackMessageMetadata;
+  readonly signal?: AbortSignal;
+}
+
 export interface SlackOpenFileRequest {
   readonly fileId: string;
   readonly signal?: AbortSignal;
@@ -140,6 +179,9 @@ export interface SlackBotClient {
   postMessage(input: SlackPostMessageRequest): Promise<SlackSentMessage>;
   updateMessage(input: SlackUpdateMessageRequest): Promise<SlackSentMessage>;
   postEphemeral(input: SlackPostEphemeralRequest): Promise<SlackSentMessage>;
+  startStream(input: SlackStartStreamRequest): Promise<SlackSentMessage>;
+  appendStream(input: SlackAppendStreamRequest): Promise<SlackSentMessage>;
+  stopStream(input: SlackStopStreamRequest): Promise<SlackSentMessage>;
   openFile(input: SlackOpenFileRequest): Promise<FilesInfoResponse>;
   downloadFile(input: SlackDownloadFileRequest): Promise<Response>;
   getBotIdentity(): Promise<SlackBotIdentity>;
@@ -236,6 +278,18 @@ export function createSlackBotClient(args: {
       const response = await app.client.chat.postEphemeral(toChatPostEphemeralArguments(input));
       return encodePostEphemeralResponse(input, response);
     },
+    startStream: async (input) => {
+      const response = await app.client.chat.startStream(toChatStartStreamArguments(input));
+      return encodeStartStreamResponse(input, response);
+    },
+    appendStream: async (input) => {
+      const response = await app.client.chat.appendStream(toChatAppendStreamArguments(input));
+      return encodeAppendStreamResponse(input, response);
+    },
+    stopStream: async (input) => {
+      const response = await app.client.chat.stopStream(toChatStopStreamArguments(input));
+      return encodeStopStreamResponse(input, response);
+    },
     openFile: (input) => app.client.files.info(toFilesInfoArguments(input)),
     downloadFile: (input) =>
       fetch(input.url, {
@@ -314,12 +368,60 @@ function toChatPostEphemeralArguments(
   ) as ChatPostEphemeralArguments;
 }
 
+function toChatStartStreamArguments(input: SlackStartStreamRequest): ChatStartStreamArguments {
+  const base = removeUndefined({
+    channel: input.channel,
+    thread_ts: input.thread_ts,
+    markdown_text: input.markdown_text,
+    recipient_team_id: input.recipient_team_id,
+    recipient_user_id: input.recipient_user_id,
+    task_display_mode: input.task_display_mode,
+  });
+
+  return (
+    input.chunks === undefined ? base : { ...base, chunks: mutableChunks(input.chunks) }
+  ) as ChatStartStreamArguments;
+}
+
+function toChatAppendStreamArguments(input: SlackAppendStreamRequest): ChatAppendStreamArguments {
+  const base = removeUndefined({
+    channel: input.channel,
+    ts: input.ts,
+    markdown_text: input.markdown_text,
+  });
+
+  return (
+    input.chunks === undefined ? base : { ...base, chunks: mutableChunks(input.chunks) }
+  ) as ChatAppendStreamArguments;
+}
+
+function toChatStopStreamArguments(input: SlackStopStreamRequest): ChatStopStreamArguments {
+  const base = removeUndefined({
+    channel: input.channel,
+    ts: input.ts,
+    markdown_text: input.markdown_text,
+    metadata: input.metadata,
+  });
+  const withChunks =
+    input.chunks === undefined ? base : { ...base, chunks: mutableChunks(input.chunks) };
+
+  return (
+    input.blocks === undefined ? withChunks : { ...withChunks, blocks: mutableBlocks(input.blocks) }
+  ) as ChatStopStreamArguments;
+}
+
 function toFilesInfoArguments(input: SlackOpenFileRequest): FilesInfoArguments {
   return { file: input.fileId };
 }
 
 function mutableBlocks(blocks: readonly SlackBlock[]): SlackBlock[] {
   return [...blocks];
+}
+
+function mutableChunks(
+  chunks: readonly SlackNativeStreamChunk[],
+): NonNullable<ChatStartStreamArguments["chunks"]> {
+  return [...chunks];
 }
 
 function retryMetadata(event: { readonly context?: SlackRetryMetadata }): SlackRetryMetadata {
@@ -387,6 +489,51 @@ function encodePostEphemeralResponse(
     channelId: input.channel,
     messageTs: response.message_ts,
     threadTs: input.thread_ts,
+    raw: response,
+  };
+}
+
+function encodeStartStreamResponse(
+  input: SlackStartStreamRequest,
+  response: ChatStartStreamResponse,
+): SlackSentMessage {
+  const messageTs = response.ts;
+  if (messageTs === undefined) {
+    throw new Error("Slack chat.startStream response did not include a message timestamp");
+  }
+
+  return {
+    channelId: response.channel ?? input.channel,
+    messageTs,
+    threadTs: input.thread_ts,
+    raw: response,
+  };
+}
+
+function encodeAppendStreamResponse(
+  input: SlackAppendStreamRequest,
+  response: ChatAppendStreamResponse,
+): SlackSentMessage {
+  const messageTs = response.ts ?? input.ts;
+
+  return {
+    channelId: response.channel ?? input.channel,
+    messageTs,
+    threadTs: undefined,
+    raw: response,
+  };
+}
+
+function encodeStopStreamResponse(
+  input: SlackStopStreamRequest,
+  response: ChatStopStreamResponse,
+): SlackSentMessage {
+  const messageTs = response.ts ?? response.message?.ts ?? input.ts;
+
+  return {
+    channelId: response.channel ?? input.channel,
+    messageTs,
+    threadTs: response.message?.thread_ts ?? input.thread_ts,
     raw: response,
   };
 }

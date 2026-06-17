@@ -20,7 +20,7 @@ export const slackAdapterCapabilities = {
       download: true,
       kinds: ["image", "audio", "video", "document", "archive", "other"],
     },
-    stream: { send: true, reply: true, strategy: "edit" },
+    stream: { send: true, reply: true, strategy: "native" },
   },
   reactions: {
     receive: true,

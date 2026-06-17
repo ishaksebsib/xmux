@@ -43,9 +43,12 @@ export const defaultSlackCommandMode = {
   type: "direct",
 } as const satisfies SlackCommandMode;
 
+export const slackStreamMarkdownTextLimit = 12_000;
+
 export const defaultSlackStreamOptions = {
-  placeholderText: "…",
-  editIntervalMs: 1_500,
+  bufferSize: 256,
+  maxSegmentChars: slackStreamMarkdownTextLimit,
+  emptyText: "",
 } as const satisfies Required<SlackStreamOptions>;
 
 export function normalizeSlackMode(mode?: SlackAdapterMode): SlackAdapterMode {
@@ -188,19 +191,52 @@ function normalizeSlackCommandMode(
 function normalizeSlackStreamOptions(
   stream?: SlackStreamOptions,
 ): Result<Required<SlackStreamOptions>, SlackConfigurationError> {
-  const editIntervalMs = stream?.editIntervalMs ?? defaultSlackStreamOptions.editIntervalMs;
+  const bufferSize = stream?.bufferSize ?? defaultSlackStreamOptions.bufferSize;
+  const maxSegmentChars = stream?.maxSegmentChars ?? defaultSlackStreamOptions.maxSegmentChars;
 
-  if (!Number.isFinite(editIntervalMs) || editIntervalMs <= 0) {
+  if (!Number.isFinite(bufferSize) || !Number.isInteger(bufferSize) || bufferSize <= 0) {
     return Result.err(
       new SlackConfigurationError({
-        field: "stream.editIntervalMs",
-        reason: "Slack stream edit interval must be a positive number of milliseconds",
+        field: "stream.bufferSize",
+        reason: "Slack native stream buffer size must be a positive integer",
+      }),
+    );
+  }
+
+  if (bufferSize > slackStreamMarkdownTextLimit) {
+    return Result.err(
+      new SlackConfigurationError({
+        field: "stream.bufferSize",
+        reason: `Slack native stream buffer size must not exceed ${slackStreamMarkdownTextLimit} characters`,
+      }),
+    );
+  }
+
+  if (
+    !Number.isFinite(maxSegmentChars) ||
+    !Number.isInteger(maxSegmentChars) ||
+    maxSegmentChars <= 0
+  ) {
+    return Result.err(
+      new SlackConfigurationError({
+        field: "stream.maxSegmentChars",
+        reason: "Slack native stream segment size must be a positive integer",
+      }),
+    );
+  }
+
+  if (maxSegmentChars > slackStreamMarkdownTextLimit) {
+    return Result.err(
+      new SlackConfigurationError({
+        field: "stream.maxSegmentChars",
+        reason: `Slack native stream segment size must not exceed ${slackStreamMarkdownTextLimit} characters`,
       }),
     );
   }
 
   return Result.ok({
-    placeholderText: stream?.placeholderText ?? defaultSlackStreamOptions.placeholderText,
-    editIntervalMs,
+    bufferSize,
+    maxSegmentChars,
+    emptyText: stream?.emptyText ?? defaultSlackStreamOptions.emptyText,
   });
 }

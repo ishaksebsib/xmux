@@ -28,6 +28,22 @@ export interface SlackMessageMetadata {
   readonly event_payload: Readonly<Record<string, unknown>>;
 }
 
+/** Per-call native Slack stream targeting options. */
+export interface SlackNativeStreamOptions {
+  /** Parent Slack message timestamp used as the required native stream thread target. */
+  readonly threadTs?: string;
+  /** User receiving the streamed text; Slack documents this as required when streaming to channels. */
+  readonly recipientUserId?: string;
+  /** Team for the receiving user; Slack documents this as required when streaming to channels. */
+  readonly recipientTeamId?: string;
+  /** Slack task display mode for richer streaming chunks. Text streaming uses the default when omitted. */
+  readonly taskDisplayMode?: string;
+  /** Per-call native stream buffer size override. */
+  readonly bufferSize?: number;
+  /** Per-message native stream text limit override. Must not exceed Slack's markdown_text limit. */
+  readonly maxSegmentChars?: number;
+}
+
 /** Per-call native Slack options. */
 export type SlackAdapterOptions = {
   readonly blocks?: readonly SlackBlock[];
@@ -36,6 +52,7 @@ export type SlackAdapterOptions = {
   readonly unfurl_media?: boolean;
   readonly replyBroadcast?: boolean;
   readonly ephemeral?: boolean;
+  readonly stream?: SlackNativeStreamOptions;
 };
 
 /** Native Slack metadata kept opaque by chat-core. */
@@ -68,10 +85,14 @@ export type SlackAdapterData = {
   readonly raw: unknown;
 };
 
-/** Edit-based streaming defaults for Slack message streams. */
+/** Native streaming defaults for Slack message streams. */
 export interface SlackStreamOptions {
-  readonly placeholderText?: string;
-  readonly editIntervalMs?: number;
+  /** Number of markdown_text characters buffered before a native append call. */
+  readonly bufferSize?: number;
+  /** Maximum streamed markdown_text characters per Slack stream message segment. */
+  readonly maxSegmentChars?: number;
+  /** Optional text to stream when the upstream stream completes without content. */
+  readonly emptyText?: string;
 }
 
 /** Options forwarded to Bolt's App constructor after Slack credentials are applied. */

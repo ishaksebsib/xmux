@@ -12,6 +12,7 @@ export type {
   SlackClientOptions,
   SlackCommandMode,
   SlackMessageMetadata,
+  SlackNativeStreamOptions,
   SlackStreamOptions,
 } from "./types";
 export type { SlackManualCommandRegistration, SlackManualSlashCommand } from "./commands";

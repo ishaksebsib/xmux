@@ -34,6 +34,8 @@ import { respondToAction as handleRespondToAction } from "./handlers/respond-act
 import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { startSocket } from "./handlers/start-socket";
+import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
+import { streamReply as handleStreamReply } from "./handlers/stream-reply";
 import {
   createSlackLogScope,
   logChatResult,
@@ -336,17 +338,53 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
   }
 
   async streamMessage(
-    _input: ChatAdapterStreamMessageInput<TChatId, SlackAdapterOptions>,
+    input: ChatAdapterStreamMessageInput<TChatId, SlackAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackStreamMessageError>> {
-    return Result.err(
-      new SlackStreamMessageError({ reason: phaseNotImplemented("streamMessage", 7) }),
-    );
+    const startedAt = startChatLogTimer();
+    const metadata = outboundStreamMetadata("streamMessage", input);
+    this.logger.debug(slackLogEvents.outboundBegin, metadata);
+    const result = await handleStreamMessage({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: slackLogEvents.outboundSuccess,
+      failureEvent: slackLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async streamReply(
-    _input: ChatAdapterStreamReplyInput<TChatId, SlackAdapterOptions>,
+    input: ChatAdapterStreamReplyInput<TChatId, SlackAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackStreamReplyError>> {
-    return Result.err(new SlackStreamReplyError({ reason: phaseNotImplemented("streamReply", 7) }));
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundStreamMetadata("streamReply", input),
+      messageId: input.message?.messageId,
+      mode: input.mode,
+    } as const;
+    this.logger.debug(slackLogEvents.outboundBegin, metadata);
+    const result = await handleStreamReply({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: slackLogEvents.outboundSuccess,
+      failureEvent: slackLogEvents.outboundFailure,
+    });
+    return result;
   }
 
   async close(): Promise<void> {
@@ -443,8 +481,15 @@ function outboundMessageMetadata(
   } as const;
 }
 
-function phaseNotImplemented(operation: string, phase: number): string {
-  return `Slack ${operation} is not implemented until phase ${phase}`;
+function outboundStreamMetadata(
+  operation: string,
+  input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>,
+) {
+  return {
+    operation,
+    conversationId: input.conversationId,
+    format: input.content.format,
+  } as const;
 }
 
 function bindAbortSignal(args: {
