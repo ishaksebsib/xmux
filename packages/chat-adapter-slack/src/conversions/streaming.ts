@@ -176,13 +176,15 @@ export function nonEmptySlackStreamValue(value: string | undefined): string | un
 export function validateSlackNativeStreamTarget<TError>(args: {
   readonly conversationId: string;
   readonly threadTs: string;
-  readonly stream: SlackAdapterOptions["stream"];
+  readonly recipientTeamId?: string;
+  readonly recipientUserId?: string;
+  readonly taskDisplayMode?: string;
   readonly createError: (reason: string) => TError;
 }): Result<SlackNativeStreamTarget, TError> {
   const threadTs = nonEmptySlackStreamValue(args.threadTs);
-  const recipientTeamId = nonEmptySlackStreamValue(args.stream?.recipientTeamId);
-  const recipientUserId = nonEmptySlackStreamValue(args.stream?.recipientUserId);
-  const taskDisplayMode = nonEmptySlackStreamValue(args.stream?.taskDisplayMode);
+  const recipientTeamId = nonEmptySlackStreamValue(args.recipientTeamId);
+  const recipientUserId = nonEmptySlackStreamValue(args.recipientUserId);
+  const taskDisplayMode = nonEmptySlackStreamValue(args.taskDisplayMode);
   const isDm = args.conversationId.startsWith("D");
 
   if (threadTs === undefined) {
@@ -194,7 +196,7 @@ export function validateSlackNativeStreamTarget<TError>(args: {
   if (!isDm && (recipientTeamId === undefined || recipientUserId === undefined)) {
     return Result.err(
       args.createError(
-        "Slack native streaming to channels requires adapterOptions.stream.recipientTeamId and recipientUserId",
+        "Slack native streaming to channels could not determine the recipient user and team; reply streams infer them from inbound Slack messages, while arbitrary channel streams need an explicit native stream target",
       ),
     );
   }

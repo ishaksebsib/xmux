@@ -58,7 +58,7 @@ function resolveSlackStreamMessageTarget(
     return Result.err(
       new SlackStreamMessageError({
         reason:
-          "Slack native streamMessage requires adapterOptions.stream.threadTs because chat.startStream must reply to a user request",
+          "Slack native streamMessage requires a source thread timestamp because chat.startStream must reply to a user request",
       }),
     );
   }
@@ -66,7 +66,9 @@ function resolveSlackStreamMessageTarget(
   return validateSlackNativeStreamTarget({
     conversationId: input.conversationId,
     threadTs,
-    stream: input.adapterOptions.stream,
+    recipientTeamId: input.adapterOptions.stream?.recipientTeamId,
+    recipientUserId: input.adapterOptions.stream?.recipientUserId,
+    taskDisplayMode: input.adapterOptions.stream?.taskDisplayMode,
     createError: (reason) => new SlackStreamMessageError({ reason }),
   });
 }

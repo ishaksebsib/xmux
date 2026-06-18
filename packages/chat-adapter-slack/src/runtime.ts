@@ -47,6 +47,10 @@ import {
   createSlackInteractionRegistry,
   type SlackInteractionRegistry,
 } from "./stores/interaction-registry";
+import {
+  createSlackStreamSourceRegistry,
+  type SlackStreamSourceRegistry,
+} from "./stores/stream-source-registry";
 import type { CreateSlackAdapterOptions, SlackAdapterData, SlackAdapterOptions } from "./types";
 
 type SlackRuntimeState =
@@ -98,6 +102,7 @@ export function openSlackRuntime<TChatId extends string>(args: {
         config,
         interactionRegistry: createSlackInteractionRegistry(),
         logger,
+        streamSourceRegistry: createSlackStreamSourceRegistry(),
       }) satisfies SlackOpenedAdapter<TChatId>,
     );
   });
@@ -127,18 +132,21 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
     readonly config: SlackAdapterConfig;
     readonly interactionRegistry: SlackInteractionRegistry;
     readonly logger: SlackLogScope;
+    readonly streamSourceRegistry: SlackStreamSourceRegistry;
   }) {
     this.id = args.chatId;
     this.client = args.client;
     this.config = args.config;
     this.interactionRegistry = args.interactionRegistry;
     this.logger = args.logger;
+    this.streamSourceRegistry = args.streamSourceRegistry;
   }
 
   private readonly client: SlackBotClient;
   private readonly config: SlackAdapterConfig;
   private readonly interactionRegistry: SlackInteractionRegistry;
   private readonly logger: SlackLogScope;
+  private readonly streamSourceRegistry: SlackStreamSourceRegistry;
 
   async start<TCommands extends ChatCommandRegistry>(
     context: ChatAdapterStartContext<TCommands, TChatId, SlackAdapterData, SlackAdapterError>,
@@ -188,6 +196,7 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       context,
       interactionRegistry: this.interactionRegistry,
       logger: this.logger,
+      streamSourceRegistry: this.streamSourceRegistry,
     });
     createSlackCommandRegistration({
       commands: context.commands,
@@ -375,6 +384,7 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       client: this.client,
       config: this.config,
       input,
+      streamSourceRegistry: this.streamSourceRegistry,
     });
     logChatResult({
       logger: this.logger,

@@ -1,9 +1,14 @@
 import { ChatStreamMessageError, ChatStreamReplyError, createChat } from "@xmux/chat-core";
 import { describe, expect, test } from "vitest";
 import { createSlackAdapter } from "../../src";
-import type { CreateSlackBotClient, SlackNativeStreamChunk } from "../../src/client";
+import type {
+  CreateSlackBotClient,
+  SlackMessageEvent,
+  SlackNativeStreamChunk,
+} from "../../src/client";
 import { SlackStreamMessageError, SlackStreamReplyError } from "../../src/errors";
 import type { CreateSlackAdapterOptions } from "../../src/types";
+import { waitForCondition } from "../fixtures/collect";
 import { createFakeSlackClient } from "../fixtures/fake-slack-client";
 
 describe("Slack native streams contract", () => {
@@ -57,6 +62,40 @@ describe("Slack native streams contract", () => {
           adapterData: { slackThreadTs: "171.000100" },
         });
       }
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("message reply streams infer channel recipients from the inbound Slack message", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createTestChat(fake, { stream: { bufferSize: 5 } });
+    const results: boolean[] = [];
+    const errors: unknown[] = [];
+
+    chat.on("message", async (event) => {
+      const result = await event.replyStream({
+        chunks: oneDelta("hello"),
+        format: "markdown",
+      });
+      results.push(result.isOk());
+      if (result.isErr()) errors.push(result.error);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      await fake.emitMessage(slackMessage({ text: "question", team_id: "T999", user: "U999" }));
+      await waitForCondition(() => results.length === 1);
+
+      expect(results).toEqual([true]);
+      expect(errors).toEqual([]);
+      expect(fake.startStreamCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000100",
+        recipient_team_id: "T999",
+        recipient_user_id: "U999",
+        chunks: [{ type: "markdown_text", text: "hello" }],
+      });
     } finally {
       await chat.close();
     }
@@ -387,6 +426,25 @@ function allStreamChunkTexts(fake: ReturnType<typeof createFakeSlackClient>) {
 
 function waitForMicrotasks() {
   return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function slackMessage(
+  overrides: Partial<{
+    readonly text: string;
+    readonly team_id: string;
+    readonly user: string;
+  }> = {},
+): SlackMessageEvent["event"] {
+  return {
+    type: "message",
+    channel: "C123",
+    ts: "171.000100",
+    text: "hello",
+    user: "U123",
+    username: "riley",
+    team_id: "T123",
+    ...overrides,
+  } as never;
 }
 
 async function* pendingAfterFirstDelta() {

@@ -1,5 +1,6 @@
 import {
   serializeChatLogError,
+  type ChatAdapterMessageEvent,
   type ChatAdapterStartContext,
   type ChatCommandRegistry,
 } from "@xmux/chat-core";
@@ -25,6 +26,7 @@ import {
   createSlackCommandInteractionId,
   type SlackInteractionRegistry,
 } from "../stores/interaction-registry";
+import type { SlackStreamSourceRegistry } from "../stores/stream-source-registry";
 import type { SlackActionStore, SlackAdapterData, SlackCommandMode } from "../types";
 import type { SlackAdapterError } from "../errors";
 
@@ -45,6 +47,7 @@ export function registerInboundHandlers<
   >;
   readonly interactionRegistry: SlackInteractionRegistry;
   readonly logger: SlackLogScope;
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): void {
   args.client.onMessage((event) =>
     runInboundHandler({
@@ -72,6 +75,11 @@ export function registerInboundHandlers<
           return;
         }
 
+        rememberSlackStreamSource({
+          botIdentity: args.botIdentity,
+          event: decoded.event,
+          registry: args.streamSourceRegistry,
+        });
         args.logger.debug(slackLogEvents.inboundEvent, {
           eventType: decoded.event.type,
           conversationId: decoded.event.conversation.conversationId,
@@ -131,6 +139,30 @@ export function registerInboundHandlers<
   args.client.onReactionRemoved((event) =>
     handleReactionEvent({ ...args, operation: "reaction_removed", event }),
   );
+}
+
+function rememberSlackStreamSource<TChatId extends string>(args: {
+  readonly botIdentity?: SlackBotIdentity;
+  readonly event: ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError>;
+  readonly registry: SlackStreamSourceRegistry;
+}): void {
+  const channelId = nonEmpty(args.event.conversation.conversationId);
+  const messageTs = nonEmpty(args.event.message.messageId);
+  if (channelId === undefined || messageTs === undefined) return;
+
+  const adapterData = args.event.message.adapterData;
+  const recipientUserId =
+    nonEmpty(adapterData.slackUserId) ?? nonEmpty(args.event.message.actor.actorId);
+  const recipientTeamId = nonEmpty(adapterData.slackTeamId) ?? nonEmpty(args.botIdentity?.teamId);
+  const threadTs = nonEmpty(adapterData.slackThreadTs) ?? messageTs;
+
+  args.registry.put({
+    channelId,
+    messageTs,
+    threadTs,
+    ...(recipientUserId === undefined ? {} : { recipientUserId }),
+    ...(recipientTeamId === undefined ? {} : { recipientTeamId }),
+  });
 }
 
 async function handleActionEvent<
@@ -346,6 +378,11 @@ function logRetryIgnored(args: {
     retryNum: args.event.retryNum,
     retryReason: args.event.retryReason,
   });
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }
 
 function ackImmediately<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {

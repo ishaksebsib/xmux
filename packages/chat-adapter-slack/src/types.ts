@@ -28,13 +28,13 @@ export interface SlackMessageMetadata {
   readonly event_payload: Readonly<Record<string, unknown>>;
 }
 
-/** Per-call native Slack stream targeting options. */
+/** Per-call native Slack stream targeting overrides. */
 export interface SlackNativeStreamOptions {
-  /** Parent Slack message timestamp used as the required native stream thread target. */
+  /** Parent Slack message timestamp override for native streams that cannot infer a source message. */
   readonly threadTs?: string;
-  /** User receiving the streamed text; Slack documents this as required when streaming to channels. */
+  /** Optional receiving user override for arbitrary channel streams. Reply streams infer this. */
   readonly recipientUserId?: string;
-  /** Team for the receiving user; Slack documents this as required when streaming to channels. */
+  /** Optional receiving team override for arbitrary channel streams. Reply streams infer this. */
   readonly recipientTeamId?: string;
   /** Slack task display mode for richer streaming chunks. Text streaming uses the default when omitted. */
   readonly taskDisplayMode?: string;

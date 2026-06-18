@@ -10,6 +10,10 @@ import {
   type SlackNativeStreamTarget,
 } from "../conversions/streaming";
 import { SlackStreamReplyError } from "../errors";
+import type {
+  SlackStreamSourceContext,
+  SlackStreamSourceRegistry,
+} from "../stores/stream-source-registry";
 import type { SlackAdapterData, SlackAdapterOptions } from "../types";
 
 export async function streamReply<TChatId extends string>(args: {
@@ -17,9 +21,13 @@ export async function streamReply<TChatId extends string>(args: {
   readonly client: SlackBotClient;
   readonly config: Pick<SlackAdapterConfig, "stream">;
   readonly input: ChatAdapterStreamReplyInput<TChatId, SlackAdapterOptions>;
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackStreamReplyError>> {
   return Result.gen(async function* () {
-    const target = yield* resolveSlackStreamReplyTarget(args.input);
+    const target = yield* resolveSlackStreamReplyTarget({
+      input: args.input,
+      streamSourceRegistry: args.streamSourceRegistry,
+    });
     const streamed = yield* Result.await(
       streamSlackNativeText({
         client: args.client,
@@ -50,21 +58,32 @@ export async function streamReply<TChatId extends string>(args: {
   });
 }
 
-function resolveSlackStreamReplyTarget(
-  input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>,
-): Result<SlackNativeStreamTarget, SlackStreamReplyError> {
+function resolveSlackStreamReplyTarget(args: {
+  readonly input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>;
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
+}): Result<SlackNativeStreamTarget, SlackStreamReplyError> {
+  const input = args.input;
   const mode = input.mode ?? "auto";
-  const adapterThreadTs = nonEmptySlackStreamValue(input.adapterOptions.stream?.threadTs);
+  const stream = input.adapterOptions.stream;
+  const sourceContext = resolveSlackStreamReplySourceContext({
+    input,
+    streamSourceRegistry: args.streamSourceRegistry,
+  });
+  const adapterThreadTs = nonEmptySlackStreamValue(stream?.threadTs);
   const messageThreadTs = nonEmptySlackStreamValue(input.message?.messageId);
-  const threadTs = mode === "conversation" ? adapterThreadTs : (messageThreadTs ?? adapterThreadTs);
+  const sourceThreadTs = nonEmptySlackStreamValue(sourceContext?.threadTs);
+  const threadTs =
+    mode === "conversation"
+      ? adapterThreadTs
+      : (sourceThreadTs ?? messageThreadTs ?? adapterThreadTs);
 
   if (threadTs === undefined || threadTs.length === 0) {
     return Result.err(
       new SlackStreamReplyError({
         reason:
           mode === "conversation"
-            ? "Slack native stream replies in conversation mode require adapterOptions.stream.threadTs"
-            : "Slack native stream replies require a message id or adapterOptions.stream.threadTs because chat.startStream must reply to a user request",
+            ? "Slack native stream replies in conversation mode require a native stream thread target"
+            : "Slack native stream replies require a source message because chat.startStream must reply to a user request",
       }),
     );
   }
@@ -72,7 +91,24 @@ function resolveSlackStreamReplyTarget(
   return validateSlackNativeStreamTarget({
     conversationId: input.conversationId,
     threadTs,
-    stream: input.adapterOptions.stream,
+    recipientTeamId:
+      nonEmptySlackStreamValue(stream?.recipientTeamId) ?? sourceContext?.recipientTeamId,
+    recipientUserId:
+      nonEmptySlackStreamValue(stream?.recipientUserId) ?? sourceContext?.recipientUserId,
+    taskDisplayMode: stream?.taskDisplayMode,
     createError: (reason) => new SlackStreamReplyError({ reason }),
+  });
+}
+
+function resolveSlackStreamReplySourceContext(args: {
+  readonly input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>;
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
+}): SlackStreamSourceContext | undefined {
+  const messageTs = nonEmptySlackStreamValue(args.input.message?.messageId);
+  if (messageTs === undefined) return undefined;
+
+  return args.streamSourceRegistry.get({
+    channelId: args.input.conversationId,
+    messageTs,
   });
 }
