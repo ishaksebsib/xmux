@@ -11,6 +11,7 @@ import {
 import { normalizeServerOptions } from "../src/options";
 import { SERVER_PACKAGE_VERSION } from "../src/package-info";
 import { assertNoActiveServer } from "../src/runtime-state/active-server";
+import { ServerProbe } from "../src/runtime-state/server-probe";
 import {
   acquireManifestOwnership,
   createServerManifest,
@@ -25,6 +26,13 @@ import { isPidAlive } from "../src/runtime-state/pid";
 import { acquireStartupLock, releaseStartupLock } from "../src/runtime-state/startup-lock";
 
 const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+const ServerProbeUnreachable = Layer.succeed(ServerProbe)({
+  isAlive: () => Effect.succeed(false),
+});
+const ServerProbeReachable = Layer.succeed(ServerProbe)({
+  isAlive: () => Effect.succeed(true),
+});
+const NodeFsPathControlLayer = Layer.mergeAll(NodeFsPathLayer, ServerProbeUnreachable);
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedClock = {
   now: () => fixedStartedAt,
@@ -103,7 +111,7 @@ describe("runtime paths", () => {
 });
 
 describe("manifest state", () => {
-  layer(NodeFsPathLayer)((it) => {
+  layer(NodeFsPathControlLayer)((it) => {
     it.effect("round-trips a manifest in a temp directory", () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -199,6 +207,46 @@ describe("manifest state", () => {
         yield* assertNoActiveServer(paths);
 
         assert.isFalse(yield* fs.exists(manifestPath));
+      }),
+    );
+
+    it.effect("fails startup when a manifest endpoint is reachable", () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const pathService = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-reachable-" });
+        const manifestPath = pathService.join(root, "server.json");
+        const socketPath = pathService.join(root, "server.sock");
+        const paths = yield* resolveRuntimePaths(
+          normalizeServerOptions({
+            configPath: pathService.join(root, "config.jsonc"),
+            pathOverrides: {
+              stateDir: pathService.join(root, "state"),
+              runtimeDir: pathService.join(root, "runtime"),
+              manifestPath,
+            },
+          }),
+        );
+        const activeManifest = makeManifest({
+          pid: process.pid,
+          configPath: paths.configPath,
+          stateDir: paths.stateDir,
+          scopeId: paths.scopeId,
+          socketPath,
+        });
+
+        yield* writeServerManifest(manifestPath, activeManifest);
+        const error = yield* assertNoActiveServer(paths).pipe(
+          Effect.provide(ServerProbeReachable),
+          Effect.flip,
+        );
+
+        if (error._tag !== "ActiveServerError") {
+          assert.fail(`Expected ActiveServerError, got ${error._tag}`);
+          return;
+        }
+        assert.strictEqual(error.endpointPath, socketPath);
+        assert.isTrue(yield* fs.exists(manifestPath));
       }),
     );
 

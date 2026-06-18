@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Context, Effect } from "effect";
 
 /** Clock seam keeps startup timestamps deterministic in lifecycle tests. */
 export interface ServerClock {
@@ -16,6 +16,7 @@ export type ServerControlEndpoint =
       readonly id: string;
     };
 
+// TODO: review this
 /** Path overrides are test seams; production paths are derived from config scope. */
 export interface ServerPathOverrides {
   readonly stateDir?: string;
@@ -26,6 +27,7 @@ export interface ServerPathOverrides {
   readonly startupLockPath?: string;
 }
 
+// TODO: review this
 /** CLI-facing server options stay small while leaving test seams explicit. */
 export interface RunXmuxServerOptions {
   /** Real product input from `xmux server run --foreground --config <path>`. */
@@ -51,6 +53,11 @@ export interface NormalizedServerOptions {
   readonly clock: ServerClock;
   readonly shutdownSignal: Effect.Effect<void>;
 }
+
+/** Normalized server options are a service so workflows can read them from context. */
+export class ServerOptions extends Context.Service<ServerOptions, NormalizedServerOptions>()(
+  "@xmux/server/ServerOptions",
+) {}
 
 /** System clock is the production default outside deterministic tests. */
 export const SystemServerClock: ServerClock = {

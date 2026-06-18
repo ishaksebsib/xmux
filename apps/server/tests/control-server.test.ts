@@ -2,9 +2,9 @@ import { request as httpRequest } from "node:http";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assert, describe, it, layer } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
-import { ServerConfig } from "../src/config/service";
+import { HttpServerResponse } from "effect/unstable/http";
 import { ConfigValidateResponse, EffectiveConfigResponse } from "../src/contracts/config";
 import { LogsResponse } from "../src/contracts/logs";
 import {
@@ -13,9 +13,10 @@ import {
   ShutdownResponse,
   StatusResponse,
 } from "../src/contracts/control";
-import { routeControlRequest } from "../src/control/router";
-import { LogReader } from "../src/logging/log-reader";
+import { shutdownHandler, statusHandler } from "../src/api/handlers";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
+import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
+import { ServerIdentity } from "../src/runtime/server-identity";
 import { ShutdownCoordinator, ShutdownCoordinatorLive } from "../src/runtime/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLive } from "../src/runtime/status-registry";
 import { runXmuxServer } from "../src/server";
@@ -37,6 +38,7 @@ const decodeShutdownResponse = Schema.decodeUnknownOption(ShutdownResponse);
 const decodeEffectiveConfigResponse = Schema.decodeUnknownOption(EffectiveConfigResponse);
 const decodeConfigValidateResponse = Schema.decodeUnknownOption(ConfigValidateResponse);
 const decodeLogsResponse = Schema.decodeUnknownOption(LogsResponse);
+const decodeControlErrorResponse = Schema.decodeUnknownOption(ControlErrorResponse);
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-control-"))),
@@ -148,16 +150,17 @@ const decodeShutdown = (body: string): ShutdownResponse => {
   return decoded.value;
 };
 
-const ConfigServiceUnexpected = Layer.succeed(ServerConfig)({
-  loadCurrent: () => Effect.die("unexpected config load"),
-  getEffective: Effect.die("unexpected config access"),
-  getRedacted: Effect.die("unexpected config access"),
-  validateCurrent: Effect.die("unexpected config validation"),
-});
+const decodeControlError = (body: string): ControlErrorResponse => {
+  const json = decodeUnknownJsonOption(body);
+  if (Option.isNone(json)) assert.fail("Expected JSON control error response");
+  const decoded = decodeControlErrorResponse(json.value);
+  if (Option.isNone(decoded)) assert.fail("Expected schema-valid control error response");
+  return decoded.value;
+};
 
-const LogReaderUnexpected = Layer.succeed(LogReader)({
-  readTail: () => Effect.die("unexpected log read"),
-});
+const responseText = (
+  response: HttpServerResponse.HttpServerResponse,
+): Effect.Effect<string> => Effect.promise(() => HttpServerResponse.toWeb(response).text());
 
 const makePaths = (root: string): ServerRuntimePaths => ({
   configPath: join(root, "config.jsonc"),
@@ -174,33 +177,30 @@ const makePaths = (root: string): ServerRuntimePaths => ({
   scopeId: "testscope",
 });
 
-describe("control router", () => {
-  layer(
-    Layer.mergeAll(
-      StatusRegistryLive,
-      ShutdownCoordinatorLive,
-      ConfigServiceUnexpected,
-      LogReaderUnexpected,
-    ),
-  )((it) => {
-    it.effect("returns schema-valid status and idempotent shutdown responses", () =>
-      Effect.gen(function* () {
-        const root = yield* makeTempRoot;
-        const paths = makePaths(root);
+describe("control handlers", () => {
+  it.effect("returns schema-valid status and idempotent shutdown responses", () =>
+    Effect.gen(function* () {
+      const root = yield* makeTempRoot;
+      const paths = makePaths(root);
+      const handlerLayer = Layer.mergeAll(
+        StatusRegistryLive,
+        ShutdownCoordinatorLive,
+        Layer.succeed(RuntimePaths)(paths),
+        Layer.succeed(ServerIdentity)({
+          pid: process.pid,
+          startedAt: fixedStartedAt,
+          sessionId: "unit",
+        }),
+      );
+
+      yield* Effect.gen(function* () {
         const status = yield* StatusRegistry;
         const shutdown = yield* ShutdownCoordinator;
         yield* status.setState("ready");
 
-        const statusRoute = yield* routeControlRequest({
-          method: "GET",
-          url: "/v1/status",
-          paths,
-          startedAt: fixedStartedAt,
-          clock: fixedClock,
-        });
-        assert.strictEqual(statusRoute.response.statusCode, 200);
-        const statusBody = statusRoute.response.body;
-        assert.instanceOf(statusBody, StatusResponse);
+        const statusResponse = yield* statusHandler();
+        assert.strictEqual(statusResponse.status, 200);
+        const statusBody = decodeStatus(yield* responseText(statusResponse));
         assert.strictEqual(statusBody.state, "ready");
         if (paths.controlEndpoint.kind !== "unix-socket") {
           assert.fail("Expected Unix socket endpoint");
@@ -208,43 +208,20 @@ describe("control router", () => {
         }
         assert.strictEqual(statusBody.endpoint.path, paths.controlEndpoint.path);
 
-        const firstShutdown = yield* routeControlRequest({
-          method: "POST",
-          url: "/v1/shutdown",
-          paths,
-          startedAt: fixedStartedAt,
-          clock: fixedClock,
-        });
-        const firstShutdownBody = firstShutdown.response.body;
-        assert.instanceOf(firstShutdownBody, ShutdownResponse);
+        const firstShutdownResponse = yield* Effect.scoped(shutdownHandler());
+        assert.strictEqual(firstShutdownResponse.status, 202);
+        const firstShutdownBody = decodeShutdown(yield* responseText(firstShutdownResponse));
         assert.isTrue(firstShutdownBody.accepted);
         assert.isFalse(firstShutdownBody.alreadyStopping);
 
-        const secondShutdown = yield* routeControlRequest({
-          method: "POST",
-          url: "/v1/shutdown",
-          paths,
-          startedAt: fixedStartedAt,
-          clock: fixedClock,
-        });
-        const secondShutdownBody = secondShutdown.response.body;
-        assert.instanceOf(secondShutdownBody, ShutdownResponse);
+        const secondShutdownResponse = yield* Effect.scoped(shutdownHandler());
+        const secondShutdownBody = decodeShutdown(yield* responseText(secondShutdownResponse));
         assert.isFalse(secondShutdownBody.accepted);
         assert.isTrue(secondShutdownBody.alreadyStopping);
         assert.isTrue(yield* shutdown.isShutdownRequested);
-
-        const missingRoute = yield* routeControlRequest({
-          method: "GET",
-          url: "/missing",
-          paths,
-          startedAt: fixedStartedAt,
-          clock: fixedClock,
-        });
-        assert.strictEqual(missingRoute.response.statusCode, 404);
-        assert.instanceOf(missingRoute.response.body, ControlErrorResponse);
-      }),
-    );
-  });
+      }).pipe(Effect.provide(handlerLayer));
+    }),
+  );
 });
 
 describe("control server", () => {
@@ -305,6 +282,14 @@ describe("control server", () => {
       assert.strictEqual(status.state, "ready");
       assert.strictEqual(status.endpoint.path, socketPath);
       assert.strictEqual(status.configPath, configPath);
+
+      const missingResponse = yield* requestUnix(socketPath, "GET", "/missing");
+      assert.strictEqual(missingResponse.statusCode, 404);
+      assert.strictEqual(decodeControlError(missingResponse.body).error.code, "not_found");
+
+      const methodResponse = yield* requestUnix(socketPath, "POST", "/healthz");
+      assert.strictEqual(methodResponse.statusCode, 405);
+      assert.strictEqual(decodeControlError(methodResponse.body).error.code, "method_not_allowed");
 
       const configResponse = yield* requestUnix(socketPath, "GET", "/v1/config/effective");
       assert.strictEqual(configResponse.statusCode, 200);

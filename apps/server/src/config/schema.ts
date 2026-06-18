@@ -11,6 +11,7 @@ import {
 const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
 const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
 
+//TODO: fix this type if source it env it should have env, if value it should have value this should be parsed at type level
 /** Resolved secrets are internal only; do not expose this shape on control routes. */
 export class ResolvedSecret extends Schema.Class<ResolvedSecret>("ResolvedSecret")({
   source: Schema.Literals(["env", "value"]),

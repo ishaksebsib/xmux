@@ -2,8 +2,8 @@ import { mkdtemp, rm, access, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
-import { runXmuxServer, serverProgram, ServerShell } from "../src/server";
+import { Effect } from "effect";
+import { runXmuxServer, serverProgram } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedClock = {
@@ -19,36 +19,31 @@ const makeTempRoot = Effect.acquireRelease(
 const exists = (path: string): Effect.Effect<boolean> =>
   Effect.promise(() => access(path).then(() => true, () => false));
 
-it.effect("constructs the server program with a fake shell layer", () =>
+it.effect("constructs the server program with a test control endpoint", () =>
   Effect.gen(function* () {
-    const events: Array<string> = [];
-    const fakeShellLayer = Layer.succeed(ServerShell)({
-      acquire: (options) =>
-        Effect.acquireRelease(
-          Effect.sync(() => {
-            const startedAt = options.clock.now();
-            events.push(`acquire:${startedAt.toISOString()}`);
-            return { startedAt, shutdownSignal: Effect.never };
-          }),
-          (handle) =>
-            Effect.sync(() => {
-              events.push(`release:${handle.startedAt.toISOString()}`);
-            }),
-        ),
-    });
+    const root = yield* makeTempRoot;
+    const manifestPath = join(root, "server.json");
+    const startupLockPath = join(root, "startup.lock");
 
     yield* Effect.scoped(
       serverProgram({
+        configPath: join(root, "config.jsonc"),
+        pathOverrides: {
+          stateDir: join(root, "state"),
+          runtimeDir: join(root, "runtime"),
+          logDir: join(root, "logs"),
+          dbPath: join(root, "state", "server.db"),
+          manifestPath,
+          startupLockPath,
+        },
         clock: fixedClock,
         controlEndpointOverride: { kind: "test", id: "unit" },
         shutdownSignal: immediateShutdown,
       }),
-    ).pipe(Effect.provide(fakeShellLayer));
+    );
 
-    assert.deepStrictEqual(events, [
-      "acquire:2026-06-16T00:00:00.000Z",
-      "release:2026-06-16T00:00:00.000Z",
-    ]);
+    assert.isFalse(yield* exists(manifestPath));
+    assert.isFalse(yield* exists(startupLockPath));
   }),
 );
 
