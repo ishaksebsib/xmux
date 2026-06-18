@@ -4,25 +4,35 @@ import { createTelegramAdapter } from "@xmux/chat-adapter-telegram";
 import { createInMemoryStore, createXmux } from "@xmux/orchestrator";
 import { createOpenCodeAdapter } from "@xmux/harness-opencode";
 import { createPiAdapter } from "@xmux/harness-pi";
+import { createSlackAdapter } from "@xmux/chat-adapter-slack";
 import {
   createTelegramAllowedUsersMiddleware,
   createTypingIndicatorMiddleware,
 } from "./middleware";
 
 export async function runXmuxDemo() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  // TELEGRAM
+  const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+  if (!telegramToken) {
+    throw new Error("TELEGRAM_BOT_TOKEN is required in apps/demo/.env");
+  }
+
+  // DISCORD
   const discordToken = process.env.DISCORD_BOT_TOKEN;
   const applicationId = process.env.DISCORD_APPLICATION_ID;
   const guildId = process.env.DISCORD_GUILD_ID;
-
-  if (!token) {
-    throw new Error("TELEGRAM_BOT_TOKEN is required in apps/demo/.env");
-  }
 
   if (!discordToken || !applicationId || !guildId) {
     throw new Error(
       "DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID, and DISCORD_GUILD_ID are required in apps/demo/.env",
     );
+  }
+
+  // SLACK
+  const slackToken = process.env.SLACK_BOT_TOKEN;
+  const slackAppToken = process.env.SLACK_APP_TOKEN;
+  if (!slackToken || !slackAppToken) {
+    throw new Error("SLACK_BOT_TOKEN and SLACK_APP_TOKEN are required in apps/demo/.env");
   }
 
   const logger = createDemoLogger();
@@ -33,7 +43,7 @@ export async function runXmuxDemo() {
     },
     chats: {
       telegram: createTelegramAdapter({
-        token,
+        token: telegramToken,
         mode: { type: "polling", dropPendingUpdates: true },
       }),
       discord: createDiscordAdapter({
@@ -41,6 +51,10 @@ export async function runXmuxDemo() {
         applicationId,
         mode: { type: "gateway", observeMessages: true, observeReactions: true },
         commandRegistration: { scope: { type: "guild", guildId }, strategy: "bulk-overwrite" },
+      }),
+      slack: createSlackAdapter({
+        botToken: slackToken,
+        mode: { type: "socket", appToken: slackAppToken },
       }),
     },
     config: {
