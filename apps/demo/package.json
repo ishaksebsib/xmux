@@ -13,11 +13,12 @@
   },
   "dependencies": {
     "@xmux/chat-adapter-discord": "workspace:^",
+    "@xmux/chat-adapter-slack": "workspace:^",
     "@xmux/chat-adapter-telegram": "workspace:^",
     "@xmux/chat-core": "workspace:^",
-    "@xmux/orchestrator": "workspace:^",
     "@xmux/harness-opencode": "workspace:^",
     "@xmux/harness-pi": "workspace:^",
+    "@xmux/orchestrator": "workspace:^",
     "better-result": "^2.9.1",
     "dotenv": "^17.4.2"
   },
