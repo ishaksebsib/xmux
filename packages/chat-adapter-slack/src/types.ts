@@ -1,7 +1,10 @@
 import type { ChatLogger } from "@xmux/chat-core";
 import type { AppOptions } from "@slack/bolt";
 
-/** Selects how Slack events are delivered. Socket Mode is the supported v1 runtime. */
+/**
+ * Selects how Slack events are delivered.
+ * Default: Socket Mode (`type: "socket"`); `appToken` is still required.
+ */
 export type SlackAdapterMode =
   | {
       readonly type: "socket";
@@ -12,7 +15,10 @@ export type SlackAdapterMode =
       readonly signingSecret: string;
     };
 
-/** Controls how manually configured Slack slash commands map to chat-core commands. */
+/**
+ * Controls how manually configured Slack slash commands map to chat-core commands.
+ * Default: direct mode (`{ type: "direct" }`).
+ */
 export type SlackCommandMode =
   | { readonly type: "direct" }
   | { readonly type: "root"; readonly command: string };
@@ -36,22 +42,29 @@ export interface SlackNativeStreamOptions {
   readonly recipientUserId?: string;
   /** Optional receiving team override for arbitrary channel streams. Reply streams infer this. */
   readonly recipientTeamId?: string;
-  /** Slack task display mode for richer streaming chunks. Text streaming uses the default when omitted. */
+  /** Slack task display mode for richer streaming chunks. Default: omitted (Slack default). */
   readonly taskDisplayMode?: string;
-  /** Per-call native stream buffer size override. */
+  /** Per-call native stream buffer size override. Default: adapter stream bufferSize (256). */
   readonly bufferSize?: number;
-  /** Per-message native stream text limit override. Must not exceed Slack's markdown_text limit. */
+  /** Per-message native stream text limit override. Default: adapter stream maxSegmentChars (12,000). */
   readonly maxSegmentChars?: number;
 }
 
 /** Per-call native Slack options. */
 export type SlackAdapterOptions = {
+  /** Default: omitted; Slack renders generated text/markdown. */
   readonly blocks?: readonly SlackBlock[];
+  /** Default: omitted. */
   readonly metadata?: SlackMessageMetadata;
+  /** Default: omitted (Slack default). */
   readonly unfurl_links?: boolean;
+  /** Default: omitted (Slack default). */
   readonly unfurl_media?: boolean;
+  /** Default: omitted/false; only applies to threaded replies. */
   readonly replyBroadcast?: boolean;
+  /** Default: false; only action replies are sent ephemerally when true. */
   readonly ephemeral?: boolean;
+  /** Default: adapter stream defaults with inferred reply targets when available. */
   readonly stream?: SlackNativeStreamOptions;
 };
 
@@ -87,11 +100,11 @@ export type SlackAdapterData = {
 
 /** Native streaming defaults for Slack message streams. */
 export interface SlackStreamOptions {
-  /** Number of markdown_text characters buffered before a native append call. */
+  /** Number of markdown_text characters buffered before a native append call. Default: 256. */
   readonly bufferSize?: number;
-  /** Maximum streamed markdown_text characters per Slack stream message segment. */
+  /** Maximum streamed markdown_text characters per Slack stream message segment. Default: 12,000. */
   readonly maxSegmentChars?: number;
-  /** Optional text to stream when the upstream stream completes without content. */
+  /** Optional text to stream when the upstream stream completes without content. Default: "". */
   readonly emptyText?: string;
 }
 
@@ -103,12 +116,20 @@ export type SlackClientOptions = Omit<
 
 /** Configuration for creating a Slack chat adapter. */
 export interface CreateSlackAdapterOptions<TChatId extends string = "slack"> {
+  /** Chat adapter id. Default: "slack". */
   readonly id?: TChatId;
+  /** Bot User OAuth token (`xoxb-...`). No default. */
   readonly botToken?: string;
+  /** Slack delivery mode. Default: Socket Mode; provide `mode.appToken`. */
   readonly mode?: SlackAdapterMode;
+  /** Slash-command routing mode. Default: `{ type: "direct" }`. */
   readonly commandMode?: SlackCommandMode;
+  /** Store for oversized button payloads. Default: none; oversized payloads error. */
   readonly actionStore?: SlackActionStore;
+  /** Native stream defaults. Default: bufferSize 256, maxSegmentChars 12,000, emptyText "". */
   readonly stream?: SlackStreamOptions;
+  /** Extra Bolt App options. Default: none. */
   readonly clientOptions?: SlackClientOptions;
+  /** Adapter logger. Default: chat-core context logger. */
   readonly logger?: ChatLogger;
 }
