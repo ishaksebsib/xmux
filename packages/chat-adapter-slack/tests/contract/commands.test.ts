@@ -8,7 +8,12 @@ import {
 } from "@xmux/chat-core";
 import { describe, expect, test } from "vitest";
 import { createSlackAdapter } from "../../src";
-import type { CreateSlackBotClient, SlackCommandEvent } from "../../src/client";
+import type {
+  CreateSlackBotClient,
+  SlackAppMentionEvent,
+  SlackCommandEvent,
+  SlackMessageEvent,
+} from "../../src/client";
 import type { CreateSlackAdapterOptions } from "../../src/types";
 import { waitForCondition } from "../fixtures/collect";
 import { createFakeSlackClient } from "../fixtures/fake-slack-client";
@@ -114,6 +119,155 @@ describe("Slack slash command contract", () => {
     }
   });
 
+  test("app mention commands are disabled by default", async () => {
+    const fake = createFakeSlackClient();
+    const events: SlackCommandEventForTest[] = [];
+    const chat = createTestChat(fake);
+
+    chat.on("command", (event) => {
+      events.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      expect(fake.handlerCountsAtStart[0]?.appMention).toBe(0);
+
+      await fake.emitAppMention(appMention({ text: "<@U_BOT> deploy --service api" }));
+      expect(events).toHaveLength(0);
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("enabled app mention commands emit parsed command events with message context", async () => {
+    const fake = createFakeSlackClient();
+    const events: SlackCommandEventForTest[] = [];
+    const chat = createTestChat(fake, { mentionCommands: { enabled: true } });
+
+    chat.on("command", (event) => {
+      events.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      expect(fake.handlerCountsAtStart[0]?.appMention).toBe(1);
+
+      await fake.emitAppMention(appMention({ text: "<@U_BOT> deploy --service api --dryRun" }));
+
+      await waitForCondition(() => events.length === 1);
+      expect(events[0]).toMatchObject({
+        type: "command",
+        chatId: "slack",
+        conversation: { chatId: "slack", conversationId: "C123" },
+        message: { chatId: "slack", conversationId: "C123", messageId: "171.000100" },
+        command: { name: "deploy", options: { service: "api", dryRun: true } },
+      });
+      expect(events[0]?.actor).toMatchObject({
+        kind: "user",
+        actorId: "U123",
+        adapterData: {
+          slackTeamId: "T123",
+          slackChannelId: "C123",
+          slackUserId: "U123",
+          slackThreadTs: "171.000100",
+        },
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("enabled mention commands parse observed Slack message events", async () => {
+    const fake = createFakeSlackClient();
+    const events: SlackCommandEventForTest[] = [];
+    const chat = createTestChat(fake, { mentionCommands: { enabled: true } });
+
+    chat.on("command", (event) => {
+      events.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitMessage(message({ text: "<@U_BOT> /deploy --service api" }));
+
+      await waitForCondition(() => events.length === 1);
+      expect(events[0]).toMatchObject({
+        type: "command",
+        command: { name: "deploy", options: { service: "api", dryRun: undefined } },
+        message: { chatId: "slack", conversationId: "C123", messageId: "171.000100" },
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("enabled mention command replies use the source Slack thread", async () => {
+    const fake = createFakeSlackClient();
+    const replies: boolean[] = [];
+    const chat = createTestChat(fake, { mentionCommands: { enabled: true } });
+
+    chat.on("command", "deploy", async (event) => {
+      const result = await event.reply("resumed");
+      replies.push(result.isOk());
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitMessage(
+        message({ text: "<@U_BOT> deploy --service api", thread_ts: "171.000001" }),
+      );
+
+      await waitForCondition(() => replies.length === 1);
+      expect(replies).toEqual([true]);
+      expect(fake.postMessageCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000001",
+        text: "resumed",
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("enabled app mention command replies stream natively in the source Slack thread", async () => {
+    const fake = createFakeSlackClient();
+    const results: boolean[] = [];
+    const chat = createTestChat(fake, {
+      mentionCommands: { enabled: true },
+      stream: { bufferSize: 2 },
+    });
+
+    chat.on("command", "deploy", async (event) => {
+      const result = await event.replyStream(
+        { chunks: oneDelta("ok"), format: "markdown" },
+        { fallback: "error" },
+      );
+      results.push(result.isOk());
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitAppMention(
+        appMention({ text: "<@U_BOT> deploy --service api", thread_ts: "171.000001" }),
+      );
+
+      await waitForCondition(() => results.length === 1);
+      expect(results).toEqual([true]);
+      expect(fake.startStreamCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000001",
+        recipient_team_id: "T123",
+        recipient_user_id: "U123",
+        chunks: [{ type: "markdown_text", text: "ok" }],
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("root mode emits command.unknown for unknown subcommands", async () => {
     const fake = createFakeSlackClient();
     const events: SlackUnknownCommandEventForTest[] = [];
@@ -194,6 +348,46 @@ function socketOptions(): CreateSlackAdapterOptions<"slack"> {
     botToken: "xoxb-token",
     mode: { type: "socket", appToken: "xapp-token" },
   };
+}
+
+function appMention(
+  overrides: Partial<{
+    readonly text: string;
+    readonly thread_ts: string;
+  }> = {},
+): SlackAppMentionEvent["event"] {
+  return {
+    type: "app_mention",
+    channel: "C123",
+    ts: "171.000100",
+    text: "<@U_BOT> deploy --service api",
+    user: "U123",
+    username: "riley",
+    team: "T123",
+    ...overrides,
+  } as never;
+}
+
+function message(
+  overrides: Partial<{
+    readonly text: string;
+    readonly thread_ts: string;
+  }> = {},
+): SlackMessageEvent["event"] {
+  return {
+    type: "message",
+    channel: "C123",
+    ts: "171.000100",
+    text: "<@U_BOT> deploy --service api",
+    user: "U123",
+    username: "riley",
+    team: "T123",
+    ...overrides,
+  } as never;
+}
+
+async function* oneDelta(delta: string) {
+  yield { type: "delta" as const, delta };
 }
 
 function slashCommand(args: {

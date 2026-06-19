@@ -26,6 +26,7 @@ describe("Slack lifecycle contract", () => {
     expect(fake.startCalls).toHaveLength(1);
     expect(fake.handlerCountsAtStart[0]).toEqual({
       message: 1,
+      appMention: 0,
       command: 1,
       action: 1,
       reactionAdded: 1,

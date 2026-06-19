@@ -23,6 +23,12 @@ export type SlackCommandMode =
   | { readonly type: "direct" }
   | { readonly type: "root"; readonly command: string };
 
+/** Controls whether Slack app mentions can invoke chat-core commands. */
+export interface SlackMentionCommandOptions {
+  /** Default: false. When true, `@bot command [options]` app mentions emit command events. */
+  readonly enabled?: boolean;
+}
+
 /** Minimal JSON-like Slack Block Kit block shape accepted as native adapter options. */
 export type SlackBlock = Readonly<Record<string, unknown>> & {
   readonly type: string;
@@ -124,6 +130,8 @@ export interface CreateSlackAdapterOptions<TChatId extends string = "slack"> {
   readonly mode?: SlackAdapterMode;
   /** Slash-command routing mode. Default: `{ type: "direct" }`. */
   readonly commandMode?: SlackCommandMode;
+  /** App-mention command routing. Default: disabled. */
+  readonly mentionCommands?: SlackMentionCommandOptions;
   /** Store for oversized button payloads. Default: none; oversized payloads error. */
   readonly actionStore?: SlackActionStore;
   /** Native stream defaults. Default: bufferSize 256, maxSegmentChars 12,000, emptyText "". */

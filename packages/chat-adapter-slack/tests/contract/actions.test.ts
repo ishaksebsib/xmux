@@ -8,7 +8,7 @@ import {
 } from "@xmux/chat-core";
 import { describe, expect, test } from "vitest";
 import { createSlackAdapter } from "../../src";
-import type { CreateSlackBotClient, SlackActionEvent } from "../../src/client";
+import type { CreateSlackBotClient, SlackActionEvent, SlackMessageEvent } from "../../src/client";
 import { SlackActionResponseError } from "../../src/errors";
 import type { CreateSlackAdapterOptions } from "../../src/types";
 import { waitForCondition } from "../fixtures/collect";
@@ -48,6 +48,40 @@ describe("Slack action contract", () => {
           { type: "section", text: { type: "plain_text", text: "Deploy build 123?" } },
           { type: "actions" },
         ],
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("chat.sendAction with a source message posts in the source Slack thread", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createSlackChat(fake);
+    const results: boolean[] = [];
+
+    chat.on("message", async (event) => {
+      const result = await chat.sendAction({
+        chatId: event.chatId,
+        conversationId: event.conversation.conversationId,
+        messageId: event.message.messageId,
+        text: "Choose a deployment action",
+        buttons: [[deploymentButton("approve")]],
+        adapterOptions: {},
+      });
+      results.push(result.isOk());
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitMessage(slackMessage({ thread_ts: "171.000001" }));
+
+      await waitForCondition(() => results.length === 1);
+      expect(results).toEqual([true]);
+      expect(fake.postMessageCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000001",
+        text: "Choose a deployment action",
       });
     } finally {
       await chat.close();
@@ -337,6 +371,24 @@ function socketOptions(): CreateSlackAdapterOptions<"slack"> {
     botToken: "xoxb-token",
     mode: { type: "socket", appToken: "xapp-token" },
   };
+}
+
+function slackMessage(
+  overrides: Partial<{
+    readonly text: string;
+    readonly thread_ts: string;
+  }> = {},
+): SlackMessageEvent["event"] {
+  return {
+    type: "message",
+    channel: "C123",
+    ts: "171.000100",
+    text: "message",
+    user: "U123",
+    username: "riley",
+    team_id: "T123",
+    ...overrides,
+  } as never;
 }
 
 function deploymentButton(value: "approve" | "reject") {

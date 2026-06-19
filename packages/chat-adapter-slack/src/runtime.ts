@@ -191,6 +191,7 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       chatId: this.id,
       client: this.client,
       commandMode: this.config.commandMode,
+      mentionCommands: this.config.mentionCommands,
       actionStore: this.config.actionStore,
       botIdentity,
       context,
@@ -283,6 +284,7 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       client: this.client,
       config: this.config,
       input,
+      streamSourceRegistry: this.streamSourceRegistry,
     });
     logChatResult({
       logger: this.logger,
@@ -334,7 +336,12 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       mode: input.mode,
     } as const;
     this.logger.debug(slackLogEvents.outboundBegin, metadata);
-    const result = await handleReply({ chatId: this.id, client: this.client, input });
+    const result = await handleReply({
+      chatId: this.id,
+      client: this.client,
+      input,
+      streamSourceRegistry: this.streamSourceRegistry,
+    });
     logChatResult({
       logger: this.logger,
       result,

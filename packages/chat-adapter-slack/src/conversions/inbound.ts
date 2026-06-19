@@ -6,7 +6,12 @@ import type {
   ChatAttachmentContent,
   ChatAttachmentKind,
 } from "@xmux/chat-core";
-import type { SlackBotClient, SlackBotIdentity, SlackMessageEvent } from "../client";
+import type {
+  SlackAppMentionEvent,
+  SlackBotClient,
+  SlackBotIdentity,
+  SlackMessageEvent,
+} from "../client";
 import { SlackAttachmentReadError, type SlackAdapterError } from "../errors";
 import type { SlackAdapterData } from "../types";
 import { unescapeSlackText } from "./formatting";
@@ -78,7 +83,7 @@ const ignoredMessageSubtypes = new Set([
 export function decodeSlackMessageEvent<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly client: SlackBotClient;
-  readonly event: SlackMessageEvent["event"];
+  readonly event: SlackMessageEvent["event"] | SlackAppMentionEvent["event"];
   readonly botIdentity?: SlackBotIdentity;
 }): SlackInboundDecodeResult<
   ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError>

@@ -55,6 +55,7 @@ export async function runXmuxDemo() {
       slack: createSlackAdapter({
         botToken: slackToken,
         mode: { type: "socket", appToken: slackAppToken },
+        mentionCommands: { enabled: true },
       }),
     },
     config: {

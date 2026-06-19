@@ -7,7 +7,7 @@ import {
 } from "@xmux/chat-core";
 import { describe, expect, test } from "vitest";
 import { createSlackCommandRegistration } from "../../src/commands";
-import { parseSlackCommand } from "../../src/commands/parse";
+import { parseSlackCommand, parseSlackMentionCommand } from "../../src/commands/parse";
 
 describe("Slack slash command parsing", () => {
   const commands = defineChatCommands({
@@ -115,6 +115,69 @@ describe("Slack slash command parsing", () => {
       status: "invalid",
       commandName: "xmux",
       reason: "root command requires a command name",
+    });
+  });
+});
+
+describe("Slack app mention command parsing", () => {
+  const commands = defineChatCommands({
+    deploy: defineChatCommand({
+      description: "Deploy a service",
+      options: {
+        service: stringOption({ required: true }),
+      },
+    }),
+  });
+
+  test("maps a bot mention followed by a command name", () => {
+    const parsed = parseSlackMentionCommand({
+      commands,
+      botUserId: "U_BOT",
+      text: "<@U_BOT> deploy --service api",
+    });
+
+    expect(parsed.status).toBe("command");
+    if (parsed.status === "command") {
+      expect(parsed.command).toEqual({ name: "deploy", options: { service: "api" } });
+    }
+  });
+
+  test("ignores non-command prose after the bot mention", () => {
+    const parsed = parseSlackMentionCommand({
+      commands,
+      botUserId: "U_BOT",
+      text: "<@U_BOT> please deploy api",
+    });
+
+    expect(parsed).toEqual({
+      status: "not_command",
+      reason: "unknown_command",
+      commandName: "please",
+    });
+  });
+
+  test("slash-prefixed unknown mention commands emit command.unknown", () => {
+    const parsed = parseSlackMentionCommand({
+      commands,
+      botUserId: "U_BOT",
+      text: "<@U_BOT> /missing --service api",
+    });
+
+    expect(parsed).toEqual({ status: "unknown", commandName: "missing" });
+  });
+
+  test("validates options for known mention commands", () => {
+    const parsed = parseSlackMentionCommand({
+      commands,
+      botUserId: "U_BOT",
+      text: "<@U_BOT> deploy",
+    });
+
+    expect(parsed).toEqual({
+      status: "invalid",
+      commandName: "deploy",
+      optionName: "service",
+      reason: "required option is missing",
     });
   });
 });

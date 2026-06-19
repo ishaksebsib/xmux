@@ -5,6 +5,14 @@ import type { SlackCommandMode } from "../types";
 
 export type SlackCommandPayloadLike = Pick<SlackCommandEvent["payload"], "command" | "text">;
 
+export type SlackMentionCommandParseResult<TCommands extends ChatCommandRegistry> =
+  | SlackCommandParseResult<TCommands>
+  | {
+      readonly status: "not_command";
+      readonly reason: "missing_mention" | "empty_command" | "unknown_command";
+      readonly commandName?: string;
+    };
+
 export type SlackCommandParseResult<TCommands extends ChatCommandRegistry> =
   | { readonly status: "unknown"; readonly commandName: string }
   | {
@@ -33,21 +41,64 @@ export function parseSlackCommand<TCommands extends ChatCommandRegistry>(args: {
     });
   }
 
-  const definition = args.commands[routed.commandName];
+  return parseRoutedSlackCommand({
+    commands: args.commands,
+    commandName: routed.commandName,
+    input: routed.input,
+    logger: args.logger,
+  });
+}
+
+export function parseSlackMentionCommand<TCommands extends ChatCommandRegistry>(args: {
+  readonly commands: TCommands;
+  readonly text: string;
+  readonly botUserId?: string;
+  readonly logger?: SlackLogScope;
+}): SlackMentionCommandParseResult<TCommands> {
+  const input = stripLeadingSlackMention({ text: args.text, botUserId: args.botUserId });
+  if (input === undefined) {
+    return { status: "not_command", reason: "missing_mention" };
+  }
+
+  const routed = readFirstToken(input);
+  if (routed === undefined) {
+    return { status: "not_command", reason: "empty_command" };
+  }
+
+  const commandName = normalizeSlashCommandName(routed.token);
+  if (args.commands[commandName] === undefined && !routed.token.trim().startsWith("/")) {
+    return { status: "not_command", reason: "unknown_command", commandName };
+  }
+
+  return parseRoutedSlackCommand({
+    commands: args.commands,
+    commandName,
+    input: routed.rest,
+    logger: args.logger,
+  });
+}
+
+function parseRoutedSlackCommand<TCommands extends ChatCommandRegistry>(args: {
+  readonly commands: TCommands;
+  readonly commandName: string;
+  readonly input: string;
+  readonly logger?: SlackLogScope;
+}): SlackCommandParseResult<TCommands> {
+  const definition = args.commands[args.commandName];
   if (definition === undefined) {
-    return { status: "unknown", commandName: routed.commandName };
+    return { status: "unknown", commandName: args.commandName };
   }
 
   const parsedOptions = parseCommandOptions({
-    commandName: routed.commandName,
+    commandName: args.commandName,
     definition,
-    input: routed.input,
+    input: args.input,
     logger: args.logger,
   });
   if (parsedOptions.status === "invalid") {
     return {
       status: "invalid",
-      commandName: routed.commandName,
+      commandName: args.commandName,
       reason: parsedOptions.reason,
       optionName: parsedOptions.optionName,
     };
@@ -56,7 +107,7 @@ export function parseSlackCommand<TCommands extends ChatCommandRegistry>(args: {
   return {
     status: "command",
     command: {
-      name: routed.commandName,
+      name: args.commandName,
       options: parsedOptions.options,
     } as ChatCommandValues<TCommands>,
   };
@@ -103,6 +154,21 @@ function routeSlackCommand(
 
 function normalizeSlashCommandName(command: string): string {
   return command.trim().replace(/^\/+/, "");
+}
+
+function stripLeadingSlackMention(args: {
+  readonly text: string;
+  readonly botUserId?: string;
+}): string | undefined {
+  const match = /^\s*<@([A-Z0-9_]+)(?:\|[^>]+)?>\s*/i.exec(args.text);
+  if (match === null) return undefined;
+
+  const mentionedUserId = match[1];
+  if (args.botUserId !== undefined && mentionedUserId !== args.botUserId) {
+    return undefined;
+  }
+
+  return args.text.slice(match[0].length).trim();
 }
 
 function parseCommandOptions(args: {

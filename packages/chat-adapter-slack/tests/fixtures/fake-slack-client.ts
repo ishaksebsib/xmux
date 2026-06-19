@@ -1,6 +1,8 @@
 import type {
   SlackActionEvent,
   SlackActionHandler,
+  SlackAppMentionEvent,
+  SlackAppMentionHandler,
   SlackBotClient,
   SlackBotIdentity,
   SlackCommandEvent,
@@ -23,6 +25,7 @@ import type {
 
 export interface FakeSlackHandlerCounts {
   readonly message: number;
+  readonly appMention: number;
   readonly command: number;
   readonly action: number;
   readonly reactionAdded: number;
@@ -58,6 +61,10 @@ export interface FakeSlackClient extends SlackBotClient {
     event: SlackMessageEvent["event"],
     options?: Pick<SlackMessageEvent, "retryNum" | "retryReason">,
   ): Promise<void>;
+  emitAppMention(
+    event: SlackAppMentionEvent["event"],
+    options?: Pick<SlackAppMentionEvent, "retryNum" | "retryReason">,
+  ): Promise<void>;
   emitAction(
     action: SlackActionEvent["action"],
     body: SlackActionEvent["body"],
@@ -86,6 +93,7 @@ export interface FakeSlackClient extends SlackBotClient {
 
 export function createFakeSlackClient(options: FakeSlackClientOptions = {}): FakeSlackClient {
   const messageHandlers: SlackMessageHandler[] = [];
+  const appMentionHandlers: SlackAppMentionHandler[] = [];
   const commandHandlers: SlackCommandHandler[] = [];
   const actionHandlers: SlackActionHandler[] = [];
   const reactionAddedHandlers: SlackReactionHandler[] = [];
@@ -119,6 +127,7 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
       startCalls.push(Date.now());
       handlerCountsAtStart.push({
         message: messageHandlers.length,
+        appMention: appMentionHandlers.length,
         command: commandHandlers.length,
         action: actionHandlers.length,
         reactionAdded: reactionAddedHandlers.length,
@@ -139,6 +148,10 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
     onMessage(handler) {
       callOrder.push("onMessage");
       messageHandlers.push(handler);
+    },
+    onAppMention(handler) {
+      callOrder.push("onAppMention");
+      appMentionHandlers.push(handler);
     },
     onCommand(handler) {
       callOrder.push("onCommand");
@@ -215,6 +228,10 @@ export function createFakeSlackClient(options: FakeSlackClientOptions = {}): Fak
       const messageEvent = createMessageEvent(event, emitOptions);
       await Promise.all(messageHandlers.map((handler) => handler(messageEvent)));
     },
+    async emitAppMention(event, emitOptions = {}) {
+      const appMentionEvent = createAppMentionEvent(event, emitOptions);
+      await Promise.all(appMentionHandlers.map((handler) => handler(appMentionEvent)));
+    },
     async emitAction(action, body, emitOptions = {}) {
       const event = createActionEvent(action, body, emitOptions);
       await Promise.all(actionHandlers.map((handler) => handler(event)));
@@ -245,6 +262,18 @@ function createMessageEvent(
     event,
     body: {} as SlackMessageEvent["body"],
     raw: {} as SlackMessageEvent["raw"],
+    ...options,
+  };
+}
+
+function createAppMentionEvent(
+  event: SlackAppMentionEvent["event"],
+  options: Pick<SlackAppMentionEvent, "retryNum" | "retryReason">,
+): SlackAppMentionEvent {
+  return {
+    event,
+    body: {} as SlackAppMentionEvent["body"],
+    raw: {} as SlackAppMentionEvent["raw"],
     ...options,
   };
 }

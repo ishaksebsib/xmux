@@ -6,6 +6,7 @@ import type {
   SlackActionStore,
   SlackAdapterMode,
   SlackCommandMode,
+  SlackMentionCommandOptions,
   SlackStreamOptions,
 } from "./types";
 
@@ -31,6 +32,7 @@ export interface SlackAdapterConfig {
   readonly botToken: SlackBotToken;
   readonly mode: SlackAdapterConfigMode;
   readonly commandMode: SlackCommandMode;
+  readonly mentionCommands: Required<SlackMentionCommandOptions>;
   readonly actionStore?: SlackActionStore;
   readonly stream: Required<SlackStreamOptions>;
 }
@@ -43,6 +45,10 @@ export const defaultSlackAdapterMode = {
 export const defaultSlackCommandMode = {
   type: "direct",
 } as const satisfies SlackCommandMode;
+
+export const defaultSlackMentionCommandOptions = {
+  enabled: false,
+} as const satisfies Required<SlackMentionCommandOptions>;
 
 export const defaultSlackStreamOptions = {
   bufferSize: 256,
@@ -61,12 +67,14 @@ export function parseSlackAdapterConfig<TChatId extends string>(
     const botToken = yield* parseSlackBotToken(options.botToken);
     const mode = yield* validateSlackMode(normalizeSlackMode(options.mode));
     const commandMode = yield* normalizeSlackCommandMode(options.commandMode);
+    const mentionCommands = normalizeSlackMentionCommandOptions(options.mentionCommands);
     const stream = yield* normalizeSlackStreamOptions(options.stream);
 
     return Result.ok({
       botToken,
       mode,
       commandMode,
+      mentionCommands,
       ...(options.actionStore === undefined ? {} : { actionStore: options.actionStore }),
       stream,
     });
@@ -185,6 +193,14 @@ function normalizeSlackCommandMode(
   }
 
   return Result.ok({ ...resolved, command });
+}
+
+function normalizeSlackMentionCommandOptions(
+  mentionCommands?: SlackMentionCommandOptions,
+): Required<SlackMentionCommandOptions> {
+  return {
+    enabled: mentionCommands?.enabled ?? defaultSlackMentionCommandOptions.enabled,
+  };
 }
 
 function normalizeSlackStreamOptions(

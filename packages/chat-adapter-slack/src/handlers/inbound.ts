@@ -7,14 +7,20 @@ import {
 import {
   createSlackCommandEvent,
   createSlackInvalidCommandEvent,
+  createSlackMentionCommandEvent,
+  createSlackMentionInvalidCommandEvent,
+  createSlackMentionUnknownCommandEvent,
   createSlackUnknownCommandEvent,
   parseSlackCommand,
+  parseSlackMentionCommand,
 } from "../commands";
 import type {
   SlackActionEvent,
+  SlackAppMentionEvent,
   SlackBotClient,
   SlackBotIdentity,
   SlackCommandEvent,
+  SlackMessageEvent,
   SlackReactionEvent,
   SlackRetryMetadata,
 } from "../client";
@@ -27,7 +33,12 @@ import {
   type SlackInteractionRegistry,
 } from "../stores/interaction-registry";
 import type { SlackStreamSourceRegistry } from "../stores/stream-source-registry";
-import type { SlackActionStore, SlackAdapterData, SlackCommandMode } from "../types";
+import type {
+  SlackActionStore,
+  SlackAdapterData,
+  SlackCommandMode,
+  SlackMentionCommandOptions,
+} from "../types";
 import type { SlackAdapterError } from "../errors";
 
 export function registerInboundHandlers<
@@ -37,6 +48,7 @@ export function registerInboundHandlers<
   readonly chatId: TChatId;
   readonly client: SlackBotClient;
   readonly commandMode: SlackCommandMode;
+  readonly mentionCommands: Required<SlackMentionCommandOptions>;
   readonly actionStore?: SlackActionStore;
   readonly botIdentity?: SlackBotIdentity;
   readonly context: ChatAdapterStartContext<
@@ -53,42 +65,19 @@ export function registerInboundHandlers<
     runInboundHandler({
       ...args,
       eventType: "message",
-      handle: () => {
-        if (isSlackRetry(event)) {
-          logRetryIgnored({ logger: args.logger, operation: "message", event });
-          return;
-        }
-
-        const decoded = decodeSlackMessageEvent({
-          chatId: args.chatId,
-          client: args.client,
-          event: event.event,
-          botIdentity: args.botIdentity,
-        });
-
-        if (decoded.status === "ignored") {
-          args.logger.debug(slackLogEvents.inboundIgnored, {
-            operation: "message",
-            reason: decoded.reason,
-            eventType: event.event.type,
-          });
-          return;
-        }
-
-        rememberSlackStreamSource({
-          botIdentity: args.botIdentity,
-          event: decoded.event,
-          registry: args.streamSourceRegistry,
-        });
-        args.logger.debug(slackLogEvents.inboundEvent, {
-          eventType: decoded.event.type,
-          conversationId: decoded.event.conversation.conversationId,
-          messageId: decoded.event.message.messageId,
-        });
-        args.context.emit(decoded.event);
-      },
+      handle: () => handleMessageEvent({ ...args, event }),
     }),
   );
+
+  if (args.mentionCommands.enabled) {
+    args.client.onAppMention((event) =>
+      runInboundHandler({
+        ...args,
+        eventType: "app_mention",
+        handle: () => handleAppMentionEvent({ ...args, event }),
+      }),
+    );
+  }
 
   args.client.onCommand((event) =>
     runInboundHandler({
@@ -139,6 +128,182 @@ export function registerInboundHandlers<
   args.client.onReactionRemoved((event) =>
     handleReactionEvent({ ...args, operation: "reaction_removed", event }),
   );
+}
+
+function handleMessageEvent<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {
+  readonly chatId: TChatId;
+  readonly client: SlackBotClient;
+  readonly botIdentity?: SlackBotIdentity;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackMessageEvent;
+  readonly logger: SlackLogScope;
+  readonly mentionCommands: Required<SlackMentionCommandOptions>;
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
+}): void {
+  if (isSlackRetry(args.event)) {
+    logRetryIgnored({ logger: args.logger, operation: "message", event: args.event });
+    return;
+  }
+
+  const decoded = decodeSlackInboundMessage({ ...args, operation: "message" });
+  if (decoded === undefined) return;
+
+  if (args.mentionCommands.enabled && emitSlackMentionCommandEvent({ ...args, source: decoded })) {
+    return;
+  }
+
+  emitSlackMessageEvent({ context: args.context, event: decoded, logger: args.logger });
+}
+
+function handleAppMentionEvent<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly chatId: TChatId;
+  readonly client: SlackBotClient;
+  readonly botIdentity?: SlackBotIdentity;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackAppMentionEvent;
+  readonly logger: SlackLogScope;
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
+}): void {
+  if (isSlackRetry(args.event)) {
+    logRetryIgnored({ logger: args.logger, operation: "app_mention", event: args.event });
+    return;
+  }
+
+  const decoded = decodeSlackInboundMessage({ ...args, operation: "app_mention" });
+  if (decoded === undefined) return;
+
+  if (emitSlackMentionCommandEvent({ ...args, source: decoded })) return;
+
+  emitSlackMessageEvent({ context: args.context, event: decoded, logger: args.logger });
+}
+
+function emitSlackMentionCommandEvent<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly botIdentity?: SlackBotIdentity;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackMessageEvent | SlackAppMentionEvent;
+  readonly logger: SlackLogScope;
+  readonly source: ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError>;
+}): boolean {
+  const parsed = parseSlackMentionCommand({
+    commands: args.context.commands,
+    text: slackEventText(args.event.event),
+    botUserId: args.botIdentity?.botUserId,
+    logger: args.logger,
+  });
+
+  if (parsed.status === "not_command") return false;
+
+  const commandEvent =
+    parsed.status === "command"
+      ? createSlackMentionCommandEvent({
+          source: args.source,
+          command: parsed.command,
+        })
+      : parsed.status === "unknown"
+        ? createSlackMentionUnknownCommandEvent({
+            source: args.source,
+            commandName: parsed.commandName,
+          })
+        : createSlackMentionInvalidCommandEvent({
+            source: args.source,
+            commandName: parsed.commandName,
+            reason: parsed.reason,
+            optionName: parsed.optionName,
+          });
+
+  args.logger.debug(slackLogEvents.inboundEvent, {
+    eventType: commandEvent.type,
+    conversationId: commandEvent.conversation.conversationId,
+    messageId: commandEvent.message?.messageId,
+    commandName: parsed.status === "command" ? parsed.command.name : parsed.commandName,
+  });
+  args.context.emit(commandEvent);
+  return true;
+}
+
+function decodeSlackInboundMessage<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly chatId: TChatId;
+  readonly client: SlackBotClient;
+  readonly botIdentity?: SlackBotIdentity;
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: SlackMessageEvent | SlackAppMentionEvent;
+  readonly logger: SlackLogScope;
+  readonly operation: "message" | "app_mention";
+  readonly streamSourceRegistry: SlackStreamSourceRegistry;
+}): ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError> | undefined {
+  const decoded = decodeSlackMessageEvent({
+    chatId: args.chatId,
+    client: args.client,
+    event: args.event.event,
+    botIdentity: args.botIdentity,
+  });
+
+  if (decoded.status === "ignored") {
+    args.logger.debug(slackLogEvents.inboundIgnored, {
+      operation: args.operation,
+      reason: decoded.reason,
+      eventType: args.event.event.type,
+    });
+    return undefined;
+  }
+
+  rememberSlackStreamSource({
+    botIdentity: args.botIdentity,
+    event: decoded.event,
+    registry: args.streamSourceRegistry,
+  });
+
+  return decoded.event;
+}
+
+function emitSlackMessageEvent<
+  TChatId extends string,
+  TCommands extends ChatCommandRegistry,
+>(args: {
+  readonly context: ChatAdapterStartContext<
+    TCommands,
+    TChatId,
+    SlackAdapterData,
+    SlackAdapterError
+  >;
+  readonly event: ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError>;
+  readonly logger: SlackLogScope;
+}): void {
+  args.logger.debug(slackLogEvents.inboundEvent, {
+    eventType: args.event.type,
+    conversationId: args.event.conversation.conversationId,
+    messageId: args.event.message.messageId,
+  });
+  args.context.emit(args.event);
 }
 
 function rememberSlackStreamSource<TChatId extends string>(args: {
@@ -361,6 +526,13 @@ async function runInboundHandler<
     });
     args.context.emit({ type: "error", chatId: args.chatId, error });
   }
+}
+
+function slackEventText(event: unknown): string {
+  if (typeof event !== "object" || event === null) return "";
+
+  const text = (event as { readonly text?: unknown }).text;
+  return typeof text === "string" ? text : "";
 }
 
 function isSlackRetry(event: SlackRetryMetadata): boolean {

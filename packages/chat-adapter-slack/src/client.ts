@@ -26,6 +26,7 @@ import type { SlackAdapterConfigMode, SlackBotToken } from "./config";
 import type { SlackBlock, SlackClientOptions, SlackMessageMetadata } from "./types";
 
 type SlackBoltMessageArgs = SlackEventMiddlewareArgs<"message"> & AllMiddlewareArgs;
+type SlackBoltAppMentionArgs = SlackEventMiddlewareArgs<"app_mention"> & AllMiddlewareArgs;
 type SlackBoltCommandArgs = SlackCommandMiddlewareArgs & AllMiddlewareArgs;
 type SlackBoltActionArgs = SlackActionMiddlewareArgs & AllMiddlewareArgs;
 type SlackBoltReactionAddedArgs = SlackEventMiddlewareArgs<"reaction_added"> & AllMiddlewareArgs;
@@ -33,6 +34,7 @@ type SlackBoltReactionRemovedArgs = SlackEventMiddlewareArgs<"reaction_removed">
   AllMiddlewareArgs;
 
 export type SlackMessageHandler = (event: SlackMessageEvent) => void | Promise<void>;
+export type SlackAppMentionHandler = (event: SlackAppMentionEvent) => void | Promise<void>;
 export type SlackCommandHandler = (event: SlackCommandEvent) => void | Promise<void>;
 export type SlackActionHandler = (event: SlackActionEvent) => void | Promise<void>;
 export type SlackReactionHandler = (event: SlackReactionEvent) => void | Promise<void>;
@@ -47,6 +49,12 @@ export interface SlackMessageEvent extends SlackRetryMetadata {
   readonly event: SlackBoltMessageArgs["event"];
   readonly body: SlackBoltMessageArgs["body"];
   readonly raw: SlackBoltMessageArgs;
+}
+
+export interface SlackAppMentionEvent extends SlackRetryMetadata {
+  readonly event: SlackBoltAppMentionArgs["event"];
+  readonly body: SlackBoltAppMentionArgs["body"];
+  readonly raw: SlackBoltAppMentionArgs;
 }
 
 export interface SlackCommandEvent extends SlackRetryMetadata {
@@ -172,6 +180,7 @@ export interface SlackBotClient {
   start(): Promise<void>;
   stop(): Promise<void>;
   onMessage(handler: SlackMessageHandler): void;
+  onAppMention(handler: SlackAppMentionHandler): void;
   onCommand(handler: SlackCommandHandler): void;
   onAction(handler: SlackActionHandler): void;
   onReactionAdded(handler: SlackReactionHandler): void;
@@ -210,6 +219,16 @@ export function createSlackBotClient(args: {
     },
     onMessage: (handler) => {
       app.message(async (event) => {
+        await handler({
+          event: event.event,
+          body: event.body,
+          raw: event,
+          ...retryMetadata(event),
+        });
+      });
+    },
+    onAppMention: (handler) => {
+      app.event("app_mention", async (event) => {
         await handler({
           event: event.event,
           body: event.body,

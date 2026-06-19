@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   defaultSlackCommandMode,
+  defaultSlackMentionCommandOptions,
   normalizeSlackMode,
   parseSlackAdapterConfig,
   parseSlackAppToken,
@@ -65,6 +66,10 @@ describe("Slack adapter config", () => {
     expect(defaultSlackCommandMode).toEqual({ type: "direct" });
   });
 
+  test("mention commands are disabled by default", () => {
+    expect(defaultSlackMentionCommandOptions).toEqual({ enabled: false });
+  });
+
   test("missing app token fails when socket mode is defaulted", () => {
     const result = parseSlackAdapterConfig({ botToken: "xoxb-token" });
 
@@ -122,6 +127,19 @@ describe("Slack adapter config", () => {
     }
   });
 
+  test("mention commands can be enabled", () => {
+    const result = parseSlackAdapterConfig({
+      botToken: "xoxb-token",
+      mode: { type: "socket", appToken: "xapp-token" },
+      mentionCommands: { enabled: true },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value.mentionCommands).toEqual({ enabled: true });
+    }
+  });
+
   test("invalid stream buffer size fails", () => {
     const result = parseSlackAdapterConfig({
       botToken: "xoxb-token",
@@ -161,6 +179,7 @@ describe("Slack adapter config", () => {
     if (result.isOk()) {
       expect(result.value.mode).toEqual({ type: "socket", appToken: "xapp-token" });
       expect(result.value.commandMode).toEqual({ type: "direct" });
+      expect(result.value.mentionCommands).toEqual({ enabled: false });
       expect(result.value.stream).toEqual({
         bufferSize: 256,
         maxSegmentChars: 12_000,
