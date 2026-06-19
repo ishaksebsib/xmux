@@ -5,17 +5,41 @@ import type { ServerControlEndpoint } from "./paths";
 import { ServerProbe } from "./server-probe";
 
 const HEALTH_CHECK_TIMEOUT_MS = 250;
+class ServerProbeRequestError extends Schema.TaggedErrorClass<ServerProbeRequestError>()(
+  "ServerProbeRequestError",
+  {
+    socketPath: Schema.String,
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
+
 const decodeUnknownJson = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
 const decodeHealthResponse = Schema.decodeUnknownEffect(HealthResponse);
 
-const decodeHealthBody = (body: string): Effect.Effect<HealthResponse, unknown> =>
-  decodeUnknownJson(body).pipe(Effect.flatMap(decodeHealthResponse));
+const decodeHealthBody = (
+  socketPath: string,
+  body: string,
+): Effect.Effect<HealthResponse, ServerProbeRequestError> =>
+  decodeUnknownJson(body).pipe(
+    Effect.flatMap(decodeHealthResponse),
+    Effect.mapError(
+      (cause) =>
+        new ServerProbeRequestError({
+          socketPath,
+          message: "Failed to decode health response.",
+          cause,
+        }),
+    ),
+  );
 
-const requestHealth = (socketPath: string): Effect.Effect<HealthResponse, unknown> =>
-  Effect.callback<HealthResponse, unknown>((resume) => {
+const requestHealth = (
+  socketPath: string,
+): Effect.Effect<HealthResponse, ServerProbeRequestError> =>
+  Effect.callback<HealthResponse, ServerProbeRequestError>((resume) => {
     let settled = false;
     let body = "";
-    const resumeOnce = (effect: Effect.Effect<HealthResponse, unknown>): void => {
+    const resumeOnce = (effect: Effect.Effect<HealthResponse, ServerProbeRequestError>): void => {
       if (settled) return;
       settled = true;
       cleanup();
@@ -36,19 +60,41 @@ const requestHealth = (socketPath: string): Effect.Effect<HealthResponse, unknow
         response.on("end", () => {
           const statusCode = response.statusCode ?? 0;
           if (statusCode !== 200) {
-            resumeOnce(Effect.fail(new Error(`Health check failed with status ${statusCode}.`)));
+            resumeOnce(
+              Effect.fail(
+                new ServerProbeRequestError({
+                  socketPath,
+                  message: `Health check failed with status ${statusCode}.`,
+                }),
+              ),
+            );
             return;
           }
-          resumeOnce(decodeHealthBody(body));
+          resumeOnce(decodeHealthBody(socketPath, body));
         });
       },
     );
     const onError = (cause: Error): void => {
-      resumeOnce(Effect.fail(cause));
+      resumeOnce(
+        Effect.fail(
+          new ServerProbeRequestError({
+            socketPath,
+            message: "Health check request failed.",
+            cause,
+          }),
+        ),
+      );
     };
     const onTimeout = (): void => {
       request.destroy();
-      resumeOnce(Effect.fail(new Error(`Timed out reaching server socket: ${socketPath}`)));
+      resumeOnce(
+        Effect.fail(
+          new ServerProbeRequestError({
+            socketPath,
+            message: "Timed out reaching server socket.",
+          }),
+        ),
+      );
     };
     const cleanup = (): void => {
       request.off("error", onError);

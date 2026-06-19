@@ -28,6 +28,14 @@ interface HttpTestResponse {
   readonly body: string;
 }
 
+class UnixSocketRequestError extends Schema.TaggedErrorClass<UnixSocketRequestError>()(
+  "UnixSocketRequestError",
+  {
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
+
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeHealthResponse = Schema.decodeUnknownOption(HealthResponse);
 const decodeStatusResponse = Schema.decodeUnknownOption(StatusResponse);
@@ -71,7 +79,7 @@ const requestUnix = (
   socketPath: string,
   method: string,
   path: string,
-): Effect.Effect<HttpTestResponse, Error> =>
+): Effect.Effect<HttpTestResponse, UnixSocketRequestError> =>
   Effect.tryPromise({
     try: () =>
       new Promise<HttpTestResponse>((resolve, reject) => {
@@ -100,7 +108,11 @@ const requestUnix = (
         });
         request.end();
       }),
-    catch: (cause) => new Error(`Unix socket request failed: ${String(cause)}`),
+    catch: (cause) =>
+      new UnixSocketRequestError({
+        message: "Unix socket request failed.",
+        cause,
+      }),
   });
 
 const decodeHealth = (body: string): HealthResponse => {
@@ -302,9 +314,10 @@ describe("control server", () => {
       const validation = decodeConfigValidate(validateResponse.body);
       assert.isTrue(validation.valid);
 
-      const duplicateError = yield* Effect.scoped(serverMain())
-        .pipe(Effect.provide(makeServerTestLayer(paths)))
-        .pipe(Effect.flip);
+      const duplicateError = yield* Effect.scoped(serverMain()).pipe(
+        Effect.provide(makeServerTestLayer(paths)),
+        Effect.flip,
+      );
       assert.strictEqual(duplicateError._tag, "ActiveServerError");
 
       yield* Effect.promise(() => writeFile(configPath, `{ "server": { "logLevel": "verbose" } }`));
