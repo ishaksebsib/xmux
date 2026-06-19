@@ -1,4 +1,5 @@
 import type { Model, PermissionRuleset, Provider } from "@opencode-ai/sdk/v2";
+import type { OpenCodeBaseUrl, OpenCodePort } from "./config";
 import type {
   HarnessAdapterDefinition,
   HarnessModelRef,
@@ -52,6 +53,20 @@ export type OpenCodeExternalConfig = OpenCodeSharedConfig & {
 };
 
 export type OpenCodeAdapterConfig = OpenCodeEmbeddedConfig | OpenCodeExternalConfig;
+
+export type ResolvedOpenCodeEmbeddedConfig = OpenCodeSharedConfig & {
+  readonly mode: "embedded";
+  readonly port?: OpenCodePort;
+};
+
+export type ResolvedOpenCodeExternalConfig = OpenCodeSharedConfig & {
+  readonly mode: "external";
+  readonly baseUrl: OpenCodeBaseUrl;
+};
+
+export type ResolvedOpenCodeAdapterConfig =
+  | ResolvedOpenCodeEmbeddedConfig
+  | ResolvedOpenCodeExternalConfig;
 
 export type OpenCodeAdapter = HarnessAdapterDefinition<
   "opencode",

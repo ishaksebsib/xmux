@@ -9,8 +9,8 @@ import {
 import { Result } from "better-result";
 import { actions } from "./actions";
 import { commands } from "./commands";
-import { XmuxCloseError, XmuxInitializeError } from "./errors";
-import { normalizeConfig, type Config } from "./config";
+import { XmuxCloseError, XmuxInitializeError, type XmuxConfigurationError } from "./errors";
+import { parseXmuxConfig, type Config } from "./config";
 import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
 import { createPromptRunRegistry } from "./features/prompt/run-registry";
@@ -51,11 +51,16 @@ export type XmuxCloseCause = {
   readonly chat?: unknown;
 };
 
-export function createXmux<
+export function createXmuxResult<
   const TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   const TChats extends ChatAdapterDefinitions<TChats>,
->(options: CreateXmuxOptions<TAdapters, TChats>): Xmux<TAdapters, TChats> {
-  const config = normalizeConfig(options.config);
+>(
+  options: CreateXmuxOptions<TAdapters, TChats>,
+): Result<Xmux<TAdapters, TChats>, XmuxConfigurationError> {
+  const parsedConfig = parseXmuxConfig(options.config);
+  if (parsedConfig.isErr()) return Result.err(parsedConfig.error);
+
+  const config = parsedConfig.value;
   const harness = createHarness({ adapters: options.harnesses, logger: options.logger });
   const chatIds = Object.freeze(Object.keys(options.chats) as Extract<keyof TChats, string>[]);
   const shutdownController = new AbortController();
@@ -87,7 +92,7 @@ export function createXmux<
   });
   const routeUnsubscribers = registerRoutes(ctx, options.middleware ?? []);
 
-  return {
+  return Result.ok({
     ctx,
 
     async initialize() {
@@ -110,5 +115,18 @@ export function createXmux<
         ? Result.ok()
         : Result.err(new XmuxCloseError({ chat: chatError, harness: harnessError }));
     },
-  };
+  });
+}
+
+/**
+ * Legacy convenience factory. New callers should prefer `createXmuxResult()` so
+ * malformed configuration remains an explicit typed Result error.
+ */
+export function createXmux<
+  const TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  const TChats extends ChatAdapterDefinitions<TChats>,
+>(options: CreateXmuxOptions<TAdapters, TChats>): Xmux<TAdapters, TChats> {
+  const created = createXmuxResult(options);
+  if (created.isErr()) throw created.error;
+  return created.value;
 }

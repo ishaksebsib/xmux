@@ -105,31 +105,41 @@ export function parseDiscordBotToken(
     : Result.ok(trimmed as DiscordBotToken);
 }
 
+function isNoDiscordCommandRegistration(
+  registration: DiscordCommandRegistrationMode,
+): registration is Extract<
+  DiscordCommandRegistrationMode,
+  { readonly scope: { readonly type: "none" } }
+> {
+  return registration.scope.type === "none";
+}
+
+function isGlobalDiscordCommandRegistration(
+  registration: DiscordCommandRegistrationMode,
+): registration is Extract<
+  DiscordCommandRegistrationMode,
+  { readonly scope: { readonly type: "global" } }
+> {
+  return registration.scope.type === "global";
+}
+
 function normalizeDiscordCommandRegistration(
   registration?: DiscordCommandRegistrationMode,
 ): Result<DiscordCommandRegistrationMode, DiscordConfigurationError> {
   const resolved = registration ?? defaultDiscordCommandRegistration;
 
-  if (resolved.scope.type === "none") {
+  if (isNoDiscordCommandRegistration(resolved)) {
     return Result.ok(resolved);
   }
 
-  if (resolved.scope.type === "global") {
-    const globalRegistration = resolved as Extract<
-      DiscordCommandRegistrationMode,
-      { readonly scope: { readonly type: "global" } }
-    >;
+  if (isGlobalDiscordCommandRegistration(resolved)) {
     return Result.ok({
-      ...globalRegistration,
-      strategy: globalRegistration.strategy ?? "upsert",
+      ...resolved,
+      strategy: resolved.strategy ?? "upsert",
     });
   }
 
-  const guildRegistration = resolved as Extract<
-    DiscordCommandRegistrationMode,
-    { readonly scope: { readonly type: "guild" } }
-  >;
-  const guildId = guildRegistration.scope.guildId.trim();
+  const guildId = resolved.scope.guildId.trim();
   if (guildId.length === 0) {
     return Result.err(
       new DiscordConfigurationError({
@@ -140,9 +150,9 @@ function normalizeDiscordCommandRegistration(
   }
 
   return Result.ok({
-    ...guildRegistration,
-    strategy: guildRegistration.strategy ?? "upsert",
-    scope: { ...guildRegistration.scope, guildId },
+    ...resolved,
+    strategy: resolved.strategy ?? "upsert",
+    scope: { ...resolved.scope, guildId },
   });
 }
 

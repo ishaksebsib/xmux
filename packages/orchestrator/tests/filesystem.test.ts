@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { normalizeConfig } from "../src/config";
+import { normalizeConfig, parseXmuxConfig } from "../src/config";
 import {
   createNodeFileSystemHost,
   FileSystemPathNotFoundError,
@@ -85,31 +85,22 @@ describe("workspace filesystem", () => {
     });
   });
 
-  test("falls back to prompt response defaults for invalid limits", () => {
-    const config = normalizeConfig({
+  test("rejects malformed prompt response limits", () => {
+    const config = parseXmuxConfig({
       userName: "xmux",
       defaultWorkingDirectory: ".",
       deliveryMode: "requester_only",
       prompt: {
         response: {
           maxToolTextOutputChars: 0,
-          maxToolJsonOutputChars: -1,
-          maxReasoningChars: 1.5,
-          maxToolInputStringChars: Number.NaN,
-          maxToolInputObjectEntries: 0,
-          maxStreamDeltaChars: 0,
         },
       },
     });
 
-    expect(config.prompt.response).toEqual({
-      showToolOutput: true,
-      maxToolTextOutputChars: 280,
-      maxToolJsonOutputChars: 400,
-      maxReasoningChars: 320,
-      maxToolInputStringChars: 50,
-      maxToolInputObjectEntries: 2,
-    });
+    expect(config.isErr()).toBe(true);
+    if (config.isErr()) {
+      expect(config.error.message).toContain("prompt.response.maxToolTextOutputChars");
+    }
   });
 
   test("resolves a relative directory from a base cwd", async () => {

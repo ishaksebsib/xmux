@@ -1,0 +1,56 @@
+{
+  "name": "@xmux/server",
+  "version": "0.0.0",
+  "private": true,
+  "homepage": "https://github.com/ishaksebsib/xmux",
+  "license": "MIT",
+  "author": "Ishak Sebsib",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ishaksebsib/xmux.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "openapi": "pnpm -s build >/dev/null && node --input-type=module -e \"import('./dist/index.mjs').then((m) => process.stdout.write(m.serverOpenApiJson()))\"",
+    "generate:openapi": "pnpm -s build >/dev/null && node --input-type=module -e \"Promise.all([import('./dist/index.mjs'), import('node:fs')]).then(([m, fs]) => fs.writeFileSync('openapi.json', m.serverOpenApiJson()))\"",
+    "test": "vitest",
+    "typecheck": "tsgo --noEmit",
+    "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "beta",
+    "effect": "beta",
+    "jsonc-parser": "^3.3.1"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.86.2",
+    "@effect/vitest": "beta",
+    "@types/node": "^25.5.0",
+    "@typescript/native-preview": "7.0.0-dev.20260328.1",
+    "@xmux/ts-config": "workspace:*",
+    "tsdown": "^0.21.7",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

@@ -3,6 +3,19 @@ import type { StoreOperation } from "./store";
 import type { XmuxCloseCause } from "./xmux";
 import { describeCause } from "./utils";
 
+export class XmuxConfigurationError extends TaggedError("XmuxConfigurationError")<{
+  readonly path: string;
+  readonly reason: string;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly path: string; readonly reason: string }) {
+    super({
+      ...args,
+      message: `Invalid xmux configuration at ${args.path}: ${args.reason}`,
+    });
+  }
+}
+
 export class XmuxInitializeError extends TaggedError("XmuxInitializeError")<{
   readonly cause: unknown;
   readonly message: string;

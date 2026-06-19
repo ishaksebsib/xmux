@@ -163,10 +163,11 @@ export async function resolvePiSession(args: {
 
   const options = mergePiCreateOptions(args.runtime.config, args.adapterOptions);
   if (options.sessionPath) {
+    const configuredSessionPath = options.sessionPath;
     return Result.gen(async function* () {
       const sessionPath = yield* validateSessionJsonlPath({
         operation: args.operation,
-        sessionPath: options.sessionPath as string,
+        sessionPath: configuredSessionPath,
       });
       const exists = yield* Result.await(
         fileExists({ operation: args.operation, filePath: sessionPath }),

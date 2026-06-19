@@ -1,5 +1,8 @@
+export { parseOpenCodeAdapterConfig } from "./config";
+export type { OpenCodeBaseUrl, OpenCodePort } from "./config";
 export { createOpenCodeAdapter } from "./opencode";
 export {
+  OpenCodeConfigurationError,
   OpenCodeInteractionRequestError,
   OpenCodeInteractionResponseError,
   OpenCodeModelRequestError,
@@ -16,4 +19,7 @@ export type {
   OpenCodeModelInfo,
   OpenCodeModelVariant,
   OpenCodeSessionInfo,
+  ResolvedOpenCodeAdapterConfig,
+  ResolvedOpenCodeEmbeddedConfig,
+  ResolvedOpenCodeExternalConfig,
 } from "./types";
