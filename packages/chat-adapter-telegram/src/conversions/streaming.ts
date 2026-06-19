@@ -1,26 +1,49 @@
-import type { MessageDraftPiece } from "@grammyjs/stream";
 import { Result } from "better-result";
 import type {
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
+  ChatMessageFormat,
   ChatSentMessage,
   ChatTextStreamChunk,
 } from "@xmux/chat-core";
+import type { TelegramBotClient, TelegramStreamedMessage } from "../client";
 import { TelegramStreamReplyError } from "../errors";
-import type { TelegramStreamedTextMessages } from "../client";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 import { encodeTelegramFormatOptions } from "./formatting";
 
-export type TelegramStreamMessageRequest = {
+type TelegramPlainStreamArgs = Parameters<TelegramBotClient["streamMessage"]>[0];
+type TelegramRichDraftOptions = Parameters<TelegramBotClient["sendRichMessageDraft"]>[0]["options"];
+type TelegramRichMessageOptions = Parameters<TelegramBotClient["sendRichMessage"]>[0]["options"];
+type TelegramRichBaseInputMessage = Omit<
+  Parameters<TelegramBotClient["sendRichMessage"]>[0]["richMessage"],
+  "markdown" | "html"
+>;
+
+type TelegramRichStreamFormat = Extract<ChatMessageFormat, "markdown" | "html">;
+
+export type TelegramPlainStreamMessageRequest = {
+  readonly kind: "plain";
   readonly chatId: number;
   readonly draftIdOffset: number;
-  readonly stream: AsyncIterable<MessageDraftPiece>;
-  readonly draftOptions?: {
-    readonly message_thread_id?: number;
-    readonly parse_mode?: TelegramAdapterOptions["parse_mode"];
-  };
-  readonly messageOptions?: TelegramAdapterOptions;
+  readonly stream: AsyncIterable<string>;
+  readonly draftOptions?: TelegramPlainStreamArgs["draftOptions"];
+  readonly messageOptions?: TelegramPlainStreamArgs["messageOptions"];
 };
+
+export type TelegramRichStreamMessageRequest = {
+  readonly kind: "rich";
+  readonly format: TelegramRichStreamFormat;
+  readonly chatId: number;
+  readonly draftId: number;
+  readonly stream: AsyncIterable<string>;
+  readonly draftOptions?: TelegramRichDraftOptions;
+  readonly messageOptions?: TelegramRichMessageOptions;
+  readonly baseInputRichMessage?: TelegramRichBaseInputMessage;
+};
+
+export type TelegramStreamMessageRequest =
+  | TelegramPlainStreamMessageRequest
+  | TelegramRichStreamMessageRequest;
 
 export function encodeTelegramStreamMessage(
   input: ChatAdapterStreamMessageInput<string, TelegramAdapterOptions>,
@@ -80,13 +103,9 @@ export function encodeTelegramStreamReplyMessage(
         );
   }
 
-  return Result.ok({
-    ...baseRequest,
-    messageOptions: {
-      reply_parameters: { message_id: parsedMessageId },
-      ...baseRequest.messageOptions,
-    },
-  });
+  return Result.ok(
+    withTelegramReplyParameters(baseRequest, { reply_parameters: { message_id: parsedMessageId } }),
+  );
 }
 
 export function encodeTelegramStreamedMessage<TChatId extends string>(args: {
@@ -97,9 +116,9 @@ export function encodeTelegramStreamedMessage<TChatId extends string>(args: {
     TChatId,
     TelegramAdapterOptions
   >["content"]["format"];
-  readonly telegramMessages: TelegramStreamedTextMessages;
+  readonly telegramMessages: TelegramStreamedMessage;
 }): ChatSentMessage<TChatId, TelegramAdapterData> {
-  const lastMessage = args.telegramMessages.at(-1);
+  const lastMessage = getLastTelegramStreamedMessage(args.telegramMessages);
   if (lastMessage === undefined) {
     throw new Error("Telegram stream did not send any messages");
   }
@@ -123,19 +142,78 @@ export function parseTelegramPrivateChatId(conversationId: string): number | und
   return Number.isInteger(chatId) && chatId > 0 ? chatId : undefined;
 }
 
-export function shouldFinalizeTelegramMarkdownStream(args: {
+export function shouldUseTelegramRichStream(args: {
   readonly format: ChatAdapterStreamMessageInput<
     string,
     TelegramAdapterOptions
   >["content"]["format"];
   readonly adapterOptions: TelegramAdapterOptions;
 }): boolean {
-  return args.format === "markdown" && args.adapterOptions.parse_mode === undefined;
+  return parseTelegramRichStreamFormat(args) !== undefined;
 }
 
-async function* encodeTelegramMessageDraftPieces(
+function parseTelegramRichStreamFormat(args: {
+  readonly format: ChatAdapterStreamMessageInput<
+    string,
+    TelegramAdapterOptions
+  >["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): TelegramRichStreamFormat | undefined {
+  if (args.adapterOptions.parse_mode !== undefined || args.adapterOptions.entities !== undefined) {
+    return undefined;
+  }
+
+  if (args.format === "markdown" || args.format === "html") {
+    return args.format;
+  }
+
+  return undefined;
+}
+
+function createTelegramStreamMessageRequest(args: {
+  readonly conversationId: string;
+  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
+  readonly format: ChatAdapterStreamMessageInput<
+    string,
+    TelegramAdapterOptions
+  >["content"]["format"];
+  readonly adapterOptions: TelegramAdapterOptions;
+}): TelegramStreamMessageRequest {
+  const richFormat = parseTelegramRichStreamFormat({
+    format: args.format,
+    adapterOptions: args.adapterOptions,
+  });
+  if (richFormat !== undefined) {
+    return {
+      kind: "rich",
+      format: richFormat,
+      chatId: Number(args.conversationId),
+      draftId: createTelegramDraftId(),
+      stream: encodeTelegramTextDeltas(args.chunks),
+      draftOptions: encodeTelegramRichDraftOptions(args.adapterOptions),
+      messageOptions: encodeTelegramRichMessageOptions(args.adapterOptions),
+    };
+  }
+
+  return {
+    kind: "plain",
+    chatId: Number(args.conversationId),
+    draftIdOffset: createTelegramDraftId(),
+    stream: encodeTelegramTextDeltas(args.chunks),
+    draftOptions: encodeTelegramMessageDraftOptions({
+      format: args.format,
+      adapterOptions: args.adapterOptions,
+    }),
+    messageOptions: {
+      ...encodeTelegramFormatOptions(args.format),
+      ...args.adapterOptions,
+    },
+  };
+}
+
+async function* encodeTelegramTextDeltas(
   chunks: AsyncIterable<ChatTextStreamChunk>,
-): AsyncIterable<MessageDraftPiece> {
+): AsyncIterable<string> {
   let text = "";
 
   for await (const chunk of chunks) {
@@ -162,64 +240,101 @@ async function* encodeTelegramMessageDraftPieces(
   }
 }
 
-function createTelegramStreamMessageRequest(args: {
-  readonly conversationId: string;
-  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
-  readonly format: ChatAdapterStreamMessageInput<
-    string,
-    TelegramAdapterOptions
-  >["content"]["format"];
-  readonly adapterOptions: TelegramAdapterOptions;
-}): TelegramStreamMessageRequest {
-  return {
-    chatId: Number(args.conversationId),
-    draftIdOffset: createTelegramDraftIdOffset(),
-    stream: encodeTelegramMessageDraftPieces(args.chunks),
-    draftOptions: encodeTelegramMessageDraftOptions({
-      format: args.format,
-      adapterOptions: args.adapterOptions,
-    }),
-    messageOptions: {
-      ...encodeTelegramStreamFormatOptions({
-        format: args.format,
-        adapterOptions: args.adapterOptions,
-      }),
-      ...args.adapterOptions,
-    },
-  };
-}
-
 function encodeTelegramMessageDraftOptions(args: {
   readonly format: ChatAdapterStreamMessageInput<
     string,
     TelegramAdapterOptions
   >["content"]["format"];
   readonly adapterOptions: TelegramAdapterOptions;
-}): TelegramStreamMessageRequest["draftOptions"] {
+}): TelegramPlainStreamMessageRequest["draftOptions"] {
   const options = {
-    ...encodeTelegramStreamFormatOptions({
-      format: args.format,
-      adapterOptions: args.adapterOptions,
-    }),
+    ...encodeTelegramFormatOptions(args.format),
     ...(args.adapterOptions.message_thread_id === undefined
       ? {}
       : { message_thread_id: args.adapterOptions.message_thread_id }),
     ...(args.adapterOptions.parse_mode === undefined
       ? {}
       : { parse_mode: args.adapterOptions.parse_mode }),
-  } satisfies TelegramStreamMessageRequest["draftOptions"];
+  } satisfies TelegramPlainStreamMessageRequest["draftOptions"];
 
   return Object.keys(options).length === 0 ? undefined : options;
 }
 
-function encodeTelegramStreamFormatOptions(args: {
-  readonly format: ChatAdapterStreamMessageInput<
-    string,
-    TelegramAdapterOptions
-  >["content"]["format"];
-  readonly adapterOptions: TelegramAdapterOptions;
-}): TelegramAdapterOptions {
-  return shouldFinalizeTelegramMarkdownStream(args) ? {} : encodeTelegramFormatOptions(args.format);
+function encodeTelegramRichDraftOptions(
+  adapterOptions: TelegramAdapterOptions,
+): TelegramRichDraftOptions {
+  return adapterOptions.message_thread_id === undefined
+    ? undefined
+    : ({ message_thread_id: adapterOptions.message_thread_id } satisfies TelegramRichDraftOptions);
+}
+
+function encodeTelegramRichMessageOptions(
+  adapterOptions: TelegramAdapterOptions,
+): TelegramRichMessageOptions {
+  const options = {
+    ...(adapterOptions.business_connection_id === undefined
+      ? {}
+      : { business_connection_id: adapterOptions.business_connection_id }),
+    ...(adapterOptions.message_thread_id === undefined
+      ? {}
+      : { message_thread_id: adapterOptions.message_thread_id }),
+    ...(adapterOptions.direct_messages_topic_id === undefined
+      ? {}
+      : { direct_messages_topic_id: adapterOptions.direct_messages_topic_id }),
+    ...(adapterOptions.disable_notification === undefined
+      ? {}
+      : { disable_notification: adapterOptions.disable_notification }),
+    ...(adapterOptions.protect_content === undefined
+      ? {}
+      : { protect_content: adapterOptions.protect_content }),
+    ...(adapterOptions.allow_paid_broadcast === undefined
+      ? {}
+      : { allow_paid_broadcast: adapterOptions.allow_paid_broadcast }),
+    ...(adapterOptions.message_effect_id === undefined
+      ? {}
+      : { message_effect_id: adapterOptions.message_effect_id }),
+    ...(adapterOptions.suggested_post_parameters === undefined
+      ? {}
+      : { suggested_post_parameters: adapterOptions.suggested_post_parameters }),
+    ...(adapterOptions.reply_parameters === undefined
+      ? {}
+      : { reply_parameters: adapterOptions.reply_parameters }),
+    ...(adapterOptions.reply_markup === undefined
+      ? {}
+      : { reply_markup: adapterOptions.reply_markup }),
+  } satisfies TelegramRichMessageOptions;
+
+  return Object.keys(options).length === 0 ? undefined : options;
+}
+
+function withTelegramReplyParameters(
+  request: TelegramStreamMessageRequest,
+  options: Pick<
+    NonNullable<TelegramPlainStreamMessageRequest["messageOptions"]>,
+    "reply_parameters"
+  >,
+): TelegramStreamMessageRequest {
+  if (request.kind === "rich") {
+    return {
+      ...request,
+      messageOptions: {
+        ...options,
+        ...request.messageOptions,
+      },
+    };
+  }
+
+  return {
+    ...request,
+    messageOptions: {
+      ...options,
+      ...request.messageOptions,
+    },
+  };
+}
+
+function getLastTelegramStreamedMessage(messages: TelegramStreamedMessage) {
+  return Array.isArray(messages) ? messages.at(-1) : messages;
 }
 
 function parseTelegramMessageId(messageId: string): number | undefined {
@@ -227,6 +342,6 @@ function parseTelegramMessageId(messageId: string): number | undefined {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function createTelegramDraftIdOffset(): number {
+function createTelegramDraftId(): number {
   return Math.floor(Math.random() * 1_000_000_000) + 1;
 }

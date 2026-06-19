@@ -250,9 +250,11 @@ describe("prompt messages", () => {
         "⚠️ **Permission requested**",
         "",
         "**Request**",
+        "",
         "`external_directory`",
         "",
         "**Scope**",
+        "",
         "- `/home/pro/dev/forks/pi/*`",
       ].join("\n"),
     );

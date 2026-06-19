@@ -433,7 +433,7 @@ function appendBlock(state: PromptRenderState, block: string): string {
 function appendToolCall(state: PromptRenderState, block: string): string {
   if (block.trim().length === 0) return "";
 
-  const header = state.toolCallsHeaderEmitted ? "" : "**Tool calls**\n";
+  const header = state.toolCallsHeaderEmitted ? "" : "**Tool calls**\n\n";
   state.toolCallsHeaderEmitted = true;
   return appendBlock(state, blockquote(`${header}${block}`));
 }

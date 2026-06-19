@@ -1,5 +1,6 @@
 import { autoRetry } from "@grammyjs/auto-retry";
 import { streamApi, type MessageDraftPiece } from "@grammyjs/stream";
+import type { ApiMethods, InputRichMessage } from "@grammyjs/stream/out/deps.node.js";
 import { Bot, type Context, type Filter } from "grammy";
 import type { Message, UserFromGetMe } from "grammy/types";
 import type { TelegramBotToken } from "./config";
@@ -13,6 +14,11 @@ type EditMessageText = GrammyBotApi["editMessageText"];
 type SendMessage = GrammyBotApi["sendMessage"];
 type SendMessageDraft = GrammyBotApi["sendMessageDraft"];
 type SendChatAction = GrammyBotApi["sendChatAction"];
+type StreamApi = ReturnType<typeof streamApi>;
+type StreamMarkdown = StreamApi["streamMarkdown"];
+type StreamHtml = StreamApi["streamHtml"];
+type SendRichMessage = ApiMethods["sendRichMessage"];
+type SendRichMessageDraft = ApiMethods["sendRichMessageDraft"];
 type DeleteMessage = GrammyBotApi["deleteMessage"];
 type AnswerCallbackQuery = GrammyBotApi["answerCallbackQuery"];
 type SetMyCommands = GrammyBotApi["setMyCommands"];
@@ -21,6 +27,12 @@ type GetFile = GrammyBotApi["getFile"];
 export type TelegramEditedTextMessage = Awaited<ReturnType<EditMessageText>>;
 export type TelegramSentTextMessage = Awaited<ReturnType<SendMessage>>;
 export type TelegramStreamedTextMessages = Message.TextMessage[];
+export type TelegramStreamedRichMessage = Message.RichMessageMessage;
+export type TelegramStreamedRichMessages = Message.RichMessageMessage[];
+export type TelegramStreamedMessage =
+  | TelegramStreamedTextMessages
+  | TelegramStreamedRichMessage
+  | TelegramStreamedRichMessages;
 
 export type TelegramMessageContext = Filter<Context, "message">;
 export type TelegramTextMessageContext = Filter<Context, "message:text">;
@@ -90,14 +102,48 @@ export interface TelegramBotClient {
     readonly signal?: AbortSignal;
   }): ReturnType<SetMyCommands>;
   start(options?: Parameters<BotStart>[0]): ReturnType<BotStart>;
+  sendRichMessage(args: {
+    readonly chatId: Parameters<SendRichMessage>[0]["chat_id"];
+    readonly richMessage: InputRichMessage;
+    readonly options?: Omit<Parameters<SendRichMessage>[0], "chat_id" | "rich_message">;
+    readonly signal?: AbortSignal;
+  }): Promise<Awaited<ReturnType<StreamMarkdown>>>;
+  sendRichMessageDraft(args: {
+    readonly chatId: Parameters<SendRichMessageDraft>[0]["chat_id"];
+    readonly draftId: Parameters<SendRichMessageDraft>[0]["draft_id"];
+    readonly richMessage: InputRichMessage;
+    readonly options?: Omit<
+      Parameters<SendRichMessageDraft>[0],
+      "chat_id" | "draft_id" | "rich_message"
+    >;
+    readonly signal?: AbortSignal;
+  }): Promise<Awaited<ReturnType<SendRichMessageDraft>>>;
   streamMessage(args: {
     readonly chatId: number;
     readonly draftIdOffset: number;
     readonly stream: Iterable<MessageDraftPiece> | AsyncIterable<MessageDraftPiece>;
-    readonly draftOptions?: Parameters<ReturnType<typeof streamApi>["streamMessage"]>[3];
-    readonly messageOptions?: Parameters<ReturnType<typeof streamApi>["streamMessage"]>[4];
+    readonly draftOptions?: Parameters<StreamApi["streamMessage"]>[3];
+    readonly messageOptions?: Parameters<StreamApi["streamMessage"]>[4];
     readonly signal?: AbortSignal;
   }): Promise<TelegramStreamedTextMessages>;
+  streamMarkdown(args: {
+    readonly chatId: Parameters<StreamMarkdown>[0];
+    readonly draftId: Parameters<StreamMarkdown>[1];
+    readonly stream: Parameters<StreamMarkdown>[2];
+    readonly draftOptions?: Parameters<StreamMarkdown>[3];
+    readonly messageOptions?: Parameters<StreamMarkdown>[4];
+    readonly baseInputRichMessage?: Parameters<StreamMarkdown>[5];
+    readonly signal?: AbortSignal;
+  }): ReturnType<StreamMarkdown>;
+  streamHtml(args: {
+    readonly chatId: Parameters<StreamHtml>[0];
+    readonly draftId: Parameters<StreamHtml>[1];
+    readonly stream: Parameters<StreamHtml>[2];
+    readonly draftOptions?: Parameters<StreamHtml>[3];
+    readonly messageOptions?: Parameters<StreamHtml>[4];
+    readonly baseInputRichMessage?: Parameters<StreamHtml>[5];
+    readonly signal?: AbortSignal;
+  }): ReturnType<StreamHtml>;
   stop(): ReturnType<Bot["stop"]>;
 }
 
@@ -166,6 +212,21 @@ export function createTelegramBotClient(args: {
         input.options,
         input.signal as Parameters<SendMessageDraft>[4],
       ),
+    sendRichMessage: (input) =>
+      bot.api.raw.sendRichMessage(
+        { chat_id: input.chatId, rich_message: input.richMessage, ...input.options },
+        input.signal as Parameters<StreamMarkdown>[6],
+      ),
+    sendRichMessageDraft: (input) =>
+      bot.api.raw.sendRichMessageDraft(
+        {
+          chat_id: input.chatId,
+          draft_id: input.draftId,
+          rich_message: input.richMessage,
+          ...input.options,
+        },
+        input.signal as Parameters<StreamMarkdown>[6],
+      ),
     sendChatAction: (input) =>
       bot.api.sendChatAction(
         input.chatId,
@@ -189,6 +250,26 @@ export function createTelegramBotClient(args: {
         input.draftOptions,
         input.messageOptions,
         input.signal as Parameters<typeof stream.streamMessage>[5],
+      ),
+    streamMarkdown: (input) =>
+      stream.streamMarkdown(
+        input.chatId,
+        input.draftId,
+        input.stream,
+        input.draftOptions,
+        input.messageOptions,
+        input.baseInputRichMessage,
+        input.signal as Parameters<typeof stream.streamMarkdown>[6],
+      ),
+    streamHtml: (input) =>
+      stream.streamHtml(
+        input.chatId,
+        input.draftId,
+        input.stream,
+        input.draftOptions,
+        input.messageOptions,
+        input.baseInputRichMessage,
+        input.signal as Parameters<typeof stream.streamHtml>[6],
       ),
   };
 }
