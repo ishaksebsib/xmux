@@ -48,7 +48,5 @@ export const xmuxServerProgram = Effect.fn("xmux.serverProgram")(function* (
   yield* normalizedOptions.shutdownSignal;
 });
 
-export const runXmuxServer = (
-  options: RunXmuxServerOptions,
-): Effect.Effect<void, ServerError> =>
+export const runXmuxServer = (options: RunXmuxServerOptions): Effect.Effect<void, ServerError> =>
   Effect.scoped(xmuxServerProgram(options)).pipe(Effect.provide(ServerShellLive));
