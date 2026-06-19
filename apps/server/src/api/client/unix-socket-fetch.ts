@@ -42,10 +42,7 @@ const responseHeaders = (headers: IncomingHttpHeaders): Headers => {
   return result;
 };
 
-/**
- * Fetch-compatible transport for generated clients that talk to the local
- * server over a Unix domain socket instead of TCP.
- */
+/** Fetch-compatible transport for local Unix-socket API calls. */
 export const unixSocketFetch = (options: UnixSocketFetchOptions): typeof fetch => {
   const baseUrl = options.baseUrl ?? defaultBaseUrl;
   const timeoutMs = options.timeoutMs;

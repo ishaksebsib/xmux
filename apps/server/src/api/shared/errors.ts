@@ -8,7 +8,7 @@ export class ApiErrorPayload extends Schema.Class<ApiErrorPayload>("ApiErrorPayl
   message: Schema.String,
 }) {}
 
-/** Error envelope keeps non-2xx responses predictable for generated clients. */
+/** Error envelope keeps non-2xx responses predictable for API consumers. */
 export class ApiErrorResponse extends Schema.Class<ApiErrorResponse>("ApiErrorResponse")({
   version: Schema.Literal(RESPONSE_VERSION),
   error: ApiErrorPayload,

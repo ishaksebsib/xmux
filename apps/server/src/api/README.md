@@ -17,4 +17,4 @@ Registration is intentionally centralized in two small files:
 
 To add a route group, create `groups/<feature>/*`, then add one import in each of those files. Keep Node/platform code out of groups; use services from context instead.
 
-OpenAPI is generated from the same `serverApi` contract via `openapi.ts`; generated clients should use `client/unix-socket-fetch.ts` as their transport when talking to the local Unix socket.
+OpenAPI is generated from the same `serverApi` contract via `openapi.ts`.
