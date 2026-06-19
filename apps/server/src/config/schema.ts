@@ -11,13 +11,20 @@ import {
 const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
 const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
 
-//TODO: fix this type if source it env it should have env, if value it should have value this should be parsed at type level
 /** Resolved secrets are internal only; do not expose this shape on control routes. */
-export class ResolvedSecret extends Schema.Class<ResolvedSecret>("ResolvedSecret")({
-  source: Schema.Literals(["env", "value"]),
-  env: Schema.optionalKey(Schema.String),
+class EnvResolvedSecret extends Schema.Class<EnvResolvedSecret>("EnvResolvedSecret")({
+  source: Schema.Literal("env"),
+  env: NonEmptyString,
   value: NonEmptyString,
 }) {}
+
+class ValueResolvedSecret extends Schema.Class<ValueResolvedSecret>("ValueResolvedSecret")({
+  source: Schema.Literal("value"),
+  value: NonEmptyString,
+}) {}
+
+export const ResolvedSecret = Schema.Union([EnvResolvedSecret, ValueResolvedSecret]);
+export type ResolvedSecret = typeof ResolvedSecret.Type;
 
 export class EffectiveServerSettings extends Schema.Class<EffectiveServerSettings>(
   "EffectiveServerSettings",
