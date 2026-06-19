@@ -6,9 +6,9 @@ import {
   encodeTelegramStreamReplyMessage,
   parseTelegramPrivateChatId,
   type TelegramPlainStreamMessageRequest,
-  type TelegramRichStreamMessageRequest,
 } from "../conversions/streaming";
 import { TelegramStreamReplyError } from "../errors";
+import { streamTelegramRich } from "./rich-stream";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 
 export async function streamReply<TChatId extends string>(args: {
@@ -30,10 +30,11 @@ export async function streamReply<TChatId extends string>(args: {
     const captured =
       request.kind === "rich"
         ? yield* Result.await(
-            captureRichStreamedText({
+            streamTelegramRich({
               bot: args.bot,
               request,
               signal: args.input.signal,
+              createError: (cause) => new TelegramStreamReplyError({ cause }),
             }),
           )
         : yield* Result.await(
@@ -88,54 +89,6 @@ function capturePlainStreamedText(args: {
             messageOptions: args.request.messageOptions,
             signal: args.signal,
           }),
-        catch: (cause) => new TelegramStreamReplyError({ cause }),
-      }),
-    );
-
-    return Result.ok({ text, telegramMessages });
-  });
-}
-
-function captureRichStreamedText(args: {
-  readonly bot: TelegramBotClient;
-  readonly request: TelegramRichStreamMessageRequest;
-  readonly signal?: AbortSignal;
-}): Promise<
-  Result<
-    {
-      readonly text: string;
-      readonly telegramMessages: Awaited<ReturnType<TelegramBotClient["streamMarkdown"]>>;
-    },
-    TelegramStreamReplyError
-  >
-> {
-  return Result.gen(async function* () {
-    let text = "";
-    const stream = captureStreamText(args.request.stream, (nextText) => {
-      text = nextText;
-    });
-    const telegramMessages = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          args.request.format === "markdown"
-            ? args.bot.streamMarkdown({
-                chatId: args.request.chatId,
-                draftId: args.request.draftId,
-                stream,
-                draftOptions: args.request.draftOptions,
-                messageOptions: args.request.messageOptions,
-                baseInputRichMessage: args.request.baseInputRichMessage,
-                signal: args.signal,
-              })
-            : args.bot.streamHtml({
-                chatId: args.request.chatId,
-                draftId: args.request.draftId,
-                stream,
-                draftOptions: args.request.draftOptions,
-                messageOptions: args.request.messageOptions,
-                baseInputRichMessage: args.request.baseInputRichMessage,
-                signal: args.signal,
-              }),
         catch: (cause) => new TelegramStreamReplyError({ cause }),
       }),
     );

@@ -4,6 +4,10 @@ import {
   encodeTelegramStreamMessage,
   shouldUseTelegramRichStream,
 } from "../../src/conversions/streaming";
+import {
+  splitTelegramRichText,
+  TELEGRAM_RICH_MESSAGE_CHARACTER_LIMIT,
+} from "../../src/handlers/rich-stream";
 import { collectAsync } from "../fixtures/collect";
 
 function chunks(items: readonly ChatTextStreamChunk[]): AsyncIterable<ChatTextStreamChunk> {
@@ -77,5 +81,41 @@ describe("Telegram stream conversions", () => {
     if (request.kind !== "plain") throw new Error("expected plain stream request");
     expect(request.draftOptions).toEqual({ parse_mode: "MarkdownV2" });
     expect(request.messageOptions).toMatchObject({ parse_mode: "MarkdownV2" });
+  });
+});
+
+describe("Telegram rich stream segmentation", () => {
+  test("keeps rich text below the limit in one segment", () => {
+    expect(splitTelegramRichText("hello")).toEqual(["hello"]);
+  });
+
+  test("splits rich text above the limit into bounded segments", () => {
+    const text = "a".repeat(TELEGRAM_RICH_MESSAGE_CHARACTER_LIMIT + 1);
+    const segments = splitTelegramRichText(text);
+
+    expect(segments).toHaveLength(2);
+    expect(segments.join("")).toBe(text);
+    expect(
+      segments.every(
+        (segment) => Array.from(segment).length <= TELEGRAM_RICH_MESSAGE_CHARACTER_LIMIT,
+      ),
+    ).toBe(true);
+  });
+
+  test("does not split surrogate pairs", () => {
+    const emoji = "🙂";
+    const text = `${"a".repeat(TELEGRAM_RICH_MESSAGE_CHARACTER_LIMIT - 1)}${emoji}tail`;
+    const segments = splitTelegramRichText(text);
+
+    expect(segments.join("")).toBe(text);
+    expect(segments[0]?.endsWith(emoji)).toBe(true);
+  });
+
+  test("prefers paragraph, newline, and space boundaries", () => {
+    const paragraphText = `${"a".repeat(100)}\n\n${"b".repeat(TELEGRAM_RICH_MESSAGE_CHARACTER_LIMIT)}`;
+    expect(splitTelegramRichText(paragraphText)[0]).toBe(`${"a".repeat(100)}\n\n`);
+
+    const spaceText = `${"a".repeat(100)} ${"b".repeat(TELEGRAM_RICH_MESSAGE_CHARACTER_LIMIT)}`;
+    expect(splitTelegramRichText(spaceText)[0]).toBe(`${"a".repeat(100)} `);
   });
 });

@@ -12,10 +12,12 @@ import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 import { encodeTelegramFormatOptions } from "./formatting";
 
 type TelegramPlainStreamArgs = Parameters<TelegramBotClient["streamMessage"]>[0];
-type TelegramMarkdownStreamArgs = Parameters<TelegramBotClient["streamMarkdown"]>[0];
-type TelegramRichDraftOptions = TelegramMarkdownStreamArgs["draftOptions"];
-type TelegramRichMessageOptions = TelegramMarkdownStreamArgs["messageOptions"];
-type TelegramRichBaseInputMessage = TelegramMarkdownStreamArgs["baseInputRichMessage"];
+type TelegramRichDraftOptions = Parameters<TelegramBotClient["sendRichMessageDraft"]>[0]["options"];
+type TelegramRichMessageOptions = Parameters<TelegramBotClient["sendRichMessage"]>[0]["options"];
+type TelegramRichBaseInputMessage = Omit<
+  Parameters<TelegramBotClient["sendRichMessage"]>[0]["richMessage"],
+  "markdown" | "html"
+>;
 
 type TelegramRichStreamFormat = Extract<ChatMessageFormat, "markdown" | "html">;
 
