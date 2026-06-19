@@ -90,6 +90,7 @@ export interface SlackUpdateMessageRequest {
   readonly ts: string;
   readonly text?: string;
   readonly markdown_text?: string;
+  readonly mrkdwn?: boolean;
   readonly blocks?: readonly SlackBlock[];
   readonly metadata?: SlackMessageMetadata;
   readonly link_names?: boolean;
@@ -341,6 +342,7 @@ function toChatUpdateArguments(input: SlackUpdateMessageRequest): ChatUpdateArgu
     ts: input.ts,
     text: input.text,
     markdown_text: input.markdown_text,
+    mrkdwn: input.mrkdwn,
     metadata: input.metadata,
     link_names: input.link_names,
     parse: input.parse,

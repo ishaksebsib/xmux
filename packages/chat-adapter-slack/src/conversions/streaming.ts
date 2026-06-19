@@ -1,12 +1,18 @@
 import { Result } from "better-result";
 import type { ChatMessageFormat, ChatSentMessage, ChatTextStreamChunk } from "@xmux/chat-core";
-import type { SlackBotClient, SlackNativeStreamChunk, SlackSentMessage } from "../client";
+import type {
+  SlackBotClient,
+  SlackNativeStreamChunk,
+  SlackPostMessageRequest,
+  SlackSentMessage,
+  SlackUpdateMessageRequest,
+} from "../client";
 import { slackMarkdownTextLimit } from "../constants";
 import type { SlackAdapterConfig } from "../config";
 import { SlackFormattingError } from "../errors";
 import type { SlackAdapterData, SlackAdapterOptions } from "../types";
-import { escapeSlackText, stripSlackHtml } from "./formatting";
-import { encodeSlackSentMessage } from "./outbound";
+import { escapeSlackText, stripSlackHtml, type SlackFormattedText } from "./formatting";
+import { encodeSlackSentMessage, encodeSlackText } from "./outbound";
 
 export type SlackNativeStreamErrorFactory<TError> = (args: {
   readonly reason?: string;
@@ -31,9 +37,26 @@ export interface SlackNativeStreamResult {
   readonly slackMessages: readonly SlackSentMessage[];
 }
 
+export interface SlackMessageUpdateStreamTarget {
+  readonly channel: string;
+  readonly threadTs?: string;
+  readonly replyBroadcast?: boolean;
+}
+
 export interface SlackNativeStreamInput<TError> {
   readonly client: Pick<SlackBotClient, "startStream" | "appendStream" | "stopStream">;
   readonly target: SlackNativeStreamTarget;
+  readonly chunks: AsyncIterable<ChatTextStreamChunk>;
+  readonly format?: ChatMessageFormat;
+  readonly adapterOptions: SlackAdapterOptions;
+  readonly config: Pick<SlackAdapterConfig, "stream">;
+  readonly signal?: AbortSignal;
+  readonly createError: SlackNativeStreamErrorFactory<TError>;
+}
+
+export interface SlackMessageUpdateStreamInput<TError> {
+  readonly client: Pick<SlackBotClient, "postMessage" | "updateMessage">;
+  readonly target: SlackMessageUpdateStreamTarget;
   readonly chunks: AsyncIterable<ChatTextStreamChunk>;
   readonly format?: ChatMessageFormat;
   readonly adapterOptions: SlackAdapterOptions;
@@ -143,12 +166,27 @@ export async function streamSlackNativeText<TError>(
   });
 }
 
+export async function streamSlackMessageUpdates<TError>(
+  args: SlackMessageUpdateStreamInput<TError>,
+): Promise<Result<SlackNativeStreamResult, TError>> {
+  return Result.tryPromise({
+    try: () => runSlackMessageUpdateStream(args),
+    catch: (cause) =>
+      args.createError({
+        reason: isAbortError(args.signal, cause)
+          ? "Slack message update stream was aborted"
+          : undefined,
+        cause,
+      }),
+  });
+}
+
 export function encodeSlackStreamedMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly conversationId: string;
   readonly text: string;
   readonly format?: ChatMessageFormat;
-  readonly threadTs: string;
+  readonly threadTs?: string;
   readonly slackMessages: readonly SlackSentMessage[];
 }): ChatSentMessage<TChatId, SlackAdapterData> {
   const lastMessage = args.slackMessages.at(-1);
@@ -284,6 +322,67 @@ async function runSlackNativeTextStream<TError>(
   }
 }
 
+async function runSlackMessageUpdateStream<TError>(
+  args: SlackMessageUpdateStreamInput<TError>,
+): Promise<SlackNativeStreamResult> {
+  const resolved = resolveSlackMessageUpdateStreamConfig({
+    config: args.config,
+    adapterOptions: args.adapterOptions,
+  });
+  if (resolved.isErr()) throw resolved.error;
+
+  const writer = new SlackMessageUpdateStreamWriter({
+    client: args.client,
+    target: args.target,
+    adapterOptions: args.adapterOptions,
+    format: args.format,
+    bufferSize: resolved.value.bufferSize,
+    signal: args.signal,
+  });
+  const iterator = args.chunks[Symbol.asyncIterator]();
+  const abortSignal = createAbortSignalPromise(args.signal);
+  let text = "";
+  let next = readNext(iterator);
+
+  try {
+    while (true) {
+      throwIfAborted(args.signal);
+      const event = await Promise.race([next, abortSignal.promise]);
+
+      if (event.result.done === true) {
+        break;
+      }
+
+      const chunk = event.result.value;
+      const applied = appendSlackNativeStreamChunk({ currentText: text, chunk });
+      if (applied.isErr()) throw applied.error;
+
+      text = applied.value.text;
+      if (applied.value.delta.length > 0) {
+        await writer.write(text);
+      }
+
+      if (chunk.type === "completed") {
+        break;
+      }
+
+      next = readNext(iterator);
+    }
+
+    if (text.length === 0 && args.config.stream.emptyText.length > 0) {
+      text = args.config.stream.emptyText;
+      await writer.write(text);
+    }
+
+    const slackMessages = await writer.finish();
+    return { text, slackMessages };
+  } finally {
+    abortSignal.cancel();
+    const returned = iterator.return?.();
+    if (returned !== undefined) void returned.catch(() => undefined);
+  }
+}
+
 class SlackNativeStreamWriter {
   private buffer = "";
   private current: SlackSentMessage | undefined;
@@ -408,6 +507,155 @@ class SlackNativeStreamWriter {
     this.current = undefined;
     this.currentSegmentChars = 0;
   }
+}
+
+class SlackMessageUpdateStreamWriter {
+  private current: SlackSentMessage | undefined;
+  private text = "";
+  private flushedLength = 0;
+
+  constructor(
+    private readonly args: {
+      readonly client: Pick<SlackBotClient, "postMessage" | "updateMessage">;
+      readonly target: SlackMessageUpdateStreamTarget;
+      readonly adapterOptions: SlackAdapterOptions;
+      readonly format?: ChatMessageFormat;
+      readonly bufferSize: number;
+      readonly signal?: AbortSignal;
+    },
+  ) {}
+
+  async write(text: string): Promise<void> {
+    if (text.length === 0) return;
+
+    this.text = text;
+    const shouldFlushFirstChunk = this.current === undefined;
+    if (shouldFlushFirstChunk || this.text.length - this.flushedLength >= this.args.bufferSize) {
+      await this.flush({ final: false });
+    }
+  }
+
+  async finish(): Promise<readonly SlackSentMessage[]> {
+    await this.flush({ final: true });
+
+    if (this.current === undefined) {
+      throw new Error("Slack message update stream produced no text");
+    }
+
+    return [this.current];
+  }
+
+  private async flush(args: { readonly final: boolean }): Promise<void> {
+    if (this.text.length === 0 || (!args.final && this.text.length === this.flushedLength)) return;
+
+    throwIfAborted(this.args.signal);
+    const formatted = encodeSlackText({
+      text: this.text,
+      format: this.args.format,
+      adapterOptions: this.args.adapterOptions,
+    });
+    if (formatted.isErr()) throw formatted.error;
+
+    if (this.current === undefined) {
+      this.current = await this.args.client.postMessage({
+        channel: this.args.target.channel,
+        thread_ts: this.args.target.threadTs,
+        reply_broadcast: this.args.target.replyBroadcast,
+        ...encodeSlackMessageUpdateStreamPostPayload({
+          formatted: formatted.value,
+          adapterOptions: this.args.adapterOptions,
+          final: args.final,
+        }),
+        signal: this.args.signal,
+      });
+    } else {
+      this.current = await this.args.client.updateMessage({
+        channel: this.current.channelId,
+        ts: this.current.messageTs,
+        ...encodeSlackMessageUpdateStreamUpdatePayload({
+          formatted: formatted.value,
+          adapterOptions: this.args.adapterOptions,
+          final: args.final,
+        }),
+        signal: this.args.signal,
+      });
+    }
+
+    this.flushedLength = this.text.length;
+  }
+}
+
+function encodeSlackMessageUpdateStreamPostPayload(args: {
+  readonly formatted: SlackFormattedText;
+  readonly adapterOptions: SlackAdapterOptions;
+  readonly final: boolean;
+}): Omit<SlackPostMessageRequest, "channel" | "thread_ts" | "reply_broadcast" | "signal"> {
+  return {
+    ...encodeSlackMessageUpdateStreamPayload(args),
+    ...(args.adapterOptions.unfurl_links === undefined
+      ? {}
+      : { unfurl_links: args.adapterOptions.unfurl_links }),
+    ...(args.adapterOptions.unfurl_media === undefined
+      ? {}
+      : { unfurl_media: args.adapterOptions.unfurl_media }),
+  };
+}
+
+function encodeSlackMessageUpdateStreamUpdatePayload(args: {
+  readonly formatted: SlackFormattedText;
+  readonly adapterOptions: SlackAdapterOptions;
+  readonly final: boolean;
+}): Omit<SlackUpdateMessageRequest, "channel" | "ts" | "signal"> {
+  return encodeSlackMessageUpdateStreamPayload(args);
+}
+
+function encodeSlackMessageUpdateStreamPayload(args: {
+  readonly formatted: SlackFormattedText;
+  readonly adapterOptions: SlackAdapterOptions;
+  readonly final: boolean;
+}) {
+  const shared =
+    args.adapterOptions.metadata === undefined ? {} : { metadata: args.adapterOptions.metadata };
+
+  if (args.final && args.adapterOptions.blocks !== undefined) {
+    return {
+      ...shared,
+      text: args.formatted.text,
+      blocks: args.adapterOptions.blocks,
+    };
+  }
+
+  if (
+    args.formatted.markdown_text !== undefined &&
+    args.formatted.markdown_text.length <= slackMarkdownTextLimit
+  ) {
+    return {
+      ...shared,
+      markdown_text: args.formatted.markdown_text,
+    };
+  }
+
+  return {
+    ...shared,
+    text: args.formatted.text,
+    mrkdwn: args.formatted.mrkdwn,
+  };
+}
+
+function resolveSlackMessageUpdateStreamConfig(args: {
+  readonly config: Pick<SlackAdapterConfig, "stream">;
+  readonly adapterOptions: SlackAdapterOptions;
+}): Result<Pick<SlackNativeStreamResolvedConfig, "bufferSize">, SlackFormattingError> {
+  const bufferSize = args.adapterOptions.stream?.bufferSize ?? args.config.stream.bufferSize;
+
+  return Result.map(
+    validatePositiveStreamInteger({
+      field: "adapterOptions.stream.bufferSize",
+      value: bufferSize,
+      limit: slackMarkdownTextLimit,
+    }),
+    () => ({ bufferSize }),
+  );
 }
 
 function validateSlackNativeStreamAdapterOptions(

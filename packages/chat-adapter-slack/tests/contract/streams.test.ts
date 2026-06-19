@@ -1,4 +1,4 @@
-import { ChatStreamMessageError, ChatStreamReplyError, createChat } from "@xmux/chat-core";
+import { ChatStreamReplyError, createChat } from "@xmux/chat-core";
 import { describe, expect, test } from "vitest";
 import { createSlackAdapter } from "../../src";
 import type {
@@ -6,7 +6,7 @@ import type {
   SlackMessageEvent,
   SlackNativeStreamChunk,
 } from "../../src/client";
-import { SlackStreamMessageError, SlackStreamReplyError } from "../../src/errors";
+import { SlackStreamReplyError } from "../../src/errors";
 import type { CreateSlackAdapterOptions } from "../../src/types";
 import { waitForCondition } from "../fixtures/collect";
 import { createFakeSlackClient } from "../fixtures/fake-slack-client";
@@ -101,7 +101,7 @@ describe("Slack native streams contract", () => {
     }
   });
 
-  test("streamMessage requires an explicit native stream thread target", async () => {
+  test("streamMessage without a native target streams in conversation using message updates", async () => {
     const fake = createFakeSlackClient();
     const chat = createTestChat(fake);
 
@@ -112,15 +112,44 @@ describe("Slack native streams contract", () => {
         conversationId: "C123",
         content: { chunks: oneDelta("hello") },
         fallback: "error",
-        adapterOptions: { stream: { recipientTeamId: "T123", recipientUserId: "U123" } },
       });
 
-      expect(result.isErr()).toBe(true);
+      expect(result.isOk()).toBe(true);
       expect(fake.startStreamCalls).toHaveLength(0);
-      if (result.isErr()) {
-        expect(result.error).toBeInstanceOf(ChatStreamMessageError);
-        expect(result.error.cause).toBeInstanceOf(SlackStreamMessageError);
-      }
+      expect(fake.postMessageCalls).toHaveLength(1);
+      expect(fake.updateMessageCalls).toHaveLength(1);
+      expect(fake.postMessageCalls[0]).toMatchObject({
+        channel: "C123",
+        text: "hello",
+        mrkdwn: false,
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("streamReply without native recipients falls back to threaded message updates", async () => {
+    const fake = createFakeSlackClient();
+    const chat = createTestChat(fake);
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+      const result = await chat.streamReply({
+        chatId: "slack",
+        conversationId: "C123",
+        messageId: "171.000100",
+        content: { chunks: oneDelta("hello") },
+        fallback: "error",
+      });
+
+      expect(result.isOk()).toBe(true);
+      expect(fake.startStreamCalls).toHaveLength(0);
+      expect(fake.postMessageCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000100",
+        text: "hello",
+        mrkdwn: false,
+      });
     } finally {
       await chat.close();
     }
@@ -150,7 +179,7 @@ describe("Slack native streams contract", () => {
     }
   });
 
-  test("blank channel stream recipients are rejected and omitted from Slack calls", async () => {
+  test("streamMessage with incomplete native recipients falls back to threaded message updates", async () => {
     const fake = createFakeSlackClient();
     const chat = createTestChat(fake);
 
@@ -166,8 +195,14 @@ describe("Slack native streams contract", () => {
         },
       });
 
-      expect(result.isErr()).toBe(true);
+      expect(result.isOk()).toBe(true);
       expect(fake.startStreamCalls).toHaveLength(0);
+      expect(fake.postMessageCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000100",
+        text: "hello",
+        mrkdwn: false,
+      });
     } finally {
       await chat.close();
     }

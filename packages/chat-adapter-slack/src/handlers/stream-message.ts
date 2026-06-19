@@ -5,8 +5,10 @@ import type { SlackAdapterConfig } from "../config";
 import {
   encodeSlackStreamedMessage,
   nonEmptySlackStreamValue,
+  streamSlackMessageUpdates,
   streamSlackNativeText,
   validateSlackNativeStreamTarget,
+  type SlackMessageUpdateStreamTarget,
   type SlackNativeStreamTarget,
 } from "../conversions/streaming";
 import { SlackStreamMessageError } from "../errors";
@@ -19,20 +21,35 @@ export async function streamMessage<TChatId extends string>(args: {
   readonly input: ChatAdapterStreamMessageInput<TChatId, SlackAdapterOptions>;
 }): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackStreamMessageError>> {
   return Result.gen(async function* () {
-    const target = yield* resolveSlackStreamMessageTarget(args.input);
+    const nativeTarget = resolveSlackStreamMessageTarget(args.input);
+    const target = nativeTarget.isOk()
+      ? { type: "native" as const, target: nativeTarget.value }
+      : { type: "update" as const, target: resolveSlackStreamMessageUpdateTarget(args.input) };
     const streamed = yield* Result.await(
-      streamSlackNativeText({
-        client: args.client,
-        target,
-        chunks: args.input.content.chunks,
-        format: args.input.content.format,
-        adapterOptions: args.input.adapterOptions,
-        config: args.config,
-        signal: args.input.signal,
-        createError: ({ reason, cause }) => new SlackStreamMessageError({ reason, cause }),
-      }),
+      target.type === "native"
+        ? streamSlackNativeText({
+            client: args.client,
+            target: target.target,
+            chunks: args.input.content.chunks,
+            format: args.input.content.format,
+            adapterOptions: args.input.adapterOptions,
+            config: args.config,
+            signal: args.input.signal,
+            createError: ({ reason, cause }) => new SlackStreamMessageError({ reason, cause }),
+          })
+        : streamSlackMessageUpdates({
+            client: args.client,
+            target: target.target,
+            chunks: args.input.content.chunks,
+            format: args.input.content.format,
+            adapterOptions: args.input.adapterOptions,
+            config: args.config,
+            signal: args.input.signal,
+            createError: ({ reason, cause }) => new SlackStreamMessageError({ reason, cause }),
+          }),
     );
 
+    const threadTs = target.target.threadTs;
     const sent = yield* Result.try({
       try: () =>
         encodeSlackStreamedMessage({
@@ -40,7 +57,7 @@ export async function streamMessage<TChatId extends string>(args: {
           conversationId: args.input.conversationId,
           text: streamed.text,
           format: args.input.content.format,
-          threadTs: target.threadTs,
+          ...(threadTs === undefined ? {} : { threadTs }),
           slackMessages: streamed.slackMessages,
         }),
       catch: (cause) => new SlackStreamMessageError({ cause }),
@@ -48,6 +65,17 @@ export async function streamMessage<TChatId extends string>(args: {
 
     return Result.ok(sent);
   });
+}
+
+function resolveSlackStreamMessageUpdateTarget(
+  input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>,
+): SlackMessageUpdateStreamTarget {
+  const threadTs = nonEmptySlackStreamValue(input.adapterOptions.stream?.threadTs);
+
+  return {
+    channel: input.conversationId,
+    ...(threadTs === undefined ? {} : { threadTs }),
+  };
 }
 
 function resolveSlackStreamMessageTarget(
