@@ -12,13 +12,13 @@ const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
 const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
 
 /** Resolved secrets are internal only; do not expose this shape on control routes. */
-class EnvResolvedSecret extends Schema.Class<EnvResolvedSecret>("EnvResolvedSecret")({
+export class EnvResolvedSecret extends Schema.Class<EnvResolvedSecret>("EnvResolvedSecret")({
   source: Schema.Literal("env"),
   env: NonEmptyString,
   value: NonEmptyString,
 }) {}
 
-class ValueResolvedSecret extends Schema.Class<ValueResolvedSecret>("ValueResolvedSecret")({
+export class ValueResolvedSecret extends Schema.Class<ValueResolvedSecret>("ValueResolvedSecret")({
   source: Schema.Literal("value"),
   value: NonEmptyString,
 }) {}

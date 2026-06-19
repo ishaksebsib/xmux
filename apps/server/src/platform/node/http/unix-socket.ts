@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import { NodeHttpServer } from "@effect/platform-node";
 import { Effect, FileSystem, Layer } from "effect";
 import { HttpServer } from "effect/unstable/http";
-import { ControlServerError } from "../errors";
-import { RuntimePaths } from "../runtime-state/runtime-paths-service";
+import { ControlServerError } from "../../../errors";
+import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
 
 export const removeSocket = (
   socketPath: string,

@@ -8,5 +8,5 @@ export const apiRoutes = HttpApiBuilder.layer(serverApi, { openapiPath: "/openap
   Layer.provide(handlers),
 );
 
-/** One app composition layer; platform binding happens in ../http. */
+/** One app composition layer; platform binding happens in ../platform. */
 export const app = apiRoutes;

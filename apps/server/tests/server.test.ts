@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
-import { ServerBinding } from "../src/http/binding";
+import { ServerBinding } from "../src/server/binding";
 import { ServerIdentity } from "../src/runtime/server-identity";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
@@ -20,9 +20,17 @@ const makeTempRoot = Effect.acquireRelease(
 );
 
 const exists = (path: string): Effect.Effect<boolean> =>
-  Effect.promise(() => access(path).then(() => true, () => false));
+  Effect.promise(() =>
+    access(path).then(
+      () => true,
+      () => false,
+    ),
+  );
 
-const makePaths = (root: string, configPath: string = join(root, "config.jsonc")): ServerRuntimePaths => ({
+const makePaths = (
+  root: string,
+  configPath: string = join(root, "config.jsonc"),
+): ServerRuntimePaths => ({
   configPath,
   stateDir: join(root, "state"),
   runtimeDir: join(root, "runtime"),

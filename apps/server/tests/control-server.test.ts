@@ -19,7 +19,7 @@ import { ServerIdentity } from "../src/runtime/server-identity";
 import { ShutdownCoordinator, ShutdownCoordinatorLive } from "../src/runtime/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLive } from "../src/runtime/status-registry";
 import { unixSocketFetch } from "../src/api/client";
-import { nodeBinding } from "../src/http/server-node";
+import { nodeBinding } from "../src/platform/node";
 import { nodeServerServices, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
@@ -46,7 +46,12 @@ const makeTempRoot = Effect.acquireRelease(
 );
 
 const exists = (path: string): Effect.Effect<boolean> =>
-  Effect.promise(() => access(path).then(() => true, () => false));
+  Effect.promise(() =>
+    access(path).then(
+      () => true,
+      () => false,
+    ),
+  );
 
 const waitForPath = (path: string): Effect.Effect<void> =>
   Effect.gen(function* () {
@@ -150,13 +155,14 @@ const decodeShutdown = (body: string): ShutdownResponse => {
   return decoded.value;
 };
 
-const responseText = (
-  response: HttpServerResponse.HttpServerResponse,
-): Effect.Effect<string> => Effect.promise(() => HttpServerResponse.toWeb(response).text());
+const responseText = (response: HttpServerResponse.HttpServerResponse): Effect.Effect<string> =>
+  Effect.promise(() => HttpServerResponse.toWeb(response).text());
 
 const makePaths = (
   root: string,
-  overrides: Partial<Pick<ServerRuntimePaths, "configPath" | "manifestPath" | "startupLockPath">> & {
+  overrides: Partial<
+    Pick<ServerRuntimePaths, "configPath" | "manifestPath" | "startupLockPath">
+  > & {
     readonly socketPath?: string;
   } = {},
 ): ServerRuntimePaths => ({
@@ -308,9 +314,7 @@ describe("control server", () => {
         .pipe(Effect.flip);
       assert.strictEqual(duplicateError._tag, "ActiveServerError");
 
-      yield* Effect.promise(() =>
-        writeFile(configPath, `{ "server": { "logLevel": "verbose" } }`),
-      );
+      yield* Effect.promise(() => writeFile(configPath, `{ "server": { "logLevel": "verbose" } }`));
       const invalidValidateResponse = yield* requestUnix(socketPath, "POST", "/v1/config/validate");
       assert.strictEqual(invalidValidateResponse.statusCode, 422);
       const invalidValidation = decodeConfigValidate(invalidValidateResponse.body);
