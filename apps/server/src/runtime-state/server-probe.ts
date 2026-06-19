@@ -1,5 +1,5 @@
 import { Context, Effect } from "effect";
-import type { ServerControlEndpoint } from "../options";
+import type { ServerControlEndpoint } from "./paths";
 
 /** Internal startup probe used only for duplicate-server liveness checks. */
 export class ServerProbe extends Context.Service<

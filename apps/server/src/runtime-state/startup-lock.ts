@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
 import { StartupLockError } from "../errors";
-import { SystemServerClock, type ServerClock } from "../options";
 import { isPidAlive } from "./pid";
 
 class StartupLockPayload extends Schema.Class<StartupLockPayload>("StartupLockPayload")({
@@ -20,11 +19,8 @@ export interface StartupLock {
   readonly nonce: string;
 }
 
-/** Lock options include seams for deterministic tests without changing ownership logic. */
 export interface AcquireStartupLockOptions {
   readonly startupLockPath: string;
-  readonly clock?: ServerClock;
-  readonly nonce?: string;
 }
 
 const parseStartupLockPayload = (raw: string): StartupLockPayload | null => {
@@ -113,11 +109,11 @@ const acquireLockFile = Effect.fn("server.acquireStartupLockFile")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
-  const clock = options.clock ?? SystemServerClock;
-  const nonce = options.nonce ?? randomUUID();
+  const startedAtMs = yield* Clock.currentTimeMillis;
+  const nonce = randomUUID();
   const payload = StartupLockPayload.make({
     pid: process.pid,
-    startedAt: clock.now().toISOString(),
+    startedAt: new Date(startedAtMs).toISOString(),
     nonce,
   });
   const directory = pathService.dirname(options.startupLockPath);
@@ -171,7 +167,7 @@ const releaseStartupLockLogged = (lock: StartupLock): Effect.Effect<void, never,
     Effect.ignore,
   );
 
-/** Acquire a scoped startup lock for tests and specialized startup workflows. */
+/** Acquire a scoped startup lock for specialized startup workflows. */
 export const acquireStartupLock = Effect.fn("server.acquireStartupLock")(function* (
   options: AcquireStartupLockOptions,
 ) {

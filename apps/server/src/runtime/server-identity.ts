@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Context, Effect, Layer } from "effect";
-import { ServerOptions } from "../options";
+import { Clock, Context, Effect, Layer } from "effect";
 
 /** Stable identity for one server process lifetime. */
 export class ServerIdentity extends Context.Service<
@@ -12,13 +11,13 @@ export class ServerIdentity extends Context.Service<
   }
 >()("@xmux/server/ServerIdentity") {}
 
-/** Live identity preserves the server clock seam for deterministic lifecycle tests. */
+/** Live identity captures process metadata once at server startup. */
 export const ServerIdentityLive = Layer.effect(ServerIdentity)(
   Effect.gen(function* () {
-    const options = yield* ServerOptions;
+    const startedAtMs = yield* Clock.currentTimeMillis;
     return {
       pid: process.pid,
-      startedAt: options.clock.now(),
+      startedAt: new Date(startedAtMs),
       sessionId: randomUUID(),
     };
   }),

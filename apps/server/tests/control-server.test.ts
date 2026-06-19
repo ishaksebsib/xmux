@@ -2,6 +2,7 @@ import { request as httpRequest } from "node:http";
 import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
@@ -18,7 +19,8 @@ import { ServerIdentity } from "../src/runtime/server-identity";
 import { ShutdownCoordinator, ShutdownCoordinatorLive } from "../src/runtime/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLive } from "../src/runtime/status-registry";
 import { unixSocketFetch } from "../src/api/client";
-import { runXmuxServer } from "../src/server";
+import { nodeBinding } from "../src/http/server-node";
+import { nodeServerServices, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedClock = {
@@ -152,20 +154,39 @@ const responseText = (
   response: HttpServerResponse.HttpServerResponse,
 ): Effect.Effect<string> => Effect.promise(() => HttpServerResponse.toWeb(response).text());
 
-const makePaths = (root: string): ServerRuntimePaths => ({
-  configPath: join(root, "config.jsonc"),
+const makePaths = (
+  root: string,
+  overrides: Partial<Pick<ServerRuntimePaths, "configPath" | "manifestPath" | "startupLockPath">> & {
+    readonly socketPath?: string;
+  } = {},
+): ServerRuntimePaths => ({
+  configPath: overrides.configPath ?? join(root, "config.jsonc"),
   stateDir: join(root, "state"),
   runtimeDir: join(root, "runtime"),
   logDir: join(root, "logs"),
   dbPath: join(root, "state", "server.db"),
-  manifestPath: join(root, "server.json"),
-  startupLockPath: join(root, "startup.lock"),
+  manifestPath: overrides.manifestPath ?? join(root, "server.json"),
+  startupLockPath: overrides.startupLockPath ?? join(root, "startup.lock"),
   controlEndpoint: {
     kind: "unix-socket",
-    path: join(root, "server.sock"),
+    path: overrides.socketPath ?? join(root, "server.sock"),
   },
   scopeId: "testscope",
 });
+
+const makeServerTestLayer = (paths: ServerRuntimePaths) =>
+  Layer.mergeAll(
+    NodeFileSystem.layer,
+    NodePath.layer,
+    Layer.succeed(RuntimePaths)(paths),
+    Layer.succeed(ServerIdentity)({
+      pid: process.pid,
+      startedAt: fixedStartedAt,
+      sessionId: "control-test",
+    }),
+    nodeServerServices,
+    nodeBinding,
+  );
 
 describe("control handlers", () => {
   it.effect("returns schema-valid status and idempotent shutdown responses", () =>
@@ -217,6 +238,7 @@ describe("control server", () => {
       const socketPath = join(root, "runtime", "server.sock");
       const manifestPath = join(root, "server.json");
       const startupLockPath = join(root, "startup.lock");
+      const paths = makePaths(root, { configPath, manifestPath, startupLockPath, socketPath });
       yield* Effect.promise(() =>
         writeFile(
           configPath,
@@ -234,20 +256,7 @@ describe("control server", () => {
       );
 
       const fiber = yield* Effect.forkScoped(
-        runXmuxServer({
-          configPath,
-          pathOverrides: {
-            stateDir: join(root, "state"),
-            runtimeDir: join(root, "runtime"),
-            logDir: join(root, "logs"),
-            dbPath: join(root, "state", "server.db"),
-            manifestPath,
-            startupLockPath,
-          },
-          controlEndpointOverride: { kind: "unix-socket", path: socketPath },
-          clock: fixedClock,
-          shutdownSignal: Effect.never,
-        }),
+        Effect.scoped(serverMain()).pipe(Effect.provide(makeServerTestLayer(paths))),
       );
 
       yield* waitForPath(manifestPath);
@@ -294,20 +303,9 @@ describe("control server", () => {
       const validation = decodeConfigValidate(validateResponse.body);
       assert.isTrue(validation.valid);
 
-      const duplicateError = yield* runXmuxServer({
-        configPath,
-        pathOverrides: {
-          stateDir: join(root, "state"),
-          runtimeDir: join(root, "runtime"),
-          logDir: join(root, "logs"),
-          dbPath: join(root, "state", "server.db"),
-          manifestPath,
-          startupLockPath,
-        },
-        controlEndpointOverride: { kind: "unix-socket", path: socketPath },
-        clock: fixedClock,
-        shutdownSignal: Effect.never,
-      }).pipe(Effect.flip);
+      const duplicateError = yield* Effect.scoped(serverMain())
+        .pipe(Effect.provide(makeServerTestLayer(paths)))
+        .pipe(Effect.flip);
       assert.strictEqual(duplicateError._tag, "ActiveServerError");
 
       yield* Effect.promise(() =>

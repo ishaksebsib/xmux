@@ -1,8 +1,30 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { Effect, FileSystem, Path } from "effect";
+import {
+  APP_DIR_NAME,
+  DEFAULT_CONFIG_FILE_NAME,
+  DEFAULT_DB_FILE_NAME,
+  LOG_DIR_NAME,
+  RUNTIME_DIR_NAME,
+  SERVER_CONTROL_DIR_NAME,
+  SERVER_MANIFEST_FILE_PREFIX,
+  SERVER_SOCKET_FILE_PREFIX,
+  STARTUP_LOCK_FILE_EXTENSION,
+  STARTUP_LOCK_FILE_PREFIX,
+  UNIX_SOCKET_FILE_EXTENSION,
+  XDG_CONFIG_HOME_ENV,
+  XDG_RUNTIME_DIR_ENV,
+  XDG_STATE_HOME_ENV,
+} from "../contracts/constants";
 import { RuntimePathError } from "../errors";
-import type { NormalizedServerOptions, ServerControlEndpoint } from "../options";
+import type { NormalizedServerOptions } from "../options";
+
+/** Local control endpoint. Windows named pipes should be added only with real transport support. */
+export interface ServerControlEndpoint {
+  readonly kind: "unix-socket";
+  readonly path: string;
+}
 
 /** Resolved paths are explicit so the CLI and server agree on one local scope. */
 export interface ServerRuntimePaths {
@@ -17,10 +39,6 @@ export interface ServerRuntimePaths {
   readonly scopeId: string;
 }
 
-const APP_DIR_NAME = "xmux";
-const DEFAULT_CONFIG_FILE_NAME = "config.jsonc";
-const DEFAULT_DB_FILE_NAME = "xmux.db";
-
 const expandHome = (pathService: Path.Path, home: string, input: string): string => {
   if (input === "~") return home;
   if (input.startsWith("~/")) return pathService.join(home, input.slice(2));
@@ -29,12 +47,6 @@ const expandHome = (pathService: Path.Path, home: string, input: string): string
 
 const resolveInputPath = (pathService: Path.Path, home: string, input: string): string =>
   pathService.resolve(expandHome(pathService, home, input));
-
-const optionalOverride = (
-  pathService: Path.Path,
-  home: string,
-  input: string | undefined,
-): string | undefined => (input === undefined ? undefined : resolveInputPath(pathService, home, input));
 
 /** Scope IDs are hashed to keep socket and manifest names short and path-safe. */
 export const createScopeId = (input: {
@@ -65,13 +77,13 @@ const defaultLayout = (
     };
   }
 
-  const configHome = process.env.XDG_CONFIG_HOME ?? pathService.join(home, ".config");
-  const stateHome = process.env.XDG_STATE_HOME ?? pathService.join(home, ".local", "state");
+  const configHome = process.env[XDG_CONFIG_HOME_ENV] ?? pathService.join(home, ".config");
+  const stateHome = process.env[XDG_STATE_HOME_ENV] ?? pathService.join(home, ".local", "state");
 
   return {
     configPath: pathService.join(configHome, APP_DIR_NAME, DEFAULT_CONFIG_FILE_NAME),
     stateDir: pathService.join(stateHome, APP_DIR_NAME),
-    logDir: pathService.join(stateHome, APP_DIR_NAME, "logs"),
+    logDir: pathService.join(stateHome, APP_DIR_NAME, LOG_DIR_NAME),
   };
 };
 
@@ -82,9 +94,8 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   const pathService = yield* Path.Path;
   const home = homedir();
   const defaults = defaultLayout(pathService, home);
-  const overrides = options.pathOverrides;
 
-  if (process.platform === "win32" && options.controlEndpointOverride === undefined) {
+  if (process.platform === "win32") {
     return yield* RuntimePathError.make({
       message: "Windows control endpoints are not implemented yet.",
     });
@@ -95,32 +106,31 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     home,
     options.configPath ?? defaults.configPath,
   );
-  const stateDir =
-    optionalOverride(pathService, home, overrides?.stateDir) ?? pathService.resolve(defaults.stateDir);
-  const logDir =
-    optionalOverride(pathService, home, overrides?.logDir) ?? pathService.resolve(defaults.logDir);
-  const runtimeDir =
-    optionalOverride(pathService, home, overrides?.runtimeDir) ??
-    pathService.resolve(
-      process.env.XDG_RUNTIME_DIR === undefined
-        ? pathService.join(stateDir, "run")
-        : pathService.join(process.env.XDG_RUNTIME_DIR, APP_DIR_NAME),
-    );
-  const dbPath =
-    optionalOverride(pathService, home, overrides?.dbPath) ??
-    pathService.join(stateDir, DEFAULT_DB_FILE_NAME);
+  const stateDir = pathService.resolve(defaults.stateDir);
+  const logDir = pathService.resolve(defaults.logDir);
+  const runtimeDir = pathService.resolve(
+    process.env[XDG_RUNTIME_DIR_ENV] === undefined
+      ? pathService.join(stateDir, RUNTIME_DIR_NAME)
+      : pathService.join(process.env[XDG_RUNTIME_DIR_ENV], APP_DIR_NAME),
+  );
+  const dbPath = pathService.join(stateDir, DEFAULT_DB_FILE_NAME);
   const scopeId = createScopeId({ configPath, stateDir });
-  const manifestPath =
-    optionalOverride(pathService, home, overrides?.manifestPath) ??
-    pathService.join(stateDir, "server-control", `server-${scopeId}.json`);
-  const startupLockPath =
-    optionalOverride(pathService, home, overrides?.startupLockPath) ??
-    pathService.join(stateDir, "server-control", `startup-${scopeId}.lock`);
+  const controlDir = pathService.join(stateDir, SERVER_CONTROL_DIR_NAME);
+  const manifestPath = pathService.join(
+    controlDir,
+    `${SERVER_MANIFEST_FILE_PREFIX}-${scopeId}.json`,
+  );
+  const startupLockPath = pathService.join(
+    controlDir,
+    `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
+  );
   const defaultControlEndpoint: ServerControlEndpoint = {
     kind: "unix-socket",
-    path: pathService.join(runtimeDir, `server-${scopeId}.sock`),
+    path: pathService.join(
+      runtimeDir,
+      `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
+    ),
   };
-  const controlEndpoint = options.controlEndpointOverride ?? defaultControlEndpoint;
 
   return {
     configPath,
@@ -130,7 +140,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     dbPath,
     manifestPath,
     startupLockPath,
-    controlEndpoint,
+    controlEndpoint: defaultControlEndpoint,
     scopeId,
   };
 });

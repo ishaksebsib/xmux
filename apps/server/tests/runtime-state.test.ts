@@ -19,7 +19,7 @@ import {
   serializeServerManifest,
   writeServerManifest,
 } from "../src/runtime-state/manifest";
-import { createScopeId, resolveRuntimePaths } from "../src/runtime-state/paths";
+import { createScopeId, resolveRuntimePaths, type ServerRuntimePaths } from "../src/runtime-state/paths";
 import { isPidAlive } from "../src/runtime-state/pid";
 import { acquireStartupLock, releaseStartupLock } from "../src/runtime-state/startup-lock";
 
@@ -70,27 +70,42 @@ const makeManifest = (input: {
     }),
   });
 
+const makeRuntimePaths = (
+  pathService: Path.Path,
+  root: string,
+  overrides: Partial<Pick<ServerRuntimePaths, "manifestPath" | "startupLockPath">> & {
+    readonly socketPath?: string;
+  } = {},
+): ServerRuntimePaths => {
+  const configPath = pathService.join(root, "config.jsonc");
+  const stateDir = pathService.join(root, "state");
+  const scopeId = createScopeId({ configPath, stateDir });
+
+  return {
+    configPath,
+    stateDir,
+    runtimeDir: pathService.join(root, "runtime"),
+    logDir: pathService.join(root, "logs"),
+    dbPath: pathService.join(root, "state", "server.db"),
+    manifestPath: overrides.manifestPath ?? pathService.join(root, "server.json"),
+    startupLockPath: overrides.startupLockPath ?? pathService.join(root, "startup.lock"),
+    controlEndpoint: {
+      kind: "unix-socket",
+      path: overrides.socketPath ?? pathService.join(root, "server.sock"),
+    },
+    scopeId,
+  };
+};
+
 describe("runtime paths", () => {
   layer(NodePath.layer)((it) => {
     it.effect("resolves stable path-safe scope ids", () =>
       Effect.gen(function* () {
         const paths = yield* resolveRuntimePaths(
-          normalizeServerOptions({
-            configPath: "/tmp/xmux-test/config.jsonc",
-            pathOverrides: {
-              stateDir: "/tmp/xmux-test/state",
-              runtimeDir: "/tmp/xmux-test/runtime",
-            },
-          }),
+          normalizeServerOptions({ configPath: "/tmp/xmux-test/config.jsonc" }),
         );
         const again = yield* resolveRuntimePaths(
-          normalizeServerOptions({
-            configPath: "/tmp/xmux-test/config.jsonc",
-            pathOverrides: {
-              stateDir: "/tmp/xmux-test/state",
-              runtimeDir: "/tmp/xmux-test/runtime",
-            },
-          }),
+          normalizeServerOptions({ configPath: "/tmp/xmux-test/config.jsonc" }),
         );
 
         assert.strictEqual(paths.scopeId, again.scopeId);
@@ -111,16 +126,9 @@ describe("manifest state", () => {
         const fs = yield* FileSystem.FileSystem;
         const pathService = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-" });
-        const paths = yield* resolveRuntimePaths(
-          normalizeServerOptions({
-            configPath: pathService.join(root, "config.jsonc"),
-            pathOverrides: {
-              stateDir: pathService.join(root, "state"),
-              runtimeDir: pathService.join(root, "runtime"),
-              manifestPath: pathService.join(root, "server.json"),
-            },
-          }),
-        );
+        const paths = makeRuntimePaths(pathService, root, {
+          manifestPath: pathService.join(root, "server.json"),
+        });
         const manifest = createServerManifest({
           paths,
           startedAt: fixedStartedAt,
@@ -174,16 +182,7 @@ describe("manifest state", () => {
         const pathService = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-active-" });
         const manifestPath = pathService.join(root, "server.json");
-        const paths = yield* resolveRuntimePaths(
-          normalizeServerOptions({
-            configPath: pathService.join(root, "config.jsonc"),
-            pathOverrides: {
-              stateDir: pathService.join(root, "state"),
-              runtimeDir: pathService.join(root, "runtime"),
-              manifestPath,
-            },
-          }),
-        );
+        const paths = makeRuntimePaths(pathService, root, { manifestPath });
         const staleManifest = makeManifest({
           pid: process.pid,
           configPath: paths.configPath,
@@ -206,16 +205,7 @@ describe("manifest state", () => {
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-reachable-" });
         const manifestPath = pathService.join(root, "server.json");
         const socketPath = pathService.join(root, "server.sock");
-        const paths = yield* resolveRuntimePaths(
-          normalizeServerOptions({
-            configPath: pathService.join(root, "config.jsonc"),
-            pathOverrides: {
-              stateDir: pathService.join(root, "state"),
-              runtimeDir: pathService.join(root, "runtime"),
-              manifestPath,
-            },
-          }),
-        );
+        const paths = makeRuntimePaths(pathService, root, { manifestPath, socketPath });
         const activeManifest = makeManifest({
           pid: process.pid,
           configPath: paths.configPath,
@@ -296,16 +286,7 @@ describe("manifest state", () => {
         const pathService = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-manifest-scope-" });
         const manifestPath = pathService.join(root, "server.json");
-        const paths = yield* resolveRuntimePaths(
-          normalizeServerOptions({
-            configPath: pathService.join(root, "config.jsonc"),
-            pathOverrides: {
-              stateDir: pathService.join(root, "state"),
-              runtimeDir: pathService.join(root, "runtime"),
-              manifestPath,
-            },
-          }),
-        );
+        const paths = makeRuntimePaths(pathService, root, { manifestPath });
 
         yield* Effect.scoped(
           Effect.gen(function* () {
@@ -335,12 +316,8 @@ describe("startup lock", () => {
 
         yield* Effect.scoped(
           Effect.gen(function* () {
-            yield* acquireStartupLock({ startupLockPath, clock: fixedClock, nonce: "first" });
-            const error = yield* acquireStartupLock({
-              startupLockPath,
-              clock: fixedClock,
-              nonce: "second",
-            }).pipe(Effect.flip);
+            yield* acquireStartupLock({ startupLockPath });
+            const error = yield* acquireStartupLock({ startupLockPath }).pipe(Effect.flip);
             assert.strictEqual(error._tag, "StartupLockError");
             assert.include(error.message, "already in progress");
           }),
@@ -371,12 +348,8 @@ describe("startup lock", () => {
 
         yield* Effect.scoped(
           Effect.gen(function* () {
-            const lock = yield* acquireStartupLock({
-              startupLockPath,
-              clock: fixedClock,
-              nonce: "fresh",
-            });
-            assert.strictEqual(lock.nonce, "fresh");
+            const lock = yield* acquireStartupLock({ startupLockPath });
+            assert.notStrictEqual(lock.nonce, "stale");
           }),
         );
 
@@ -393,7 +366,7 @@ describe("startup lock", () => {
 
         yield* Effect.scoped(
           Effect.gen(function* () {
-            yield* acquireStartupLock({ startupLockPath, clock: fixedClock, nonce: "owner" });
+            yield* acquireStartupLock({ startupLockPath });
             yield* releaseStartupLock({ path: startupLockPath, pid: process.pid, nonce: "other" });
             assert.isTrue(yield* fs.exists(startupLockPath));
           }),
