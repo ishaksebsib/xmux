@@ -5,4 +5,5 @@ import { serverApi } from "./api";
 export const openApi = () => OpenApi.fromApi(serverApi);
 
 /** JSON string used by package scripts and OpenAPI consumers. */
-export const openApiJson = (space: number = 2): string => `${JSON.stringify(openApi(), null, space)}\n`;
+export const openApiJson = (space: number = 2): string =>
+  `${JSON.stringify(openApi(), null, space)}\n`;

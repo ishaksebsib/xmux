@@ -8,9 +8,7 @@ export class ManifestEndpoint extends Schema.Class<ManifestEndpoint>("ManifestEn
 }) {}
 
 /** Owner metadata helps users identify which binary wrote the manifest. */
-export class ServerOwnerMetadata extends Schema.Class<ServerOwnerMetadata>(
-  "ServerOwnerMetadata",
-)({
+export class ServerOwnerMetadata extends Schema.Class<ServerOwnerMetadata>("ServerOwnerMetadata")({
   client: Schema.String,
   version: Schema.String,
   executablePath: Schema.String,

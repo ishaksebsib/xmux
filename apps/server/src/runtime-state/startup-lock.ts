@@ -92,14 +92,13 @@ const removeLockFile = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.remove(startupLockPath, { force: true }).pipe(
-      Effect.mapError(
-        (cause) =>
-          StartupLockError.make({
-            operation,
-            path: startupLockPath,
-            message: `Failed to remove startup lock: ${startupLockPath}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        StartupLockError.make({
+          operation,
+          path: startupLockPath,
+          message: `Failed to remove startup lock: ${startupLockPath}`,
+          cause,
+        }),
       ),
     );
   });
@@ -119,14 +118,13 @@ const acquireLockFile = Effect.fn("server.acquireStartupLockFile")(function* (
   const directory = pathService.dirname(options.startupLockPath);
 
   yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 }).pipe(
-    Effect.mapError(
-      (cause) =>
-        StartupLockError.make({
-          operation: "acquire",
-          path: options.startupLockPath,
-          message: `Failed to create startup lock directory: ${directory}`,
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      StartupLockError.make({
+        operation: "acquire",
+        path: options.startupLockPath,
+        message: `Failed to create startup lock directory: ${directory}`,
+        cause,
+      }),
     ),
   );
 
@@ -159,11 +157,11 @@ export const releaseStartupLock = (
     yield* removeLockFile(lock.path, "release");
   });
 
-const releaseStartupLockLogged = (lock: StartupLock): Effect.Effect<void, never, FileSystem.FileSystem> =>
+const releaseStartupLockLogged = (
+  lock: StartupLock,
+): Effect.Effect<void, never, FileSystem.FileSystem> =>
   releaseStartupLock(lock).pipe(
-    Effect.tapError((error) =>
-      Effect.logWarning("failed to release startup lock", { error }),
-    ),
+    Effect.tapError((error) => Effect.logWarning("failed to release startup lock", { error })),
     Effect.ignore,
   );
 
@@ -179,8 +177,4 @@ export const withStartupLock = <A, E, R>(
   options: AcquireStartupLockOptions,
   use: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E | StartupLockError, R | FileSystem.FileSystem | Path.Path> =>
-  Effect.acquireUseRelease(
-    acquireLockFile(options),
-    () => use,
-    releaseStartupLockLogged,
-  );
+  Effect.acquireUseRelease(acquireLockFile(options), () => use, releaseStartupLockLogged);

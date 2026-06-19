@@ -122,27 +122,27 @@ const logPathsNewestFirst = (activePath: string, maxFiles: number): readonly str
   return paths;
 };
 
-const readTailAcrossRotatedFiles = Effect.fn("server.readTailAcrossRotatedFiles")(function* (
-  input: {
+const readTailAcrossRotatedFiles = Effect.fn("server.readTailAcrossRotatedFiles")(
+  function* (input: {
     readonly activePath: string;
     readonly tail: number;
     readonly maxFiles: number;
     readonly maxBytes: number;
+  }) {
+    let remainingBytes = Math.max(input.maxBytes, 0);
+    let entries: readonly LogEntry[] = [];
+
+    for (const path of logPathsNewestFirst(input.activePath, input.maxFiles)) {
+      if (entries.length >= input.tail || remainingBytes <= 0) break;
+      const raw = yield* Effect.scoped(readBoundedFileTail(path, remainingBytes));
+      remainingBytes = Math.max(0, remainingBytes - byteLength(raw));
+      const fileEntries = parseLogLines(raw);
+      entries = [...fileEntries, ...entries].slice(-input.tail);
+    }
+
+    return entries.slice(-input.tail);
   },
-) {
-  let remainingBytes = Math.max(input.maxBytes, 0);
-  let entries: readonly LogEntry[] = [];
-
-  for (const path of logPathsNewestFirst(input.activePath, input.maxFiles)) {
-    if (entries.length >= input.tail || remainingBytes <= 0) break;
-    const raw = yield* Effect.scoped(readBoundedFileTail(path, remainingBytes));
-    remainingBytes = Math.max(0, remainingBytes - byteLength(raw));
-    const fileEntries = parseLogLines(raw);
-    entries = [...fileEntries, ...entries].slice(-input.tail);
-  }
-
-  return entries.slice(-input.tail);
-});
+);
 
 /** Read a bounded tail from the main server log and decode schema-valid entries. */
 export const readServerLogTail = Effect.fn("server.readServerLogTail")(function* (
@@ -165,7 +165,9 @@ export const readServerLogTail = Effect.fn("server.readServerLogTail")(function*
 export class LogReader extends Context.Service<
   LogReader,
   {
-    readonly readTail: (input: ReadServerLogTailInput) => Effect.Effect<readonly LogEntry[], LogFileError>;
+    readonly readTail: (
+      input: ReadServerLogTailInput,
+    ) => Effect.Effect<readonly LogEntry[], LogFileError>;
   }
 >()("@xmux/server/LogReader") {}
 

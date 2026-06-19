@@ -47,16 +47,26 @@ export const resolveServerLogFilePaths = (
 
 export const rotatedLogPath = (path: string, index: number): string => `${path}.${index}`;
 
-const normalizeRotation = (options: LogRotationOptions): NormalizedLogRotationOptions => ({
-  maxBytes:
-    options.maxBytes === undefined || !Number.isFinite(options.maxBytes) || options.maxBytes < 1
-      ? DEFAULT_MAX_LOG_FILE_BYTES
-      : Math.floor(options.maxBytes),
-  maxFiles:
-    options.maxFiles === undefined || !Number.isInteger(options.maxFiles) || options.maxFiles < 1
-      ? DEFAULT_MAX_LOG_FILES
-      : options.maxFiles,
-});
+const parseRotation = (
+  options: LogRotationOptions,
+  path: string,
+): Effect.Effect<NormalizedLogRotationOptions, LogFileError> => {
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_LOG_FILE_BYTES;
+  if (!Number.isFinite(maxBytes) || maxBytes < 1) {
+    return Effect.fail(
+      mapLogFileError("setup", path, "Log rotation maxBytes must be greater than 0", undefined),
+    );
+  }
+
+  const maxFiles = options.maxFiles ?? DEFAULT_MAX_LOG_FILES;
+  if (!Number.isInteger(maxFiles) || maxFiles < 1) {
+    return Effect.fail(
+      mapLogFileError("setup", path, "Log rotation maxFiles must be a positive integer", undefined),
+    );
+  }
+
+  return Effect.succeed({ maxBytes: Math.floor(maxBytes), maxFiles });
+};
 
 const byteLength = (value: string): number => textEncoder.encode(value).byteLength;
 
@@ -77,7 +87,9 @@ const normalizeLevel = (level: string): EntryLogLevel => {
   }
 };
 
-const toMinimumLogLevel = (level: ServerLogLevel): "Trace" | "Debug" | "Info" | "Warn" | "Error" => {
+const toMinimumLogLevel = (
+  level: ServerLogLevel,
+): "Trace" | "Debug" | "Info" | "Warn" | "Error" => {
   switch (level) {
     case "trace":
       return "Trace";
@@ -144,28 +156,27 @@ const mapLogFileError = (
     cause,
   });
 
-const ensureLogFile = (
-  path: string,
-): Effect.Effect<void, LogFileError, FileSystem.FileSystem> =>
+const ensureLogFile = (path: string): Effect.Effect<void, LogFileError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(path, "", { flag: "a", mode: 0o600 }).pipe(
-      Effect.mapError((cause) =>
-        mapLogFileError("setup", path, `Failed to set up log file: ${path}`, cause),
-      ),
-    );
+    yield* fs
+      .writeFileString(path, "", { flag: "a", mode: 0o600 })
+      .pipe(
+        Effect.mapError((cause) =>
+          mapLogFileError("setup", path, `Failed to set up log file: ${path}`, cause),
+        ),
+      );
     if (process.platform === "win32") return;
-    yield* fs.chmod(path, 0o600).pipe(
-      Effect.mapError((cause) =>
-        mapLogFileError("setup", path, `Failed to secure log file: ${path}`, cause),
-      ),
-    );
+    yield* fs
+      .chmod(path, 0o600)
+      .pipe(
+        Effect.mapError((cause) =>
+          mapLogFileError("setup", path, `Failed to secure log file: ${path}`, cause),
+        ),
+      );
   });
 
-const fileSize = (
-  fs: FileSystem.FileSystem,
-  path: string,
-): Effect.Effect<number, LogFileError> =>
+const fileSize = (fs: FileSystem.FileSystem, path: string): Effect.Effect<number, LogFileError> =>
   fs.stat(path).pipe(
     Effect.map((info) => Number(info.size)),
     Effect.catchTag("PlatformError", (error) =>
@@ -181,26 +192,30 @@ const removeIfExists = (
   fs: FileSystem.FileSystem,
   path: string,
 ): Effect.Effect<void, LogFileError> =>
-  fs.remove(path, { force: true }).pipe(
-    Effect.mapError((cause) =>
-      mapLogFileError("write", path, `Failed to remove rotated log file: ${path}`, cause),
-    ),
-  );
+  fs
+    .remove(path, { force: true })
+    .pipe(
+      Effect.mapError((cause) =>
+        mapLogFileError("write", path, `Failed to remove rotated log file: ${path}`, cause),
+      ),
+    );
 
 const renameIfExists = (
   fs: FileSystem.FileSystem,
   from: string,
   to: string,
 ): Effect.Effect<void, LogFileError> =>
-  fs.rename(from, to).pipe(
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "NotFound"
-        ? Effect.void
-        : Effect.fail(
-            mapLogFileError("write", from, `Failed to rotate log file: ${from} -> ${to}`, error),
-          ),
-    ),
-  );
+  fs
+    .rename(from, to)
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound"
+          ? Effect.void
+          : Effect.fail(
+              mapLogFileError("write", from, `Failed to rotate log file: ${from} -> ${to}`, error),
+            ),
+      ),
+    );
 
 const rotateLogFile = (
   fs: FileSystem.FileSystem,
@@ -242,11 +257,13 @@ const appendLogLine = (
   const data = `${line}\n`;
   return rotateIfNeeded(fs, path, byteLength(data), rotation).pipe(
     Effect.andThen(
-      fs.writeFileString(path, data, { flag: "a", mode: 0o600 }).pipe(
-        Effect.mapError((cause) =>
-          mapLogFileError("write", path, `Failed to append log file: ${path}`, cause),
+      fs
+        .writeFileString(path, data, { flag: "a", mode: 0o600 })
+        .pipe(
+          Effect.mapError((cause) =>
+            mapLogFileError("write", path, `Failed to append log file: ${path}`, cause),
+          ),
         ),
-      ),
     ),
   );
 };
@@ -276,9 +293,7 @@ const writeBatch = (
   entries: readonly EncodedLogEntry[],
 ): Effect.Effect<void> => {
   const mainLines = entries.map((entry) => entry.line);
-  const errorLines = entries
-    .filter((entry) => entry.level === "error")
-    .map((entry) => entry.line);
+  const errorLines = entries.filter((entry) => entry.level === "error").map((entry) => entry.line);
 
   return appendLogLines(fs, paths.mainLogPath, mainLines, rotation).pipe(
     Effect.andThen(appendLogLines(fs, paths.errorLogPath, errorLines, rotation)),
@@ -292,7 +307,7 @@ export const makeFileLogger = Effect.fn("server.makeFileLogger")(function* (
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const paths = resolveServerLogFilePaths(pathService, input.logDir);
-  const rotation = normalizeRotation(input);
+  const rotation = yield* parseRotation(input, input.logDir);
 
   yield* ensureLogFile(paths.mainLogPath);
   yield* ensureLogFile(paths.errorLogPath);
@@ -312,6 +327,9 @@ export const withFileLogger = <A, E, R>(
     const logger = yield* makeFileLogger(input);
     return yield* use.pipe(
       Effect.provide(Logger.layer([logger], { mergeWithExisting: true })),
-      Effect.provideService(References.MinimumLogLevel, toMinimumLogLevel(input.logLevel ?? "info")),
+      Effect.provideService(
+        References.MinimumLogLevel,
+        toMinimumLogLevel(input.logLevel ?? "info"),
+      ),
     );
   });

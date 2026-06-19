@@ -98,38 +98,37 @@ export const writeServerManifest = (
     const directory = pathService.dirname(manifestPath);
 
     yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 }).pipe(
-      Effect.mapError(
-        (cause) =>
-          ManifestError.make({
-            operation: "write",
-            path: manifestPath,
-            message: `Failed to create manifest directory: ${directory}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        ManifestError.make({
+          operation: "write",
+          path: manifestPath,
+          message: `Failed to create manifest directory: ${directory}`,
+          cause,
+        }),
       ),
     );
-    yield* fs.writeFileString(manifestPath, serializeServerManifest(manifest), {
-      mode: 0o600,
-    }).pipe(
-      Effect.mapError(
-        (cause) =>
+    yield* fs
+      .writeFileString(manifestPath, serializeServerManifest(manifest), {
+        mode: 0o600,
+      })
+      .pipe(
+        Effect.mapError((cause) =>
           ManifestError.make({
             operation: "write",
             path: manifestPath,
             message: `Failed to write server manifest: ${manifestPath}`,
             cause,
           }),
-      ),
-    );
+        ),
+      );
     yield* fs.chmod(manifestPath, 0o600).pipe(
-      Effect.mapError(
-        (cause) =>
-          ManifestError.make({
-            operation: "write",
-            path: manifestPath,
-            message: `Failed to secure server manifest: ${manifestPath}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        ManifestError.make({
+          operation: "write",
+          path: manifestPath,
+          message: `Failed to secure server manifest: ${manifestPath}`,
+          cause,
+        }),
       ),
     );
   });
@@ -141,14 +140,13 @@ export const removeServerManifest = (
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.remove(manifestPath, { force: true }).pipe(
-      Effect.mapError(
-        (cause) =>
-          ManifestError.make({
-            operation: "remove",
-            path: manifestPath,
-            message: `Failed to remove server manifest: ${manifestPath}`,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        ManifestError.make({
+          operation: "remove",
+          path: manifestPath,
+          message: `Failed to remove server manifest: ${manifestPath}`,
+          cause,
+        }),
       ),
     );
   });

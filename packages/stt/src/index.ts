@@ -1,4 +1,4 @@
-export { createSpeechToTextClient, createSttClient } from "./client";
+export { createSpeechToTextClient, createSttClient, parseSpeechToTextClientConfig } from "./client";
 export {
   SpeechToTextConfigError,
   SpeechToTextInputError,
@@ -8,6 +8,7 @@ export {
 } from "./errors";
 export type {
   SpeechToTextClientConfig,
+  ParsedSpeechToTextClientConfig,
   SpeechToTextCreateClientError,
   SttClientConfig,
 } from "./client";

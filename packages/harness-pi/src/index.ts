@@ -1,3 +1,5 @@
+export { mergePiCreateOptions, normalizePiAdapterConfig } from "./config";
+export type { ResolvedPiAdapterConfig, ResolvedPiCreateOptions, ResolvedPiPath } from "./config";
 export { createPiAdapter } from "./pi";
 export {
   PiModelRequestError,

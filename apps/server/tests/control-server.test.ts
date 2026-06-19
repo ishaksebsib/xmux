@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
-import { HttpServerResponse } from "effect/unstable/http";
 import { ConfigValidateResponse, EffectiveConfigResponse } from "../src/api/groups/config/schemas";
 import { LogsResponse } from "../src/api/groups/log/schemas";
 import { ShutdownResponse } from "../src/api/groups/lifecycle/schemas";
@@ -23,9 +22,6 @@ import { nodeBinding } from "../src/platform/node";
 import { nodeServerServices, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
-const fixedClock = {
-  now: () => fixedStartedAt,
-};
 
 interface HttpTestResponse {
   readonly statusCode: number;
@@ -154,9 +150,6 @@ const decodeShutdown = (body: string): ShutdownResponse => {
   if (Option.isNone(decoded)) assert.fail("Expected schema-valid shutdown response");
   return decoded.value;
 };
-
-const responseText = (response: HttpServerResponse.HttpServerResponse): Effect.Effect<string> =>
-  Effect.promise(() => HttpServerResponse.toWeb(response).text());
 
 const makePaths = (
   root: string,

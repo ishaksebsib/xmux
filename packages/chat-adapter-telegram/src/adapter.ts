@@ -1,6 +1,5 @@
 import { defineChatAdapter, type ChatAdapterDefinition } from "@xmux/chat-core";
 import { telegramAdapterCapabilities } from "./capabilities";
-import { defaultTelegramAdapterMode } from "./config";
 import { openTelegramRuntime } from "./runtime";
 import type { TelegramAdapterError } from "./errors";
 import type {
@@ -20,7 +19,6 @@ export function createTelegramAdapter<const TChatId extends string = "telegram">
   TelegramAdapterError
 > {
   const chatId = (options.id ?? "telegram") as TChatId;
-  const mode = options.mode ?? defaultTelegramAdapterMode;
 
   return defineChatAdapter<
     TChatId,
@@ -35,7 +33,6 @@ export function createTelegramAdapter<const TChatId extends string = "telegram">
       return openTelegramRuntime({
         chatId,
         options,
-        mode,
         logger: options.logger ?? context.logger,
       });
     },

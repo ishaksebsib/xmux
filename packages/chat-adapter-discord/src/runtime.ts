@@ -21,7 +21,7 @@ import {
   type DiscordBotClient,
 } from "./client";
 import {
-  normalizeDiscordMode,
+  defaultDiscordAdapterMode,
   parseDiscordAdapterConfig,
   type DiscordAdapterConfig,
 } from "./config";
@@ -83,21 +83,25 @@ export function openDiscordRuntime<TChatId extends string>(args: {
   readonly createClient?: CreateDiscordBotClient;
   readonly logger?: ChatLogger;
 }): Result<DiscordOpenedAdapter<TChatId>, DiscordConfigurationError> {
+  const configResult = parseDiscordAdapterConfig(args.options);
+  const logMode = configResult.isOk()
+    ? configResult.value.mode.type
+    : (args.options.mode ?? defaultDiscordAdapterMode).type;
   const logger = createDiscordLogScope({
     logger: args.logger,
     chatId: args.chatId,
-    mode: normalizeDiscordMode(args.options.mode).type,
+    mode: logMode,
   });
   const startedAt = startChatLogTimer();
   const metadata = {
     operation: "open",
-    mode: normalizeDiscordMode(args.options.mode).type,
+    mode: logMode,
   } as const;
 
   logger.debug(discordLogEvents.openBegin, metadata);
 
   const result = Result.gen(function* () {
-    const config = yield* parseDiscordAdapterConfig(args.options);
+    const config = yield* configResult;
     const client = yield* Result.try({
       try: () =>
         (args.createClient ?? createDiscordBotClient)({

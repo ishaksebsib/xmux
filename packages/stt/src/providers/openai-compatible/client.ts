@@ -25,7 +25,7 @@ export function createOpenAICompatibleSpeechToTextClient(
 
       const body = createTranscriptionFormData(validated.value);
       const signal = createRequestSignal({
-        signal: input.signal,
+        signal: validated.value.signal,
         timeoutMs: config.timeoutMs,
       });
 
@@ -34,7 +34,7 @@ export function createOpenAICompatibleSpeechToTextClient(
           try: () =>
             config.fetch(config.url, {
               method: "POST",
-              headers: mergeHeaders(config.headers, input.headers),
+              headers: mergeHeaders(config.headers, validated.value.headers),
               body,
               signal: signal.signal,
             }),

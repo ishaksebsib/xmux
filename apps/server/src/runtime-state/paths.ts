@@ -20,21 +20,26 @@ import {
 import { RuntimePathError } from "../errors";
 import type { NormalizedServerOptions } from "../options";
 
+declare const resolvedPathBrand: unique symbol;
+
+/** Absolute path resolved once at the server runtime boundary. */
+export type ResolvedPath = string & { readonly [resolvedPathBrand]?: true };
+
 /** Local control endpoint. Windows named pipes should be added only with real transport support. */
 export interface ServerControlEndpoint {
   readonly kind: "unix-socket";
-  readonly path: string;
+  readonly path: ResolvedPath;
 }
 
 /** Resolved paths are explicit so the CLI and server agree on one local scope. */
 export interface ServerRuntimePaths {
-  readonly configPath: string;
-  readonly stateDir: string;
-  readonly runtimeDir: string;
-  readonly logDir: string;
-  readonly dbPath: string;
-  readonly manifestPath: string;
-  readonly startupLockPath: string;
+  readonly configPath: ResolvedPath;
+  readonly stateDir: ResolvedPath;
+  readonly runtimeDir: ResolvedPath;
+  readonly logDir: ResolvedPath;
+  readonly dbPath: ResolvedPath;
+  readonly manifestPath: ResolvedPath;
+  readonly startupLockPath: ResolvedPath;
   readonly controlEndpoint: ServerControlEndpoint;
   readonly scopeId: string;
 }
@@ -45,8 +50,10 @@ const expandHome = (pathService: Path.Path, home: string, input: string): string
   return input;
 };
 
-const resolveInputPath = (pathService: Path.Path, home: string, input: string): string =>
-  pathService.resolve(expandHome(pathService, home, input));
+const asResolvedPath = (path: string): ResolvedPath => path as ResolvedPath;
+
+const resolveInputPath = (pathService: Path.Path, home: string, input: string): ResolvedPath =>
+  asResolvedPath(pathService.resolve(expandHome(pathService, home, input)));
 
 /** Scope IDs are hashed to keep socket and manifest names short and path-safe. */
 export const createScopeId = (input: {
@@ -64,16 +71,16 @@ const defaultLayout = (
   pathService: Path.Path,
   home: string,
 ): {
-  readonly configPath: string;
-  readonly stateDir: string;
-  readonly logDir: string;
+  readonly configPath: ResolvedPath;
+  readonly stateDir: ResolvedPath;
+  readonly logDir: ResolvedPath;
 } => {
   if (process.platform === "darwin") {
     const appSupportDir = pathService.join(home, "Library", "Application Support", APP_DIR_NAME);
     return {
-      configPath: pathService.join(appSupportDir, DEFAULT_CONFIG_FILE_NAME),
-      stateDir: appSupportDir,
-      logDir: pathService.join(home, "Library", "Logs", APP_DIR_NAME),
+      configPath: asResolvedPath(pathService.join(appSupportDir, DEFAULT_CONFIG_FILE_NAME)),
+      stateDir: asResolvedPath(appSupportDir),
+      logDir: asResolvedPath(pathService.join(home, "Library", "Logs", APP_DIR_NAME)),
     };
   }
 
@@ -81,9 +88,11 @@ const defaultLayout = (
   const stateHome = process.env[XDG_STATE_HOME_ENV] ?? pathService.join(home, ".local", "state");
 
   return {
-    configPath: pathService.join(configHome, APP_DIR_NAME, DEFAULT_CONFIG_FILE_NAME),
-    stateDir: pathService.join(stateHome, APP_DIR_NAME),
-    logDir: pathService.join(stateHome, APP_DIR_NAME, LOG_DIR_NAME),
+    configPath: asResolvedPath(
+      pathService.join(configHome, APP_DIR_NAME, DEFAULT_CONFIG_FILE_NAME),
+    ),
+    stateDir: asResolvedPath(pathService.join(stateHome, APP_DIR_NAME)),
+    logDir: asResolvedPath(pathService.join(stateHome, APP_DIR_NAME, LOG_DIR_NAME)),
   };
 };
 
@@ -101,34 +110,35 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     });
   }
 
-  const configPath = resolveInputPath(
-    pathService,
-    home,
-    options.configPath ?? defaults.configPath,
+  const configPath = resolveInputPath(pathService, home, options.configPath ?? defaults.configPath);
+  const stateDir = asResolvedPath(pathService.resolve(defaults.stateDir));
+  const logDir = asResolvedPath(pathService.resolve(defaults.logDir));
+  const runtimeDir = asResolvedPath(
+    pathService.resolve(
+      process.env[XDG_RUNTIME_DIR_ENV] === undefined
+        ? pathService.join(stateDir, RUNTIME_DIR_NAME)
+        : pathService.join(process.env[XDG_RUNTIME_DIR_ENV], APP_DIR_NAME),
+    ),
   );
-  const stateDir = pathService.resolve(defaults.stateDir);
-  const logDir = pathService.resolve(defaults.logDir);
-  const runtimeDir = pathService.resolve(
-    process.env[XDG_RUNTIME_DIR_ENV] === undefined
-      ? pathService.join(stateDir, RUNTIME_DIR_NAME)
-      : pathService.join(process.env[XDG_RUNTIME_DIR_ENV], APP_DIR_NAME),
-  );
-  const dbPath = pathService.join(stateDir, DEFAULT_DB_FILE_NAME);
+  const dbPath = asResolvedPath(pathService.join(stateDir, DEFAULT_DB_FILE_NAME));
   const scopeId = createScopeId({ configPath, stateDir });
   const controlDir = pathService.join(stateDir, SERVER_CONTROL_DIR_NAME);
-  const manifestPath = pathService.join(
-    controlDir,
-    `${SERVER_MANIFEST_FILE_PREFIX}-${scopeId}.json`,
+  const manifestPath = asResolvedPath(
+    pathService.join(controlDir, `${SERVER_MANIFEST_FILE_PREFIX}-${scopeId}.json`),
   );
-  const startupLockPath = pathService.join(
-    controlDir,
-    `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
+  const startupLockPath = asResolvedPath(
+    pathService.join(
+      controlDir,
+      `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
+    ),
   );
   const defaultControlEndpoint: ServerControlEndpoint = {
     kind: "unix-socket",
-    path: pathService.join(
-      runtimeDir,
-      `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
+    path: asResolvedPath(
+      pathService.join(
+        runtimeDir,
+        `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
+      ),
     ),
   };
 
@@ -145,28 +155,28 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   };
 });
 
-const makeDirectory = (directory: string): Effect.Effect<void, RuntimePathError, FileSystem.FileSystem> =>
+const makeDirectory = (
+  directory: string,
+): Effect.Effect<void, RuntimePathError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 }).pipe(
-      Effect.mapError(
-        (cause) =>
-          RuntimePathError.make({
-            message: `Failed to create runtime directory: ${directory}`,
-            path: directory,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        RuntimePathError.make({
+          message: `Failed to create runtime directory: ${directory}`,
+          path: directory,
+          cause,
+        }),
       ),
     );
     if (process.platform === "win32") return;
     yield* fs.chmod(directory, 0o700).pipe(
-      Effect.mapError(
-        (cause) =>
-          RuntimePathError.make({
-            message: `Failed to secure runtime directory: ${directory}`,
-            path: directory,
-            cause,
-          }),
+      Effect.mapError((cause) =>
+        RuntimePathError.make({
+          message: `Failed to secure runtime directory: ${directory}`,
+          path: directory,
+          cause,
+        }),
       ),
     );
   });

@@ -1,37 +1,37 @@
-import type { SpeechToTextAudioInput, SpeechToTextFormValue } from "../../types";
-import type { ValidatedTranscribeInput } from "./validation";
+import type { SpeechToTextFormValue } from "../../types";
+import type { ValidatedAudioInput, ValidatedTranscribeInput } from "./validation";
 
 type BlobConstructorPart = NonNullable<ConstructorParameters<typeof Blob>[0]>[number];
 
 export function createTranscriptionFormData(input: ValidatedTranscribeInput): FormData {
   const body = new FormData();
-  const file = toFormDataFile(input.input.audio);
+  const file = toFormDataFile(input.audio);
 
   body.append("file", file.blob, file.filename);
   body.append("model", input.model);
-  appendOptional(body, "language", input.input.language);
-  appendOptional(body, "prompt", input.input.prompt);
-  appendOptional(body, "temperature", input.input.temperature);
-  appendOptional(body, "response_format", input.input.responseFormat);
+  appendOptional(body, "language", input.language);
+  appendOptional(body, "prompt", input.prompt);
+  appendOptional(body, "temperature", input.temperature);
+  body.append("response_format", input.responseFormat);
 
-  for (const granularity of input.input.timestampGranularities ?? []) {
+  for (const granularity of input.timestampGranularities) {
     body.append("timestamp_granularities[]", granularity);
   }
 
-  for (const [name, value] of Object.entries(input.input.extraBody ?? {})) {
+  for (const [name, value] of Object.entries(input.extraBody)) {
     appendFormValue(body, name, value);
   }
 
   return body;
 }
 
-function toFormDataFile(input: SpeechToTextAudioInput): {
+function toFormDataFile(input: ValidatedAudioInput): {
   readonly blob: Blob;
   readonly filename: string;
 } {
   if (input.source === "blob") {
     const blob = input.mimeType ? new Blob([input.data], { type: input.mimeType }) : input.data;
-    return { blob, filename: input.filename ?? "audio" };
+    return { blob, filename: input.filename };
   }
 
   return {

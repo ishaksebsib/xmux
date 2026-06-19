@@ -3,7 +3,7 @@ import { Layer } from "effect";
 import { SecretResolverLive } from "../../config/resolve-secrets";
 import { ServerConfigLive } from "../../config/service";
 import { LogReaderLive } from "../../logging/log-reader";
-import type { NormalizedServerOptions } from "../../options";
+import type { ParsedServerOptions } from "../../options";
 import { ServerIdentityLive } from "../../runtime/server-identity";
 import { ShutdownCoordinatorLive } from "../../runtime/shutdown-coordinator";
 import { StatusRegistryLive } from "../../runtime/status-registry";
@@ -23,10 +23,10 @@ export const nodeProviders = {
 } satisfies XmuxServerApp.XmuxServerAppProviders;
 
 /** Production Node app composition. This is the single injection point for the server. */
-export const makeNodeXmuxServerApp = (options: NormalizedServerOptions) =>
+export const makeNodeXmuxServerApp = (options: ParsedServerOptions) =>
   XmuxServerApp.make({ options, providers: nodeProviders });
 
-export const makeNodeXmuxServerLayer = (options: NormalizedServerOptions) =>
+export const makeNodeXmuxServerLayer = (options: ParsedServerOptions) =>
   makeNodeXmuxServerApp(options).layer;
 
 const serverConfig = Layer.provide(

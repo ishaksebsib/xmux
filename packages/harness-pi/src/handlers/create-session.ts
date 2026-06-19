@@ -83,8 +83,9 @@ export async function createSession(
     runtime.sessions.set(handle.sessionId, handle);
 
     if (input.title) {
+      const title = input.title;
       const named = Result.try({
-        try: () => created.session.setSessionName(input.title as string),
+        try: () => created.session.setSessionName(title),
         catch: (cause) => new PiSessionRequestError({ operation: "setSessionName", cause }),
       });
       if (named.isErr()) {

@@ -1,5 +1,7 @@
 import { resolve } from "node:path";
 import type { ChatAttachmentKind } from "@xmux/chat-core";
+import { Result, type Result as ResultType } from "better-result";
+import { XmuxConfigurationError } from "./errors";
 
 /**
  * Delivery mode for harnesses responses.
@@ -7,6 +9,11 @@ import type { ChatAttachmentKind } from "@xmux/chat-core";
  * Requester only - only the chat platform that sent the message will receive it.
  */
 export type DeliveryMode = "requester_only" | "fanout";
+
+declare const absolutePathBrand: unique symbol;
+
+/** Absolute path produced by the xmux config parser. */
+export type AbsolutePath = string & { readonly [absolutePathBrand]: true };
 
 export interface WorkspaceConfig {
   readonly showHiddenFiles?: boolean;
@@ -88,7 +95,7 @@ export interface Config {
 
 export interface NormalizedConfig {
   readonly userName: string;
-  readonly defaultWorkingDirectory: string;
+  readonly defaultWorkingDirectory: AbsolutePath;
   readonly deliveryMode: DeliveryMode;
   readonly workspace: NormalizedWorkspaceConfig;
   readonly resume: NormalizedResumeConfig;
@@ -124,116 +131,271 @@ export const DEFAULT_PROMPT_RESPONSE_CONFIG: Readonly<NormalizedPromptResponseCo
     maxToolInputObjectEntries: 2,
   });
 
-export function normalizeConfig(config: Config): NormalizedConfig {
-  return Object.freeze({
-    userName: config.userName,
-    defaultWorkingDirectory: resolve(config.defaultWorkingDirectory),
-    deliveryMode: config.deliveryMode,
-    workspace: Object.freeze({
-      showHiddenFiles: config.workspace?.showHiddenFiles ?? false,
-      maxListEntries: normalizeMaxListEntries(config.workspace?.maxListEntries),
-    }),
-    resume: Object.freeze({
-      maxSessionsPerHarness: normalizeMaxResumeSessionsPerHarness(
-        config.resume?.maxSessionsPerHarness,
-      ),
-    }),
-    model: Object.freeze({
-      maxModelsPerProvider: normalizeMaxModelsPerProvider(config.model?.maxModelsPerProvider),
-    }),
-    prompt: Object.freeze({
-      response: normalizePromptResponseConfig(config.prompt?.response),
-      attachments: normalizePromptAttachmentsConfig(config.prompt?.attachments),
-    }),
-  });
+function configError(path: string, reason: string): XmuxConfigurationError {
+  return new XmuxConfigurationError({ path, reason });
 }
 
-function normalizeMaxListEntries(value: number | undefined): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) {
-    return DEFAULT_MAX_LIST_ENTRIES;
-  }
-
-  return value;
+function parseNonEmptyString(
+  input: unknown,
+  path: string,
+): ResultType<string, XmuxConfigurationError> {
+  return typeof input === "string" && input.trim().length > 0
+    ? Result.ok(input)
+    : Result.err(configError(path, "must be a non-empty string"));
 }
 
-function normalizeMaxResumeSessionsPerHarness(value: number | undefined): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) {
-    return DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS;
-  }
-
-  return value;
-}
-
-function normalizeMaxModelsPerProvider(value: number | undefined): number {
-  if (value === undefined || !Number.isInteger(value) || value < 1) {
-    return DEFAULT_MAX_MODELS_PER_PROVIDER;
-  }
-
-  return value;
-}
-
-function normalizePromptAttachmentsConfig(
-  config: PromptAttachmentsConfig | undefined,
-): NormalizedPromptAttachmentsConfig {
-  return Object.freeze({
-    enabled: config?.enabled ?? DEFAULT_PROMPT_ATTACHMENTS_CONFIG.enabled,
-    maxBytes: normalizePositiveInteger(
-      config?.maxBytes,
-      DEFAULT_PROMPT_ATTACHMENTS_CONFIG.maxBytes,
-    ),
-    kinds: normalizePromptAttachmentKinds(config?.kinds),
-  });
-}
-
-function normalizePromptAttachmentKinds(
-  kinds: readonly ChatAttachmentKind[] | undefined,
-): readonly ChatAttachmentKind[] {
-  if (kinds === undefined) return DEFAULT_PROMPT_ATTACHMENTS_CONFIG.kinds;
-
-  const normalized = kinds.filter(
-    (kind, index) => PROMPT_ATTACHMENT_KINDS.includes(kind) && kinds.indexOf(kind) === index,
+function parseDefaultWorkingDirectory(
+  input: unknown,
+): ResultType<AbsolutePath, XmuxConfigurationError> {
+  return Result.map(
+    parseNonEmptyString(input, "defaultWorkingDirectory"),
+    (directory) => resolve(directory) as AbsolutePath,
   );
-
-  return normalized.length === 0
-    ? DEFAULT_PROMPT_ATTACHMENTS_CONFIG.kinds
-    : Object.freeze(normalized);
 }
 
-function normalizePromptResponseConfig(
-  config: PromptResponseConfig | undefined,
-): NormalizedPromptResponseConfig {
-  const maxStreamDeltaChars = normalizeOptionalPositiveInteger(config?.maxStreamDeltaChars);
+function parseDeliveryMode(input: unknown): ResultType<DeliveryMode, XmuxConfigurationError> {
+  return input === "requester_only" || input === "fanout"
+    ? Result.ok(input)
+    : Result.err(configError("deliveryMode", "must be requester_only or fanout"));
+}
 
-  return Object.freeze({
-    showToolOutput: config?.showToolOutput ?? DEFAULT_PROMPT_RESPONSE_CONFIG.showToolOutput,
-    maxToolTextOutputChars: normalizePositiveInteger(
-      config?.maxToolTextOutputChars,
-      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolTextOutputChars,
-    ),
-    maxToolJsonOutputChars: normalizePositiveInteger(
-      config?.maxToolJsonOutputChars,
-      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolJsonOutputChars,
-    ),
-    maxReasoningChars: normalizePositiveInteger(
-      config?.maxReasoningChars,
-      DEFAULT_PROMPT_RESPONSE_CONFIG.maxReasoningChars,
-    ),
-    maxToolInputStringChars: normalizePositiveInteger(
-      config?.maxToolInputStringChars,
-      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolInputStringChars,
-    ),
-    maxToolInputObjectEntries: normalizePositiveInteger(
-      config?.maxToolInputObjectEntries,
-      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolInputObjectEntries,
-    ),
-    ...(maxStreamDeltaChars === undefined ? {} : { maxStreamDeltaChars }),
+function parseBoolean(
+  input: unknown,
+  path: string,
+  fallback: boolean,
+): ResultType<boolean, XmuxConfigurationError> {
+  if (input === undefined) return Result.ok(fallback);
+  return typeof input === "boolean"
+    ? Result.ok(input)
+    : Result.err(configError(path, "must be a boolean"));
+}
+
+function parsePositiveInteger(
+  input: unknown,
+  path: string,
+  fallback: number,
+): ResultType<number, XmuxConfigurationError> {
+  if (input === undefined) return Result.ok(fallback);
+  return typeof input === "number" && Number.isInteger(input) && input > 0
+    ? Result.ok(input)
+    : Result.err(configError(path, "must be a positive integer"));
+}
+
+function parseOptionalPositiveInteger(
+  input: unknown,
+  path: string,
+): ResultType<number | undefined, XmuxConfigurationError> {
+  if (input === undefined) return Result.ok(undefined);
+  return typeof input === "number" && Number.isInteger(input) && input > 0
+    ? Result.ok(input)
+    : Result.err(configError(path, "must be a positive integer when provided"));
+}
+
+function parseOptionalObject<T>(
+  input: T | undefined,
+  path: string,
+): ResultType<T | undefined, XmuxConfigurationError> {
+  if (input === undefined) return Result.ok(undefined);
+  return typeof input === "object" && input !== null
+    ? Result.ok(input)
+    : Result.err(configError(path, "must be an object"));
+}
+
+function parseWorkspaceConfig(
+  config: WorkspaceConfig | undefined,
+): ResultType<NormalizedWorkspaceConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "workspace");
+    const showHiddenFiles = yield* parseBoolean(
+      parsed?.showHiddenFiles,
+      "workspace.showHiddenFiles",
+      false,
+    );
+    const maxListEntries = yield* parsePositiveInteger(
+      parsed?.maxListEntries,
+      "workspace.maxListEntries",
+      DEFAULT_MAX_LIST_ENTRIES,
+    );
+
+    return Result.ok(Object.freeze({ showHiddenFiles, maxListEntries }));
   });
 }
 
-function normalizePositiveInteger(value: number | undefined, fallback: number): number {
-  return value === undefined || !Number.isInteger(value) || value < 1 ? fallback : value;
+function parseResumeConfig(
+  config: ResumeConfig | undefined,
+): ResultType<NormalizedResumeConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "resume");
+    const maxSessionsPerHarness = yield* parsePositiveInteger(
+      parsed?.maxSessionsPerHarness,
+      "resume.maxSessionsPerHarness",
+      DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS,
+    );
+    return Result.ok(Object.freeze({ maxSessionsPerHarness }));
+  });
 }
 
-function normalizeOptionalPositiveInteger(value: number | undefined): number | undefined {
-  return value === undefined || !Number.isInteger(value) || value < 1 ? undefined : value;
+function parseModelConfig(
+  config: ModelConfig | undefined,
+): ResultType<NormalizedModelConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "model");
+    const maxModelsPerProvider = yield* parsePositiveInteger(
+      parsed?.maxModelsPerProvider,
+      "model.maxModelsPerProvider",
+      DEFAULT_MAX_MODELS_PER_PROVIDER,
+    );
+    return Result.ok(Object.freeze({ maxModelsPerProvider }));
+  });
+}
+
+function isChatAttachmentKind(input: unknown): input is ChatAttachmentKind {
+  return typeof input === "string" && PROMPT_ATTACHMENT_KINDS.includes(input as ChatAttachmentKind);
+}
+
+function parsePromptAttachmentKinds(
+  kinds: readonly ChatAttachmentKind[] | undefined,
+): ResultType<readonly ChatAttachmentKind[], XmuxConfigurationError> {
+  if (kinds === undefined) return Result.ok(DEFAULT_PROMPT_ATTACHMENTS_CONFIG.kinds);
+  if (!Array.isArray(kinds)) {
+    return Result.err(configError("prompt.attachments.kinds", "must be an array"));
+  }
+
+  const parsed: ChatAttachmentKind[] = [];
+  for (const kind of kinds) {
+    if (!isChatAttachmentKind(kind)) {
+      return Result.err(
+        configError("prompt.attachments.kinds", `unsupported attachment kind: ${String(kind)}`),
+      );
+    }
+    if (!parsed.includes(kind)) parsed.push(kind);
+  }
+
+  return Result.ok(Object.freeze(parsed));
+}
+
+function parsePromptAttachmentsConfig(
+  config: PromptAttachmentsConfig | undefined,
+): ResultType<NormalizedPromptAttachmentsConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "prompt.attachments");
+    const enabled = yield* parseBoolean(
+      parsed?.enabled,
+      "prompt.attachments.enabled",
+      DEFAULT_PROMPT_ATTACHMENTS_CONFIG.enabled,
+    );
+    const maxBytes = yield* parsePositiveInteger(
+      parsed?.maxBytes,
+      "prompt.attachments.maxBytes",
+      DEFAULT_PROMPT_ATTACHMENTS_CONFIG.maxBytes,
+    );
+    const kinds = yield* parsePromptAttachmentKinds(parsed?.kinds);
+
+    return Result.ok(Object.freeze({ enabled, maxBytes, kinds }));
+  });
+}
+
+function parsePromptResponseConfig(
+  config: PromptResponseConfig | undefined,
+): ResultType<NormalizedPromptResponseConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "prompt.response");
+    const showToolOutput = yield* parseBoolean(
+      parsed?.showToolOutput,
+      "prompt.response.showToolOutput",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.showToolOutput,
+    );
+    const maxToolTextOutputChars = yield* parsePositiveInteger(
+      parsed?.maxToolTextOutputChars,
+      "prompt.response.maxToolTextOutputChars",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolTextOutputChars,
+    );
+    const maxToolJsonOutputChars = yield* parsePositiveInteger(
+      parsed?.maxToolJsonOutputChars,
+      "prompt.response.maxToolJsonOutputChars",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolJsonOutputChars,
+    );
+    const maxReasoningChars = yield* parsePositiveInteger(
+      parsed?.maxReasoningChars,
+      "prompt.response.maxReasoningChars",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxReasoningChars,
+    );
+    const maxToolInputStringChars = yield* parsePositiveInteger(
+      parsed?.maxToolInputStringChars,
+      "prompt.response.maxToolInputStringChars",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolInputStringChars,
+    );
+    const maxToolInputObjectEntries = yield* parsePositiveInteger(
+      parsed?.maxToolInputObjectEntries,
+      "prompt.response.maxToolInputObjectEntries",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.maxToolInputObjectEntries,
+    );
+    const maxStreamDeltaChars = yield* parseOptionalPositiveInteger(
+      parsed?.maxStreamDeltaChars,
+      "prompt.response.maxStreamDeltaChars",
+    );
+
+    return Result.ok(
+      Object.freeze({
+        showToolOutput,
+        maxToolTextOutputChars,
+        maxToolJsonOutputChars,
+        maxReasoningChars,
+        maxToolInputStringChars,
+        maxToolInputObjectEntries,
+        ...(maxStreamDeltaChars === undefined ? {} : { maxStreamDeltaChars }),
+      }),
+    );
+  });
+}
+
+function parsePromptConfig(
+  config: PromptConfig | undefined,
+): ResultType<NormalizedPromptConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "prompt");
+    const response = yield* parsePromptResponseConfig(parsed?.response);
+    const attachments = yield* parsePromptAttachmentsConfig(parsed?.attachments);
+    return Result.ok(Object.freeze({ response, attachments }));
+  });
+}
+
+export function parseXmuxConfig(
+  config: Config,
+): ResultType<NormalizedConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const userName = yield* parseNonEmptyString(config.userName, "userName");
+    const defaultWorkingDirectory = yield* parseDefaultWorkingDirectory(
+      config.defaultWorkingDirectory,
+    );
+    const deliveryMode = yield* parseDeliveryMode(config.deliveryMode);
+    const workspace = yield* parseWorkspaceConfig(config.workspace);
+    const resume = yield* parseResumeConfig(config.resume);
+    const model = yield* parseModelConfig(config.model);
+    const prompt = yield* parsePromptConfig(config.prompt);
+
+    return Result.ok(
+      Object.freeze({
+        userName,
+        defaultWorkingDirectory,
+        deliveryMode,
+        workspace,
+        resume,
+        model,
+        prompt,
+      }),
+    );
+  });
+}
+
+export const parseConfig = parseXmuxConfig;
+
+/**
+ * Legacy compatibility wrapper for callers that still expect a synchronous config value.
+ * New boundaries should use `parseXmuxConfig` and handle `XmuxConfigurationError` explicitly.
+ */
+export function normalizeConfig(config: Config): NormalizedConfig {
+  const parsed = parseXmuxConfig(config);
+  if (parsed.isErr()) throw parsed.error;
+  return parsed.value;
 }

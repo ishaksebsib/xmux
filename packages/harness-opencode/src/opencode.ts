@@ -8,7 +8,8 @@ import {
   startHarnessLogTimer,
   type OpenCodeLogScope,
 } from "./logger";
-import { openRuntime, normalizeConfig, type OpenCodeRuntime } from "./runtime";
+import { parseOpenCodeAdapterConfig } from "./config";
+import { openRuntime, type OpenCodeRuntime } from "./runtime";
 import { abortSession } from "./handlers/abort";
 import { createSession } from "./handlers/create-session";
 import { deleteSession } from "./handlers/delete-session";
@@ -154,8 +155,8 @@ async function createOpenedAdapter(
 }
 
 export function createOpenCodeAdapter(config?: OpenCodeAdapterConfig): OpenCodeAdapter {
-  const normalizedConfig = normalizeConfig(config);
-  const mode = normalizedConfig.mode ?? "embedded";
+  const parsedConfig = parseOpenCodeAdapterConfig(config);
+  const mode = parsedConfig.isOk() ? parsedConfig.value.mode : (config?.mode ?? "embedded");
 
   return defineHarnessAdapter({
     id: "opencode",
@@ -169,7 +170,8 @@ export function createOpenCodeAdapter(config?: OpenCodeAdapterConfig): OpenCodeA
       logger.debug(openCodeLogEvents.openBegin, metadata);
 
       const result = await Result.gen(async function* () {
-        const runtime = yield* Result.await(openRuntime(normalizedConfig));
+        const resolvedConfig = yield* parsedConfig;
+        const runtime = yield* Result.await(openRuntime(resolvedConfig));
         const adapter = yield* Result.await(createOpenedAdapter(runtime, logger));
         return Result.ok(adapter);
       });

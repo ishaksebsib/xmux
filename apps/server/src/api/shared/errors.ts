@@ -31,14 +31,11 @@ export const jsonError = (input: {
   );
 
 /** Schema-backed route failure that Effect HTTP can render as JSON. */
-export class ApiError extends Schema.TaggedErrorClass<ApiError>()(
-  "ApiError",
-  {
-    status: Schema.Int,
-    code: Schema.String,
-    message: Schema.String,
-  },
-) {
+export class ApiError extends Schema.TaggedErrorClass<ApiError>()("ApiError", {
+  status: Schema.Int,
+  code: Schema.String,
+  message: Schema.String,
+}) {
   [HttpServerRespondable.symbol]() {
     return jsonError({
       status: this.status,

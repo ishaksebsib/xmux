@@ -127,18 +127,9 @@ describe("structured file logging", () => {
             maxBytes: 5_000,
           });
           assert.lengthOf(entries, 3);
-          assert.deepStrictEqual(entries[0]?.message, [
-            "rotation-7",
-            { payload: "x".repeat(160) },
-          ]);
-          assert.deepStrictEqual(entries[1]?.message, [
-            "rotation-8",
-            { payload: "x".repeat(160) },
-          ]);
-          assert.deepStrictEqual(entries[2]?.message, [
-            "rotation-9",
-            { payload: "x".repeat(160) },
-          ]);
+          assert.deepStrictEqual(entries[0]?.message, ["rotation-7", { payload: "x".repeat(160) }]);
+          assert.deepStrictEqual(entries[1]?.message, ["rotation-8", { payload: "x".repeat(160) }]);
+          assert.deepStrictEqual(entries[2]?.message, ["rotation-9", { payload: "x".repeat(160) }]);
         }),
       ),
     );

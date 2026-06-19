@@ -1,7 +1,9 @@
 const REDACTED = "[redacted]";
-const SECRET_KEY_PATTERN = /(?:token|password|secret|api[-_]?key|authorization|client[-_]?secret|bot[-_]?token)/iu;
+const SECRET_KEY_PATTERN =
+  /(?:token|password|secret|api[-_]?key|authorization|client[-_]?secret|bot[-_]?token)/iu;
 const BEARER_PATTERN = /Bearer\s+[A-Za-z0-9._~+/=-]+/giu;
-const KEY_VALUE_SECRET_PATTERN = /((?:token|password|secret|api[-_]?key|authorization|client[-_]?secret|bot[-_]?token)\s*[:=]\s*)([^\s,}]+)/giu;
+const KEY_VALUE_SECRET_PATTERN =
+  /((?:token|password|secret|api[-_]?key|authorization|client[-_]?secret|bot[-_]?token)\s*[:=]\s*)([^\s,}]+)/giu;
 
 const isSecretKey = (key: string): boolean => SECRET_KEY_PATTERN.test(key);
 
@@ -33,7 +35,8 @@ const redactUnknownInternal = (value: unknown, seen: WeakSet<object>): unknown =
 };
 
 /** Recursively redact log metadata before it can reach disk or control routes. */
-export const redactUnknown = (value: unknown): unknown => redactUnknownInternal(value, new WeakSet());
+export const redactUnknown = (value: unknown): unknown =>
+  redactUnknownInternal(value, new WeakSet());
 
 /** Redact a record while preserving its record type for schema constructors. */
 export const redactRecord = (value: Record<string, unknown>): Record<string, unknown> => {

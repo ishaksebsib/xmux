@@ -8,9 +8,9 @@ import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeRuntimeOpenError } from "./errors";
 import { defaultOpenCodeThinkingLevelMap } from "./thinking-levels";
 import type {
-  OpenCodeAdapterConfig,
-  OpenCodeEmbeddedConfig,
-  OpenCodeExternalConfig,
+  ResolvedOpenCodeAdapterConfig,
+  ResolvedOpenCodeEmbeddedConfig,
+  ResolvedOpenCodeExternalConfig,
   OpenCodeSharedConfig,
   OpenCodeThinkingNativeValue,
 } from "./types";
@@ -36,7 +36,7 @@ function resolveThinkingLevelMap(
 export { normalizeConfig, normalizeOpenCodeAdapterConfig } from "./config";
 
 function createExternalRuntime(
-  config: OpenCodeExternalConfig,
+  config: ResolvedOpenCodeExternalConfig,
 ): ResultType<OpenCodeRuntime, OpenCodeRuntimeOpenError> {
   return Result.try({
     try: () => ({
@@ -55,7 +55,7 @@ function createExternalRuntime(
 }
 
 async function createEmbeddedRuntime(
-  config: OpenCodeEmbeddedConfig,
+  config: ResolvedOpenCodeEmbeddedConfig,
 ): Promise<ResultType<OpenCodeRuntime, OpenCodeRuntimeOpenError>> {
   return Result.tryPromise({
     try: async () => {
@@ -78,7 +78,7 @@ async function createEmbeddedRuntime(
 }
 
 export async function openRuntime(
-  config: OpenCodeAdapterConfig,
+  config: ResolvedOpenCodeAdapterConfig,
 ): Promise<ResultType<OpenCodeRuntime, OpenCodeRuntimeOpenError>> {
   return config.mode === "external" ? createExternalRuntime(config) : createEmbeddedRuntime(config);
 }

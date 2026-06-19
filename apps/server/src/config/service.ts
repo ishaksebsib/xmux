@@ -19,13 +19,22 @@ import { redactServerConfig } from "./redact";
 import { resolveSecretRef, SecretResolver } from "./resolve-secrets";
 import {
   EffectiveChatsConfig,
-  EffectiveDiscordConfig,
+  EffectiveDiscordDisabled,
+  EffectiveDiscordGatewayEnabled,
+  EffectiveDiscordGatewayMode,
+  EffectiveDiscordWebhookEnabled,
+  EffectiveDiscordWebhookMode,
   EffectiveHarnessesConfig,
-  EffectiveOpenCodeConfig,
-  EffectivePiConfig,
+  EffectiveOpenCodeDisabled,
+  EffectiveOpenCodeEmbedded,
+  EffectiveOpenCodeExternal,
+  type EffectivePiConfig,
+  EffectivePiDisabled,
+  EffectivePiEnabled,
   EffectiveServerConfig,
   EffectiveServerSettings,
-  EffectiveTelegramConfig,
+  EffectiveTelegramDisabled,
+  EffectiveTelegramEnabled,
 } from "./schema";
 
 interface LoadedConfig {
@@ -70,7 +79,7 @@ const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* 
 }) {
   const enabled = input.config?.enabled ?? false;
   const mode = input.config?.mode ?? TelegramModeConfig.make({ type: "polling" });
-  if (!enabled) return EffectiveTelegramConfig.make({ enabled, mode });
+  if (!enabled) return EffectiveTelegramDisabled.make({ enabled: false, mode });
 
   if (input.config?.token === undefined) {
     return yield* validationError({
@@ -80,7 +89,7 @@ const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* 
   }
 
   const token = yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.token });
-  return EffectiveTelegramConfig.make({ enabled, token, mode });
+  return EffectiveTelegramEnabled.make({ enabled: true, token, mode });
 });
 
 const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (input: {
@@ -94,8 +103,8 @@ const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (i
   const publicKey = input.config?.publicKey;
 
   if (!enabled) {
-    return EffectiveDiscordConfig.make({
-      enabled,
+    return EffectiveDiscordDisabled.make({
+      enabled: false,
       mode,
       ...(applicationId === undefined ? {} : { applicationId }),
       ...(guildId === undefined ? {} : { guildId }),
@@ -117,11 +126,29 @@ const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (i
   }
 
   const token = yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.token });
-  return EffectiveDiscordConfig.make({
-    enabled,
+  if (mode.type === "webhook") {
+    if (publicKey === undefined) {
+      return yield* validationError({
+        configPath: input.configPath,
+        message: "Discord webhook mode requires chats.discord.publicKey.",
+      });
+    }
+
+    return EffectiveDiscordWebhookEnabled.make({
+      enabled: true,
+      token,
+      applicationId,
+      publicKey,
+      mode: EffectiveDiscordWebhookMode.make({ type: "webhook" }),
+      ...(guildId === undefined ? {} : { guildId }),
+    });
+  }
+
+  return EffectiveDiscordGatewayEnabled.make({
+    enabled: true,
     token,
     applicationId,
-    mode,
+    mode: EffectiveDiscordGatewayMode.make({ type: "gateway" }),
     ...(guildId === undefined ? {} : { guildId }),
     ...(publicKey === undefined ? {} : { publicKey }),
   });
@@ -144,10 +171,38 @@ const normalizeOpenCode = Effect.fn("server.normalizeOpenCodeConfig")(function* 
   const defaultModel = input.config?.defaultModel;
   const defaultThinking = input.config?.defaultThinking;
 
-  return EffectiveOpenCodeConfig.make({
-    enabled: input.config?.enabled ?? false,
+  const enabled = input.config?.enabled ?? false;
+  if (!enabled) {
+    return EffectiveOpenCodeDisabled.make({
+      enabled: false,
+      mode,
+      ...(baseUrl === undefined ? {} : { baseUrl }),
+      ...(port === undefined ? {} : { port }),
+      ...(defaultModel === undefined ? {} : { defaultModel }),
+      ...(defaultThinking === undefined ? {} : { defaultThinking }),
+    });
+  }
+
+  if (mode === "external") {
+    if (baseUrl === undefined) {
+      return yield* validationError({
+        configPath: input.configPath,
+        message: "OpenCode external mode requires harnesses.opencode.baseUrl.",
+      });
+    }
+
+    return EffectiveOpenCodeExternal.make({
+      enabled: true,
+      mode,
+      baseUrl,
+      ...(defaultModel === undefined ? {} : { defaultModel }),
+      ...(defaultThinking === undefined ? {} : { defaultThinking }),
+    });
+  }
+
+  return EffectiveOpenCodeEmbedded.make({
+    enabled: true,
     mode,
-    ...(baseUrl === undefined ? {} : { baseUrl }),
     ...(port === undefined ? {} : { port }),
     ...(defaultModel === undefined ? {} : { defaultModel }),
     ...(defaultThinking === undefined ? {} : { defaultThinking }),
@@ -173,8 +228,7 @@ const normalizePi = (input: {
   const excludeTools = input.config?.excludeTools;
   const noTools = input.config?.noTools;
 
-  return EffectivePiConfig.make({
-    enabled: input.config?.enabled ?? false,
+  const makeInput = {
     ...(agentDir === undefined ? {} : { agentDir }),
     ...(sessionDir === undefined ? {} : { sessionDir }),
     ...(defaultModel === undefined ? {} : { defaultModel }),
@@ -182,55 +236,56 @@ const normalizePi = (input: {
     ...(tools === undefined ? {} : { tools }),
     ...(excludeTools === undefined ? {} : { excludeTools }),
     ...(noTools === undefined ? {} : { noTools }),
-  });
+  };
+
+  return input.config?.enabled === true
+    ? EffectivePiEnabled.make({ enabled: true, ...makeInput })
+    : EffectivePiDisabled.make({ enabled: false, ...makeInput });
 };
 
 /** Normalize decoded file config, resolve enabled secrets, and fill defaults. */
-export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveServerConfig")(function* (
-  input: {
-    readonly configPath: string;
-    readonly fileConfig: ServerFileConfig | null;
-  },
-) {
-  const pathService = yield* Path.Path;
-  const config = input.fileConfig ?? ServerFileConfig.make({});
-  const defaultWorkingDirectory = resolveConfigRelativePath(
-    pathService,
-    input.configPath,
-    config.defaultWorkingDirectory ?? homedir(),
-  );
-  const telegram = yield* normalizeTelegram({
-    configPath: input.configPath,
-    config: config.chats?.telegram,
-  });
-  const discord = yield* normalizeDiscord({
-    configPath: input.configPath,
-    config: config.chats?.discord,
-  });
-  const opencode = yield* normalizeOpenCode({
-    configPath: input.configPath,
-    config: config.harnesses?.opencode,
-  });
+export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveServerConfig")(
+  function* (input: { readonly configPath: string; readonly fileConfig: ServerFileConfig | null }) {
+    const pathService = yield* Path.Path;
+    const config = input.fileConfig ?? ServerFileConfig.make({});
+    const defaultWorkingDirectory = resolveConfigRelativePath(
+      pathService,
+      input.configPath,
+      config.defaultWorkingDirectory ?? homedir(),
+    );
+    const telegram = yield* normalizeTelegram({
+      configPath: input.configPath,
+      config: config.chats?.telegram,
+    });
+    const discord = yield* normalizeDiscord({
+      configPath: input.configPath,
+      config: config.chats?.discord,
+    });
+    const opencode = yield* normalizeOpenCode({
+      configPath: input.configPath,
+      config: config.harnesses?.opencode,
+    });
 
-  const middleware = config.middleware;
+    const middleware = config.middleware;
 
-  return EffectiveServerConfig.make({
-    userName: config.userName ?? defaultUserName(),
-    defaultWorkingDirectory,
-    deliveryMode: config.deliveryMode ?? "requester_only",
-    server: normalizeServerSettings(config.server),
-    chats: EffectiveChatsConfig.make({ telegram, discord }),
-    harnesses: EffectiveHarnessesConfig.make({
-      opencode,
-      pi: normalizePi({
-        pathService,
-        configPath: input.configPath,
-        config: config.harnesses?.pi,
+    return EffectiveServerConfig.make({
+      userName: config.userName ?? defaultUserName(),
+      defaultWorkingDirectory,
+      deliveryMode: config.deliveryMode ?? "requester_only",
+      server: normalizeServerSettings(config.server),
+      chats: EffectiveChatsConfig.make({ telegram, discord }),
+      harnesses: EffectiveHarnessesConfig.make({
+        opencode,
+        pi: normalizePi({
+          pathService,
+          configPath: input.configPath,
+          config: config.harnesses?.pi,
+        }),
       }),
-    }),
-    ...(middleware === undefined ? {} : { middleware }),
-  });
-});
+      ...(middleware === undefined ? {} : { middleware }),
+    });
+  },
+);
 
 /** Load config from disk into the internal, resolved runtime shape. */
 export const loadEffectiveServerConfig = Effect.fn("server.loadEffectiveServerConfig")(function* (

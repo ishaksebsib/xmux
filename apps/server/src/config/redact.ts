@@ -7,7 +7,6 @@ import {
   RedactedSecretRef,
   RedactedServerConfig,
   RedactedTelegramConfig,
-  ServerFileServerConfig,
 } from "../contracts/config";
 import type {
   EffectiveDiscordConfig,
@@ -69,8 +68,8 @@ const redactDiscord = (discord: EffectiveDiscordConfig): RedactedDiscordConfig =
 };
 
 const redactOpenCode = (opencode: EffectiveOpenCodeConfig): RedactedOpenCodeConfig => {
-  const baseUrl = opencode.baseUrl;
-  const port = opencode.port;
+  const baseUrl = "baseUrl" in opencode ? opencode.baseUrl : undefined;
+  const port = "port" in opencode ? opencode.port : undefined;
   const defaultModel = opencode.defaultModel;
   const defaultThinking = opencode.defaultThinking;
   return RedactedOpenCodeConfig.make({
@@ -109,7 +108,7 @@ export const redactServerConfig = (config: EffectiveServerConfig): RedactedServe
     userName: config.userName,
     defaultWorkingDirectory: config.defaultWorkingDirectory,
     deliveryMode: config.deliveryMode,
-    server: ServerFileServerConfig.make({ logLevel: config.server.logLevel }),
+    server: config.server,
     chats: RedactedChatsConfig.make({
       telegram: redactTelegram(config.chats.telegram),
       discord: redactDiscord(config.chats.discord),

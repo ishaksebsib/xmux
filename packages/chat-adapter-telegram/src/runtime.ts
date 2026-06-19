@@ -19,7 +19,11 @@ import {
   type CreateTelegramBotClient,
   type TelegramBotClient,
 } from "./client";
-import { parseTelegramBotToken } from "./config";
+import {
+  normalizeTelegramMode,
+  parseTelegramAdapterConfig,
+  type TelegramAdapterConfig,
+} from "./config";
 import {
   createTelegramLogScope,
   logChatResult,
@@ -53,7 +57,6 @@ import { streamReply as handleStreamReply } from "./handlers/stream-reply";
 import type {
   CreateTelegramAdapterOptions,
   TelegramAdapterData,
-  TelegramAdapterMode,
   TelegramAdapterOptions,
 } from "./types";
 
@@ -69,7 +72,6 @@ type TelegramRuntimeState =
 export function openTelegramRuntime<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly options: CreateTelegramAdapterOptions<TChatId>;
-  readonly mode: TelegramAdapterMode;
   readonly createBot?: CreateTelegramBotClient;
   readonly logger?: ChatLogger;
 }): Result<
@@ -82,28 +84,32 @@ export function openTelegramRuntime<TChatId extends string>(args: {
   >,
   TelegramConfigurationError
 > {
+  const configResult = parseTelegramAdapterConfig({ chatId: args.chatId, options: args.options });
+  const logMode = configResult.isOk()
+    ? configResult.value.mode.type
+    : normalizeTelegramMode(args.options.mode).type;
   const logger = createTelegramLogScope({
     logger: args.logger,
     chatId: args.chatId,
-    mode: args.mode.type,
+    mode: logMode,
   });
   const startedAt = startChatLogTimer();
-  const metadata = { operation: "open", mode: args.mode.type } as const;
+  const metadata = { operation: "open", mode: logMode } as const;
 
   logger.debug(telegramLogEvents.openBegin, metadata);
 
   const result = Result.gen(function* () {
-    const token = yield* parseTelegramBotToken(args.options.token);
+    const config = yield* configResult;
     const bot = yield* Result.try({
       try: () =>
         (args.createBot ?? createTelegramBotClient)({
-          token,
-          options: args.options.botOptions,
+          token: config.token,
+          options: config.botOptions,
         }),
       catch: (cause) => new TelegramConfigurationError({ field: "token", cause }),
     });
 
-    return Result.ok(new TelegramRuntime({ chatId: args.chatId, bot, mode: args.mode, logger }));
+    return Result.ok(new TelegramRuntime({ config, bot, logger }));
   });
 
   logChatResult({
@@ -131,19 +137,18 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
   #state: TelegramRuntimeState = { status: "opened" };
 
   constructor(args: {
-    readonly chatId: TChatId;
+    readonly config: TelegramAdapterConfig<TChatId>;
     readonly bot: TelegramBotClient;
-    readonly mode: TelegramAdapterMode;
     readonly logger: TelegramLogScope;
   }) {
-    this.id = args.chatId;
+    this.id = args.config.id;
     this.bot = args.bot;
-    this.mode = args.mode;
+    this.config = args.config;
     this.logger = args.logger;
   }
 
   private readonly bot: TelegramBotClient;
-  private readonly mode: TelegramAdapterMode;
+  private readonly config: TelegramAdapterConfig<TChatId>;
   private readonly logger: TelegramLogScope;
 
   async start<TCommands extends ChatCommandRegistry>(
@@ -155,7 +160,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     >
   > {
     const startedAt = startChatLogTimer();
-    const metadata = { operation: "start", mode: this.mode.type } as const;
+    const metadata = { operation: "start", mode: this.config.mode.type } as const;
 
     this.logger.debug(telegramLogEvents.startBegin, metadata);
 
@@ -172,7 +177,7 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
       return result;
     }
 
-    const mode = this.mode;
+    const mode = this.config.mode;
     if (mode.type === "webhook") {
       const result = Result.err(new TelegramWebhookModeUnsupportedError());
       logChatResult({

@@ -19,7 +19,11 @@ import {
   serializeServerManifest,
   writeServerManifest,
 } from "../src/runtime-state/manifest";
-import { createScopeId, resolveRuntimePaths, type ServerRuntimePaths } from "../src/runtime-state/paths";
+import {
+  createScopeId,
+  resolveRuntimePaths,
+  type ServerRuntimePaths,
+} from "../src/runtime-state/paths";
 import { isPidAlive } from "../src/runtime-state/pid";
 import { acquireStartupLock, releaseStartupLock } from "../src/runtime-state/startup-lock";
 
@@ -32,9 +36,6 @@ const ServerProbeReachable = Layer.succeed(ServerProbe)({
 });
 const NodeFsPathControlLayer = Layer.mergeAll(NodeFsPathLayer, ServerProbeUnreachable);
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
-const fixedClock = {
-  now: () => fixedStartedAt,
-};
 const fixedSessionId = "test-session";
 
 const findDeadPid = (): number => {

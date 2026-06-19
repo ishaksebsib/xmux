@@ -4,6 +4,26 @@ function causeDetail(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
+export class OpenCodeConfigurationError extends TaggedError("OpenCodeConfigurationError")<{
+  field: string;
+  message: string;
+  cause?: unknown;
+}>() {
+  constructor(args: {
+    readonly field: string;
+    readonly reason?: string;
+    readonly cause?: unknown;
+  }) {
+    super({
+      field: args.field,
+      cause: args.cause,
+      message:
+        args.reason ??
+        `Invalid OpenCode adapter configuration for ${args.field}: ${causeDetail(args.cause)}`,
+    });
+  }
+}
+
 export class OpenCodeRuntimeOpenError extends TaggedError("OpenCodeRuntimeOpenError")<{
   mode: "embedded" | "external";
   message: string;

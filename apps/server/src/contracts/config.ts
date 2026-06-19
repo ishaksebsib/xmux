@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
-const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
-const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
+export const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
+export const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
 
 /** Secret references let config point at credentials without exposing them in status. */
 export class EnvSecretRef extends Schema.Class<EnvSecretRef>("EnvSecretRef")({
@@ -33,11 +33,24 @@ export const HarnessThinkingLevel = Schema.Literals([
 ]);
 export type HarnessThinkingLevel = typeof HarnessThinkingLevel.Type;
 
+export const OpenCodeMode = Schema.Literals(["embedded", "external"]);
+export type OpenCodeMode = typeof OpenCodeMode.Type;
+
+export const PiNoToolsMode = Schema.Literals(["all", "builtin"]);
+export type PiNoToolsMode = typeof PiNoToolsMode.Type;
+
 /** User-facing server config knobs. */
 export class ServerFileServerConfig extends Schema.Class<ServerFileServerConfig>(
   "ServerFileServerConfig",
 )({
   logLevel: Schema.optionalKey(ServerLogLevel),
+}) {}
+
+/** Normalized server settings used after defaults have been applied. */
+export class ServerSettingsConfig extends Schema.Class<ServerSettingsConfig>(
+  "ServerSettingsConfig",
+)({
+  logLevel: ServerLogLevel,
 }) {}
 
 export class TelegramModeConfig extends Schema.Class<TelegramModeConfig>("TelegramModeConfig")({
@@ -80,7 +93,7 @@ export class HarnessModelRefConfig extends Schema.Class<HarnessModelRefConfig>(
 
 export class OpenCodeFileConfig extends Schema.Class<OpenCodeFileConfig>("OpenCodeFileConfig")({
   enabled: Schema.optionalKey(Schema.Boolean),
-  mode: Schema.optionalKey(Schema.Literals(["embedded", "external"])),
+  mode: Schema.optionalKey(OpenCodeMode),
   baseUrl: Schema.optionalKey(NonEmptyString),
   port: Schema.optionalKey(PositiveInteger),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
@@ -95,7 +108,7 @@ export class PiFileConfig extends Schema.Class<PiFileConfig>("PiFileConfig")({
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
   tools: Schema.optionalKey(Schema.Array(NonEmptyString)),
   excludeTools: Schema.optionalKey(Schema.Array(NonEmptyString)),
-  noTools: Schema.optionalKey(Schema.Literals(["all", "builtin"])),
+  noTools: Schema.optionalKey(PiNoToolsMode),
 }) {}
 
 export class HarnessesFileConfig extends Schema.Class<HarnessesFileConfig>("HarnessesFileConfig")({
@@ -128,7 +141,7 @@ export class RedactedTelegramConfig extends Schema.Class<RedactedTelegramConfig>
 )({
   enabled: Schema.Boolean,
   token: Schema.optionalKey(RedactedSecretRef),
-  mode: Schema.optionalKey(TelegramModeConfig),
+  mode: TelegramModeConfig,
 }) {}
 
 export class RedactedDiscordConfig extends Schema.Class<RedactedDiscordConfig>(
@@ -139,7 +152,7 @@ export class RedactedDiscordConfig extends Schema.Class<RedactedDiscordConfig>(
   applicationId: Schema.optionalKey(Schema.String),
   guildId: Schema.optionalKey(Schema.String),
   publicKey: Schema.optionalKey(Schema.String),
-  mode: Schema.optionalKey(DiscordModeConfig),
+  mode: DiscordModeConfig,
 }) {}
 
 export class RedactedChatsConfig extends Schema.Class<RedactedChatsConfig>("RedactedChatsConfig")({
@@ -151,7 +164,7 @@ export class RedactedOpenCodeConfig extends Schema.Class<RedactedOpenCodeConfig>
   "RedactedOpenCodeConfig",
 )({
   enabled: Schema.Boolean,
-  mode: Schema.Literals(["embedded", "external"]),
+  mode: OpenCodeMode,
   baseUrl: Schema.optionalKey(Schema.String),
   port: Schema.optionalKey(PositiveInteger),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
@@ -166,7 +179,7 @@ export class RedactedPiConfig extends Schema.Class<RedactedPiConfig>("RedactedPi
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
   tools: Schema.optionalKey(Schema.Array(Schema.String)),
   excludeTools: Schema.optionalKey(Schema.Array(Schema.String)),
-  noTools: Schema.optionalKey(Schema.Literals(["all", "builtin"])),
+  noTools: Schema.optionalKey(PiNoToolsMode),
 }) {}
 
 export class RedactedHarnessesConfig extends Schema.Class<RedactedHarnessesConfig>(
@@ -183,7 +196,7 @@ export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
   userName: Schema.String,
   defaultWorkingDirectory: Schema.String,
   deliveryMode: DeliveryMode,
-  server: ServerFileServerConfig,
+  server: ServerSettingsConfig,
   chats: RedactedChatsConfig,
   harnesses: RedactedHarnessesConfig,
   middleware: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),

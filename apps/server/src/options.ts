@@ -6,19 +6,23 @@ export interface RunXmuxServerOptions {
   readonly configPath?: string;
 }
 
-/** Normalized options remove defaults once so services do not repeat fallback logic. */
-export interface NormalizedServerOptions {
+/** Parsed options represent checked public inputs before filesystem defaults are resolved. */
+export interface ParsedServerOptions {
   readonly configPath?: string;
 }
 
-/** Normalized server options are a service so workflows can read them from context. */
-export class ServerOptions extends Context.Service<ServerOptions, NormalizedServerOptions>()(
+/** @deprecated Use ParsedServerOptions. */
+export type NormalizedServerOptions = ParsedServerOptions;
+
+/** Parsed server options are a service so workflows can read them from context. */
+export class ServerOptions extends Context.Service<ServerOptions, ParsedServerOptions>()(
   "@xmux/server/ServerOptions",
 ) {}
 
-/** Normalize at the boundary so downstream services receive explicit values. */
-export const normalizeServerOptions = (
-  options: RunXmuxServerOptions,
-): NormalizedServerOptions => ({
+/** Parse at the boundary so downstream services receive explicit values. */
+export const parseServerOptions = (options: RunXmuxServerOptions): ParsedServerOptions => ({
   configPath: options.configPath,
 });
+
+/** @deprecated Use parseServerOptions. */
+export const normalizeServerOptions = parseServerOptions;

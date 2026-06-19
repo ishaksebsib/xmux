@@ -5,7 +5,7 @@ import {
   makeNodeXmuxServerLayer,
   nodeServerServices,
 } from "../platform/node";
-import { normalizeServerOptions, type RunXmuxServerOptions } from "../options";
+import { parseServerOptions, type RunXmuxServerOptions } from "../options";
 
 export { serverMain } from "./main";
 export { ServerBinding, type ServerBindingContext } from "./binding";
@@ -17,8 +17,8 @@ export const makeServerLayer = makeNodeXmuxServerLayer;
 
 /** Program boundary normalizes public options and supplies the production Node app. */
 export const serverProgram = Effect.fn("server.program")(function* (options: RunXmuxServerOptions) {
-  const normalizedOptions = normalizeServerOptions(options);
-  const app = makeNodeXmuxServerApp(normalizedOptions);
+  const parsedOptions = parseServerOptions(options);
+  const app = makeNodeXmuxServerApp(parsedOptions);
   return yield* app.main;
 });
 

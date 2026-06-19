@@ -7,17 +7,11 @@ import { serverApi } from "../../api";
 import { jsonError } from "../../shared/errors";
 import { LogsResponse } from "./schemas";
 
-const parseTail = (value: string | undefined): number | undefined => {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  return Number.isInteger(parsed) ? parsed : undefined;
-};
-
-export const tail = Effect.fn("api.logs.tail")(function* (rawTail: string | undefined) {
+export const tail = Effect.fn("api.logs.tail")(function* (tail: number | undefined) {
   const paths = yield* RuntimePaths;
   const reader = yield* LogReader;
 
-  return yield* reader.readTail({ logDir: paths.logDir, tail: parseTail(rawTail) }).pipe(
+  return yield* reader.readTail({ logDir: paths.logDir, tail }).pipe(
     Effect.matchEffect({
       onFailure: (error) =>
         jsonError({
