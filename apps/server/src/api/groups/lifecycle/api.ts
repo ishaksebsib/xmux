@@ -1,9 +1,9 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
-import { ShutdownResponse } from "../../contracts/control";
+import { ShutdownAccepted } from "./schemas";
 
 /** Local lifecycle control endpoints. */
-export const LifecycleApi = HttpApiGroup.make("lifecycle").add(
+export const lifecycleApi = HttpApiGroup.make("lifecycle").add(
   HttpApiEndpoint.post("shutdown", "/v1/shutdown", {
-    success: ShutdownResponse,
+    success: ShutdownAccepted,
   }),
 );

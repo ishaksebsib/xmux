@@ -18,8 +18,6 @@ export interface ActiveServerInfo {
 export const findActiveServer = Effect.fn("server.findActiveServer")(function* (
   paths: ServerRuntimePaths,
 ) {
-  if (paths.controlEndpoint.kind !== "unix-socket") return null;
-
   const manifest = yield* readServerManifest(paths.manifestPath);
   if (manifest === null) return null;
   if (manifest.scopeId !== paths.scopeId) return null;

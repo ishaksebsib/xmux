@@ -2,7 +2,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import {
-  ConfigValidateResponse,
+  ConfigValidationResult,
   EnvSecretRef,
   InlineSecretRef,
   RedactedServerConfig,
@@ -25,7 +25,7 @@ const ConfigTestLayer = Layer.mergeAll(NodeFsPathLayer, SecretLayer);
 
 const decodeFileConfig = Schema.decodeUnknownSync(ServerFileConfig);
 const decodeRedactedConfig = Schema.decodeUnknownSync(RedactedServerConfig);
-const decodeValidateResponse = Schema.decodeUnknownSync(ConfigValidateResponse);
+const decodeValidateResponse = Schema.decodeUnknownSync(ConfigValidationResult);
 
 const withTempConfigPath = <A, E, R>(
   name: string,

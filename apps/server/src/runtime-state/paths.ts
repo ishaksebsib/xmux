@@ -173,9 +173,7 @@ export const ensureRuntimeDirectories = Effect.fn("server.ensureRuntimeDirectori
   directories.add(pathService.dirname(paths.dbPath));
   directories.add(pathService.dirname(paths.manifestPath));
   directories.add(pathService.dirname(paths.startupLockPath));
-  if (paths.controlEndpoint.kind === "unix-socket") {
-    directories.add(pathService.dirname(paths.controlEndpoint.path));
-  }
+  directories.add(pathService.dirname(paths.controlEndpoint.path));
 
   for (const directory of directories) {
     yield* makeDirectory(directory);

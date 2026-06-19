@@ -2,14 +2,17 @@ import { mkdtemp, rm, access, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
-import { runXmuxServer, serverProgram } from "../src/server";
+import { Effect, Layer } from "effect";
+import { ServerBinding } from "../src/http/binding";
+import { normalizeServerOptions } from "../src/options";
+import { makeServerLayer, runXmuxServer, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedClock = {
   now: () => fixedStartedAt,
 };
 const immediateShutdown = Effect.succeed(undefined);
+const testBinding = Layer.succeed(ServerBinding)({ bind: Effect.void });
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-boundary-"))),
@@ -19,31 +22,33 @@ const makeTempRoot = Effect.acquireRelease(
 const exists = (path: string): Effect.Effect<boolean> =>
   Effect.promise(() => access(path).then(() => true, () => false));
 
-it.effect("constructs the server program with a test control endpoint", () =>
+it.effect("constructs the server program with an injected server binding", () =>
   Effect.gen(function* () {
     const root = yield* makeTempRoot;
     const manifestPath = join(root, "server.json");
     const startupLockPath = join(root, "startup.lock");
 
-    yield* Effect.scoped(
-      serverProgram({
-        configPath: join(root, "config.jsonc"),
-        pathOverrides: {
-          stateDir: join(root, "state"),
-          runtimeDir: join(root, "runtime"),
-          logDir: join(root, "logs"),
-          dbPath: join(root, "state", "server.db"),
-          manifestPath,
-          startupLockPath,
-        },
-        clock: fixedClock,
-        controlEndpointOverride: { kind: "test", id: "unit" },
-        shutdownSignal: immediateShutdown,
-      }),
-    );
+    const socketPath = join(root, "server.sock");
+    const options = normalizeServerOptions({
+      configPath: join(root, "config.jsonc"),
+      pathOverrides: {
+        stateDir: join(root, "state"),
+        runtimeDir: join(root, "runtime"),
+        logDir: join(root, "logs"),
+        dbPath: join(root, "state", "server.db"),
+        manifestPath,
+        startupLockPath,
+      },
+      clock: fixedClock,
+      controlEndpointOverride: { kind: "unix-socket", path: socketPath },
+      shutdownSignal: immediateShutdown,
+    });
+
+    yield* Effect.scoped(serverMain().pipe(Effect.provide(makeServerLayer(options, testBinding))));
 
     assert.isFalse(yield* exists(manifestPath));
     assert.isFalse(yield* exists(startupLockPath));
+    assert.isFalse(yield* exists(socketPath));
   }),
 );
 

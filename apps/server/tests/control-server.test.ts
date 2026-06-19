@@ -5,20 +5,20 @@ import { join } from "node:path";
 import { assert, describe, it } from "@effect/vitest";
 import { Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
-import { ConfigValidateResponse, EffectiveConfigResponse } from "../src/contracts/config";
-import { LogsResponse } from "../src/contracts/logs";
-import {
-  ControlErrorResponse,
-  HealthResponse,
-  ShutdownResponse,
-  StatusResponse,
-} from "../src/contracts/control";
-import { shutdownHandler, statusHandler } from "../src/api/handlers";
+import { ConfigValidateResponse, EffectiveConfigResponse } from "../src/api/groups/config/schemas";
+import { LogsResponse } from "../src/api/groups/log/schemas";
+import { ShutdownResponse } from "../src/api/groups/lifecycle/schemas";
+import { StatusResponse } from "../src/api/groups/status/schemas";
+import { HealthResponse } from "../src/api/groups/system/schemas";
+import { ApiErrorResponse } from "../src/api/shared/errors";
+import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
+import { status as statusRoute } from "../src/api/groups/status/handlers";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
 import { ServerIdentity } from "../src/runtime/server-identity";
 import { ShutdownCoordinator, ShutdownCoordinatorLive } from "../src/runtime/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLive } from "../src/runtime/status-registry";
+import { unixSocketFetch } from "../src/api/client";
 import { runXmuxServer } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
@@ -38,7 +38,7 @@ const decodeShutdownResponse = Schema.decodeUnknownOption(ShutdownResponse);
 const decodeEffectiveConfigResponse = Schema.decodeUnknownOption(EffectiveConfigResponse);
 const decodeConfigValidateResponse = Schema.decodeUnknownOption(ConfigValidateResponse);
 const decodeLogsResponse = Schema.decodeUnknownOption(LogsResponse);
-const decodeControlErrorResponse = Schema.decodeUnknownOption(ControlErrorResponse);
+const decodeControlErrorResponse = Schema.decodeUnknownOption(ApiErrorResponse);
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-control-"))),
@@ -150,7 +150,7 @@ const decodeShutdown = (body: string): ShutdownResponse => {
   return decoded.value;
 };
 
-const decodeControlError = (body: string): ControlErrorResponse => {
+const decodeControlError = (body: string): ApiErrorResponse => {
   const json = decodeUnknownJsonOption(body);
   if (Option.isNone(json)) assert.fail("Expected JSON control error response");
   const decoded = decodeControlErrorResponse(json.value);
@@ -198,24 +198,19 @@ describe("control handlers", () => {
         const shutdown = yield* ShutdownCoordinator;
         yield* status.setState("ready");
 
-        const statusResponse = yield* statusHandler();
-        assert.strictEqual(statusResponse.status, 200);
-        const statusBody = decodeStatus(yield* responseText(statusResponse));
-        assert.strictEqual(statusBody.state, "ready");
-        if (paths.controlEndpoint.kind !== "unix-socket") {
-          assert.fail("Expected Unix socket endpoint");
+        const statusBody = yield* statusRoute();
+        if (!(statusBody instanceof StatusResponse)) {
+          assert.fail("Expected direct status response value");
           return;
         }
+        assert.strictEqual(statusBody.state, "ready");
         assert.strictEqual(statusBody.endpoint.path, paths.controlEndpoint.path);
 
-        const firstShutdownResponse = yield* Effect.scoped(shutdownHandler());
-        assert.strictEqual(firstShutdownResponse.status, 202);
-        const firstShutdownBody = decodeShutdown(yield* responseText(firstShutdownResponse));
+        const firstShutdownBody = yield* Effect.scoped(shutdownRoute());
         assert.isTrue(firstShutdownBody.accepted);
         assert.isFalse(firstShutdownBody.alreadyStopping);
 
-        const secondShutdownResponse = yield* Effect.scoped(shutdownHandler());
-        const secondShutdownBody = decodeShutdown(yield* responseText(secondShutdownResponse));
+        const secondShutdownBody = yield* Effect.scoped(shutdownRoute());
         assert.isFalse(secondShutdownBody.accepted);
         assert.isTrue(secondShutdownBody.alreadyStopping);
         assert.isTrue(yield* shutdown.isShutdownRequested);
@@ -275,6 +270,14 @@ describe("control server", () => {
       assert.isTrue(health.alive);
       assert.isTrue(health.ready);
       assert.strictEqual(health.state, "ready");
+
+      const clientFetch = unixSocketFetch({ socketPath });
+      const clientHealthResponse = yield* Effect.promise(() =>
+        clientFetch("http://xmux.local/healthz"),
+      );
+      assert.strictEqual(clientHealthResponse.status, 200);
+      const clientHealth = decodeHealth(yield* Effect.promise(() => clientHealthResponse.text()));
+      assert.isTrue(clientHealth.alive);
 
       const statusResponse = yield* requestUnix(socketPath, "GET", "/v1/status");
       assert.strictEqual(statusResponse.statusCode, 200);

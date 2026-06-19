@@ -1,6 +1,6 @@
 import { request as httpRequest } from "node:http";
 import { Effect, Layer, Schema } from "effect";
-import { HealthResponse } from "../contracts/control";
+import { HealthResponse } from "../api/groups/system/schemas";
 import type { ServerControlEndpoint } from "../options";
 import { ServerProbe } from "./server-probe";
 
@@ -65,15 +65,13 @@ const requestHealth = (socketPath: string): Effect.Effect<HealthResponse, unknow
     });
   });
 
-const isAlive = (endpoint: ServerControlEndpoint): Effect.Effect<boolean> => {
-  if (endpoint.kind !== "unix-socket") return Effect.succeed(false);
-  return requestHealth(endpoint.path).pipe(
+const isAlive = (endpoint: ServerControlEndpoint): Effect.Effect<boolean> =>
+  requestHealth(endpoint.path).pipe(
     Effect.match({
       onFailure: () => false,
       onSuccess: (health) => health.alive === true,
     }),
   );
-};
 
 export const ServerProbeNodeLive = Layer.succeed(ServerProbe)({
   isAlive,

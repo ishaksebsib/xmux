@@ -2,8 +2,9 @@ import { NodeFileSystem, NodeHttpServer, NodePath } from "@effect/platform-node"
 import { Effect, Layer } from "effect";
 import { ServerConfig, ServerConfigLive } from "./config/service";
 import { SecretResolverLive } from "./config/resolve-secrets";
-import { XmuxHttpServerLive } from "./http/server-node";
 import type { ServerError } from "./errors";
+import { ServerBinding } from "./http/binding";
+import { nodeBinding } from "./http/server-node";
 import { withFileLogger } from "./logging/file-logger";
 import { LogReaderLive } from "./logging/log-reader";
 import {
@@ -22,40 +23,40 @@ import { RuntimePaths, RuntimePathsLive } from "./runtime-state/runtime-paths-se
 import { ServerProbeNodeLive } from "./runtime-state/server-probe-node";
 import { withStartupLock } from "./runtime-state/startup-lock";
 
-const NodePlatformLive = Layer.mergeAll(
+const nodePlatform = Layer.mergeAll(
   NodeFileSystem.layer,
   NodePath.layer,
   NodeHttpServer.layerHttpServices,
 );
 
-const ServerConfigWithPlatformLive = Layer.provide(
+const serverConfig = Layer.provide(
   ServerConfigLive,
-  Layer.mergeAll(NodePlatformLive, SecretResolverLive),
+  Layer.mergeAll(nodePlatform, SecretResolverLive),
 );
 
-const LogReaderWithPlatformLive = Layer.provide(LogReaderLive, NodePlatformLive);
+const logReader = Layer.provide(LogReaderLive, nodePlatform);
 
-const ServerServicesLive = Layer.mergeAll(
-  StatusRegistryLive,
-  ShutdownCoordinatorLive,
-  ServerConfigWithPlatformLive,
-  LogReaderWithPlatformLive,
-  ServerProbeNodeLive,
-);
-
-/** Compose the live server dependency graph once for a normalized option set. */
-export const makeServerLive = (options: NormalizedServerOptions) => {
-  const ServerOptionsLive = Layer.succeed(ServerOptions)(options);
-  const CoreLive = Layer.mergeAll(NodePlatformLive, ServerOptionsLive);
-  const RuntimePathsReadyLive = Layer.provide(RuntimePathsLive, CoreLive);
-  const ServerIdentityReadyLive = Layer.provide(ServerIdentityLive, ServerOptionsLive);
-
-  return Layer.mergeAll(
-    CoreLive,
-    RuntimePathsReadyLive,
-    ServerIdentityReadyLive,
-    ServerServicesLive,
+const serverServices = (binding: Layer.Layer<ServerBinding>) =>
+  Layer.mergeAll(
+    StatusRegistryLive,
+    ShutdownCoordinatorLive,
+    serverConfig,
+    logReader,
+    ServerProbeNodeLive,
+    binding,
   );
+
+/** Compose the server dependency graph once for a normalized option set. */
+export const makeServerLayer = (
+  options: NormalizedServerOptions,
+  binding: Layer.Layer<ServerBinding> = nodeBinding,
+) => {
+  const optionsLayer = Layer.succeed(ServerOptions)(options);
+  const core = Layer.mergeAll(nodePlatform, optionsLayer);
+  const runtimePaths = Layer.provide(RuntimePathsLive, core);
+  const identity = Layer.provide(ServerIdentityLive, optionsLayer);
+
+  return Layer.mergeAll(core, runtimePaths, identity, serverServices(binding));
 };
 
 /** Main server workflow owns startup ordering while services come from context. */
@@ -66,6 +67,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
   const config = yield* ServerConfig;
   const status = yield* StatusRegistry;
   const shutdown = yield* ShutdownCoordinator;
+  const binding = yield* ServerBinding;
 
   yield* ensureRuntimeDirectories(paths);
   const effectiveConfig = yield* config.loadCurrent(paths.configPath);
@@ -79,7 +81,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
         { startupLockPath: paths.startupLockPath, clock: options.clock },
         Effect.gen(function* () {
           yield* assertNoActiveServer(paths);
-          yield* Layer.build(XmuxHttpServerLive);
+          yield* binding.bind;
           yield* acquireManifestOwnership({
             paths,
             startedAt: identity.startedAt,
@@ -113,7 +115,7 @@ export const serverProgram = Effect.fn("server.program")(function* (
   options: RunXmuxServerOptions,
 ) {
   const normalizedOptions = normalizeServerOptions(options);
-  return yield* serverMain().pipe(Effect.provide(makeServerLive(normalizedOptions)));
+  return yield* serverMain().pipe(Effect.provide(makeServerLayer(normalizedOptions)));
 });
 
 /** Public Effect boundary for use by clients. */

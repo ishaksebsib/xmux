@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { CONTROL_RESPONSE_VERSION } from "./control";
 
 const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
 const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
@@ -112,7 +111,7 @@ export class ServerFileConfig extends Schema.Class<ServerFileConfig>("ServerFile
   server: Schema.optionalKey(ServerFileServerConfig),
   chats: Schema.optionalKey(ChatsFileConfig),
   harnesses: Schema.optionalKey(HarnessesFileConfig),
-	// TODO: harden this type, and think about the design more
+  // TODO: harden this type, and think about the design more
   middleware: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
@@ -190,11 +189,10 @@ export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
   middleware: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
-/** GET /v1/config/effective response. */
-export class EffectiveConfigResponse extends Schema.Class<EffectiveConfigResponse>(
-  "EffectiveConfigResponse",
+/** Redacted config snapshot is domain data; API groups wrap it in response envelopes. */
+export class RedactedConfigSnapshot extends Schema.Class<RedactedConfigSnapshot>(
+  "RedactedConfigSnapshot",
 )({
-  version: Schema.Literal(CONTROL_RESPONSE_VERSION),
   configPath: Schema.String,
   config: RedactedServerConfig,
 }) {}
@@ -208,11 +206,10 @@ export class ConfigValidationIssue extends Schema.Class<ConfigValidationIssue>(
   path: Schema.optionalKey(Schema.String),
 }) {}
 
-/** POST /v1/config/validate response. */
-export class ConfigValidateResponse extends Schema.Class<ConfigValidateResponse>(
-  "ConfigValidateResponse",
+/** Config validation result is domain data; API groups choose HTTP status codes. */
+export class ConfigValidationResult extends Schema.Class<ConfigValidationResult>(
+  "ConfigValidationResult",
 )({
-  version: Schema.Literal(CONTROL_RESPONSE_VERSION),
   configPath: Schema.String,
   valid: Schema.Boolean,
   issues: Schema.Array(ConfigValidationIssue),

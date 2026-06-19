@@ -1,6 +1,6 @@
 import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "effect";
 import type { ServerLogLevel } from "../contracts/config";
-import { LogEntry, type LogLevel as EntryLogLevel } from "../contracts/logs";
+import { LogEntry, type LogLevel as EntryLogLevel } from "./schema";
 import { LogFileError } from "../errors";
 import { redactRecord, redactString, redactUnknown } from "./redaction";
 

@@ -100,10 +100,6 @@ describe("runtime paths", () => {
         assert.match(paths.scopeId, /^[a-f0-9]{16}$/);
         assert.include(paths.manifestPath, paths.scopeId);
         assert.include(paths.startupLockPath, paths.scopeId);
-        if (paths.controlEndpoint.kind !== "unix-socket") {
-          assert.fail("default endpoint should be a Unix socket");
-          return;
-        }
         assert.include(paths.controlEndpoint.path, paths.scopeId);
       }),
     );
@@ -132,11 +128,6 @@ describe("manifest state", () => {
           startedAt: fixedStartedAt,
           sessionId: fixedSessionId,
         });
-        if (manifest === null) {
-          assert.fail("expected a manifest for a Unix socket endpoint");
-          return;
-        }
-
         yield* writeServerManifest(paths.manifestPath, manifest);
         const read = yield* readServerManifest(paths.manifestPath);
 

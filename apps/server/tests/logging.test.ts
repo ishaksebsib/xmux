@@ -1,7 +1,7 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { LogEntry } from "../src/contracts/logs";
+import { LogEntry } from "../src/logging/schema";
 import {
   resolveServerLogFilePaths,
   rotatedLogPath,
@@ -120,22 +120,22 @@ describe("structured file logging", () => {
           assert.isTrue(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 2)));
           assert.isFalse(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 3)));
 
-          const response = yield* readServerLogTail({
+          const entries = yield* readServerLogTail({
             logDir,
             tail: 3,
             maxFiles: 3,
             maxBytes: 5_000,
           });
-          assert.lengthOf(response.entries, 3);
-          assert.deepStrictEqual(response.entries[0]?.message, [
+          assert.lengthOf(entries, 3);
+          assert.deepStrictEqual(entries[0]?.message, [
             "rotation-7",
             { payload: "x".repeat(160) },
           ]);
-          assert.deepStrictEqual(response.entries[1]?.message, [
+          assert.deepStrictEqual(entries[1]?.message, [
             "rotation-8",
             { payload: "x".repeat(160) },
           ]);
-          assert.deepStrictEqual(response.entries[2]?.message, [
+          assert.deepStrictEqual(entries[2]?.message, [
             "rotation-9",
             { payload: "x".repeat(160) },
           ]);
@@ -166,10 +166,10 @@ describe("structured file logging", () => {
           ].map((entry) => JSON.stringify(entry));
           yield* fs.writeFileString(paths.mainLogPath, `not-json\n${lines.join("\n")}\n`);
 
-          const response = yield* readServerLogTail({ logDir, tail: 2 });
-          assert.lengthOf(response.entries, 2);
-          assert.strictEqual(response.entries[0]?.message, "two");
-          assert.strictEqual(response.entries[1]?.message, "three");
+          const entries = yield* readServerLogTail({ logDir, tail: 2 });
+          assert.lengthOf(entries, 2);
+          assert.strictEqual(entries[0]?.message, "two");
+          assert.strictEqual(entries[1]?.message, "three");
         }),
       ),
     );

@@ -1,20 +1,19 @@
 import { homedir } from "node:os";
 import { Context, Effect, FileSystem, Layer, Path, Ref } from "effect";
 import {
-  ConfigValidateResponse,
   ConfigValidationIssue,
+  ConfigValidationResult,
   DiscordModeConfig,
   type DiscordFileConfig,
-  EffectiveConfigResponse,
   type OpenCodeFileConfig,
   type PiFileConfig,
+  RedactedConfigSnapshot,
   ServerFileConfig,
   TelegramModeConfig,
   type TelegramFileConfig,
   type ServerFileServerConfig,
 } from "../contracts/config";
 import { ConfigValidationError, type ConfigError } from "../errors";
-import { CONTROL_RESPONSE_VERSION } from "../contracts/control";
 import { loadServerConfigFile } from "./load-jsonc";
 import { redactServerConfig } from "./redact";
 import { resolveSecretRef, SecretResolver } from "./resolve-secrets";
@@ -255,15 +254,13 @@ export const validateServerConfig = Effect.fn("server.validateServerConfig")(fun
   return yield* loadEffectiveServerConfig(configPath).pipe(
     Effect.match({
       onFailure: (error) =>
-        ConfigValidateResponse.make({
-          version: CONTROL_RESPONSE_VERSION,
+        ConfigValidationResult.make({
           configPath,
           valid: false,
           issues: [issueFromConfigError(error)],
         }),
       onSuccess: (effective) =>
-        ConfigValidateResponse.make({
-          version: CONTROL_RESPONSE_VERSION,
+        ConfigValidationResult.make({
           configPath,
           valid: true,
           issues: [],
@@ -279,8 +276,8 @@ export class ServerConfig extends Context.Service<
   {
     readonly loadCurrent: (configPath: string) => Effect.Effect<EffectiveServerConfig, ConfigError>;
     readonly getEffective: Effect.Effect<EffectiveServerConfig, ConfigValidationError>;
-    readonly getRedacted: Effect.Effect<EffectiveConfigResponse, ConfigValidationError>;
-    readonly validateCurrent: Effect.Effect<ConfigValidateResponse>;
+    readonly getRedacted: Effect.Effect<RedactedConfigSnapshot, ConfigValidationError>;
+    readonly validateCurrent: Effect.Effect<ConfigValidationResult>;
   }
 >()("@xmux/server/ServerConfig") {}
 
@@ -316,8 +313,7 @@ export const ServerConfigLive = Layer.effect(ServerConfig)(
       getEffective: getLoaded.pipe(Effect.map((loaded) => loaded.effective)),
       getRedacted: getLoaded.pipe(
         Effect.map((loaded) =>
-          EffectiveConfigResponse.make({
-            version: CONTROL_RESPONSE_VERSION,
+          RedactedConfigSnapshot.make({
             configPath: loaded.configPath,
             config: redactServerConfig(loaded.effective),
           }),
@@ -327,8 +323,7 @@ export const ServerConfigLive = Layer.effect(ServerConfig)(
         Effect.flatMap((loaded) =>
           loaded === null
             ? Effect.succeed(
-                ConfigValidateResponse.make({
-                  version: CONTROL_RESPONSE_VERSION,
+                ConfigValidationResult.make({
                   configPath: "",
                   valid: false,
                   issues: [

@@ -18,7 +18,6 @@ export interface ManifestOwnership {
   readonly path: string;
   readonly pid: number;
   readonly sessionId: string;
-  readonly wroteManifest: boolean;
 }
 
 /** Manifest creation input is explicit to keep process metadata at the shell edge. */
@@ -42,11 +41,9 @@ export const parseServerManifest = (raw: string): ServerManifest | null => {
 export const serializeServerManifest = (manifest: ServerManifest): string =>
   `${JSON.stringify(manifest, null, 2)}\n`;
 
-/** Build a manifest only for real local control endpoints. */
-export const createServerManifest = (input: CreateManifestInput): ServerManifest | null => {
-  if (input.paths.controlEndpoint.kind !== "unix-socket") return null;
-
-  return ServerManifest.make({
+/** Build the active-server manifest for the local control endpoint. */
+export const createServerManifest = (input: CreateManifestInput): ServerManifest =>
+  ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
     protocolVersion: CONTROL_PROTOCOL_VERSION,
     pid: process.pid,
@@ -67,7 +64,6 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
         executablePath: process.argv[1] ?? process.execPath,
       }),
   });
-};
 
 /** Read manifests defensively because the file is only discovery metadata. */
 export const readServerManifest = (
@@ -176,14 +172,6 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
   input: CreateManifestInput,
 ) {
   const manifest = createServerManifest(input);
-  if (manifest === null) {
-    return {
-      path: input.paths.manifestPath,
-      pid: process.pid,
-      sessionId: input.sessionId,
-      wroteManifest: false,
-    };
-  }
 
   return yield* Effect.acquireRelease(
     writeServerManifest(input.paths.manifestPath, manifest).pipe(
@@ -192,7 +180,6 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
           path: input.paths.manifestPath,
           pid: process.pid,
           sessionId: input.sessionId,
-          wroteManifest: true,
         }),
       ),
     ),

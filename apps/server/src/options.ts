@@ -1,23 +1,18 @@
 import { Context, Effect } from "effect";
 
-/** Clock seam keeps startup timestamps deterministic in lifecycle tests. */
+/** Clock seam keeps startup timestamps deterministic for hosts and tests. */
 export interface ServerClock {
   readonly now: () => Date;
 }
 
-/** Control endpoint overrides let tests avoid binding real local sockets. */
-export type ServerControlEndpoint =
-  | {
-      readonly kind: "unix-socket";
-      readonly path: string;
-    }
-  | {
-      readonly kind: "test";
-      readonly id: string;
-    };
+/** Local control endpoint. Windows named pipes should be added only with real transport support. */
+export interface ServerControlEndpoint {
+  readonly kind: "unix-socket";
+  readonly path: string;
+}
 
 // TODO: review this
-/** Path overrides are test seams; production paths are derived from config scope. */
+/** Path overrides are host seams; production paths are derived from config scope. */
 export interface ServerPathOverrides {
   readonly stateDir?: string;
   readonly runtimeDir?: string;
@@ -28,19 +23,19 @@ export interface ServerPathOverrides {
 }
 
 // TODO: review this
-/** CLI-facing server options stay small while leaving test seams explicit. */
+/** CLI-facing server options stay small while leaving host seams explicit. */
 export interface RunXmuxServerOptions {
   /** Real product input from `xmux server run --foreground --config <path>`. */
   readonly configPath?: string;
-  /** Test/host seam for Phase 2 path resolution. */
+  /** Host seam for explicit path resolution. */
   readonly pathOverrides?: ServerPathOverrides;
-  /** Test/host seam for Phase 3 control binding. */
+  /** Host seam for selecting a non-default Unix socket path. */
   readonly controlEndpointOverride?: ServerControlEndpoint;
-  /** Test seam for deterministic timestamps. */
+  /** Seam for deterministic timestamps in callers that need one. */
   readonly clock?: ServerClock;
   /**
-   * Test and host seam for the long-lived foreground wait. The real server uses
-   * a never-ending signal until Phase 3 wires control/signal shutdown.
+   * Host seam for the long-lived foreground wait. The real server uses
+   * a never-ending signal unless the embedding process supplies one.
    */
   readonly shutdownSignal?: Effect.Effect<void>;
 }
@@ -59,7 +54,7 @@ export class ServerOptions extends Context.Service<ServerOptions, NormalizedServ
   "@xmux/server/ServerOptions",
 ) {}
 
-/** System clock is the production default outside deterministic tests. */
+/** System clock is the production default. */
 export const SystemServerClock: ServerClock = {
   now: () => new Date(),
 };

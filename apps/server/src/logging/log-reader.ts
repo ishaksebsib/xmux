@@ -1,6 +1,5 @@
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
-import { CONTROL_RESPONSE_VERSION } from "../contracts/control";
-import { LogEntry, LogsResponse } from "../contracts/logs";
+import { LogEntry } from "./schema";
 import { LogFileError } from "../errors";
 import { DEFAULT_MAX_LOG_FILES, resolveServerLogFilePaths, rotatedLogPath } from "./file-logger";
 
@@ -159,17 +158,14 @@ export const readServerLogTail = Effect.fn("server.readServerLogTail")(function*
     maxBytes: input.maxBytes ?? MAX_READ_BYTES,
   });
 
-  return LogsResponse.make({
-    version: CONTROL_RESPONSE_VERSION,
-    entries,
-  });
+  return entries;
 });
 
 /** LogReader captures platform services for route handlers outside the main fiber. */
 export class LogReader extends Context.Service<
   LogReader,
   {
-    readonly readTail: (input: ReadServerLogTailInput) => Effect.Effect<LogsResponse, LogFileError>;
+    readonly readTail: (input: ReadServerLogTailInput) => Effect.Effect<readonly LogEntry[], LogFileError>;
   }
 >()("@xmux/server/LogReader") {}
 

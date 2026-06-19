@@ -5,7 +5,7 @@ import { HttpServer } from "effect/unstable/http";
 import { ControlServerError } from "../errors";
 import { RuntimePaths } from "../runtime-state/runtime-paths-service";
 
-export const removeSocketFile = (
+export const removeSocket = (
   socketPath: string,
   operation: "bind" | "close",
 ): Effect.Effect<void, ControlServerError, FileSystem.FileSystem> =>
@@ -24,21 +24,9 @@ export const removeSocketFile = (
   });
 
 /** Node Unix-socket adapter; all route logic stays in the API layer. */
-export const UnixSocketHttpServerLive = Layer.unwrap(
+export const unixSocketServer = Layer.unwrap(
   Effect.gen(function* () {
     const paths = yield* RuntimePaths;
-
-    if (paths.controlEndpoint.kind !== "unix-socket") {
-      return Layer.effect(HttpServer.HttpServer)(
-        Effect.fail(
-          ControlServerError.make({
-            operation: "bind",
-            path: paths.runtimeDir,
-            message: "Server HTTP binding requires a Unix socket endpoint.",
-          }),
-        ),
-      );
-    }
 
     const socketPath = paths.controlEndpoint.path;
 
@@ -46,9 +34,9 @@ export const UnixSocketHttpServerLive = Layer.unwrap(
       NodeHttpServer.layerHttpServices,
       Layer.effect(HttpServer.HttpServer)(
         Effect.gen(function* () {
-          yield* removeSocketFile(socketPath, "bind");
+          yield* removeSocket(socketPath, "bind");
           yield* Effect.addFinalizer(() =>
-            removeSocketFile(socketPath, "close").pipe(
+            removeSocket(socketPath, "close").pipe(
               Effect.tapError((error) =>
                 Effect.logWarning("failed to remove server socket", { error }),
               ),

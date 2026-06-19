@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Ref } from "effect";
-import type { ServerStatusState } from "../contracts/control";
+import type { ServerStatusState } from "./status-state";
 
 /** StatusRegistry keeps coarse runtime state behind one mutable Effect service. */
 export class StatusRegistry extends Context.Service<
