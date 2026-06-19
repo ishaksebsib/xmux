@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { HttpServerRespondable, HttpServerResponse } from "effect/unstable/http";
-import { RESPONSE_VERSION } from "./version";
+import { API_VERSION } from "../../contracts/constants";
 
 /** Control errors are schema-backed because clients render them directly. */
 export class ApiErrorPayload extends Schema.Class<ApiErrorPayload>("ApiErrorPayload")({
@@ -10,7 +10,7 @@ export class ApiErrorPayload extends Schema.Class<ApiErrorPayload>("ApiErrorPayl
 
 /** Error envelope keeps non-2xx responses predictable for API consumers. */
 export class ApiErrorResponse extends Schema.Class<ApiErrorResponse>("ApiErrorResponse")({
-  version: Schema.Literal(RESPONSE_VERSION),
+  version: Schema.Literal(API_VERSION),
   error: ApiErrorPayload,
 }) {}
 
@@ -24,7 +24,7 @@ export const jsonError = (input: {
 }) =>
   encodeError(
     ApiErrorResponse.make({
-      version: RESPONSE_VERSION,
+      version: API_VERSION,
       error: ApiErrorPayload.make({ code: input.code, message: input.message }),
     }),
     { status: input.status },

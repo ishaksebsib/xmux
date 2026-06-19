@@ -1,12 +1,12 @@
 import { Schema } from "effect";
 import { ConfigValidationIssue, RedactedServerConfig } from "../../../contracts/config";
-import { RESPONSE_VERSION } from "../../shared/version";
+import { API_VERSION } from "../../../contracts/constants";
 
 /** GET /v1/config/effective response. */
 export class EffectiveConfigResponse extends Schema.Class<EffectiveConfigResponse>(
   "EffectiveConfigResponse",
 )({
-  version: Schema.Literal(RESPONSE_VERSION),
+  version: Schema.Literal(API_VERSION),
   configPath: Schema.String,
   config: RedactedServerConfig,
 }) {}
@@ -15,7 +15,7 @@ export class EffectiveConfigResponse extends Schema.Class<EffectiveConfigRespons
 export class ConfigValidateResponse extends Schema.Class<ConfigValidateResponse>(
   "ConfigValidateResponse",
 )({
-  version: Schema.Literal(RESPONSE_VERSION),
+  version: Schema.Literal(API_VERSION),
   configPath: Schema.String,
   valid: Schema.Boolean,
   issues: Schema.Array(ConfigValidationIssue),

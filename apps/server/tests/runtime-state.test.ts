@@ -2,14 +2,12 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 import {
-  CONTROL_PROTOCOL_VERSION,
-  ManifestEndpoint,
+  API_VERSION,
   SERVER_MANIFEST_VERSION,
-  ServerManifest,
-  ServerOwnerMetadata,
-} from "../src/contracts/manifest";
+  SERVER_PACKAGE_VERSION,
+} from "../src/contracts/constants";
+import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../src/contracts/manifest";
 import { normalizeServerOptions } from "../src/options";
-import { SERVER_PACKAGE_VERSION } from "../src/package-info";
 import { assertNoActiveServer } from "../src/runtime-state/active-server";
 import { ServerProbe } from "../src/runtime-state/server-probe";
 import {
@@ -57,7 +55,7 @@ const makeManifest = (input: {
 }): ServerManifest =>
   ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
-    protocolVersion: CONTROL_PROTOCOL_VERSION,
+    protocolVersion: API_VERSION,
     pid: input.pid,
     sessionId: input.sessionId ?? fixedSessionId,
     startedAt: fixedStartedAt.toISOString(),

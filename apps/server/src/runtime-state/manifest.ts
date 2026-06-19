@@ -1,13 +1,11 @@
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
 import {
-  CONTROL_PROTOCOL_VERSION,
-  ManifestEndpoint,
+  API_VERSION,
   SERVER_MANIFEST_VERSION,
-  ServerManifest,
-  ServerOwnerMetadata,
-} from "../contracts/manifest";
+  SERVER_PACKAGE_VERSION,
+} from "../contracts/constants";
+import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../contracts/manifest";
 import { ManifestError } from "../errors";
-import { SERVER_PACKAGE_VERSION } from "../package-info";
 import type { ServerRuntimePaths } from "./paths";
 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
@@ -45,7 +43,7 @@ export const serializeServerManifest = (manifest: ServerManifest): string =>
 export const createServerManifest = (input: CreateManifestInput): ServerManifest =>
   ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
-    protocolVersion: CONTROL_PROTOCOL_VERSION,
+    protocolVersion: API_VERSION,
     pid: process.pid,
     sessionId: input.sessionId,
     startedAt: input.startedAt.toISOString(),

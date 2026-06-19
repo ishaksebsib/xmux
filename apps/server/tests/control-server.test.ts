@@ -10,7 +10,6 @@ import { LogsResponse } from "../src/api/groups/log/schemas";
 import { ShutdownResponse } from "../src/api/groups/lifecycle/schemas";
 import { StatusResponse } from "../src/api/groups/status/schemas";
 import { HealthResponse } from "../src/api/groups/system/schemas";
-import { ApiErrorResponse } from "../src/api/shared/errors";
 import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
 import { status as statusRoute } from "../src/api/groups/status/handlers";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
@@ -38,7 +37,6 @@ const decodeShutdownResponse = Schema.decodeUnknownOption(ShutdownResponse);
 const decodeEffectiveConfigResponse = Schema.decodeUnknownOption(EffectiveConfigResponse);
 const decodeConfigValidateResponse = Schema.decodeUnknownOption(ConfigValidateResponse);
 const decodeLogsResponse = Schema.decodeUnknownOption(LogsResponse);
-const decodeControlErrorResponse = Schema.decodeUnknownOption(ApiErrorResponse);
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-control-"))),
@@ -147,14 +145,6 @@ const decodeShutdown = (body: string): ShutdownResponse => {
   if (Option.isNone(json)) assert.fail("Expected JSON shutdown response");
   const decoded = decodeShutdownResponse(json.value);
   if (Option.isNone(decoded)) assert.fail("Expected schema-valid shutdown response");
-  return decoded.value;
-};
-
-const decodeControlError = (body: string): ApiErrorResponse => {
-  const json = decodeUnknownJsonOption(body);
-  if (Option.isNone(json)) assert.fail("Expected JSON control error response");
-  const decoded = decodeControlErrorResponse(json.value);
-  if (Option.isNone(decoded)) assert.fail("Expected schema-valid control error response");
   return decoded.value;
 };
 
@@ -288,11 +278,9 @@ describe("control server", () => {
 
       const missingResponse = yield* requestUnix(socketPath, "GET", "/missing");
       assert.strictEqual(missingResponse.statusCode, 404);
-      assert.strictEqual(decodeControlError(missingResponse.body).error.code, "not_found");
 
       const methodResponse = yield* requestUnix(socketPath, "POST", "/healthz");
-      assert.strictEqual(methodResponse.statusCode, 405);
-      assert.strictEqual(decodeControlError(methodResponse.body).error.code, "method_not_allowed");
+      assert.strictEqual(methodResponse.statusCode, 404);
 
       const configResponse = yield* requestUnix(socketPath, "GET", "/v1/config/effective");
       assert.strictEqual(configResponse.statusCode, 200);

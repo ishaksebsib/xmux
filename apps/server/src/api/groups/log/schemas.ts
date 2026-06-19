@@ -1,6 +1,6 @@
 import { Schema } from "effect";
+import { API_VERSION } from "../../../contracts/constants";
 import { LogEntry } from "../../../logging/schema";
-import { RESPONSE_VERSION } from "../../shared/version";
 
 export const LogsQuery = Schema.Struct({
   tail: Schema.optional(Schema.String),
@@ -8,6 +8,6 @@ export const LogsQuery = Schema.Struct({
 
 /** GET /v1/logs response with already-bounded entries. */
 export class LogsResponse extends Schema.Class<LogsResponse>("LogsResponse")({
-  version: Schema.Literal(RESPONSE_VERSION),
+  version: Schema.Literal(API_VERSION),
   entries: Schema.Array(LogEntry),
 }) {}

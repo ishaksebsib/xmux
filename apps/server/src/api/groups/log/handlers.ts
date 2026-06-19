@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { API_VERSION } from "../../../contracts/constants";
 import { LogReader } from "../../../logging/log-reader";
 import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
 import { serverApi } from "../../api";
 import { jsonError } from "../../shared/errors";
-import { RESPONSE_VERSION } from "../../shared/version";
 import { LogsResponse } from "./schemas";
 
 const parseTail = (value: string | undefined): number | undefined => {
@@ -28,7 +28,7 @@ export const tail = Effect.fn("api.logs.tail")(function* (rawTail: string | unde
       onSuccess: (entries) =>
         Effect.succeed(
           LogsResponse.make({
-            version: RESPONSE_VERSION,
+            version: API_VERSION,
             entries,
           }),
         ),

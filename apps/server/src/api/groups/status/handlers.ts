@@ -1,11 +1,11 @@
 import { Clock, Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { CONTROL_PROTOCOL_VERSION, ManifestEndpoint } from "../../../contracts/manifest";
+import { API_VERSION } from "../../../contracts/constants";
+import { ManifestEndpoint } from "../../../contracts/manifest";
 import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
 import { ServerIdentity } from "../../../runtime/server-identity";
 import { StatusRegistry } from "../../../runtime/status-registry";
 import { serverApi } from "../../api";
-import { RESPONSE_VERSION } from "../../shared/version";
 import { StatusResponse } from "./schemas";
 
 export const status = Effect.fn("api.status.get")(function* () {
@@ -18,8 +18,8 @@ export const status = Effect.fn("api.status.get")(function* () {
   const uptimeMs = Math.max(0, nowMs - identity.startedAt.getTime());
 
   return StatusResponse.make({
-    version: RESPONSE_VERSION,
-    protocolVersion: CONTROL_PROTOCOL_VERSION,
+    version: API_VERSION,
+    protocolVersion: API_VERSION,
     pid: identity.pid,
     startedAt: identity.startedAt.toISOString(),
     uptimeMs,

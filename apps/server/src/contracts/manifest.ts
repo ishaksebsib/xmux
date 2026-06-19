@@ -1,10 +1,5 @@
 import { Schema } from "effect";
-
-/** Manifest file version gates future shape changes without guessing. */
-export const SERVER_MANIFEST_VERSION = 1;
-
-/** Control protocol version lets old CLIs reject incompatible servers. */
-export const CONTROL_PROTOCOL_VERSION = 1;
+import { API_VERSION, SERVER_MANIFEST_VERSION } from "./constants";
 
 /** Local-only endpoint stored in manifests for CLI discovery. */
 export class ManifestEndpoint extends Schema.Class<ManifestEndpoint>("ManifestEndpoint")({
@@ -24,7 +19,7 @@ export class ServerOwnerMetadata extends Schema.Class<ServerOwnerMetadata>(
 /** Active-server manifest is schema-backed because the CLI reads it as untrusted JSON. */
 export class ServerManifest extends Schema.Class<ServerManifest>("ServerManifest")({
   version: Schema.Literal(SERVER_MANIFEST_VERSION),
-  protocolVersion: Schema.Literal(CONTROL_PROTOCOL_VERSION),
+  protocolVersion: Schema.Literal(API_VERSION),
   pid: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)),
   sessionId: Schema.String,
   startedAt: Schema.String,
