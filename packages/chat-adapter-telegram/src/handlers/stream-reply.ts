@@ -1,4 +1,3 @@
-import type { MessageDraftPiece } from "@grammyjs/stream";
 import { Result } from "better-result";
 import type { ChatAdapterStreamReplyInput, ChatSentMessage } from "@xmux/chat-core";
 import type { TelegramBotClient } from "../client";
@@ -6,16 +5,11 @@ import {
   encodeTelegramStreamedMessage,
   encodeTelegramStreamReplyMessage,
   parseTelegramPrivateChatId,
-  shouldFinalizeTelegramMarkdownStream,
+  type TelegramPlainStreamMessageRequest,
+  type TelegramRichStreamMessageRequest,
 } from "../conversions/streaming";
 import { TelegramStreamReplyError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
-import { streamTelegramMarkdown } from "./markdown-stream-spooler";
-
-type TelegramStreamMessageOk = Extract<
-  ReturnType<typeof encodeTelegramStreamReplyMessage>,
-  { readonly status: "ok" }
->["value"];
 
 export async function streamReply<TChatId extends string>(args: {
   readonly chatId: TChatId;
@@ -33,29 +27,22 @@ export async function streamReply<TChatId extends string>(args: {
 
   return Result.gen(async function* () {
     const request = yield* encodeTelegramStreamReplyMessage(args.input);
-    const useRenderedMarkdown = shouldFinalizeTelegramMarkdownStream({
-      format: args.input.content.format,
-      adapterOptions: args.input.adapterOptions,
-    });
-    const captured = useRenderedMarkdown
-      ? yield* Result.await(
-          streamTelegramMarkdown({
-            bot: args.bot,
-            request,
-            chatId,
-            chunks: args.input.content.chunks,
-            signal: args.input.signal,
-            createError: (cause) => new TelegramStreamReplyError({ cause }),
-          }),
-        )
-      : yield* Result.await(
-          captureStreamedText({
-            bot: args.bot,
-            request,
-            chatId,
-            signal: args.input.signal,
-          }),
-        );
+    const captured =
+      request.kind === "rich"
+        ? yield* Result.await(
+            captureRichStreamedText({
+              bot: args.bot,
+              request,
+              signal: args.input.signal,
+            }),
+          )
+        : yield* Result.await(
+            capturePlainStreamedText({
+              bot: args.bot,
+              request,
+              signal: args.input.signal,
+            }),
+          );
 
     const sent = yield* Result.try({
       try: () =>
@@ -73,10 +60,9 @@ export async function streamReply<TChatId extends string>(args: {
   });
 }
 
-function captureStreamedText(args: {
+function capturePlainStreamedText(args: {
   readonly bot: TelegramBotClient;
-  readonly request: TelegramStreamMessageOk;
-  readonly chatId: number;
+  readonly request: TelegramPlainStreamMessageRequest;
   readonly signal?: AbortSignal;
 }): Promise<
   Result<
@@ -93,11 +79,13 @@ function captureStreamedText(args: {
       Result.tryPromise({
         try: async () =>
           args.bot.streamMessage({
-            ...args.request,
-            chatId: args.chatId,
+            chatId: args.request.chatId,
+            draftIdOffset: args.request.draftIdOffset,
             stream: captureStreamText(args.request.stream, (nextText) => {
               text = nextText;
             }),
+            draftOptions: args.request.draftOptions,
+            messageOptions: args.request.messageOptions,
             signal: args.signal,
           }),
         catch: (cause) => new TelegramStreamReplyError({ cause }),
@@ -108,15 +96,63 @@ function captureStreamedText(args: {
   });
 }
 
+function captureRichStreamedText(args: {
+  readonly bot: TelegramBotClient;
+  readonly request: TelegramRichStreamMessageRequest;
+  readonly signal?: AbortSignal;
+}): Promise<
+  Result<
+    {
+      readonly text: string;
+      readonly telegramMessages: Awaited<ReturnType<TelegramBotClient["streamMarkdown"]>>;
+    },
+    TelegramStreamReplyError
+  >
+> {
+  return Result.gen(async function* () {
+    let text = "";
+    const stream = captureStreamText(args.request.stream, (nextText) => {
+      text = nextText;
+    });
+    const telegramMessages = yield* Result.await(
+      Result.tryPromise({
+        try: async () =>
+          args.request.format === "markdown"
+            ? args.bot.streamMarkdown({
+                chatId: args.request.chatId,
+                draftId: args.request.draftId,
+                stream,
+                draftOptions: args.request.draftOptions,
+                messageOptions: args.request.messageOptions,
+                baseInputRichMessage: args.request.baseInputRichMessage,
+                signal: args.signal,
+              })
+            : args.bot.streamHtml({
+                chatId: args.request.chatId,
+                draftId: args.request.draftId,
+                stream,
+                draftOptions: args.request.draftOptions,
+                messageOptions: args.request.messageOptions,
+                baseInputRichMessage: args.request.baseInputRichMessage,
+                signal: args.signal,
+              }),
+        catch: (cause) => new TelegramStreamReplyError({ cause }),
+      }),
+    );
+
+    return Result.ok({ text, telegramMessages });
+  });
+}
+
 async function* captureStreamText(
-  stream: AsyncIterable<MessageDraftPiece>,
+  stream: AsyncIterable<string>,
   onText: (text: string) => void,
-): AsyncIterable<MessageDraftPiece> {
+): AsyncIterable<string> {
   let text = "";
 
-  for await (const piece of stream) {
-    text += typeof piece === "string" ? piece : piece.text;
+  for await (const delta of stream) {
+    text += delta;
     onText(text);
-    yield piece;
+    yield delta;
   }
 }
