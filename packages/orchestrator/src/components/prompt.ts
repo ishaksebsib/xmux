@@ -53,7 +53,7 @@ export function promptTool(input: PromptToolComponentInput): string {
   const summary = `${toolStatusIcon(input.status)} ${toolDescription(input, input.config)}`;
 
   if (input.status === "failed") {
-    return [summary, markdownText(describeUnknown(input.error ?? "Tool failed"))].join("\n");
+    return [summary, markdownText(describeUnknown(input.error ?? "Tool failed"))].join("\n\n");
   }
 
   if (
@@ -231,7 +231,7 @@ function formatQuestion(
 }
 
 function section(title: string, body: string): string {
-  return `**${title}**\n${body}`;
+  return `**${title}**\n\n${body}`;
 }
 
 function compactLines(lines: readonly (string | undefined)[]): string {
@@ -263,7 +263,7 @@ export function promptUsage(input: {
 
   if (details.length === 0) return "";
 
-  return ["**Stats**", ...details.map((detail) => `_${detail}_`)].join("\n");
+  return ["**Stats**", bulletList(details.map((detail) => `_${detail}_`))].join("\n\n");
 }
 
 function formatTokenLine(
