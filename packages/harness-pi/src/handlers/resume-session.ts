@@ -67,13 +67,9 @@ function openResolvedPiSession(args: {
       );
     }
 
+    const sessionFile = args.resolved.sessionFile;
     const sessionManager = yield* Result.try({
-      try: () =>
-        SessionManager.open(
-          args.resolved.sessionFile as string,
-          options.sessionDir,
-          args.resolved.cwd,
-        ),
+      try: () => SessionManager.open(sessionFile, options.sessionDir, args.resolved.cwd),
       catch: (cause) => new PiSessionRequestError({ operation: "resumeSession", cause }),
     });
 

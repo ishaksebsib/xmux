@@ -1,3 +1,19 @@
+export { unixSocketFetch, type UnixSocketFetchOptions } from "./api/client";
+export { openApi as serverOpenApi, openApiJson as serverOpenApiJson } from "./api/openapi";
 export { runXmuxServer } from "./server";
 export type { RunXmuxServerOptions } from "./options";
-export { ServerShutdownError, ServerStartupError, type ServerError } from "./errors";
+export {
+  ActiveServerError,
+  ConfigParseError,
+  ConfigSecretError,
+  ConfigValidationError,
+  ControlServerError,
+  LogFileError,
+  ManifestError,
+  RuntimePathError,
+  ServerShutdownError,
+  ServerStartupError,
+  StartupLockError,
+  type ConfigError,
+  type ServerError,
+} from "./errors";

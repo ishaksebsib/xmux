@@ -1,7 +1,7 @@
 import type { AgentSession } from "@earendil-works/pi-coding-agent";
 import type { HarnessModelRef, HarnessThinkingLevel } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
-import { normalizeConfig, type NormalizedPiAdapterConfig } from "./config";
+import { normalizeConfig, type ResolvedPiAdapterConfig } from "./config";
 import { PiRuntimeOpenError } from "./errors";
 import type { PiAdapterConfig } from "./types";
 
@@ -24,7 +24,7 @@ export type PiSessionHandle = {
  * to one opened adapter instead of leaking through module globals.
  */
 export type PiRuntime = {
-  readonly config: NormalizedPiAdapterConfig;
+  readonly config: ResolvedPiAdapterConfig;
   readonly sessions: Map<string, PiSessionHandle>;
   defaultModel?: HarnessModelRef;
   defaultThinking?: HarnessThinkingLevel;
@@ -61,7 +61,7 @@ function closeSessions(sessions: Map<string, PiSessionHandle>): void {
  * handlers so adapter startup remains cheap and does not require model auth.
  */
 export async function openRuntime(
-  config: NormalizedPiAdapterConfig,
+  config: ResolvedPiAdapterConfig,
 ): Promise<ResultType<PiRuntime, PiRuntimeOpenError>> {
   return Result.try({
     try: () => {
@@ -80,6 +80,6 @@ export async function openRuntime(
 }
 
 /** Normalizes runtime config for callers that need the same path handling as the adapter factory. */
-export function normalizeRuntimeConfig(config?: PiAdapterConfig): NormalizedPiAdapterConfig {
+export function normalizeRuntimeConfig(config?: PiAdapterConfig): ResolvedPiAdapterConfig {
   return normalizeConfig(config);
 }

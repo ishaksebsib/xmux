@@ -7,7 +7,8 @@
     "test": "turbo run test",
     "test:integration": "turbo run test:integration",
     "typecheck": "turbo run typecheck",
-    "lint": "oxlint",
+    "lint": "oxlint && pnpm --filter @xmux/server lint:effect",
+    "lint:effect": "pnpm --filter @xmux/server lint:effect",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"

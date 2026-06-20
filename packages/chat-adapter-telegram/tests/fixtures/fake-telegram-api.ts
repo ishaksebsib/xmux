@@ -238,12 +238,26 @@ function resultForMethod(
       entities: request.entities,
     });
   }
+  if (method === "sendRichMessage") {
+    const request = bodyAsRecord(body);
+    return telegramSentMessage({
+      message_id: 100,
+      chat: {
+        id: request.chat_id ?? request.chatId ?? 12345,
+        type: "private",
+        first_name: "Alice",
+      },
+      rich_message: request.rich_message,
+    });
+  }
   if (method === "editMessageText") return true;
   if (method === "getFile") {
     const request = bodyAsRecord(body);
     return telegramFile({ file_id: request.file_id ?? request.fileId ?? "file-id" });
   }
   if (
+    method === "sendMessageDraft" ||
+    method === "sendRichMessageDraft" ||
     method === "sendChatAction" ||
     method === "setMyCommands" ||
     method === "answerCallbackQuery" ||

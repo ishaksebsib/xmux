@@ -1,62 +1,28 @@
-import { Effect } from "effect";
+import { Context } from "effect";
 
-export interface ServerClock {
-  readonly now: () => Date;
-}
-
-export type RunXmuxServerControlEndpoint =
-  | {
-      readonly kind: "unix-socket";
-      readonly path: string;
-    }
-  | {
-      readonly kind: "test";
-      readonly id: string;
-    };
-
-export interface RunXmuxServerPathOverrides {
-  readonly stateDir?: string;
-  readonly runtimeDir?: string;
-  readonly logDir?: string;
-  readonly dbPath?: string;
-  readonly manifestPath?: string;
-  readonly startupLockPath?: string;
-}
-
+/** CLI-facing server options stay limited to product inputs. */
 export interface RunXmuxServerOptions {
   /** Real product input from `xmux server run --foreground --config <path>`. */
   readonly configPath?: string;
-  /** Test/host seam for Phase 2 path resolution. */
-  readonly pathOverrides?: RunXmuxServerPathOverrides;
-  /** Test/host seam for Phase 3 control binding. */
-  readonly controlEndpointOverride?: RunXmuxServerControlEndpoint;
-  /** Test seam for deterministic timestamps. */
-  readonly clock?: ServerClock;
-  /**
-   * Test and host seam for the long-lived foreground wait. The real server uses
-   * a never-ending signal until Phase 3 wires control/signal shutdown.
-   */
-  readonly shutdownSignal?: Effect.Effect<void>;
 }
 
-export interface NormalizedRunXmuxServerOptions {
+/** Parsed options represent checked public inputs before filesystem defaults are resolved. */
+export interface ParsedServerOptions {
   readonly configPath?: string;
-  readonly pathOverrides?: RunXmuxServerPathOverrides;
-  readonly controlEndpointOverride?: RunXmuxServerControlEndpoint;
-  readonly clock: ServerClock;
-  readonly shutdownSignal: Effect.Effect<void>;
 }
 
-export const SystemServerClock: ServerClock = {
-  now: () => new Date(),
-};
+/** @deprecated Use ParsedServerOptions. */
+export type NormalizedServerOptions = ParsedServerOptions;
 
-export const normalizeRunXmuxServerOptions = (
-  options: RunXmuxServerOptions,
-): NormalizedRunXmuxServerOptions => ({
+/** Parsed server options are a service so workflows can read them from context. */
+export class ServerOptions extends Context.Service<ServerOptions, ParsedServerOptions>()(
+  "@xmux/server/ServerOptions",
+) {}
+
+/** Parse at the boundary so downstream services receive explicit values. */
+export const parseServerOptions = (options: RunXmuxServerOptions): ParsedServerOptions => ({
   configPath: options.configPath,
-  pathOverrides: options.pathOverrides,
-  controlEndpointOverride: options.controlEndpointOverride,
-  clock: options.clock ?? SystemServerClock,
-  shutdownSignal: options.shutdownSignal ?? Effect.never,
 });
+
+/** @deprecated Use parseServerOptions. */
+export const normalizeServerOptions = parseServerOptions;

@@ -2,93 +2,71 @@ import path from "node:path";
 import type { HarnessModelRef } from "@xmux/harness-core";
 import type { PiAdapterConfig, PiCreateOptions } from "./types";
 
-export type NormalizedPiAdapterConfig = PiAdapterConfig;
+declare const resolvedPiPathBrand: unique symbol;
 
-type MutablePiConfig = {
-  -readonly [TKey in keyof PiAdapterConfig]: PiAdapterConfig[TKey];
+/** Absolute Pi filesystem path resolved at the adapter/per-call boundary. */
+export type ResolvedPiPath = string & { readonly [resolvedPiPathBrand]: true };
+
+export type ResolvedPiAdapterConfig = {
+  readonly agentDir?: ResolvedPiPath;
+  readonly sessionDir?: ResolvedPiPath;
+  readonly defaultModel?: HarnessModelRef;
+  readonly defaultThinking?: PiAdapterConfig["defaultThinking"];
+  readonly tools?: readonly string[];
+  readonly excludeTools?: readonly string[];
+  readonly noTools?: PiAdapterConfig["noTools"];
 };
 
-type MutablePiCreateOptions = {
-  -readonly [TKey in keyof PiCreateOptions]: PiCreateOptions[TKey];
+export type ResolvedPiCreateOptions = {
+  readonly agentDir?: ResolvedPiPath;
+  readonly sessionDir?: ResolvedPiPath;
+  readonly sessionPath?: ResolvedPiPath;
+  readonly parentSession?: string;
+  readonly tools?: readonly string[];
+  readonly excludeTools?: readonly string[];
+  readonly noTools?: PiCreateOptions["noTools"];
 };
 
-function normalizePath(value: string): string {
-  return path.resolve(value);
+/** @deprecated Use ResolvedPiAdapterConfig. */
+export type NormalizedPiAdapterConfig = ResolvedPiAdapterConfig;
+
+function resolvePiPath(value: string): ResolvedPiPath {
+  return path.resolve(value) as ResolvedPiPath;
 }
 
 function cloneModelRef(model: HarnessModelRef): HarnessModelRef {
   return { ...model };
 }
 
-function copyConfigValue(
-  target: MutablePiConfig,
-  key: keyof PiAdapterConfig,
-  value: PiAdapterConfig[keyof PiAdapterConfig],
-): void {
-  if (value === undefined) return;
-
-  switch (key) {
-    case "agentDir":
-    case "sessionDir":
-      target[key] = normalizePath(value as string);
-      return;
-    case "defaultModel":
-      target.defaultModel = cloneModelRef(value as HarnessModelRef);
-      return;
-    case "tools":
-    case "excludeTools":
-      target[key] = [...(value as readonly string[])];
-      return;
-    case "defaultThinking":
-    case "noTools":
-      target[key] = value as never;
-      return;
-  }
-}
-
-function copyCreateOptionValue(
-  target: MutablePiCreateOptions,
-  key: keyof PiCreateOptions,
-  value: PiCreateOptions[keyof PiCreateOptions],
-): void {
-  if (value === undefined) return;
-
-  switch (key) {
-    case "agentDir":
-    case "sessionDir":
-    case "sessionPath":
-      target[key] = normalizePath(value as string);
-      return;
-    case "tools":
-    case "excludeTools":
-      target[key] = [...(value as readonly string[])];
-      return;
-    case "parentSession":
-    case "noTools":
-      target[key] = value as never;
-      return;
-  }
+function cloneStringArray(values: readonly string[] | undefined): readonly string[] | undefined {
+  return values === undefined ? undefined : Object.freeze([...values]);
 }
 
 /**
  * Normalizes adapter defaults once at factory creation so later handlers can
- * rely on absolute Pi paths and cloned immutable-looking option arrays.
+ * rely on absolute Pi paths and cloned immutable option arrays.
  */
 export function normalizePiAdapterConfig(
   config: PiAdapterConfig | undefined,
-): NormalizedPiAdapterConfig {
-  const normalized: MutablePiConfig = {};
-  if (!config) return normalized;
+): ResolvedPiAdapterConfig {
+  if (config === undefined) return Object.freeze({});
 
-  copyConfigValue(normalized, "agentDir", config.agentDir);
-  copyConfigValue(normalized, "sessionDir", config.sessionDir);
-  copyConfigValue(normalized, "defaultModel", config.defaultModel);
-  copyConfigValue(normalized, "defaultThinking", config.defaultThinking);
-  copyConfigValue(normalized, "tools", config.tools);
-  copyConfigValue(normalized, "excludeTools", config.excludeTools);
-  copyConfigValue(normalized, "noTools", config.noTools);
+  const agentDir = config.agentDir === undefined ? undefined : resolvePiPath(config.agentDir);
+  const sessionDir = config.sessionDir === undefined ? undefined : resolvePiPath(config.sessionDir);
+  const defaultModel =
+    config.defaultModel === undefined ? undefined : cloneModelRef(config.defaultModel);
+  const tools = cloneStringArray(config.tools);
+  const excludeTools = cloneStringArray(config.excludeTools);
 
-  return normalized;
+  return Object.freeze({
+    ...(agentDir === undefined ? {} : { agentDir }),
+    ...(sessionDir === undefined ? {} : { sessionDir }),
+    ...(defaultModel === undefined ? {} : { defaultModel }),
+    ...(config.defaultThinking === undefined ? {} : { defaultThinking: config.defaultThinking }),
+    ...(tools === undefined ? {} : { tools }),
+    ...(excludeTools === undefined ? {} : { excludeTools }),
+    ...(config.noTools === undefined ? {} : { noTools: config.noTools }),
+  });
 }
 
 /**
@@ -96,28 +74,36 @@ export function normalizePiAdapterConfig(
  * keeping session-specific paths and tool policy local to a single operation.
  */
 export function mergePiCreateOptions(
-  config: NormalizedPiAdapterConfig,
+  config: ResolvedPiAdapterConfig,
   adapterOptions: PiCreateOptions | undefined,
-): PiCreateOptions {
-  const merged: MutablePiCreateOptions = {};
+): ResolvedPiCreateOptions {
+  const agentDir =
+    adapterOptions?.agentDir === undefined
+      ? config.agentDir
+      : resolvePiPath(adapterOptions.agentDir);
+  const sessionDir =
+    adapterOptions?.sessionDir === undefined
+      ? config.sessionDir
+      : resolvePiPath(adapterOptions.sessionDir);
+  const sessionPath =
+    adapterOptions?.sessionPath === undefined
+      ? undefined
+      : resolvePiPath(adapterOptions.sessionPath);
+  const tools = cloneStringArray(adapterOptions?.tools ?? config.tools);
+  const excludeTools = cloneStringArray(adapterOptions?.excludeTools ?? config.excludeTools);
+  const noTools = adapterOptions?.noTools ?? config.noTools;
 
-  copyCreateOptionValue(merged, "agentDir", config.agentDir);
-  copyCreateOptionValue(merged, "sessionDir", config.sessionDir);
-  copyCreateOptionValue(merged, "tools", config.tools);
-  copyCreateOptionValue(merged, "excludeTools", config.excludeTools);
-  copyCreateOptionValue(merged, "noTools", config.noTools);
-
-  if (!adapterOptions) return merged;
-
-  copyCreateOptionValue(merged, "agentDir", adapterOptions.agentDir);
-  copyCreateOptionValue(merged, "sessionDir", adapterOptions.sessionDir);
-  copyCreateOptionValue(merged, "sessionPath", adapterOptions.sessionPath);
-  copyCreateOptionValue(merged, "parentSession", adapterOptions.parentSession);
-  copyCreateOptionValue(merged, "tools", adapterOptions.tools);
-  copyCreateOptionValue(merged, "excludeTools", adapterOptions.excludeTools);
-  copyCreateOptionValue(merged, "noTools", adapterOptions.noTools);
-
-  return merged;
+  return Object.freeze({
+    ...(agentDir === undefined ? {} : { agentDir }),
+    ...(sessionDir === undefined ? {} : { sessionDir }),
+    ...(sessionPath === undefined ? {} : { sessionPath }),
+    ...(adapterOptions?.parentSession === undefined
+      ? {}
+      : { parentSession: adapterOptions.parentSession }),
+    ...(tools === undefined ? {} : { tools }),
+    ...(excludeTools === undefined ? {} : { excludeTools }),
+    ...(noTools === undefined ? {} : { noTools }),
+  });
 }
 
 export const normalizeConfig = normalizePiAdapterConfig;
