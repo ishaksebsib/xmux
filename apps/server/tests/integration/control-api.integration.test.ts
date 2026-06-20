@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { unixSocketFetch } from "../../src/api/client";
+import { createXmuxClient } from "../../src/platform/node";
 import { assertNoSecret, assertServerPublished } from "../support/assertions";
 import {
   getEffectiveConfig,
@@ -57,10 +57,13 @@ describeIntegration("control API integration", () => {
         assert.strictEqual(missing.statusCode, 404);
         const wrongMethod = yield* requestUnix({ socketPath, method: "POST", path: "/healthz" });
         assert.isAtLeast(wrongMethod.statusCode, 400);
-        const fetchResponse = yield* Effect.promise(() =>
-          unixSocketFetch({ socketPath })("http://xmux.local/healthz"),
+        const typedHealth = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const client = yield* createXmuxClient({ socketPath });
+            return yield* client.system.health();
+          }),
         );
-        assert.strictEqual(fetchResponse.status, 200);
+        assert.isTrue(typedHealth.alive);
       }),
     ),
   );

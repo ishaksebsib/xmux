@@ -27,6 +27,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./platform/node": {
+      "import": {
+        "types": "./dist/platform/node.d.mts",
+        "default": "./dist/platform/node.mjs"
+      },
+      "require": {
+        "types": "./dist/platform/node.d.cts",
+        "default": "./dist/platform/node.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

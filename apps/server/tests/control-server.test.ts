@@ -23,8 +23,8 @@ import {
   ShutdownCoordinatorLayer,
 } from "../src/services/shutdown-coordinator";
 import { StatusRegistry, StatusRegistryLayer } from "../src/services/status-registry";
-import { unixSocketFetch } from "../src/api/client";
 import {
+  createXmuxClient,
   NodeHostRuntime,
   NodeServerProbe,
   NodeUnixSocketControlTransport,
@@ -299,13 +299,14 @@ describe("control server", () => {
       assert.isTrue(health.ready);
       assert.strictEqual(health.state, "ready");
 
-      const clientFetch = unixSocketFetch({ socketPath });
-      const clientHealthResponse = yield* Effect.promise(() =>
-        clientFetch("http://xmux.local/healthz"),
+      const typedHealth = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* createXmuxClient({ socketPath });
+          return yield* client.system.health();
+        }),
       );
-      assert.strictEqual(clientHealthResponse.status, 200);
-      const clientHealth = decodeHealth(yield* Effect.promise(() => clientHealthResponse.text()));
-      assert.isTrue(clientHealth.alive);
+      assert.isTrue(typedHealth.alive);
+      assert.strictEqual(typedHealth.state, "ready");
 
       const statusResponse = yield* requestUnix(socketPath, "GET", "/v1/status");
       assert.strictEqual(statusResponse.statusCode, 200);
