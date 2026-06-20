@@ -92,7 +92,7 @@ interface ActiveChatStream {
   readonly result: Promise<Result<void, PromptResponseError>>;
 }
 
-async function streamPromptReplyInMessages<
+export async function streamPromptReplyInMessages<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: StreamPromptReplyInput<TAdapters, TChats>): Promise<Result<void, PromptResponseError>> {

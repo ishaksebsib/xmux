@@ -1,5 +1,9 @@
 export { registerPromptRoute } from "./route";
-export { handlePromptMessage, type PromptMessageEvent } from "./handler";
+export {
+  handlePromptMessage,
+  streamPromptReplyInMessages,
+  type PromptMessageEvent,
+} from "./handler";
 export {
   getPromptSessionForThread,
   promptSessionForThread,

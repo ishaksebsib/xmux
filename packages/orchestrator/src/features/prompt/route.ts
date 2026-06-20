@@ -1,9 +1,11 @@
 import type { Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import type { Result } from "better-result";
 import type { Context } from "../../ctx";
 import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
 import { actorFromChatActor } from "../utils";
+import { classifyAudioMessage, handleSttAudioMessage, handleSttUnsupportedMessage } from "../stt";
 import { handlePromptMessage, isUserPromptActor, type PromptMessageEvent } from "./handler";
 
 /** Registers chat routes owned by the prompt feature. */
@@ -28,17 +30,32 @@ export function registerPromptRoute<
       return;
     }
 
+    const audio = classifyAudioMessage(promptEvent.message);
+
     const handled = await runXmuxHandler({
       app: ctx,
       event,
       middleware,
-      routeName: "prompt",
+      routeName: audio.type === "no_audio" ? "prompt" : "stt",
       actor: actorFromChatActor(promptEvent.message.actor),
-      handler: (handlerCtx) =>
-        handlePromptMessage({
-          ctx: handlerCtx,
-          event: promptEvent,
-        }),
+      handler: async (handlerCtx): Promise<Result<unknown, unknown>> => {
+        switch (audio.type) {
+          case "no_audio":
+            return handlePromptMessage({ ctx: handlerCtx, event: promptEvent });
+          case "single_audio":
+            return handleSttAudioMessage({
+              ctx: handlerCtx,
+              event: promptEvent,
+              attachment: audio.attachment,
+            });
+          case "unsupported":
+            return handleSttUnsupportedMessage({
+              ctx: handlerCtx,
+              event: promptEvent,
+              error: audio.error,
+            });
+        }
+      },
     });
 
     if (handled.isErr()) {

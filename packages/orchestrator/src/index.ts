@@ -34,6 +34,8 @@ export type {
   PromptConfig,
   PromptResponseConfig,
   ResumeConfig,
+  SttConfig,
+  NormalizedSttConfig,
   WorkspaceConfig,
 } from "./config";
 export type {

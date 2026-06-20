@@ -37,6 +37,7 @@
   "dependencies": {
     "@xmux/chat-core": "workspace:*",
     "@xmux/harness-core": "workspace:*",
+    "@xmux/stt": "workspace:*",
     "better-result": "^2.9.1"
   },
   "devDependencies": {

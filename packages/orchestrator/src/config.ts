@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { ChatAttachmentKind } from "@xmux/chat-core";
+import { parseSpeechToTextClientConfig, type SpeechToTextClientConfig } from "@xmux/stt";
 import { Result, type Result as ResultType } from "better-result";
 import { XmuxConfigurationError } from "./errors";
 
@@ -78,6 +79,27 @@ export interface PromptConfig {
   readonly attachments?: PromptAttachmentsConfig;
 }
 
+export interface SttConfig {
+  readonly enabled?: boolean;
+  readonly provider?: "openai-compatible";
+  readonly apiKey?: string;
+  readonly baseUrl?: string;
+  readonly endpointPath?: string;
+  readonly model?: string;
+  readonly language?: string;
+  readonly maxBytes?: number;
+  readonly timeoutMs?: number;
+}
+
+export type NormalizedSttConfig =
+  | { readonly enabled: false }
+  | {
+      readonly enabled: true;
+      readonly clientConfig: SpeechToTextClientConfig;
+      readonly language?: string;
+      readonly maxBytes: number;
+    };
+
 export interface NormalizedPromptConfig {
   readonly response: NormalizedPromptResponseConfig;
   readonly attachments: NormalizedPromptAttachmentsConfig;
@@ -91,6 +113,7 @@ export interface Config {
   readonly resume?: ResumeConfig;
   readonly model?: ModelConfig;
   readonly prompt?: PromptConfig;
+  readonly stt?: SttConfig;
 }
 
 export interface NormalizedConfig {
@@ -101,12 +124,14 @@ export interface NormalizedConfig {
   readonly resume: NormalizedResumeConfig;
   readonly model: NormalizedModelConfig;
   readonly prompt: NormalizedPromptConfig;
+  readonly stt: NormalizedSttConfig;
 }
 
 const DEFAULT_MAX_LIST_ENTRIES = 100;
 const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
 const DEFAULT_MAX_MODELS_PER_PROVIDER = 10;
 const DEFAULT_PROMPT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_STT_MAX_BYTES = 25 * 1024 * 1024;
 const PROMPT_ATTACHMENT_KINDS = Object.freeze([
   "image",
   "audio",
@@ -360,6 +385,78 @@ function parsePromptConfig(
   });
 }
 
+function parseOptionalString(
+  input: unknown,
+  path: string,
+): ResultType<string | undefined, XmuxConfigurationError> {
+  if (input === undefined) return Result.ok(undefined);
+  return typeof input === "string"
+    ? Result.ok(input)
+    : Result.err(configError(path, "must be a string when provided"));
+}
+
+function parseOptionalNonEmptyString(
+  input: unknown,
+  path: string,
+): ResultType<string | undefined, XmuxConfigurationError> {
+  if (input === undefined) return Result.ok(undefined);
+  return parseNonEmptyString(input, path);
+}
+
+function parseSttProvider(input: unknown): ResultType<"openai-compatible", XmuxConfigurationError> {
+  if (input === undefined || input === "openai-compatible") return Result.ok("openai-compatible");
+  return Result.err(configError("stt.provider", "must be openai-compatible"));
+}
+
+function parseSttConfig(
+  config: SttConfig | undefined,
+): ResultType<NormalizedSttConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "stt");
+    const enabled = yield* parseBoolean(parsed?.enabled, "stt.enabled", false);
+    if (!enabled) return Result.ok(Object.freeze({ enabled: false } as const));
+
+    const provider = yield* parseSttProvider(parsed?.provider);
+    const apiKey = yield* parseOptionalString(parsed?.apiKey, "stt.apiKey");
+    const baseUrl = yield* parseOptionalNonEmptyString(parsed?.baseUrl, "stt.baseUrl");
+    const endpointPath = yield* parseOptionalNonEmptyString(
+      parsed?.endpointPath,
+      "stt.endpointPath",
+    );
+    const model = yield* parseNonEmptyString(parsed?.model, "stt.model");
+    const language = yield* parseOptionalNonEmptyString(parsed?.language, "stt.language");
+    const maxBytes = yield* parsePositiveInteger(
+      parsed?.maxBytes,
+      "stt.maxBytes",
+      DEFAULT_STT_MAX_BYTES,
+    );
+    const timeoutMs = yield* parseOptionalPositiveInteger(parsed?.timeoutMs, "stt.timeoutMs");
+
+    const clientConfig: SpeechToTextClientConfig = {
+      provider,
+      model,
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(baseUrl === undefined ? {} : { baseUrl }),
+      ...(endpointPath === undefined ? {} : { endpointPath }),
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    };
+
+    const parsedClient = parseSpeechToTextClientConfig(clientConfig);
+    if (parsedClient.isErr()) {
+      return Result.err(configError("stt", parsedClient.error.message));
+    }
+
+    return Result.ok(
+      Object.freeze({
+        enabled: true,
+        clientConfig,
+        ...(language === undefined ? {} : { language }),
+        maxBytes,
+      } as const),
+    );
+  });
+}
+
 export function parseXmuxConfig(
   config: Config,
 ): ResultType<NormalizedConfig, XmuxConfigurationError> {
@@ -373,6 +470,7 @@ export function parseXmuxConfig(
     const resume = yield* parseResumeConfig(config.resume);
     const model = yield* parseModelConfig(config.model);
     const prompt = yield* parsePromptConfig(config.prompt);
+    const stt = yield* parseSttConfig(config.stt);
 
     return Result.ok(
       Object.freeze({
@@ -383,6 +481,7 @@ export function parseXmuxConfig(
         resume,
         model,
         prompt,
+        stt,
       }),
     );
   });
