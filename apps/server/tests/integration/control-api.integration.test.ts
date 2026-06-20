@@ -2,7 +2,14 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { unixSocketFetch } from "../../src/api/client";
 import { assertNoSecret, assertServerPublished } from "../support/assertions";
-import { getEffectiveConfig, getHealth, getStatus, requestUnix, tailLogs, validateConfig } from "../support/client";
+import {
+  getEffectiveConfig,
+  getHealth,
+  getStatus,
+  requestUnix,
+  tailLogs,
+  validateConfig,
+} from "../support/client";
 import { invalidLogLevelConfig, validTelegramConfig, writeConfig } from "../support/config";
 import { withInProcessServer } from "../support/in-process-server";
 
@@ -19,7 +26,11 @@ describeIntegration("control API integration", () => {
         assert.isTrue(health.ready);
         const status = yield* getStatus(socketPath);
         assert.strictEqual(status.state, "ready");
-        const configResponse = yield* requestUnix({ socketPath, method: "GET", path: "/v1/config/effective" });
+        const configResponse = yield* requestUnix({
+          socketPath,
+          method: "GET",
+          path: "/v1/config/effective",
+        });
         assert.strictEqual(configResponse.statusCode, 200);
         yield* assertNoSecret(configResponse.body, secret);
         const config = yield* getEffectiveConfig(socketPath);
@@ -27,9 +38,17 @@ describeIntegration("control API integration", () => {
         const valid = yield* validateConfig(socketPath);
         assert.isTrue(valid.valid);
         yield* writeConfig(paths.configPath, invalidLogLevelConfig);
-        const invalid = yield* requestUnix({ socketPath, method: "POST", path: "/v1/config/validate" });
+        const invalid = yield* requestUnix({
+          socketPath,
+          method: "POST",
+          path: "/v1/config/validate",
+        });
         assert.strictEqual(invalid.statusCode, 422);
-        const logsResponse = yield* requestUnix({ socketPath, method: "GET", path: "/v1/logs?tail=5" });
+        const logsResponse = yield* requestUnix({
+          socketPath,
+          method: "GET",
+          path: "/v1/logs?tail=5",
+        });
         assert.strictEqual(logsResponse.statusCode, 200);
         yield* assertNoSecret(logsResponse.body, secret);
         const logs = yield* tailLogs(socketPath, 5);
@@ -38,8 +57,11 @@ describeIntegration("control API integration", () => {
         assert.strictEqual(missing.statusCode, 404);
         const wrongMethod = yield* requestUnix({ socketPath, method: "POST", path: "/healthz" });
         assert.isAtLeast(wrongMethod.statusCode, 400);
-        const fetchResponse = yield* Effect.promise(() => unixSocketFetch({ socketPath })("http://xmux.local/healthz"));
+        const fetchResponse = yield* Effect.promise(() =>
+          unixSocketFetch({ socketPath })("http://xmux.local/healthz"),
+        );
         assert.strictEqual(fetchResponse.status, 200);
       }),
-    ));
+    ),
+  );
 });

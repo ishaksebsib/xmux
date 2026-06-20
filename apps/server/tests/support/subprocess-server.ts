@@ -13,12 +13,16 @@ import { waitForHealthReady, waitForMissingPath } from "./wait";
 
 const tail = (lines: ReadonlyArray<string>) => lines.slice(-80).join("");
 
-class SubprocessServerError extends Schema.TaggedErrorClass<SubprocessServerError>()("SubprocessServerError", {
-  message: Schema.String,
-  cause: Schema.optionalKey(Schema.Unknown),
-}) {}
+class SubprocessServerError extends Schema.TaggedErrorClass<SubprocessServerError>()(
+  "SubprocessServerError",
+  {
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
 
-const isExited = (child: ChildProcess): boolean => child.exitCode !== null || child.signalCode !== null;
+const isExited = (child: ChildProcess): boolean =>
+  child.exitCode !== null || child.signalCode !== null;
 
 const waitForExit = (child: ChildProcess): Effect.Effect<void> =>
   Effect.promise(() =>
@@ -76,7 +80,12 @@ export const withSubprocessServer = <A>(
     const runnerPath = join(sandbox.root, "runner.mjs");
     const distPath = resolve("dist/index.mjs");
     const effectPath = resolve("node_modules/effect/dist/Effect.js");
-    yield* Effect.promise(() => writeFile(runnerPath, `import * as Effect from ${JSON.stringify(effectPath)};\nimport { runXmuxServer } from ${JSON.stringify(distPath)};\nEffect.runPromise(runXmuxServer({ configPath: process.argv[2] })).catch((error) => { console.error(error); process.exitCode = 1; });\n`));
+    yield* Effect.promise(() =>
+      writeFile(
+        runnerPath,
+        `import * as Effect from ${JSON.stringify(effectPath)};\nimport { runXmuxServer } from ${JSON.stringify(distPath)};\nEffect.runPromise(runXmuxServer({ configPath: process.argv[2] })).catch((error) => { console.error(error); process.exitCode = 1; });\n`,
+      ),
+    );
     yield* Effect.addFinalizer(() => Effect.promise(() => unlink(runnerPath)).pipe(Effect.ignore));
     const stdout: Array<string> = [];
     const stderr: Array<string> = [];
@@ -86,12 +95,15 @@ export const withSubprocessServer = <A>(
       XDG_CONFIG_HOME: join(sandbox.root, "xdg-config"),
       XDG_STATE_HOME: join(sandbox.root, "xdg-state"),
       XDG_RUNTIME_DIR: join(sandbox.root, "xdg-runtime"),
-      ...(input.env ?? {}),
+      ...input.env,
     };
     const paths = yield* resolveExpectedPaths({ root: sandbox.root, configPath, env: childEnv });
     const child = yield* Effect.acquireRelease(
       Effect.sync(() => {
-        const proc = spawn(process.execPath, [runnerPath, configPath], { env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
+        const proc = spawn(process.execPath, [runnerPath, configPath], {
+          env: childEnv,
+          stdio: ["ignore", "pipe", "pipe"],
+        });
         proc.stdout.on("data", (chunk: Buffer) => stdout.push(chunk.toString("utf8")));
         proc.stderr.on("data", (chunk: Buffer) => stderr.push(chunk.toString("utf8")));
         return proc;
@@ -108,7 +120,9 @@ export const withSubprocessServer = <A>(
       waitForExit(child).pipe(
         Effect.flatMap(() =>
           Effect.fail(
-            diagnostics(`Subprocess exited before readiness: exitCode=${child.exitCode ?? "null"} signalCode=${child.signalCode ?? "null"}`),
+            diagnostics(
+              `Subprocess exited before readiness: exitCode=${child.exitCode ?? "null"} signalCode=${child.signalCode ?? "null"}`,
+            ),
           ),
         ),
       ),
@@ -118,5 +132,12 @@ export const withSubprocessServer = <A>(
       Effect.andThen(waitForMissingPath(paths.manifestPath)),
     );
     yield* Effect.addFinalizer(() => shutdown.pipe(Effect.ignore));
-    return yield* use({ root: sandbox.root, configPath, paths, manifestPath: paths.manifestPath, socketPath: paths.controlEndpoint.path, shutdown });
+    return yield* use({
+      root: sandbox.root,
+      configPath,
+      paths,
+      manifestPath: paths.manifestPath,
+      socketPath: paths.controlEndpoint.path,
+      shutdown,
+    });
   });

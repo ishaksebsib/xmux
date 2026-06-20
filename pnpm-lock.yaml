@@ -50,9 +50,6 @@ importers:
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
-      effect:
-        specifier: beta
-        version: 4.0.0-beta.83
     devDependencies:
       '@types/node':
         specifier: ^25.5.0

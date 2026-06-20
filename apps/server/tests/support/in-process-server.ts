@@ -3,7 +3,12 @@ import { Effect, Fiber, Layer, Schema, Scope } from "effect";
 import { makeSecretResolverLayer } from "../../src/config/resolve-secrets";
 import { ServerConfigLayer } from "../../src/config/service";
 import { LogReaderLayer } from "../../src/logging/log-reader";
-import { NodeHostRuntime, NodeSecretResolver, NodeServerProbe, NodeUnixSocketControlTransport } from "../../src/platform/node";
+import {
+  NodeHostRuntime,
+  NodeSecretResolver,
+  NodeServerProbe,
+  NodeUnixSocketControlTransport,
+} from "../../src/platform/node";
 import type { ServerRuntimePaths } from "../../src/runtime-state/paths";
 import { RuntimePaths } from "../../src/runtime-state/runtime-paths-service";
 import { ServerIdentity } from "../../src/services/server-identity";
@@ -25,7 +30,10 @@ export const makeInProcessServerLayer = (input: {
   readonly paths: ServerRuntimePaths;
   readonly env?: ReadonlyMap<string, string>;
 }) => {
-  const secretLayer = input.env === undefined ? Layer.provideMerge(NodeSecretResolver, NodeHostRuntime) : makeSecretResolverLayer(input.env);
+  const secretLayer =
+    input.env === undefined
+      ? Layer.provideMerge(NodeSecretResolver, NodeHostRuntime)
+      : makeSecretResolverLayer(input.env);
   const base = Layer.mergeAll(
     NodeHostRuntime,
     NodeFileSystem.layer,
@@ -33,7 +41,11 @@ export const makeInProcessServerLayer = (input: {
     secretLayer,
     NodeServerProbe,
     Layer.succeed(RuntimePaths)(input.paths),
-    Layer.succeed(ServerIdentity)({ pid: process.pid, startedAt: fixedStartedAt, sessionId: "integration-test" }),
+    Layer.succeed(ServerIdentity)({
+      pid: process.pid,
+      startedAt: fixedStartedAt,
+      sessionId: "integration-test",
+    }),
   );
   const withConfig = Layer.provideMerge(ServerConfigLayer, base);
   const withLogReader = Layer.provideMerge(LogReaderLayer, withConfig);
@@ -68,7 +80,14 @@ export const withInProcessServer = <A>(
         ),
       ),
     );
-    const shutdown = requestShutdown(sandbox.paths.controlEndpoint.path).pipe(Effect.andThen(Fiber.join(fiber)));
+    const shutdown = requestShutdown(sandbox.paths.controlEndpoint.path).pipe(
+      Effect.andThen(Fiber.join(fiber)),
+    );
     yield* Effect.addFinalizer(() => shutdown.pipe(Effect.ignore));
-    return yield* use({ root: sandbox.root, paths: sandbox.paths, socketPath: sandbox.paths.controlEndpoint.path, shutdown });
+    return yield* use({
+      root: sandbox.root,
+      paths: sandbox.paths,
+      socketPath: sandbox.paths.controlEndpoint.path,
+      shutdown,
+    });
   });

@@ -1,6 +1,9 @@
 import { request as httpRequest } from "node:http";
 import { Effect, Option, Schema } from "effect";
-import { ConfigValidateResponse, EffectiveConfigResponse } from "../../src/api/groups/config/schemas";
+import {
+  ConfigValidateResponse,
+  EffectiveConfigResponse,
+} from "../../src/api/groups/config/schemas";
 import { ShutdownResponse } from "../../src/api/groups/lifecycle/schemas";
 import { LogsResponse } from "../../src/api/groups/log/schemas";
 import { StatusResponse } from "../../src/api/groups/status/schemas";
@@ -12,10 +15,13 @@ export interface TestHttpResponse {
   readonly headers: Record<string, string | readonly string[] | undefined>;
 }
 
-export class UnixSocketRequestError extends Schema.TaggedErrorClass<UnixSocketRequestError>()("UnixSocketRequestError", {
-  message: Schema.String,
-  cause: Schema.optionalKey(Schema.Unknown),
-}) {}
+export class UnixSocketRequestError extends Schema.TaggedErrorClass<UnixSocketRequestError>()(
+  "UnixSocketRequestError",
+  {
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Unknown),
+  },
+) {}
 
 export const requestUnix = (input: {
   readonly socketPath: string;
@@ -25,20 +31,34 @@ export const requestUnix = (input: {
   readonly timeoutMs?: number;
 }): Effect.Effect<TestHttpResponse, UnixSocketRequestError> =>
   Effect.tryPromise({
-    try: () => new Promise<TestHttpResponse>((resolve, reject) => {
-      const request = httpRequest({ method: input.method, path: input.path, socketPath: input.socketPath }, (response) => {
-        const chunks: Array<string> = [];
-        response.setEncoding("utf8");
-        response.on("data", (chunk: string) => chunks.push(chunk));
-        response.on("end", () => resolve({ statusCode: response.statusCode ?? 0, body: chunks.join(""), headers: response.headers }));
-      });
-      request.setTimeout(input.timeoutMs ?? 2_000, () => {
-        request.destroy(new Error(`Unix socket request timed out after ${input.timeoutMs ?? 2_000}ms: ${input.method} ${input.path}`));
-      });
-      request.on("error", reject);
-      if (input.body !== undefined) request.write(input.body);
-      request.end();
-    }),
+    try: () =>
+      new Promise<TestHttpResponse>((resolve, reject) => {
+        const request = httpRequest(
+          { method: input.method, path: input.path, socketPath: input.socketPath },
+          (response) => {
+            const chunks: Array<string> = [];
+            response.setEncoding("utf8");
+            response.on("data", (chunk: string) => chunks.push(chunk));
+            response.on("end", () =>
+              resolve({
+                statusCode: response.statusCode ?? 0,
+                body: chunks.join(""),
+                headers: response.headers,
+              }),
+            );
+          },
+        );
+        request.setTimeout(input.timeoutMs ?? 2_000, () => {
+          request.destroy(
+            new Error(
+              `Unix socket request timed out after ${input.timeoutMs ?? 2_000}ms: ${input.method} ${input.path}`,
+            ),
+          );
+        });
+        request.on("error", reject);
+        if (input.body !== undefined) request.write(input.body);
+        request.end();
+      }),
     catch: (cause) => new UnixSocketRequestError({ message: "Unix socket request failed", cause }),
   });
 
@@ -87,15 +107,40 @@ export const decodeShutdown = (body: string): ShutdownResponse => {
   return decoded.value;
 };
 
-export const getHealth = (socketPath: string): Effect.Effect<HealthResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: "/healthz" }).pipe(Effect.map((r) => decodeHealth(r.body)));
-export const getStatus = (socketPath: string): Effect.Effect<StatusResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: "/v1/status" }).pipe(Effect.map((r) => decodeStatus(r.body)));
-export const getEffectiveConfig = (socketPath: string): Effect.Effect<EffectiveConfigResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: "/v1/config/effective" }).pipe(Effect.map((r) => decodeEffectiveConfig(r.body)));
-export const validateConfig = (socketPath: string): Effect.Effect<ConfigValidateResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "POST", path: "/v1/config/validate" }).pipe(Effect.map((r) => decodeConfigValidate(r.body)));
-export const tailLogs = (socketPath: string, tail = 20): Effect.Effect<LogsResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: `/v1/logs?tail=${tail}` }).pipe(Effect.map((r) => decodeLogs(r.body)));
-export const requestShutdown = (socketPath: string): Effect.Effect<ShutdownResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "POST", path: "/v1/shutdown" }).pipe(Effect.map((r) => decodeShutdown(r.body)));
+export const getHealth = (
+  socketPath: string,
+): Effect.Effect<HealthResponse, UnixSocketRequestError> =>
+  requestUnix({ socketPath, method: "GET", path: "/healthz" }).pipe(
+    Effect.map((r) => decodeHealth(r.body)),
+  );
+export const getStatus = (
+  socketPath: string,
+): Effect.Effect<StatusResponse, UnixSocketRequestError> =>
+  requestUnix({ socketPath, method: "GET", path: "/v1/status" }).pipe(
+    Effect.map((r) => decodeStatus(r.body)),
+  );
+export const getEffectiveConfig = (
+  socketPath: string,
+): Effect.Effect<EffectiveConfigResponse, UnixSocketRequestError> =>
+  requestUnix({ socketPath, method: "GET", path: "/v1/config/effective" }).pipe(
+    Effect.map((r) => decodeEffectiveConfig(r.body)),
+  );
+export const validateConfig = (
+  socketPath: string,
+): Effect.Effect<ConfigValidateResponse, UnixSocketRequestError> =>
+  requestUnix({ socketPath, method: "POST", path: "/v1/config/validate" }).pipe(
+    Effect.map((r) => decodeConfigValidate(r.body)),
+  );
+export const tailLogs = (
+  socketPath: string,
+  tail = 20,
+): Effect.Effect<LogsResponse, UnixSocketRequestError> =>
+  requestUnix({ socketPath, method: "GET", path: `/v1/logs?tail=${tail}` }).pipe(
+    Effect.map((r) => decodeLogs(r.body)),
+  );
+export const requestShutdown = (
+  socketPath: string,
+): Effect.Effect<ShutdownResponse, UnixSocketRequestError> =>
+  requestUnix({ socketPath, method: "POST", path: "/v1/shutdown" }).pipe(
+    Effect.map((r) => decodeShutdown(r.body)),
+  );

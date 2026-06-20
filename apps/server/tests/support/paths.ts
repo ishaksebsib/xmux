@@ -14,6 +14,9 @@ export const makeTestPaths = (input: {
   dbPath: join(input.root, "state", "server.db"),
   manifestPath: join(input.root, "server.json"),
   startupLockPath: join(input.root, "startup.lock"),
-  controlEndpoint: { kind: "unix-socket", path: input.socketPath ?? join(input.root, "runtime", "server.sock") },
+  controlEndpoint: {
+    kind: "unix-socket",
+    path: input.socketPath ?? join(input.root, "runtime", "server.sock"),
+  },
   scopeId: input.scopeId ?? "testscope",
 });

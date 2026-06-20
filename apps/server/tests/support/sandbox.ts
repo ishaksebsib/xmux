@@ -12,12 +12,18 @@ export interface ServerTestSandbox {
   readonly writeConfig: (content: string) => Effect.Effect<void, unknown>;
 }
 
-export const makeSandbox: Effect.Effect<ServerTestSandbox, never, Scope.Scope> = Effect.acquireRelease(
-  Effect.promise(() => mkdtemp(join(tmpdir(), "xmux-server-"))).pipe(
-    Effect.map((root) => {
-      const paths = makeTestPaths({ root });
-      return { root, paths, writeConfig: (content: string) => writeConfigFile(paths.configPath, content) };
-    }),
-  ),
-  (sandbox) => Effect.promise(() => rm(sandbox.root, { recursive: true, force: true })).pipe(Effect.ignore),
-);
+export const makeSandbox: Effect.Effect<ServerTestSandbox, never, Scope.Scope> =
+  Effect.acquireRelease(
+    Effect.promise(() => mkdtemp(join(tmpdir(), "xmux-server-"))).pipe(
+      Effect.map((root) => {
+        const paths = makeTestPaths({ root });
+        return {
+          root,
+          paths,
+          writeConfig: (content: string) => writeConfigFile(paths.configPath, content),
+        };
+      }),
+    ),
+    (sandbox) =>
+      Effect.promise(() => rm(sandbox.root, { recursive: true, force: true })).pipe(Effect.ignore),
+  );

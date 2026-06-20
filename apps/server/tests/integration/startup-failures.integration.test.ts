@@ -2,7 +2,11 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { serverMain } from "../../src/server";
 import { assertRuntimeFilesCleaned } from "../support/assertions";
-import { invalidJsonConfig, invalidLogLevelConfig, missingEnvSecretConfig } from "../support/config";
+import {
+  invalidJsonConfig,
+  invalidLogLevelConfig,
+  missingEnvSecretConfig,
+} from "../support/config";
 import { makeInProcessServerLayer } from "../support/in-process-server";
 import { makeSandbox } from "../support/sandbox";
 
@@ -23,11 +27,14 @@ const assertStartupFailure = (config: string, tag: string) =>
 
 describeIntegration("startup failure integration", () => {
   posixOnly("invalid JSONC fails without publishing runtime files", () =>
-    assertStartupFailure(invalidJsonConfig, "ConfigParseError"));
+    assertStartupFailure(invalidJsonConfig, "ConfigParseError"),
+  );
 
   posixOnly("schema mismatch fails without publishing runtime files", () =>
-    assertStartupFailure(invalidLogLevelConfig, "ConfigValidationError"));
+    assertStartupFailure(invalidLogLevelConfig, "ConfigValidationError"),
+  );
 
   posixOnly("missing env secret fails without publishing runtime files", () =>
-    assertStartupFailure(missingEnvSecretConfig("XMUX_MISSING_SECRET"), "ConfigSecretError"));
+    assertStartupFailure(missingEnvSecretConfig("XMUX_MISSING_SECRET"), "ConfigSecretError"),
+  );
 });

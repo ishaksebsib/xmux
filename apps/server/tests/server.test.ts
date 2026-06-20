@@ -9,7 +9,10 @@ import { ServerConfigLayer } from "../src/config/service";
 import { LogReaderLayer } from "../src/logging/log-reader";
 import { NodeHostRuntime } from "../src/platform/node";
 import { ServerIdentity } from "../src/services/server-identity";
-import { ShutdownCoordinator, ShutdownCoordinatorLayer } from "../src/services/shutdown-coordinator";
+import {
+  ShutdownCoordinator,
+  ShutdownCoordinatorLayer,
+} from "../src/services/shutdown-coordinator";
 import { StatusRegistryLayer } from "../src/services/status-registry";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";

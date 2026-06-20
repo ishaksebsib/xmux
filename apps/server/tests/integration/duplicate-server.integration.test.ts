@@ -20,5 +20,6 @@ describeIntegration("duplicate server integration", () => {
         const health = yield* getHealth(socketPath);
         assert.isTrue(health.ready);
       }),
-    ));
+    ),
+  );
 });

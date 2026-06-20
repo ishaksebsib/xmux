@@ -4,7 +4,12 @@ import { Duration, Effect } from "effect";
 import { getHealth } from "./client";
 
 export const exists = (path: string): Effect.Effect<boolean> =>
-  Effect.promise(() => access(path).then(() => true, () => false));
+  Effect.promise(() =>
+    access(path).then(
+      () => true,
+      () => false,
+    ),
+  );
 
 export const waitUntil = <A>(input: {
   readonly label: string;
@@ -27,21 +32,28 @@ export const waitUntil = <A>(input: {
       if (value !== undefined) return value;
       yield* Effect.sleep(Duration.millis(interval));
     }
-    assert.fail(`Timed out waiting for ${input.label} after ${timeout}ms${lastError === undefined ? "" : `; last error: ${String(lastError)}`}`);
+    assert.fail(
+      `Timed out waiting for ${input.label} after ${timeout}ms${lastError === undefined ? "" : `; last error: ${String(lastError)}`}`,
+    );
   });
 
 export const waitForPath = (path: string): Effect.Effect<void> =>
-  waitUntil({ label: `path: ${path}`, probe: exists(path).pipe(Effect.map((ok) => (ok ? true : undefined))) }).pipe(
-    Effect.asVoid,
-  );
+  waitUntil({
+    label: `path: ${path}`,
+    probe: exists(path).pipe(Effect.map((ok) => (ok ? true : undefined))),
+  }).pipe(Effect.asVoid);
 
 export const waitForExistingPath = (path: string): Effect.Effect<string> =>
-  waitUntil({ label: `path: ${path}`, probe: exists(path).pipe(Effect.map((ok) => (ok ? path : undefined))) });
+  waitUntil({
+    label: `path: ${path}`,
+    probe: exists(path).pipe(Effect.map((ok) => (ok ? path : undefined))),
+  });
 
 export const waitForMissingPath = (path: string): Effect.Effect<void> =>
-  waitUntil({ label: `missing path: ${path}`, probe: exists(path).pipe(Effect.map((ok) => (!ok ? true : undefined))) }).pipe(
-    Effect.asVoid,
-  );
+  waitUntil({
+    label: `missing path: ${path}`,
+    probe: exists(path).pipe(Effect.map((ok) => (!ok ? true : undefined))),
+  }).pipe(Effect.asVoid);
 
 export const waitForHealthReady = (socketPath: string) =>
   waitUntil({
