@@ -7,7 +7,7 @@ import {
   SERVER_PACKAGE_VERSION,
 } from "../src/contracts/constants";
 import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../src/contracts/manifest";
-import { normalizeServerOptions } from "../src/options";
+import { parseServerOptions } from "../src/options";
 import { assertNoActiveServer } from "../src/runtime-state/active-server";
 import { ServerProbe } from "../src/runtime-state/server-probe";
 import {
@@ -103,10 +103,10 @@ describe("runtime paths", () => {
     it.effect("resolves stable path-safe scope ids", () =>
       Effect.gen(function* () {
         const paths = yield* resolveRuntimePaths(
-          normalizeServerOptions({ configPath: "/tmp/xmux-test/config.jsonc" }),
+          parseServerOptions({ configPath: "/tmp/xmux-test/config.jsonc" }),
         );
         const again = yield* resolveRuntimePaths(
-          normalizeServerOptions({ configPath: "/tmp/xmux-test/config.jsonc" }),
+          parseServerOptions({ configPath: "/tmp/xmux-test/config.jsonc" }),
         );
 
         assert.strictEqual(paths.scopeId, again.scopeId);

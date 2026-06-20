@@ -11,9 +11,6 @@ export interface ParsedServerOptions {
   readonly configPath?: string;
 }
 
-/** @deprecated Use ParsedServerOptions. */
-export type NormalizedServerOptions = ParsedServerOptions;
-
 /** Parsed server options are a service so workflows can read them from context. */
 export class ServerOptions extends Context.Service<ServerOptions, ParsedServerOptions>()(
   "@xmux/server/ServerOptions",
@@ -23,6 +20,3 @@ export class ServerOptions extends Context.Service<ServerOptions, ParsedServerOp
 export const parseServerOptions = (options: RunXmuxServerOptions): ParsedServerOptions => ({
   configPath: options.configPath,
 });
-
-/** @deprecated Use parseServerOptions. */
-export const normalizeServerOptions = parseServerOptions;

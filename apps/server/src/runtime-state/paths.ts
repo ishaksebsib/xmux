@@ -17,7 +17,7 @@ import {
   XDG_STATE_HOME_ENV,
 } from "../contracts/constants";
 import { RuntimePathError } from "../errors";
-import type { NormalizedServerOptions } from "../options";
+import type { ParsedServerOptions } from "../options";
 import { HostRuntime } from "../runtime/host";
 
 declare const resolvedPathBrand: unique symbol;
@@ -100,7 +100,7 @@ const defaultLayout = (
 
 /** Resolve runtime paths once so later services do not guess filesystem layout. */
 export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(function* (
-  options: NormalizedServerOptions,
+  options: ParsedServerOptions,
 ) {
   const pathService = yield* Path.Path;
   const host = yield* HostRuntime;
