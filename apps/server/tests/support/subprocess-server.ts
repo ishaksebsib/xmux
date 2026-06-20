@@ -1,0 +1,122 @@
+import { type ChildProcess, spawn } from "node:child_process";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { NodePath } from "@effect/platform-node";
+import { Duration, Effect, Layer, Schema, Scope } from "effect";
+import { parseServerOptions } from "../../src/options";
+import { resolveRuntimePaths, type ServerRuntimePaths } from "../../src/runtime-state/paths";
+import { HostRuntime } from "../../src/services/host";
+import { requestShutdown } from "./client";
+import { writeConfig } from "./config";
+import { makeSandbox } from "./sandbox";
+import { waitForHealthReady, waitForMissingPath } from "./wait";
+
+const tail = (lines: ReadonlyArray<string>) => lines.slice(-80).join("");
+
+class SubprocessServerError extends Schema.TaggedErrorClass<SubprocessServerError>()("SubprocessServerError", {
+  message: Schema.String,
+  cause: Schema.optionalKey(Schema.Unknown),
+}) {}
+
+const isExited = (child: ChildProcess): boolean => child.exitCode !== null || child.signalCode !== null;
+
+const waitForExit = (child: ChildProcess): Effect.Effect<void> =>
+  Effect.promise(() =>
+    isExited(child)
+      ? Promise.resolve()
+      : new Promise<void>((resolveExit) => child.once("exit", () => resolveExit())),
+  );
+
+const terminateProcess = (child: ChildProcess): Effect.Effect<void> =>
+  Effect.gen(function* () {
+    if (isExited(child)) return;
+    child.kill("SIGTERM");
+    const exited = yield* Effect.timeoutOption(waitForExit(child), Duration.millis(1_000));
+    if (exited._tag === "Some" || isExited(child)) return;
+    child.kill("SIGKILL");
+    yield* Effect.timeoutOption(waitForExit(child), Duration.millis(1_000)).pipe(Effect.ignore);
+  });
+
+const resolveExpectedPaths = (input: {
+  readonly root: string;
+  readonly configPath: string;
+  readonly env: Record<string, string | undefined>;
+}): Effect.Effect<ServerRuntimePaths, unknown> => {
+  const host = Layer.succeed(HostRuntime)({
+    platform: process.platform,
+    homeDir: join(input.root, "home"),
+    pid: process.pid,
+    executablePath: process.execPath,
+    getEnv: (name: string) => input.env[name],
+    randomUuid: Effect.succeed("subprocess-test"),
+    isPidAlive: () => Effect.succeed(true),
+    emitWarning: () => Effect.void,
+  });
+  return resolveRuntimePaths(parseServerOptions({ configPath: input.configPath })).pipe(
+    Effect.provide(Layer.mergeAll(NodePath.layer, host)),
+  );
+};
+
+export const withSubprocessServer = <A>(
+  input: { readonly config: string; readonly env?: Record<string, string> },
+  use: (server: {
+    readonly root: string;
+    readonly configPath: string;
+    readonly manifestPath: string;
+    readonly socketPath: string;
+    readonly paths: ServerRuntimePaths;
+    readonly shutdown: Effect.Effect<void, unknown>;
+  }) => Effect.Effect<A, unknown, never>,
+): Effect.Effect<A, unknown, Scope.Scope> =>
+  Effect.gen(function* () {
+    const sandbox = yield* makeSandbox;
+    const configPath = join(sandbox.root, "config.jsonc");
+    yield* writeConfig(configPath, input.config);
+    yield* Effect.promise(() => mkdir(join(sandbox.root, "home"), { recursive: true }));
+    const runnerPath = join(sandbox.root, "runner.mjs");
+    const distPath = resolve("dist/index.mjs");
+    const effectPath = resolve("node_modules/effect/dist/Effect.js");
+    yield* Effect.promise(() => writeFile(runnerPath, `import * as Effect from ${JSON.stringify(effectPath)};\nimport { runXmuxServer } from ${JSON.stringify(distPath)};\nEffect.runPromise(runXmuxServer({ configPath: process.argv[2] })).catch((error) => { console.error(error); process.exitCode = 1; });\n`));
+    yield* Effect.addFinalizer(() => Effect.promise(() => unlink(runnerPath)).pipe(Effect.ignore));
+    const stdout: Array<string> = [];
+    const stderr: Array<string> = [];
+    const childEnv = {
+      ...process.env,
+      HOME: join(sandbox.root, "home"),
+      XDG_CONFIG_HOME: join(sandbox.root, "xdg-config"),
+      XDG_STATE_HOME: join(sandbox.root, "xdg-state"),
+      XDG_RUNTIME_DIR: join(sandbox.root, "xdg-runtime"),
+      ...(input.env ?? {}),
+    };
+    const paths = yield* resolveExpectedPaths({ root: sandbox.root, configPath, env: childEnv });
+    const child = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const proc = spawn(process.execPath, [runnerPath, configPath], { env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
+        proc.stdout.on("data", (chunk: Buffer) => stdout.push(chunk.toString("utf8")));
+        proc.stderr.on("data", (chunk: Buffer) => stderr.push(chunk.toString("utf8")));
+        return proc;
+      }),
+      terminateProcess,
+    );
+    const diagnostics = (error: unknown) =>
+      new SubprocessServerError({
+        message: `${String(error)}\nstdout:\n${tail(stdout)}\nstderr:\n${tail(stderr)}\nmanifest=${paths.manifestPath}\nsocket=${paths.controlEndpoint.path}\nlock=${paths.startupLockPath}`,
+        cause: error,
+      });
+    yield* Effect.race(
+      waitForHealthReady(paths.controlEndpoint.path).pipe(Effect.mapError(diagnostics)),
+      waitForExit(child).pipe(
+        Effect.flatMap(() =>
+          Effect.fail(
+            diagnostics(`Subprocess exited before readiness: exitCode=${child.exitCode ?? "null"} signalCode=${child.signalCode ?? "null"}`),
+          ),
+        ),
+      ),
+    );
+    const shutdown = requestShutdown(paths.controlEndpoint.path).pipe(
+      Effect.andThen(waitForExit(child)),
+      Effect.andThen(waitForMissingPath(paths.manifestPath)),
+    );
+    yield* Effect.addFinalizer(() => shutdown.pipe(Effect.ignore));
+    return yield* use({ root: sandbox.root, configPath, paths, manifestPath: paths.manifestPath, socketPath: paths.controlEndpoint.path, shutdown });
+  });
