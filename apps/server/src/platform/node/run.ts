@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { ServerError } from "../../errors";
 import { parseServerOptions, type RunXmuxServerOptions } from "../../options";
-import { serverMain } from "../../server/main";
+import { serverMain } from "../../server";
 import { makeNodeServerLayer } from "./layer";
 
 /** Node program boundary: parse public options and provide the production server layer. */

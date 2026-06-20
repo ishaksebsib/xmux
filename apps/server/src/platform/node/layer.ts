@@ -2,7 +2,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Layer } from "effect";
 import type { ParsedServerOptions } from "../../options";
 import { ServerOptions } from "../../options";
-import { ServerRuntimeServices } from "../../server/layer";
+import { ServerRuntimeServices } from "../../server";
 import { NodeHostRuntime } from "./host";
 import { NodeSecretResolver } from "./secrets";
 import { NodeUnixSocketControlTransport } from "./http/control-transport";

@@ -9,7 +9,7 @@ import { ServerIdentity } from "../../../services/server-identity";
 import { ShutdownCoordinator } from "../../../services/shutdown-coordinator";
 import { StatusRegistry } from "../../../services/status-registry";
 import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
-import { ControlTransport } from "../../../server/control-transport";
+import { ControlTransport } from "../../../services/control-transport";
 import { app } from "../../../api/app";
 
 export const removeSocket = (

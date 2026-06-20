@@ -1,16 +1,33 @@
-import { Effect } from "effect";
-import { ServerConfig } from "../config/service";
-import type { ServerError } from "../errors";
-import { withFileLogger } from "../logging/file-logger";
-import { ServerIdentity } from "../services/server-identity";
-import { ShutdownCoordinator } from "../services/shutdown-coordinator";
-import { StatusRegistry } from "../services/status-registry";
-import { assertNoActiveServer } from "../runtime-state/active-server";
-import { acquireManifestOwnership } from "../runtime-state/manifest";
-import { ensureRuntimeDirectories } from "../runtime-state/paths";
-import { RuntimePaths } from "../runtime-state/runtime-paths-service";
-import { withStartupLock } from "../runtime-state/startup-lock";
-import { ControlTransport } from "./control-transport";
+import { Effect, Layer } from "effect";
+import { ServerConfig } from "./config/service";
+import { ServerConfigLayer } from "./config/service";
+import type { ServerError } from "./errors";
+import { withFileLogger } from "./logging/file-logger";
+import { LogReaderLayer } from "./logging/log-reader";
+import { ServerIdentity } from "./services/server-identity";
+import { ServerIdentityLayer } from "./services/server-identity";
+import { ShutdownCoordinator } from "./services/shutdown-coordinator";
+import { ShutdownCoordinatorLayer } from "./services/shutdown-coordinator";
+import { ControlTransport } from "./services/control-transport";
+export { ControlTransport } from "./services/control-transport";
+import { StatusRegistry } from "./services/status-registry";
+import { StatusRegistryLayer } from "./services/status-registry";
+import { assertNoActiveServer } from "./runtime-state/active-server";
+import { acquireManifestOwnership } from "./runtime-state/manifest";
+import { ensureRuntimeDirectories } from "./runtime-state/paths";
+import { RuntimePaths } from "./runtime-state/runtime-paths-service";
+import { RuntimePathsLayer } from "./runtime-state/runtime-paths-service";
+import { withStartupLock } from "./runtime-state/startup-lock";
+
+/** Platform-neutral server services; host layers provide platform, secrets, probe, and transport. */
+export const ServerRuntimeServices = Layer.mergeAll(
+  RuntimePathsLayer,
+  ServerConfigLayer,
+  LogReaderLayer,
+  ServerIdentityLayer,
+  ShutdownCoordinatorLayer,
+  StatusRegistryLayer,
+);
 
 /** Main server workflow owns startup ordering while services come from context. */
 export const serverMain = Effect.fn("server.main")(function* () {
