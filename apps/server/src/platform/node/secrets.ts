@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 import { SecretResolver } from "../../config/resolve-secrets";
 import { ConfigSecretError } from "../../errors";
-import { HostRuntime } from "../../services/host";
+import { HostRuntime } from "../host";
 
 /** Node secret resolver backed by process environment through HostRuntime. */
 export const NodeSecretResolver = Layer.effect(SecretResolver)(

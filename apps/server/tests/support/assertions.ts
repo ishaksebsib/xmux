@@ -1,6 +1,6 @@
 import { assert } from "@effect/vitest";
 import { Effect } from "effect";
-import type { ServerRuntimePaths } from "../../src/runtime-state/paths";
+import type { ServerRuntimePaths } from "../../src/server-control/paths";
 import { exists } from "./wait";
 
 export const assertNoSecret = (text: string, secret: string): Effect.Effect<void> =>

@@ -1,7 +1,7 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { LogEntry } from "../src/logging/schema";
+import { LogEntry } from "../src/contracts/logging";
 import {
   resolveServerLogFilePaths,
   rotatedLogPath,
@@ -9,7 +9,7 @@ import {
 } from "../src/logging/file-logger";
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
-import type { HostRuntime } from "../src/services/host";
+import type { HostRuntime } from "../src/platform/host";
 import { NodeHostRuntime } from "../src/platform/node";
 
 const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);

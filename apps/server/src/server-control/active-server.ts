@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import { ActiveServerError } from "../errors";
-import { HostRuntime } from "../services/host";
+import { HostRuntime } from "../platform/host";
 import { readServerManifest, removeServerManifest } from "./manifest";
 import type { ServerRuntimePaths } from "./paths";
-import { ServerProbe } from "./server-probe";
+import { ServerProbe } from "./ports";
 
 /** Active server details come from manifest plus a reachable control endpoint. */
 export interface ActiveServerInfo {

@@ -1,12 +1,10 @@
 import { Effect, FileSystem, Option, Path, Schema } from "effect";
-import {
-  API_VERSION,
-  SERVER_MANIFEST_VERSION,
-  SERVER_PACKAGE_VERSION,
-} from "../contracts/constants";
-import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../contracts/manifest";
+import { API_VERSION, SERVER_MANIFEST_VERSION } from "../contracts/constants";
+import { SERVER_PACKAGE_VERSION } from "./constants";
+import { ServerControlEndpoint } from "../contracts/control";
+import { ServerManifest, ServerOwnerMetadata } from "../contracts/manifest";
 import { ManifestError } from "../errors";
-import { HostRuntime } from "../services/host";
+import { HostRuntime } from "../platform/host";
 import type { ServerRuntimePaths } from "./paths";
 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
@@ -60,7 +58,7 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
     configPath: input.paths.configPath,
     stateDir: input.paths.stateDir,
     scopeId: input.paths.scopeId,
-    endpoint: ManifestEndpoint.make({
+    endpoint: ServerControlEndpoint.make({
       kind: "unix-socket",
       path: input.paths.controlEndpoint.path,
     }),

@@ -1,6 +1,6 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Schema, Scope } from "effect";
-import { makeSecretResolverLayer } from "../../src/config/resolve-secrets";
+import { makeSecretResolverLayer } from "./secrets";
 import { ServerConfigLayer } from "../../src/config/service";
 import { LogReaderLayer } from "../../src/logging/log-reader";
 import {
@@ -9,11 +9,11 @@ import {
   NodeServerProbe,
   NodeUnixSocketControlTransport,
 } from "../../src/platform/node";
-import type { ServerRuntimePaths } from "../../src/runtime-state/paths";
-import { RuntimePaths } from "../../src/runtime-state/runtime-paths-service";
-import { ServerIdentity } from "../../src/services/server-identity";
-import { ShutdownCoordinatorLayer } from "../../src/services/shutdown-coordinator";
-import { StatusRegistryLayer } from "../../src/services/status-registry";
+import type { ServerRuntimePaths } from "../../src/server-control/paths";
+import { RuntimePaths } from "../../src/server-control/paths";
+import { ServerIdentity } from "../../src/server-runtime/identity";
+import { ShutdownCoordinatorLayer } from "../../src/server-runtime/shutdown-coordinator";
+import { StatusRegistryLayer } from "../../src/server-runtime/state";
 import { serverMain } from "../../src/server";
 import { requestShutdown } from "./client";
 import { makeSandbox } from "./sandbox";

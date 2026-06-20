@@ -1,8 +1,7 @@
 import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "effect";
-import type { ServerLogLevel } from "../contracts/config";
-import { LogEntry, type LogLevel as EntryLogLevel } from "./schema";
+import { LogEntry, type LogLevel } from "../contracts/logging";
 import { LogFileError } from "../errors";
-import { HostRuntime, type HostRuntimeService } from "../services/host";
+import { HostRuntime, type HostRuntimeService } from "../platform/host";
 import { redactRecord, redactString, redactUnknown } from "./redaction";
 
 export const SERVER_LOG_FILE_NAME = "server.log";
@@ -30,11 +29,11 @@ interface NormalizedLogRotationOptions {
 
 interface FileLoggerOptions extends LogRotationOptions {
   readonly logDir: string;
-  readonly logLevel?: ServerLogLevel;
+  readonly logLevel?: LogLevel;
 }
 
 interface EncodedLogEntry {
-  readonly level: EntryLogLevel;
+  readonly level: LogLevel;
   readonly line: string;
 }
 
@@ -71,7 +70,7 @@ const parseRotation = (
 
 const byteLength = (value: string): number => textEncoder.encode(value).byteLength;
 
-const normalizeLevel = (level: string): EntryLogLevel => {
+const normalizeLevel = (level: string): LogLevel => {
   switch (level.toLowerCase()) {
     case "trace":
       return "trace";
@@ -88,9 +87,7 @@ const normalizeLevel = (level: string): EntryLogLevel => {
   }
 };
 
-const toMinimumLogLevel = (
-  level: ServerLogLevel,
-): "Trace" | "Debug" | "Info" | "Warn" | "Error" => {
+const toMinimumLogLevel = (level: LogLevel): "Trace" | "Debug" | "Info" | "Warn" | "Error" => {
   switch (level) {
     case "trace":
       return "Trace";

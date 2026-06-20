@@ -1,10 +1,10 @@
 import { Clock, Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
+import { ServerControlEndpoint } from "../../../contracts/control";
 import { API_VERSION } from "../../../contracts/constants";
-import { ManifestEndpoint } from "../../../contracts/manifest";
-import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
-import { ServerIdentity } from "../../../services/server-identity";
-import { StatusRegistry } from "../../../services/status-registry";
+import { RuntimePaths } from "../../../server-control/paths";
+import { ServerIdentity } from "../../../server-runtime/identity";
+import { StatusRegistry } from "../../../server-runtime/state";
 import { serverApi } from "../../api";
 import { StatusResponse } from "./schemas";
 
@@ -27,7 +27,7 @@ export const status = Effect.fn("api.status.get")(function* () {
     configPath: paths.configPath,
     stateDir: paths.stateDir,
     scopeId: paths.scopeId,
-    endpoint: ManifestEndpoint.make({
+    endpoint: ServerControlEndpoint.make({
       kind: "unix-socket",
       path: paths.controlEndpoint.path,
     }),

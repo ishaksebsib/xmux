@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { StatusRegistry } from "../../../services/status-registry";
+import { StatusRegistry } from "../../../server-runtime/state";
 import { serverApi } from "../../api";
 import { HealthResponse } from "./schemas";
 

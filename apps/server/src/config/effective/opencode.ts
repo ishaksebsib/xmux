@@ -1,10 +1,6 @@
 import { Schema } from "effect";
-import {
-  HarnessModelRefConfig,
-  HarnessThinkingLevel,
-  OpenCodeMode,
-  PositiveInteger,
-} from "../../contracts/config";
+import { HarnessModelRefConfig, HarnessThinkingLevel, OpenCodeMode } from "../../contracts/config";
+import { PositiveInteger } from "../../contracts/primitives";
 
 export class EffectiveOpenCodeDisabled extends Schema.TaggedClass<EffectiveOpenCodeDisabled>()(
   "OpenCodeDisabled",

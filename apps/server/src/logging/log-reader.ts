@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
-import { LogEntry } from "./schema";
+import { LogEntry } from "../contracts/logging";
 import { LogFileError } from "../errors";
 import { DEFAULT_MAX_LOG_FILES, resolveServerLogFilePaths, rotatedLogPath } from "./file-logger";
 

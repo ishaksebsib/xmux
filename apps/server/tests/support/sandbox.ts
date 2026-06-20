@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Scope } from "effect";
-import type { ServerRuntimePaths } from "../../src/runtime-state/paths";
+import type { ServerRuntimePaths } from "../../src/server-control/paths";
 import { writeConfig as writeConfigFile } from "./config";
 import { makeTestPaths } from "./paths";
 

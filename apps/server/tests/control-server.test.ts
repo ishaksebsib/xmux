@@ -7,17 +7,17 @@ import { Duration, Effect, Fiber, Layer } from "effect";
 import { StatusResponse } from "../src/api/groups/status/schemas";
 import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
 import { status as statusRoute } from "../src/api/groups/status/handlers";
-import { makeSecretResolverLayer } from "../src/config/resolve-secrets";
+import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfigLayer } from "../src/config/service";
 import { LogReaderLayer } from "../src/logging/log-reader";
-import type { ServerRuntimePaths } from "../src/runtime-state/paths";
-import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
-import { ServerIdentity } from "../src/services/server-identity";
+import type { ServerRuntimePaths } from "../src/server-control/paths";
+import { RuntimePaths } from "../src/server-control/paths";
+import { ServerIdentity } from "../src/server-runtime/identity";
 import {
   ShutdownCoordinator,
   ShutdownCoordinatorLayer,
-} from "../src/services/shutdown-coordinator";
-import { StatusRegistry, StatusRegistryLayer } from "../src/services/status-registry";
+} from "../src/server-runtime/shutdown-coordinator";
+import { StatusRegistry, StatusRegistryLayer } from "../src/server-runtime/state";
 import {
   NodeHostRuntime,
   NodeServerProbe,

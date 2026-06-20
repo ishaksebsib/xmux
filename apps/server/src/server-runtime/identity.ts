@@ -1,5 +1,5 @@
 import { Clock, Context, Effect, Layer } from "effect";
-import { HostRuntime } from "./host";
+import { HostRuntime } from "../platform/host";
 
 /** Stable identity for one server process lifetime. */
 export class ServerIdentity extends Context.Service<

@@ -1,5 +1,4 @@
 export { openApi as serverOpenApi, openApiJson as serverOpenApiJson } from "./api/openapi";
-export { runXmuxServer } from "./platform/node";
 export type { RunXmuxServerOptions } from "./options";
 export {
   ActiveServerError,

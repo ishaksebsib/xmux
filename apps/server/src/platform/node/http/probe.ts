@@ -1,8 +1,8 @@
 import { request as httpRequest } from "node:http";
 import { Effect, Layer, Schema } from "effect";
 import { HealthResponse } from "../../../api/groups/system/schemas";
-import type { ServerControlEndpoint } from "../../../runtime-state/paths";
-import { ServerProbe } from "../../../runtime-state/server-probe";
+import type { ServerControlEndpoint } from "../../../contracts/control";
+import { ServerProbe } from "../../../server-control/ports";
 
 const HEALTH_CHECK_TIMEOUT_MS = 250;
 

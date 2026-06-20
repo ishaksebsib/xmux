@@ -4,8 +4,8 @@ import { join, resolve } from "node:path";
 import { NodePath } from "@effect/platform-node";
 import { Duration, Effect, Layer, Schema, Scope } from "effect";
 import { parseServerOptions } from "../../src/options";
-import { resolveRuntimePaths, type ServerRuntimePaths } from "../../src/runtime-state/paths";
-import { HostRuntime } from "../../src/services/host";
+import { resolveRuntimePaths, type ServerRuntimePaths } from "../../src/server-control/paths";
+import { HostRuntime } from "../../src/platform/host";
 import { requestShutdown } from "./client";
 import { writeConfig } from "./config";
 import { makeSandbox } from "./sandbox";
@@ -78,7 +78,7 @@ export const withSubprocessServer = <A>(
     yield* writeConfig(configPath, input.config);
     yield* Effect.promise(() => mkdir(join(sandbox.root, "home"), { recursive: true }));
     const runnerPath = join(sandbox.root, "runner.mjs");
-    const distPath = resolve("dist/index.mjs");
+    const distPath = resolve("dist/platform/node.mjs");
     const effectPath = resolve("node_modules/effect/dist/Effect.js");
     yield* Effect.promise(() =>
       writeFile(

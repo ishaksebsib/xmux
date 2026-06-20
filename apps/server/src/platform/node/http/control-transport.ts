@@ -5,11 +5,11 @@ import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { ServerConfig } from "../../../config/service";
 import { ControlServerError } from "../../../errors";
 import { LogReader } from "../../../logging/log-reader";
-import { ServerIdentity } from "../../../services/server-identity";
-import { ShutdownCoordinator } from "../../../services/shutdown-coordinator";
-import { StatusRegistry } from "../../../services/status-registry";
-import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
-import { ControlTransport } from "../../../services/control-transport";
+import { ServerIdentity } from "../../../server-runtime/identity";
+import { ShutdownCoordinator } from "../../../server-runtime/shutdown-coordinator";
+import { StatusRegistry } from "../../../server-runtime/state";
+import { RuntimePaths } from "../../../server-control/paths";
+import { ControlTransport } from "../../../server-control/ports";
 import { app } from "../../../api/app";
 
 export const removeSocket = (

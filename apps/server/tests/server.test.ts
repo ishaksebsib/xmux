@@ -4,19 +4,19 @@ import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
-import { makeSecretResolverLayer } from "../src/config/resolve-secrets";
+import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfigLayer } from "../src/config/service";
 import { LogReaderLayer } from "../src/logging/log-reader";
 import { NodeHostRuntime } from "../src/platform/node";
-import { ServerIdentity } from "../src/services/server-identity";
+import { ServerIdentity } from "../src/server-runtime/identity";
 import {
   ShutdownCoordinator,
   ShutdownCoordinatorLayer,
-} from "../src/services/shutdown-coordinator";
-import { StatusRegistryLayer } from "../src/services/status-registry";
-import type { ServerRuntimePaths } from "../src/runtime-state/paths";
-import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
-import { ServerProbe } from "../src/runtime-state/server-probe";
+} from "../src/server-runtime/shutdown-coordinator";
+import { StatusRegistryLayer } from "../src/server-runtime/state";
+import type { ServerRuntimePaths } from "../src/server-control/paths";
+import { RuntimePaths } from "../src/server-control/paths";
+import { ServerProbe } from "../src/server-control/ports";
 import { ControlTransport, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");

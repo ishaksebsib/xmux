@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { API_VERSION } from "../../../contracts/constants";
-import { LogEntry } from "../../../logging/schema";
+import { LogEntry } from "../../../contracts/logging";
 
 export const PositiveIntegerFromString = Schema.NumberFromString.check(Schema.isInt()).check(
   Schema.isGreaterThan(0),

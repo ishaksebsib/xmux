@@ -1,7 +1,7 @@
 import { Schema } from "effect";
+import { ServerControlEndpoint } from "../../../contracts/control";
 import { API_VERSION } from "../../../contracts/constants";
-import { ManifestEndpoint } from "../../../contracts/manifest";
-import { ServerStatusState } from "../../../services/status-state";
+import { ServerStatusState } from "../../../server-runtime/state";
 
 /** Status is the schema-backed local control payload for CLI discovery. */
 export class StatusResponse extends Schema.Class<StatusResponse>("StatusResponse")({
@@ -14,5 +14,5 @@ export class StatusResponse extends Schema.Class<StatusResponse>("StatusResponse
   configPath: Schema.String,
   stateDir: Schema.String,
   scopeId: Schema.String,
-  endpoint: ManifestEndpoint,
+  endpoint: ServerControlEndpoint,
 }) {}

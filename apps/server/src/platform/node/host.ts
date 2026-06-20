@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { Effect, Layer } from "effect";
-import { HostRuntime } from "../../services/host";
+import { HostRuntime } from "../host";
 
 /** PID liveness is a stale-file hint, never sole ownership proof. */
 export const isPidAlive = (pid: number): boolean => {

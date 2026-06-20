@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { ServerRuntimePaths } from "../../src/runtime-state/paths";
+import type { ServerRuntimePaths } from "../../src/server-control/paths";
 
 export const makeTestPaths = (input: {
   readonly root: string;

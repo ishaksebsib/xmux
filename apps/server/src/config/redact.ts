@@ -15,21 +15,19 @@ import type {
   EffectiveServerConfig,
   EffectiveTelegramConfig,
   ResolvedSecret,
-} from "./schema";
+} from "./effective";
 
 const redactSecret = (secret: ResolvedSecret): RedactedSecretRef => {
   if (secret.source === "env" && secret.env !== undefined) {
     return RedactedSecretRef.make({
       source: "env",
       env: secret.env,
-      resolved: true,
       redacted: true,
     });
   }
 
   return RedactedSecretRef.make({
     source: "value",
-    resolved: true,
     redacted: true,
   });
 };

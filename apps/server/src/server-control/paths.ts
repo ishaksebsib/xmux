@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { Effect, FileSystem, Path } from "effect";
+import { Context, Effect, FileSystem, Layer, Path } from "effect";
 import {
   APP_DIR_NAME,
   DEFAULT_CONFIG_FILE_NAME,
@@ -15,21 +14,16 @@ import {
   XDG_CONFIG_HOME_ENV,
   XDG_RUNTIME_DIR_ENV,
   XDG_STATE_HOME_ENV,
-} from "../contracts/constants";
+} from "./constants";
+import { ServerControlEndpoint } from "../contracts/control";
 import { RuntimePathError } from "../errors";
-import type { ParsedServerOptions } from "../options";
-import { HostRuntime } from "../services/host";
+import { ServerOptions, type ParsedServerOptions } from "../options";
+import { HostRuntime } from "../platform/host";
 
 declare const resolvedPathBrand: unique symbol;
 
 /** Absolute path resolved once at the server runtime boundary. */
 export type ResolvedPath = string & { readonly [resolvedPathBrand]?: true };
-
-/** Local control endpoint. Windows named pipes should be added only with real transport support. */
-export interface ServerControlEndpoint {
-  readonly kind: "unix-socket";
-  readonly path: ResolvedPath;
-}
 
 /** Resolved paths are explicit so the CLI and server agree on one local scope. */
 export interface ServerRuntimePaths {
@@ -44,6 +38,11 @@ export interface ServerRuntimePaths {
   readonly scopeId: string;
 }
 
+/** RuntimePaths exposes the once-resolved filesystem/control layout as a service. */
+export class RuntimePaths extends Context.Service<RuntimePaths, ServerRuntimePaths>()(
+  "@xmux/server/RuntimePaths",
+) {}
+
 const expandHome = (pathService: Path.Path, home: string, input: string): string => {
   if (input === "~") return home;
   if (input.startsWith("~/")) return pathService.join(home, input.slice(2));
@@ -55,17 +54,25 @@ const asResolvedPath = (path: string): ResolvedPath => path as ResolvedPath;
 const resolveInputPath = (pathService: Path.Path, home: string, input: string): ResolvedPath =>
   asResolvedPath(pathService.resolve(expandHome(pathService, home, input)));
 
-/** Scope IDs are hashed to keep socket and manifest names short and path-safe. */
+const fnv1a32 = (value: string, seed: number): number => {
+  let hash = seed >>> 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619) >>> 0;
+  }
+  return hash;
+};
+
+const hex32 = (value: number): string => value.toString(16).padStart(8, "0");
+
+/** Scope IDs are stable, short, and path-safe; they are not security identifiers. */
 export const createScopeId = (input: {
   readonly configPath: string;
   readonly stateDir: string;
-}): string =>
-  createHash("sha256")
-    .update(input.configPath)
-    .update("\0")
-    .update(input.stateDir)
-    .digest("hex")
-    .slice(0, 16);
+}): string => {
+  const value = `${input.configPath}\0${input.stateDir}`;
+  return `${hex32(fnv1a32(value, 0x811c9dc5))}${hex32(fnv1a32(value, 0x01000193))}`;
+};
 
 const defaultLayout = (
   pathService: Path.Path,
@@ -116,11 +123,12 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   const configPath = resolveInputPath(pathService, home, options.configPath ?? defaults.configPath);
   const stateDir = asResolvedPath(pathService.resolve(defaults.stateDir));
   const logDir = asResolvedPath(pathService.resolve(defaults.logDir));
+  const runtimeHome = host.getEnv(XDG_RUNTIME_DIR_ENV);
   const runtimeDir = asResolvedPath(
     pathService.resolve(
-      host.getEnv(XDG_RUNTIME_DIR_ENV) === undefined
+      runtimeHome === undefined
         ? pathService.join(stateDir, RUNTIME_DIR_NAME)
-        : pathService.join(host.getEnv(XDG_RUNTIME_DIR_ENV) ?? stateDir, APP_DIR_NAME),
+        : pathService.join(runtimeHome, APP_DIR_NAME),
     ),
   );
   const dbPath = asResolvedPath(pathService.join(stateDir, DEFAULT_DB_FILE_NAME));
@@ -135,7 +143,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
       `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
     ),
   );
-  const defaultControlEndpoint: ServerControlEndpoint = {
+  const defaultControlEndpoint = ServerControlEndpoint.make({
     kind: "unix-socket",
     path: asResolvedPath(
       pathService.join(
@@ -143,7 +151,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
         `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
       ),
     ),
-  };
+  });
 
   return {
     configPath,
@@ -157,6 +165,14 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     scopeId,
   };
 });
+
+/** Resolve paths from normalized server options at the application boundary. */
+export const RuntimePathsLayer = Layer.effect(RuntimePaths)(
+  Effect.gen(function* () {
+    const options = yield* ServerOptions;
+    return yield* resolveRuntimePaths(options);
+  }),
+);
 
 const makeDirectory = (
   directory: string,

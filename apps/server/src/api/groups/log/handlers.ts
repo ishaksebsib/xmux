@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { API_VERSION } from "../../../contracts/constants";
 import { LogReader } from "../../../logging/log-reader";
-import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
+import { RuntimePaths } from "../../../server-control/paths";
 import { serverApi } from "../../api";
 import { apiError } from "../../shared/errors";
 import { LogsResponse } from "./schemas";

@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Schema } from "effect";
 import type { SecretRef } from "../contracts/config";
 import { EnvSecretRef, InlineSecretRef } from "../contracts/config";
 import { ConfigSecretError } from "../errors";
@@ -28,23 +28,6 @@ export class SecretResolver extends Context.Service<
     }) => Effect.Effect<string, ConfigSecretError>;
   }
 >()("@xmux/server/SecretResolver") {}
-
-/** Test helper keeps config tests deterministic without touching process.env. */
-export const makeSecretResolverLayer = (
-  values: ReadonlyMap<string, string>,
-): Layer.Layer<SecretResolver> =>
-  Layer.succeed(SecretResolver)({
-    resolveEnv: ({ configPath, env }) =>
-      Effect.gen(function* () {
-        const value = values.get(env);
-        if (value !== undefined && value.length > 0) return value;
-        return yield* ConfigSecretError.make({
-          path: configPath,
-          env,
-          message: `Missing required environment secret: ${env}`,
-        });
-      }),
-  });
 
 /** Resolve a config secret to an in-memory value while preserving redaction metadata. */
 export const resolveSecretRef = Effect.fn("server.resolveSecretRef")(function* (input: {

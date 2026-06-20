@@ -1,7 +1,6 @@
 import { Schema } from "effect";
-
-export const NonEmptyString = Schema.String.check(Schema.isNonEmpty());
-export const PositiveInteger = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0));
+import { LogLevel } from "./logging";
+import { NonEmptyString, PositiveInteger } from "./primitives";
 
 /** Secret references let config point at credentials without exposing them in status. */
 export class EnvSecretRef extends Schema.Class<EnvSecretRef>("EnvSecretRef")({
@@ -18,9 +17,6 @@ export type SecretRef = typeof SecretRef.Type;
 
 export const DeliveryMode = Schema.Literals(["requester_only", "fanout"]);
 export type DeliveryMode = typeof DeliveryMode.Type;
-
-export const ServerLogLevel = Schema.Literals(["trace", "debug", "info", "warn", "error"]);
-export type ServerLogLevel = typeof ServerLogLevel.Type;
 
 export const HarnessThinkingLevel = Schema.Literals([
   "off",
@@ -43,14 +39,14 @@ export type PiNoToolsMode = typeof PiNoToolsMode.Type;
 export class ServerFileServerConfig extends Schema.Class<ServerFileServerConfig>(
   "ServerFileServerConfig",
 )({
-  logLevel: Schema.optionalKey(ServerLogLevel),
+  logLevel: Schema.optionalKey(LogLevel),
 }) {}
 
 /** Normalized server settings used after defaults have been applied. */
 export class ServerSettingsConfig extends Schema.Class<ServerSettingsConfig>(
   "ServerSettingsConfig",
 )({
-  logLevel: ServerLogLevel,
+  logLevel: LogLevel,
 }) {}
 
 export class TelegramModeConfig extends Schema.Class<TelegramModeConfig>("TelegramModeConfig")({
@@ -132,7 +128,6 @@ export class ServerFileConfig extends Schema.Class<ServerFileConfig>("ServerFile
 export class RedactedSecretRef extends Schema.Class<RedactedSecretRef>("RedactedSecretRef")({
   source: Schema.Literals(["env", "value"]),
   env: Schema.optionalKey(Schema.String),
-  resolved: Schema.Boolean,
   redacted: Schema.Literal(true),
 }) {}
 
@@ -214,17 +209,31 @@ export class RedactedConfigSnapshot extends Schema.Class<RedactedConfigSnapshot>
 export class ConfigValidationIssue extends Schema.Class<ConfigValidationIssue>(
   "ConfigValidationIssue",
 )({
-  code: Schema.String,
-  message: Schema.String,
+  code: NonEmptyString,
+  message: NonEmptyString,
   path: Schema.optionalKey(Schema.String),
 }) {}
 
-/** Config validation result is domain data; API groups choose HTTP status codes. */
-export class ConfigValidationResult extends Schema.Class<ConfigValidationResult>(
-  "ConfigValidationResult",
+export class ValidConfigValidationResult extends Schema.Class<ValidConfigValidationResult>(
+  "ValidConfigValidationResult",
+)({
+  configPath: NonEmptyString,
+  valid: Schema.Literal(true),
+  issues: Schema.Tuple([]),
+  config: RedactedServerConfig,
+}) {}
+
+export class InvalidConfigValidationResult extends Schema.Class<InvalidConfigValidationResult>(
+  "InvalidConfigValidationResult",
 )({
   configPath: Schema.String,
-  valid: Schema.Boolean,
-  issues: Schema.Array(ConfigValidationIssue),
-  config: Schema.optionalKey(RedactedServerConfig),
+  valid: Schema.Literal(false),
+  issues: Schema.NonEmptyArray(ConfigValidationIssue),
 }) {}
+
+/** Config validation result is domain data; API groups choose HTTP status codes. */
+export const ConfigValidationResult = Schema.Union([
+  ValidConfigValidationResult,
+  InvalidConfigValidationResult,
+]);
+export type ConfigValidationResult = typeof ConfigValidationResult.Type;

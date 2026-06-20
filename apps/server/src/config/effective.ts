@@ -1,19 +1,23 @@
 import { Schema } from "effect";
-import { DeliveryMode, ServerSettingsConfig } from "../contracts/config";
-import { EffectiveDiscordConfig } from "./adapters/discord";
-import { EffectiveOpenCodeConfig } from "./adapters/opencode";
-import { EffectivePiConfig } from "./adapters/pi";
-import { EffectiveTelegramConfig } from "./adapters/telegram";
+import { DeliveryMode } from "../contracts/config";
+import { LogLevel } from "../contracts/logging";
+import { EffectiveDiscordConfig } from "./effective/discord";
+import { EffectiveOpenCodeConfig } from "./effective/opencode";
+import { EffectivePiConfig } from "./effective/pi";
+import { EffectiveTelegramConfig } from "./effective/telegram";
 
-export * from "./adapters/discord";
-export * from "./adapters/opencode";
-export * from "./adapters/pi";
-export * from "./adapters/telegram";
+export * from "./effective/discord";
+export * from "./effective/opencode";
+export * from "./effective/pi";
+export * from "./effective/telegram";
 export { EnvResolvedSecret, ResolvedSecret, ValueResolvedSecret } from "./resolve-secrets";
 export type { ResolvedSecret as ResolvedSecretType } from "./resolve-secrets";
 
-export const EffectiveServerSettings = ServerSettingsConfig;
-export type EffectiveServerSettings = typeof EffectiveServerSettings.Type;
+export class EffectiveServerSettings extends Schema.Class<EffectiveServerSettings>(
+  "EffectiveServerSettings",
+)({
+  logLevel: LogLevel,
+}) {}
 
 export class EffectiveChatsConfig extends Schema.Class<EffectiveChatsConfig>(
   "EffectiveChatsConfig",

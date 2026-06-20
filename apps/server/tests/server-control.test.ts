@@ -1,15 +1,13 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
-import {
-  API_VERSION,
-  SERVER_MANIFEST_VERSION,
-  SERVER_PACKAGE_VERSION,
-} from "../src/contracts/constants";
-import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../src/contracts/manifest";
+import { API_VERSION, SERVER_MANIFEST_VERSION } from "../src/contracts/constants";
+import { SERVER_PACKAGE_VERSION } from "../src/server-control/constants";
+import { ServerControlEndpoint } from "../src/contracts/control";
+import { ServerManifest, ServerOwnerMetadata } from "../src/contracts/manifest";
 import { parseServerOptions } from "../src/options";
-import { assertNoActiveServer } from "../src/runtime-state/active-server";
-import { ServerProbe } from "../src/runtime-state/server-probe";
+import { assertNoActiveServer } from "../src/server-control/active-server";
+import { ServerProbe } from "../src/server-control/ports";
 import {
   acquireManifestOwnership,
   createServerManifest,
@@ -18,13 +16,13 @@ import {
   removeServerManifestIfOwnedBy,
   serializeServerManifest,
   writeServerManifest,
-} from "../src/runtime-state/manifest";
+} from "../src/server-control/manifest";
 import {
   createScopeId,
   resolveRuntimePaths,
   type ServerRuntimePaths,
-} from "../src/runtime-state/paths";
-import { acquireStartupLock, releaseStartupLock } from "../src/runtime-state/startup-lock";
+} from "../src/server-control/paths";
+import { acquireStartupLock, releaseStartupLock } from "../src/server-control/startup-lock";
 import { NodeHostRuntime, isPidAlive } from "../src/platform/node";
 
 const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
@@ -63,7 +61,7 @@ const makeManifest = (input: {
     configPath: input.configPath,
     stateDir: input.stateDir,
     scopeId: input.scopeId,
-    endpoint: ManifestEndpoint.make({ kind: "unix-socket", path: input.socketPath }),
+    endpoint: ServerControlEndpoint.make({ kind: "unix-socket", path: input.socketPath }),
     owner: ServerOwnerMetadata.make({
       client: "test",
       version: "0.0.0",

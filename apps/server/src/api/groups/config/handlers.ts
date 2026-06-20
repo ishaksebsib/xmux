@@ -34,15 +34,24 @@ export const effective = Effect.fn("api.config.effective")(function* () {
 export const validate = Effect.fn("api.config.validate")(function* () {
   const config = yield* ServerConfig;
   const result = yield* config.validateCurrent;
-  const response = ConfigValidateResponse.make({
+  if (!result.valid) {
+    return yield* Effect.fail(
+      ConfigValidateResponse.make({
+        version: API_VERSION,
+        configPath: result.configPath,
+        valid: false,
+        issues: result.issues,
+      }),
+    );
+  }
+
+  return ConfigValidateResponse.make({
     version: API_VERSION,
     configPath: result.configPath,
-    valid: result.valid,
+    valid: true,
     issues: result.issues,
-    ...(result.config === undefined ? {} : { config: result.config }),
+    config: result.config,
   });
-  if (!result.valid) return yield* Effect.fail(response);
-  return response;
 });
 
 export const configHandlers = HttpApiBuilder.group(serverApi, "config", (handlers) =>
