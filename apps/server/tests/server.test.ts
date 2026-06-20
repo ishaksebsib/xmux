@@ -4,15 +4,24 @@ import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
-import { ServerBinding } from "../src/server/binding";
+import { makeSecretResolverLayer } from "../src/config/resolve-secrets";
+import { ServerConfigLayer } from "../src/config/service";
+import { LogReaderLayer } from "../src/logging/log-reader";
+import { NodeHostRuntime } from "../src/platform/node";
 import { ServerIdentity } from "../src/runtime/server-identity";
+import { ShutdownCoordinator, ShutdownCoordinatorLayer } from "../src/runtime/shutdown-coordinator";
+import { StatusRegistryLayer } from "../src/runtime/status-registry";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
-import { ShutdownCoordinator } from "../src/runtime/shutdown-coordinator";
-import { nodeServerServices, serverMain } from "../src/server";
+import { ServerProbe } from "../src/runtime-state/server-probe";
+import { ControlTransport, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
-const testBinding = Layer.succeed(ServerBinding)({ bind: Effect.void });
+const testTransport = Layer.succeed(ControlTransport)({ bind: Effect.void });
+const SecretLayer = makeSecretResolverLayer(new Map());
+const ServerProbeUnreachable = Layer.succeed(ServerProbe)({
+  isAlive: () => Effect.succeed(false),
+});
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-boundary-"))),
@@ -45,19 +54,30 @@ const makePaths = (
   scopeId: "testscope",
 });
 
-const makeTestLayer = (paths: ServerRuntimePaths) =>
-  Layer.mergeAll(
+const makeTestLayer = (paths: ServerRuntimePaths) => {
+  const base = Layer.mergeAll(
+    NodeHostRuntime,
     NodeFileSystem.layer,
     NodePath.layer,
+    SecretLayer,
+    ServerProbeUnreachable,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
       pid: process.pid,
       startedAt: fixedStartedAt,
       sessionId: "unit",
     }),
-    nodeServerServices,
-    testBinding,
   );
+  const withConfig = Layer.provideMerge(ServerConfigLayer, base);
+  const withLogReader = Layer.provideMerge(LogReaderLayer, withConfig);
+
+  return Layer.mergeAll(
+    withLogReader,
+    StatusRegistryLayer,
+    ShutdownCoordinatorLayer,
+    testTransport,
+  );
+};
 
 it.effect("constructs the server program with injected runtime services", () =>
   Effect.gen(function* () {

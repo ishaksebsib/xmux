@@ -13,8 +13,10 @@ import { loadServerConfigFile } from "../src/config/load-jsonc";
 import { redactServerConfig } from "../src/config/redact";
 import { loadEffectiveServerConfig, validateServerConfig } from "../src/config/service";
 import { makeSecretResolverLayer } from "../src/config/resolve-secrets";
+import type { HostRuntime } from "../src/runtime/host";
+import { NodeHostRuntime } from "../src/platform/node";
 
-const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
 const SecretLayer = makeSecretResolverLayer(
   new Map([
     ["TELEGRAM_BOT_TOKEN", "telegram-secret"],
@@ -29,7 +31,10 @@ const decodeValidateResponse = Schema.decodeUnknownSync(ConfigValidationResult);
 
 const withTempConfigPath = <A, E, R>(
   name: string,
-  use: (path: string, root: string) => Effect.Effect<A, E, R | FileSystem.FileSystem | Path.Path>,
+  use: (
+    path: string,
+    root: string,
+  ) => Effect.Effect<A, E, R | FileSystem.FileSystem | Path.Path | HostRuntime>,
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

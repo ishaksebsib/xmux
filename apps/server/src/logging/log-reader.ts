@@ -171,7 +171,7 @@ export class LogReader extends Context.Service<
   }
 >()("@xmux/server/LogReader") {}
 
-export const LogReaderLive = Layer.effect(LogReader)(
+export const LogReaderLayer = Layer.effect(LogReader)(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;

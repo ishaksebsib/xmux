@@ -1,0 +1,10 @@
+import { Context, Effect, Scope } from "effect";
+import type { ControlServerError } from "../errors";
+
+/** Host transport that binds the local control API as a scoped resource. */
+export class ControlTransport extends Context.Service<
+  ControlTransport,
+  {
+    readonly bind: Effect.Effect<void, ControlServerError, Scope.Scope>;
+  }
+>()("@xmux/server/ControlTransport") {}

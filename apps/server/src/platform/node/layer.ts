@@ -1,47 +1,22 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Layer } from "effect";
-import { SecretResolverLive } from "../../config/resolve-secrets";
-import { ServerConfigLive } from "../../config/service";
-import { LogReaderLive } from "../../logging/log-reader";
 import type { ParsedServerOptions } from "../../options";
-import { ServerIdentityLive } from "../../runtime/server-identity";
-import { ShutdownCoordinatorLive } from "../../runtime/shutdown-coordinator";
-import { StatusRegistryLive } from "../../runtime/status-registry";
-import { ServerProbeNodeLive } from "../../runtime-state/server-probe-node";
-import * as XmuxServerApp from "../../server/app";
-import { NodeUnixSocketBindingLive, nodeBinding } from "./http/server-binding";
+import { ServerOptions } from "../../options";
+import { ServerRuntimeServices } from "../../server/layer";
+import { NodeHostRuntime } from "./host";
+import { NodeSecretResolver } from "./secrets";
+import { NodeUnixSocketControlTransport } from "./http/control-transport";
+import { NodeServerProbe } from "./http/probe";
 
-/** Node platform services used by the shared server app. */
-export const nodePlatform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+/** Node platform primitives shared by the local server graph. */
+export const NodePlatform = Layer.mergeAll(NodeHostRuntime, NodeFileSystem.layer, NodePath.layer);
 
-export const nodeProviders = {
-  platform: nodePlatform,
-  secrets: SecretResolverLive,
-  identity: ServerIdentityLive,
-  probe: ServerProbeNodeLive,
-  binding: NodeUnixSocketBindingLive,
-} satisfies XmuxServerApp.XmuxServerAppProviders;
+/** Production Node server layer. Construct once at the runtime boundary. */
+export const makeNodeServerLayer = (options: ParsedServerOptions) => {
+  const boot = Layer.mergeAll(NodePlatform, Layer.succeed(ServerOptions)(options));
+  const withSecrets = Layer.provideMerge(NodeSecretResolver, boot);
+  const core = Layer.provideMerge(ServerRuntimeServices, withSecrets);
+  const coreWithProbe = Layer.mergeAll(core, NodeServerProbe);
 
-/** Production Node app composition. This is the single injection point for the server. */
-export const makeNodeXmuxServerApp = (options: ParsedServerOptions) =>
-  XmuxServerApp.make({ options, providers: nodeProviders });
-
-export const makeNodeXmuxServerLayer = (options: ParsedServerOptions) =>
-  makeNodeXmuxServerApp(options).layer;
-
-const serverConfig = Layer.provide(
-  ServerConfigLive,
-  Layer.mergeAll(nodePlatform, SecretResolverLive),
-);
-const logReader = Layer.provide(LogReaderLive, nodePlatform);
-
-/** Compatibility/testing bundle for server tests that inject custom paths or bindings. */
-export const nodeServerServices = Layer.mergeAll(
-  StatusRegistryLive,
-  ShutdownCoordinatorLive,
-  serverConfig,
-  logReader,
-  ServerProbeNodeLive,
-);
-
-export { nodeBinding };
+  return Layer.provideMerge(NodeUnixSocketControlTransport, coreWithProbe);
+};

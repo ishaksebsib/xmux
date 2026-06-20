@@ -17,8 +17,8 @@ export class ShutdownCoordinator extends Context.Service<
   }
 >()("@xmux/server/ShutdownCoordinator") {}
 
-/** Live coordinator is one deferred signal plus a ref for idempotent requests. */
-export const ShutdownCoordinatorLive = Layer.effect(ShutdownCoordinator)(
+/** Coordinator layer is one deferred signal plus a ref for idempotent requests. */
+export const ShutdownCoordinatorLayer = Layer.effect(ShutdownCoordinator)(
   Effect.gen(function* () {
     const requested = yield* Ref.make(false);
     const signal = yield* Deferred.make<void>();

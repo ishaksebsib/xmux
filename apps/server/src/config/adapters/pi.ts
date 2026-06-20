@@ -1,9 +1,5 @@
 import { Schema } from "effect";
-import {
-  HarnessModelRefConfig,
-  HarnessThinkingLevel,
-  PiNoToolsMode,
-} from "../../contracts/config";
+import { HarnessModelRefConfig, HarnessThinkingLevel, PiNoToolsMode } from "../../contracts/config";
 
 export class EffectivePiDisabled extends Schema.TaggedClass<EffectivePiDisabled>()("PiDisabled", {
   enabled: Schema.Literal(false),

@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ServerConfig } from "../../../config/service";
 import { API_VERSION } from "../../../contracts/constants";
 import { serverApi } from "../../api";
-import { jsonError } from "../../shared/errors";
+import { apiError } from "../../shared/errors";
 import { ConfigValidateResponse, EffectiveConfigResponse } from "./schemas";
 
 export const effective = Effect.fn("api.config.effective")(function* () {
@@ -12,11 +12,13 @@ export const effective = Effect.fn("api.config.effective")(function* () {
   return yield* config.getRedacted.pipe(
     Effect.matchEffect({
       onFailure: (error) =>
-        jsonError({
-          status: 500,
-          code: "config_unavailable",
-          message: error.message,
-        }).pipe(Effect.orDie),
+        Effect.fail(
+          apiError({
+            status: 500,
+            code: "config_unavailable",
+            message: error.message,
+          }),
+        ),
       onSuccess: (snapshot) =>
         Effect.succeed(
           EffectiveConfigResponse.make({

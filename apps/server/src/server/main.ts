@@ -10,7 +10,7 @@ import { acquireManifestOwnership } from "../runtime-state/manifest";
 import { ensureRuntimeDirectories } from "../runtime-state/paths";
 import { RuntimePaths } from "../runtime-state/runtime-paths-service";
 import { withStartupLock } from "../runtime-state/startup-lock";
-import { ServerBinding } from "./binding";
+import { ControlTransport } from "./control-transport";
 
 /** Main server workflow owns startup ordering while services come from context. */
 export const serverMain = Effect.fn("server.main")(function* () {
@@ -19,7 +19,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
   const config = yield* ServerConfig;
   const status = yield* StatusRegistry;
   const shutdown = yield* ShutdownCoordinator;
-  const binding = yield* ServerBinding;
+  const transport = yield* ControlTransport;
 
   yield* ensureRuntimeDirectories(paths);
   const effectiveConfig = yield* config.loadCurrent(paths.configPath);
@@ -33,7 +33,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
         { startupLockPath: paths.startupLockPath },
         Effect.gen(function* () {
           yield* assertNoActiveServer(paths);
-          yield* binding.bind;
+          yield* transport.bind;
           yield* acquireManifestOwnership({
             paths,
             startedAt: identity.startedAt,

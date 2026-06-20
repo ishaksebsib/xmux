@@ -9,7 +9,7 @@ export class RuntimePaths extends Context.Service<RuntimePaths, ServerRuntimePat
 ) {}
 
 /** Resolve paths from normalized server options at the application boundary. */
-export const RuntimePathsLive = Layer.effect(RuntimePaths)(
+export const RuntimePathsLayer = Layer.effect(RuntimePaths)(
   Effect.gen(function* () {
     const options = yield* ServerOptions;
     return yield* resolveRuntimePaths(options);

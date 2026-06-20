@@ -1,8 +1,8 @@
 import { Effect } from "effect";
 import { ActiveServerError } from "../errors";
+import { HostRuntime } from "../runtime/host";
 import { readServerManifest, removeServerManifest } from "./manifest";
 import type { ServerRuntimePaths } from "./paths";
-import { isPidAlive } from "./pid";
 import { ServerProbe } from "./server-probe";
 
 /** Active server details come from manifest plus a reachable control endpoint. */
@@ -23,13 +23,14 @@ export const findActiveServer = Effect.fn("server.findActiveServer")(function* (
   if (manifest.scopeId !== paths.scopeId) return null;
 
   const probe = yield* ServerProbe;
+  const host = yield* HostRuntime;
   const endpointReachable = yield* probe.isAlive(manifest.endpoint);
   if (endpointReachable) {
     return {
       manifestPath: paths.manifestPath,
       endpointPath: manifest.endpoint.path,
       pid: manifest.pid,
-      pidAlive: isPidAlive(manifest.pid),
+      pidAlive: yield* host.isPidAlive(manifest.pid),
       sessionId: manifest.sessionId,
     };
   }
@@ -38,7 +39,7 @@ export const findActiveServer = Effect.fn("server.findActiveServer")(function* (
     manifestPath: paths.manifestPath,
     endpointPath: manifest.endpoint.path,
     pid: manifest.pid,
-    pidAlive: isPidAlive(manifest.pid),
+    pidAlive: yield* host.isPidAlive(manifest.pid),
   });
   yield* removeServerManifest(paths.manifestPath);
   return null;

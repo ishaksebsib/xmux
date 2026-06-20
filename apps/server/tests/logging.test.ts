@@ -9,8 +9,10 @@ import {
 } from "../src/logging/file-logger";
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
+import type { HostRuntime } from "../src/runtime/host";
+import { NodeHostRuntime } from "../src/platform/node";
 
-const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeLogEntry = Schema.decodeUnknownOption(LogEntry);
 
@@ -19,7 +21,7 @@ const withTempLogDir = <A, E, R>(
     readonly root: string;
     readonly logDir: string;
     readonly paths: ReturnType<typeof resolveServerLogFilePaths>;
-  }) => Effect.Effect<A, E, R | FileSystem.FileSystem | Path.Path>,
+  }) => Effect.Effect<A, E, R | FileSystem.FileSystem | Path.Path | HostRuntime>,
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;

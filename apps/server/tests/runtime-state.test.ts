@@ -24,10 +24,10 @@ import {
   resolveRuntimePaths,
   type ServerRuntimePaths,
 } from "../src/runtime-state/paths";
-import { isPidAlive } from "../src/runtime-state/pid";
 import { acquireStartupLock, releaseStartupLock } from "../src/runtime-state/startup-lock";
+import { NodeHostRuntime, isPidAlive } from "../src/platform/node";
 
-const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer);
+const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
 const ServerProbeUnreachable = Layer.succeed(ServerProbe)({
   isAlive: () => Effect.succeed(false),
 });
@@ -99,7 +99,7 @@ const makeRuntimePaths = (
 };
 
 describe("runtime paths", () => {
-  layer(NodePath.layer)((it) => {
+  layer(Layer.mergeAll(NodePath.layer, NodeHostRuntime))((it) => {
     it.effect("resolves stable path-safe scope ids", () =>
       Effect.gen(function* () {
         const paths = yield* resolveRuntimePaths(
@@ -134,6 +134,8 @@ describe("manifest state", () => {
           paths,
           startedAt: fixedStartedAt,
           sessionId: fixedSessionId,
+          pid: process.pid,
+          executablePath: process.execPath,
         });
         yield* writeServerManifest(paths.manifestPath, manifest);
         const read = yield* readServerManifest(paths.manifestPath);

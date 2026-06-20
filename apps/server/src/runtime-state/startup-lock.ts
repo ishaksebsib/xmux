@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
 import { StartupLockError } from "../errors";
-import { isPidAlive } from "./pid";
+import { HostRuntime } from "../runtime/host";
 
 class StartupLockPayload extends Schema.Class<StartupLockPayload>("StartupLockPayload")({
   pid: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)),
@@ -108,10 +107,11 @@ const acquireLockFile = Effect.fn("server.acquireStartupLockFile")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
+  const host = yield* HostRuntime;
   const startedAtMs = yield* Clock.currentTimeMillis;
-  const nonce = randomUUID();
+  const nonce = yield* host.randomUuid;
   const payload = StartupLockPayload.make({
-    pid: process.pid,
+    pid: host.pid,
     startedAt: new Date(startedAtMs).toISOString(),
     nonce,
   });
@@ -129,14 +129,14 @@ const acquireLockFile = Effect.fn("server.acquireStartupLockFile")(function* (
   );
 
   if (yield* writeLockFile({ startupLockPath: options.startupLockPath, payload })) {
-    return { path: options.startupLockPath, pid: process.pid, nonce };
+    return { path: options.startupLockPath, pid: host.pid, nonce };
   }
 
   const existing = yield* readStartupLockPayload(options.startupLockPath, "acquire");
-  if (existing !== null && !isPidAlive(existing.pid)) {
+  if (existing !== null && !(yield* host.isPidAlive(existing.pid))) {
     yield* removeLockFile(options.startupLockPath, "acquire");
     if (yield* writeLockFile({ startupLockPath: options.startupLockPath, payload })) {
-      return { path: options.startupLockPath, pid: process.pid, nonce };
+      return { path: options.startupLockPath, pid: host.pid, nonce };
     }
   }
 
@@ -176,5 +176,5 @@ export const acquireStartupLock = Effect.fn("server.acquireStartupLock")(functio
 export const withStartupLock = <A, E, R>(
   options: AcquireStartupLockOptions,
   use: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | StartupLockError, R | FileSystem.FileSystem | Path.Path> =>
+): Effect.Effect<A, E | StartupLockError, R | FileSystem.FileSystem | Path.Path | HostRuntime> =>
   Effect.acquireUseRelease(acquireLockFile(options), () => use, releaseStartupLockLogged);

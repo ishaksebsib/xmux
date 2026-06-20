@@ -1,5 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { Clock, Context, Effect, Layer } from "effect";
+import { HostRuntime } from "./host";
 
 /** Stable identity for one server process lifetime. */
 export class ServerIdentity extends Context.Service<
@@ -11,14 +11,16 @@ export class ServerIdentity extends Context.Service<
   }
 >()("@xmux/server/ServerIdentity") {}
 
-/** Live identity captures process metadata once at server startup. */
-export const ServerIdentityLive = Layer.effect(ServerIdentity)(
+/** Identity layer captures process metadata once at server startup. */
+export const ServerIdentityLayer = Layer.effect(ServerIdentity)(
   Effect.gen(function* () {
     const startedAtMs = yield* Clock.currentTimeMillis;
+    const host = yield* HostRuntime;
+    const sessionId = yield* host.randomUuid;
     return {
-      pid: process.pid,
+      pid: host.pid,
       startedAt: new Date(startedAtMs),
-      sessionId: randomUUID(),
+      sessionId,
     };
   }),
 );

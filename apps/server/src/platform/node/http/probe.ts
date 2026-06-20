@@ -1,10 +1,11 @@
 import { request as httpRequest } from "node:http";
 import { Effect, Layer, Schema } from "effect";
-import { HealthResponse } from "../api/groups/system/schemas";
-import type { ServerControlEndpoint } from "./paths";
-import { ServerProbe } from "./server-probe";
+import { HealthResponse } from "../../../api/groups/system/schemas";
+import type { ServerControlEndpoint } from "../../../runtime-state/paths";
+import { ServerProbe } from "../../../runtime-state/server-probe";
 
 const HEALTH_CHECK_TIMEOUT_MS = 250;
+
 class ServerProbeRequestError extends Schema.TaggedErrorClass<ServerProbeRequestError>()(
   "ServerProbeRequestError",
   {
@@ -23,13 +24,12 @@ const decodeHealthBody = (
 ): Effect.Effect<HealthResponse, ServerProbeRequestError> =>
   decodeUnknownJson(body).pipe(
     Effect.flatMap(decodeHealthResponse),
-    Effect.mapError(
-      (cause) =>
-        new ServerProbeRequestError({
-          socketPath,
-          message: "Failed to decode health response.",
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      ServerProbeRequestError.make({
+        socketPath,
+        message: "Failed to decode health response.",
+        cause,
+      }),
     ),
   );
 
@@ -62,7 +62,7 @@ const requestHealth = (
           if (statusCode !== 200) {
             resumeOnce(
               Effect.fail(
-                new ServerProbeRequestError({
+                ServerProbeRequestError.make({
                   socketPath,
                   message: `Health check failed with status ${statusCode}.`,
                 }),
@@ -77,7 +77,7 @@ const requestHealth = (
     const onError = (cause: Error): void => {
       resumeOnce(
         Effect.fail(
-          new ServerProbeRequestError({
+          ServerProbeRequestError.make({
             socketPath,
             message: "Health check request failed.",
             cause,
@@ -89,7 +89,7 @@ const requestHealth = (
       request.destroy();
       resumeOnce(
         Effect.fail(
-          new ServerProbeRequestError({
+          ServerProbeRequestError.make({
             socketPath,
             message: "Timed out reaching server socket.",
           }),
@@ -119,6 +119,6 @@ const isAlive = (endpoint: ServerControlEndpoint): Effect.Effect<boolean> =>
     }),
   );
 
-export const ServerProbeNodeLive = Layer.succeed(ServerProbe)({
+export const NodeServerProbe = Layer.succeed(ServerProbe)({
   isAlive,
 });

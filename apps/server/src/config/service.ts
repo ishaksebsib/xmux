@@ -1,4 +1,3 @@
-import { homedir } from "node:os";
 import { Context, Effect, FileSystem, Layer, Path, Ref } from "effect";
 import {
   ConfigValidationIssue,
@@ -14,6 +13,7 @@ import {
   type ServerFileServerConfig,
 } from "../contracts/config";
 import { ConfigValidationError, type ConfigError } from "../errors";
+import { HostRuntime } from "../runtime/host";
 import { loadServerConfigFile } from "./load-jsonc";
 import { redactServerConfig } from "./redact";
 import { resolveSecretRef, SecretResolver } from "./resolve-secrets";
@@ -42,20 +42,21 @@ interface LoadedConfig {
   readonly effective: EffectiveServerConfig;
 }
 
-const defaultUserName = (): string => process.env.USER ?? process.env.USERNAME ?? "xmux";
+const DEFAULT_USER_NAME = "xmux";
 
-const expandHome = (pathService: Path.Path, input: string): string => {
-  if (input === "~") return homedir();
-  if (input.startsWith("~/")) return pathService.join(homedir(), input.slice(2));
+const expandHome = (pathService: Path.Path, homeDir: string, input: string): string => {
+  if (input === "~") return homeDir;
+  if (input.startsWith("~/")) return pathService.join(homeDir, input.slice(2));
   return input;
 };
 
 const resolveConfigRelativePath = (
   pathService: Path.Path,
+  homeDir: string,
   configPath: string,
   input: string,
 ): string => {
-  const expanded = expandHome(pathService, input);
+  const expanded = expandHome(pathService, homeDir, input);
   if (pathService.isAbsolute(expanded)) return pathService.resolve(expanded);
   return pathService.resolve(pathService.dirname(configPath), expanded);
 };
@@ -211,17 +212,28 @@ const normalizeOpenCode = Effect.fn("server.normalizeOpenCodeConfig")(function* 
 
 const normalizePi = (input: {
   readonly pathService: Path.Path;
+  readonly homeDir: string;
   readonly configPath: string;
   readonly config: PiFileConfig | undefined;
 }): EffectivePiConfig => {
   const agentDir =
     input.config?.agentDir === undefined
       ? undefined
-      : resolveConfigRelativePath(input.pathService, input.configPath, input.config.agentDir);
+      : resolveConfigRelativePath(
+          input.pathService,
+          input.homeDir,
+          input.configPath,
+          input.config.agentDir,
+        );
   const sessionDir =
     input.config?.sessionDir === undefined
       ? undefined
-      : resolveConfigRelativePath(input.pathService, input.configPath, input.config.sessionDir);
+      : resolveConfigRelativePath(
+          input.pathService,
+          input.homeDir,
+          input.configPath,
+          input.config.sessionDir,
+        );
   const defaultModel = input.config?.defaultModel;
   const defaultThinking = input.config?.defaultThinking;
   const tools = input.config?.tools;
@@ -247,11 +259,13 @@ const normalizePi = (input: {
 export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveServerConfig")(
   function* (input: { readonly configPath: string; readonly fileConfig: ServerFileConfig | null }) {
     const pathService = yield* Path.Path;
+    const host = yield* HostRuntime;
     const config = input.fileConfig ?? ServerFileConfig.make({});
     const defaultWorkingDirectory = resolveConfigRelativePath(
       pathService,
+      host.homeDir,
       input.configPath,
-      config.defaultWorkingDirectory ?? homedir(),
+      config.defaultWorkingDirectory ?? host.homeDir,
     );
     const telegram = yield* normalizeTelegram({
       configPath: input.configPath,
@@ -269,7 +283,7 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
     const middleware = config.middleware;
 
     return EffectiveServerConfig.make({
-      userName: config.userName ?? defaultUserName(),
+      userName: config.userName ?? DEFAULT_USER_NAME,
       defaultWorkingDirectory,
       deliveryMode: config.deliveryMode ?? "requester_only",
       server: normalizeServerSettings(config.server),
@@ -278,6 +292,7 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
         opencode,
         pi: normalizePi({
           pathService,
+          homeDir: host.homeDir,
           configPath: input.configPath,
           config: config.harnesses?.pi,
         }),
@@ -336,11 +351,12 @@ export class ServerConfig extends Context.Service<
   }
 >()("@xmux/server/ServerConfig") {}
 
-/** Live config service captures platform dependencies once and exposes a testable API. */
-export const ServerConfigLive = Layer.effect(ServerConfig)(
+/** Config layer captures platform dependencies once and exposes a testable API. */
+export const ServerConfigLayer = Layer.effect(ServerConfig)(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
+    const host = yield* HostRuntime;
     const secretResolver = yield* SecretResolver;
     const current = yield* Ref.make<LoadedConfig | null>(null);
 
@@ -349,6 +365,7 @@ export const ServerConfigLive = Layer.effect(ServerConfig)(
         Effect.tap((effective) => Ref.set(current, { configPath, effective })),
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, pathService),
+        Effect.provideService(HostRuntime, host),
         Effect.provideService(SecretResolver, secretResolver),
       );
 
@@ -393,6 +410,7 @@ export const ServerConfigLive = Layer.effect(ServerConfig)(
         ),
         Effect.provideService(FileSystem.FileSystem, fs),
         Effect.provideService(Path.Path, pathService),
+        Effect.provideService(HostRuntime, host),
         Effect.provideService(SecretResolver, secretResolver),
       ),
     };

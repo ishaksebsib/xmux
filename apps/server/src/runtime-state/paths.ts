@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import { Effect, FileSystem, Path } from "effect";
 import {
   APP_DIR_NAME,
@@ -19,6 +18,7 @@ import {
 } from "../contracts/constants";
 import { RuntimePathError } from "../errors";
 import type { NormalizedServerOptions } from "../options";
+import { HostRuntime } from "../runtime/host";
 
 declare const resolvedPathBrand: unique symbol;
 
@@ -70,12 +70,14 @@ export const createScopeId = (input: {
 const defaultLayout = (
   pathService: Path.Path,
   home: string,
+  platform: string,
+  getEnv: (name: string) => string | undefined,
 ): {
   readonly configPath: ResolvedPath;
   readonly stateDir: ResolvedPath;
   readonly logDir: ResolvedPath;
 } => {
-  if (process.platform === "darwin") {
+  if (platform === "darwin") {
     const appSupportDir = pathService.join(home, "Library", "Application Support", APP_DIR_NAME);
     return {
       configPath: asResolvedPath(pathService.join(appSupportDir, DEFAULT_CONFIG_FILE_NAME)),
@@ -84,8 +86,8 @@ const defaultLayout = (
     };
   }
 
-  const configHome = process.env[XDG_CONFIG_HOME_ENV] ?? pathService.join(home, ".config");
-  const stateHome = process.env[XDG_STATE_HOME_ENV] ?? pathService.join(home, ".local", "state");
+  const configHome = getEnv(XDG_CONFIG_HOME_ENV) ?? pathService.join(home, ".config");
+  const stateHome = getEnv(XDG_STATE_HOME_ENV) ?? pathService.join(home, ".local", "state");
 
   return {
     configPath: asResolvedPath(
@@ -101,10 +103,11 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   options: NormalizedServerOptions,
 ) {
   const pathService = yield* Path.Path;
-  const home = homedir();
-  const defaults = defaultLayout(pathService, home);
+  const host = yield* HostRuntime;
+  const home = host.homeDir;
+  const defaults = defaultLayout(pathService, home, host.platform, host.getEnv);
 
-  if (process.platform === "win32") {
+  if (host.platform === "win32") {
     return yield* RuntimePathError.make({
       message: "Windows control endpoints are not implemented yet.",
     });
@@ -115,9 +118,9 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   const logDir = asResolvedPath(pathService.resolve(defaults.logDir));
   const runtimeDir = asResolvedPath(
     pathService.resolve(
-      process.env[XDG_RUNTIME_DIR_ENV] === undefined
+      host.getEnv(XDG_RUNTIME_DIR_ENV) === undefined
         ? pathService.join(stateDir, RUNTIME_DIR_NAME)
-        : pathService.join(process.env[XDG_RUNTIME_DIR_ENV], APP_DIR_NAME),
+        : pathService.join(host.getEnv(XDG_RUNTIME_DIR_ENV) ?? stateDir, APP_DIR_NAME),
     ),
   );
   const dbPath = asResolvedPath(pathService.join(stateDir, DEFAULT_DB_FILE_NAME));
@@ -157,7 +160,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
 
 const makeDirectory = (
   directory: string,
-): Effect.Effect<void, RuntimePathError, FileSystem.FileSystem> =>
+): Effect.Effect<void, RuntimePathError, FileSystem.FileSystem | HostRuntime> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 }).pipe(
@@ -169,7 +172,8 @@ const makeDirectory = (
         }),
       ),
     );
-    if (process.platform === "win32") return;
+    const host = yield* HostRuntime;
+    if (host.platform === "win32") return;
     yield* fs.chmod(directory, 0o700).pipe(
       Effect.mapError((cause) =>
         RuntimePathError.make({

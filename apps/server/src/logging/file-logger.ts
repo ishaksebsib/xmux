@@ -2,6 +2,7 @@ import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "e
 import type { ServerLogLevel } from "../contracts/config";
 import { LogEntry, type LogLevel as EntryLogLevel } from "./schema";
 import { LogFileError } from "../errors";
+import { HostRuntime, type HostRuntimeService } from "../runtime/host";
 import { redactRecord, redactString, redactUnknown } from "./redaction";
 
 export const SERVER_LOG_FILE_NAME = "server.log";
@@ -156,9 +157,12 @@ const mapLogFileError = (
     cause,
   });
 
-const ensureLogFile = (path: string): Effect.Effect<void, LogFileError, FileSystem.FileSystem> =>
+const ensureLogFile = (
+  path: string,
+): Effect.Effect<void, LogFileError, FileSystem.FileSystem | HostRuntime> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
+    const host = yield* HostRuntime;
     yield* fs
       .writeFileString(path, "", { flag: "a", mode: 0o600 })
       .pipe(
@@ -166,7 +170,7 @@ const ensureLogFile = (path: string): Effect.Effect<void, LogFileError, FileSyst
           mapLogFileError("setup", path, `Failed to set up log file: ${path}`, cause),
         ),
       );
-    if (process.platform === "win32") return;
+    if (host.platform === "win32") return;
     yield* fs
       .chmod(path, 0o600)
       .pipe(
@@ -269,6 +273,7 @@ const appendLogLine = (
 };
 
 const appendLogLines = (
+  host: HostRuntimeService,
   fs: FileSystem.FileSystem,
   path: string,
   lines: readonly string[],
@@ -279,14 +284,13 @@ const appendLogLines = (
     discard: true,
   }).pipe(
     Effect.catch((error) =>
-      Effect.sync(() => {
-        process.emitWarning(`xmux failed to write log file ${path}: ${String(error)}`);
-      }),
+      host.emitWarning(`xmux failed to write log file ${path}: ${String(error)}`),
     ),
   );
 };
 
 const writeBatch = (
+  host: HostRuntimeService,
   fs: FileSystem.FileSystem,
   paths: ServerLogFilePaths,
   rotation: NormalizedLogRotationOptions,
@@ -295,8 +299,8 @@ const writeBatch = (
   const mainLines = entries.map((entry) => entry.line);
   const errorLines = entries.filter((entry) => entry.level === "error").map((entry) => entry.line);
 
-  return appendLogLines(fs, paths.mainLogPath, mainLines, rotation).pipe(
-    Effect.andThen(appendLogLines(fs, paths.errorLogPath, errorLines, rotation)),
+  return appendLogLines(host, fs, paths.mainLogPath, mainLines, rotation).pipe(
+    Effect.andThen(appendLogLines(host, fs, paths.errorLogPath, errorLines, rotation)),
   );
 };
 
@@ -306,6 +310,7 @@ export const makeFileLogger = Effect.fn("server.makeFileLogger")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
+  const host = yield* HostRuntime;
   const paths = resolveServerLogFilePaths(pathService, input.logDir);
   const rotation = yield* parseRotation(input, input.logDir);
 
@@ -314,7 +319,7 @@ export const makeFileLogger = Effect.fn("server.makeFileLogger")(function* (
 
   return yield* Logger.batched(encodeLogEntry, {
     window: LOG_BATCH_WINDOW,
-    flush: (entries) => writeBatch(fs, paths, rotation, entries),
+    flush: (entries) => writeBatch(host, fs, paths, rotation, entries),
   });
 });
 
@@ -322,7 +327,11 @@ export const makeFileLogger = Effect.fn("server.makeFileLogger")(function* (
 export const withFileLogger = <A, E, R>(
   input: FileLoggerOptions,
   use: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | LogFileError, R | FileSystem.FileSystem | Path.Path | Scope.Scope> =>
+): Effect.Effect<
+  A,
+  E | LogFileError,
+  R | FileSystem.FileSystem | Path.Path | HostRuntime | Scope.Scope
+> =>
   Effect.gen(function* () {
     const logger = yield* makeFileLogger(input);
     return yield* use.pipe(

@@ -6,6 +6,7 @@ import {
 } from "../contracts/constants";
 import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../contracts/manifest";
 import { ManifestError } from "../errors";
+import { HostRuntime } from "../runtime/host";
 import type { ServerRuntimePaths } from "./paths";
 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
@@ -20,6 +21,15 @@ export interface ManifestOwnership {
 
 /** Manifest creation input is explicit to keep process metadata at the shell edge. */
 export interface CreateManifestInput {
+  readonly paths: ServerRuntimePaths;
+  readonly startedAt: Date;
+  readonly sessionId: string;
+  readonly pid: number;
+  readonly executablePath: string;
+  readonly owner?: ServerOwnerMetadata;
+}
+
+export interface AcquireManifestOwnershipInput {
   readonly paths: ServerRuntimePaths;
   readonly startedAt: Date;
   readonly sessionId: string;
@@ -44,7 +54,7 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
   ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
     protocolVersion: API_VERSION,
-    pid: process.pid,
+    pid: input.pid,
     sessionId: input.sessionId,
     startedAt: input.startedAt.toISOString(),
     configPath: input.paths.configPath,
@@ -59,7 +69,7 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
       ServerOwnerMetadata.make({
         client: "server",
         version: SERVER_PACKAGE_VERSION,
-        executablePath: process.argv[1] ?? process.execPath,
+        executablePath: input.executablePath,
       }),
   });
 
@@ -165,16 +175,21 @@ export const removeServerManifestIfOwnedBy = (input: {
 
 /** Acquire manifest ownership as a scoped resource to guarantee cleanup. */
 export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnership")(function* (
-  input: CreateManifestInput,
+  input: AcquireManifestOwnershipInput,
 ) {
-  const manifest = createServerManifest(input);
+  const host = yield* HostRuntime;
+  const manifest = createServerManifest({
+    ...input,
+    pid: host.pid,
+    executablePath: host.executablePath,
+  });
 
   return yield* Effect.acquireRelease(
     writeServerManifest(input.paths.manifestPath, manifest).pipe(
       Effect.map(
         (): ManifestOwnership => ({
           path: input.paths.manifestPath,
-          pid: process.pid,
+          pid: host.pid,
           sessionId: input.sessionId,
         }),
       ),

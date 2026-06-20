@@ -11,6 +11,7 @@ alias c := check
 check:
 	pnpm run fmt:check
 	pnpm run lint
+	pnpm run lint:effect
 	pnpm run typecheck
 
 alias t := test

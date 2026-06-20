@@ -12,16 +12,24 @@ import { StatusResponse } from "../src/api/groups/status/schemas";
 import { HealthResponse } from "../src/api/groups/system/schemas";
 import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
 import { status as statusRoute } from "../src/api/groups/status/handlers";
+import { makeSecretResolverLayer } from "../src/config/resolve-secrets";
+import { ServerConfigLayer } from "../src/config/service";
+import { LogReaderLayer } from "../src/logging/log-reader";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
 import { ServerIdentity } from "../src/runtime/server-identity";
-import { ShutdownCoordinator, ShutdownCoordinatorLive } from "../src/runtime/shutdown-coordinator";
-import { StatusRegistry, StatusRegistryLive } from "../src/runtime/status-registry";
+import { ShutdownCoordinator, ShutdownCoordinatorLayer } from "../src/runtime/shutdown-coordinator";
+import { StatusRegistry, StatusRegistryLayer } from "../src/runtime/status-registry";
 import { unixSocketFetch } from "../src/api/client";
-import { nodeBinding } from "../src/platform/node";
-import { nodeServerServices, serverMain } from "../src/server";
+import {
+  NodeHostRuntime,
+  NodeServerProbe,
+  NodeUnixSocketControlTransport,
+} from "../src/platform/node";
+import { serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
+const SecretLayer = makeSecretResolverLayer(new Map());
 
 interface HttpTestResponse {
   readonly statusCode: number;
@@ -185,19 +193,26 @@ const makePaths = (
   scopeId: "testscope",
 });
 
-const makeServerTestLayer = (paths: ServerRuntimePaths) =>
-  Layer.mergeAll(
+const makeServerTestLayer = (paths: ServerRuntimePaths) => {
+  const base = Layer.mergeAll(
+    NodeHostRuntime,
     NodeFileSystem.layer,
     NodePath.layer,
+    SecretLayer,
+    NodeServerProbe,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
       pid: process.pid,
       startedAt: fixedStartedAt,
       sessionId: "control-test",
     }),
-    nodeServerServices,
-    nodeBinding,
   );
+  const withConfig = Layer.provideMerge(ServerConfigLayer, base);
+  const withLogReader = Layer.provideMerge(LogReaderLayer, withConfig);
+  const withRuntime = Layer.mergeAll(withLogReader, StatusRegistryLayer, ShutdownCoordinatorLayer);
+
+  return Layer.provideMerge(NodeUnixSocketControlTransport, withRuntime);
+};
 
 describe("control handlers", () => {
   it.effect("returns schema-valid status and idempotent shutdown responses", () =>
@@ -205,8 +220,8 @@ describe("control handlers", () => {
       const root = yield* makeTempRoot;
       const paths = makePaths(root);
       const handlerLayer = Layer.mergeAll(
-        StatusRegistryLive,
-        ShutdownCoordinatorLive,
+        StatusRegistryLayer,
+        ShutdownCoordinatorLayer,
         Layer.succeed(RuntimePaths)(paths),
         Layer.succeed(ServerIdentity)({
           pid: process.pid,

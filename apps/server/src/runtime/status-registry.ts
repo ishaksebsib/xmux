@@ -10,8 +10,8 @@ export class StatusRegistry extends Context.Service<
   }
 >()("@xmux/server/StatusRegistry") {}
 
-/** Live status starts as `starting`; the shell marks readiness after publish. */
-export const StatusRegistryLive = Layer.effect(StatusRegistry)(
+/** Status layer starts as `starting`; the shell marks readiness after publish. */
+export const StatusRegistryLayer = Layer.effect(StatusRegistry)(
   Effect.gen(function* () {
     const state = yield* Ref.make<ServerStatusState>("starting");
 
