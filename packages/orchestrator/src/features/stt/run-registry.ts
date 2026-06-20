@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { ChatActor, ChatConversationRef, ChatMessageRef } from "@xmux/chat-core";
 import { Result, type Result as ResultType } from "better-result";
 import type { Actor } from "../../ctx";
@@ -9,6 +9,8 @@ import {
   SttRunStateConflictError,
   type SttTranscribeError,
 } from "./errors";
+
+export const DEFAULT_STT_RUN_TTL_MS = 15 * 60 * 1000;
 
 export type SttRunState =
   | "transcribing"
@@ -65,17 +67,25 @@ export interface SttRunRegistry {
     runId: string,
     now: string,
   ): ResultType<SttRun, SttRunNotFoundError | SttRunNotReadyError | SttRunStateConflictError>;
+  markAwaitingSend(
+    runId: string,
+    now: string,
+  ): ResultType<SttRun, SttRunNotFoundError | SttRunStateConflictError>;
   markSent(
     runId: string,
     now: string,
   ): ResultType<SttRun, SttRunNotFoundError | SttRunStateConflictError>;
+  delete(runId: string): boolean;
+  pruneExpired(now: string): number;
 }
 
-export function createSttRunRegistry(): SttRunRegistry {
+export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): SttRunRegistry {
+  const ttlMs = input.ttlMs ?? DEFAULT_STT_RUN_TTL_MS;
   const runs = new Map<string, MutableSttRun>();
 
   return {
     start(input) {
+      pruneExpiredRuns(runs, input.now, ttlMs);
       const runId = createRunId((candidate) => !runs.has(candidate));
       const run = new MutableSttRun({ ...input, runId });
       runs.set(runId, run);
@@ -87,18 +97,21 @@ export function createSttRunRegistry(): SttRunRegistry {
     },
 
     complete(runId, transcript, now) {
+      pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
       return run.complete(transcript, now);
     },
 
     fail(runId, error, now) {
+      pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
       return run.fail(error, now);
     },
 
     cancel(runId, reason, now) {
+      pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
       run.cancel(reason, now);
@@ -106,15 +119,30 @@ export function createSttRunRegistry(): SttRunRegistry {
     },
 
     markSending(runId, now) {
+      pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
       return run.markSending(now);
+    },
+
+    markAwaitingSend(runId, now) {
+      const run = runs.get(runId);
+      if (!run) return Result.err(new SttRunNotFoundError({ runId }));
+      return run.markAwaitingSend(now);
     },
 
     markSent(runId, now) {
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
       return run.markSent(now);
+    },
+
+    delete(runId) {
+      return runs.delete(runId);
+    },
+
+    pruneExpired(now) {
+      return pruneExpiredRuns(runs, now, ttlMs);
     },
   };
 }
@@ -147,6 +175,14 @@ class MutableSttRun {
     this.attachmentId = input.attachmentId;
     this.createdAt = input.now;
     this.updatedAtValue = input.now;
+  }
+
+  get state(): SttRunState {
+    return this.stateValue;
+  }
+
+  get updatedAt(): string {
+    return this.updatedAtValue;
   }
 
   snapshot(): SttRun {
@@ -232,6 +268,22 @@ class MutableSttRun {
     return Result.ok(this.snapshot());
   }
 
+  markAwaitingSend(now: string): ResultType<SttRun, SttRunStateConflictError> {
+    if (this.stateValue !== "sending") {
+      return Result.err(
+        new SttRunStateConflictError({
+          runId: this.runId,
+          state: this.stateValue,
+          message: "Transcription can only be made retryable while sending.",
+        }),
+      );
+    }
+
+    this.stateValue = "awaiting_send";
+    this.updatedAtValue = now;
+    return Result.ok(this.snapshot());
+  }
+
   markSent(now: string): ResultType<SttRun, SttRunStateConflictError> {
     if (this.stateValue !== "sending") {
       return Result.err(
@@ -251,9 +303,32 @@ class MutableSttRun {
 
 function createRunId(isAvailable: (candidate: string) => boolean): string {
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const candidate = Math.random().toString(36).slice(2, 10);
-    if (candidate.length > 0 && isAvailable(candidate)) return candidate;
+    const candidate = randomBytes(6).toString("base64url");
+    if (isAvailable(candidate)) return candidate;
   }
 
-  return randomUUID().replaceAll("-", "").slice(0, 12);
+  return randomBytes(9).toString("base64url");
+}
+
+function pruneExpiredRuns(runs: Map<string, MutableSttRun>, now: string, ttlMs: number): number {
+  const nowMs = Date.parse(now);
+  if (!Number.isFinite(nowMs)) return 0;
+
+  let deleted = 0;
+  for (const [runId, run] of runs) {
+    if (!isPrunableState(run.state)) continue;
+    const updatedAtMs = Date.parse(run.updatedAt);
+    if (!Number.isFinite(updatedAtMs)) continue;
+    if (nowMs - updatedAtMs <= ttlMs) continue;
+    runs.delete(runId);
+    deleted += 1;
+  }
+
+  return deleted;
+}
+
+function isPrunableState(state: SttRunState): boolean {
+  return (
+    state === "awaiting_send" || state === "cancelled" || state === "failed" || state === "sent"
+  );
 }

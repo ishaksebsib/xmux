@@ -72,7 +72,7 @@ describe("STT voice messages", () => {
     const started = await handleSttAudioMessage({ ctx, event, attachment });
 
     expect(started.isOk()).toBe(true);
-    expect(actionMessages[0]?.text).toContain("🎙️ **Transcribing...**");
+    expect(actionMessages[0]?.text).toContain("**Transcribing...**");
     expect(attachment.open).toHaveBeenCalledWith({
       maxBytes: 25 * 1024 * 1024,
       signal: expect.any(AbortSignal),
@@ -80,7 +80,7 @@ describe("STT voice messages", () => {
 
     await eventually(() => actionMessages.length === 2);
 
-    expect(actionMessages[1]?.text).toBe("✅ **Transcription ready**\n\nhello from voice");
+    expect(actionMessages[1]?.text).toBe("**Transcription ready**\n\nhello from voice");
     const runId = firstPayload(actionMessages[1]?.buttons);
 
     const sent = await handleSttAction({
@@ -126,13 +126,152 @@ describe("STT voice messages", () => {
 
     await xmux.shutdown();
   });
+
+  test("route intercepts audio and never passes raw audio to prompt", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ text: "route transcript" }), {
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const { actionMessages, emitMessage, promptInputs, xmux } = await initializeXmux({
+      stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
+    });
+    await bindSession(xmux.ctx.store);
+
+    const attachment = audioAttachment("voice-route");
+    emitMessage(messageEvent({ attachments: [attachment] }));
+
+    await eventually(() => actionMessages.length === 2);
+
+    expect(promptInputs).toHaveLength(0);
+    expect(attachment.open).toHaveBeenCalledOnce();
+    expect(actionMessages[1]?.text).toContain("**Transcription ready**");
+
+    await xmux.shutdown();
+  });
+
+  test("route rejects multiple audio and mixed audio attachments", async () => {
+    const { emitMessage, promptInputs, replies, xmux } = await initializeXmux();
+
+    emitMessage(
+      messageEvent({
+        messageId: "multi-audio",
+        attachments: [audioAttachment("voice-a"), audioAttachment("voice-b")],
+      }),
+    );
+    emitMessage(
+      messageEvent({
+        messageId: "mixed",
+        attachments: [audioAttachment("voice-c"), imageAttachment("image-c")],
+      }),
+    );
+
+    await eventually(() => replies.length === 2);
+
+    expect(promptInputs).toHaveLength(0);
+    expect(replies[0]).toContain("Multiple audio attachments are not supported");
+    expect(replies[1]).toContain("Audio messages mixed with other attachments are not supported");
+
+    await xmux.shutdown();
+  });
+
+  test("provider failure shows a safe failure and deletes the run", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("provider down", { status: 500 })),
+    );
+    const { actionMessages, ctx, replies, xmux } = await initializeXmux({
+      stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
+    });
+    const attachment = audioAttachment("voice-fail");
+    const event = promptMessageEvent({ text: "", attachment, replies });
+
+    const started = await handleSttAudioMessage({ ctx, event, attachment });
+    expect(started.isOk()).toBe(true);
+
+    const runId = firstPayload(actionMessages[0]?.buttons);
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("**Transcription failed**");
+    expect(ctx.app.services.sttRuns.get(runId)).toBeUndefined();
+
+    await xmux.shutdown();
+  });
+
+  test("stale run ids are safe", async () => {
+    const { ctx, replies, updates, xmux } = await initializeXmux({
+      stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
+    });
+
+    const handled = await handleSttAction({
+      ctx,
+      event: sttActionEvent({ value: "send", runId: "missing-run", updates, replies }),
+    });
+
+    expect(handled.isOk()).toBe(true);
+    expect(updates[0]?.text).toContain("This transcription request is no longer available");
+
+    await xmux.shutdown();
+  });
+
+  test("send failure reverts to awaiting_send so the user can retry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ text: "retry transcript" }), {
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const { actionMessages, ctx, promptInputs, replies, updates, xmux } = await initializeXmux({
+      stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
+    });
+    const attachment = audioAttachment("voice-retry");
+    const event = promptMessageEvent({ text: "", attachment });
+
+    const started = await handleSttAudioMessage({ ctx, event, attachment });
+    expect(started.isOk()).toBe(true);
+    await eventually(() => actionMessages.length === 2);
+    const runId = firstPayload(actionMessages[1]?.buttons);
+
+    const firstSend = await handleSttAction({
+      ctx,
+      event: sttActionEvent({ value: "send", runId, updates, replies }),
+    });
+    expect(firstSend.isOk()).toBe(true);
+    expect(ctx.app.services.sttRuns.get(runId)?.state).toBe("awaiting_send");
+
+    await bindSession(xmux.ctx.store);
+    const secondSend = await handleSttAction({
+      ctx,
+      event: sttActionEvent({ value: "send", runId, updates, replies }),
+    });
+
+    expect(secondSend.isOk()).toBe(true);
+    expect(promptInputs).toHaveLength(1);
+    expect(ctx.app.services.sttRuns.get(runId)).toBeUndefined();
+
+    await xmux.shutdown();
+  });
 });
 
-async function initializeXmux(input: { readonly stt?: Config["stt"] } = {}) {
+async function initializeXmux(
+  input: {
+    readonly stt?: Config["stt"];
+    readonly promptError?: unknown;
+    readonly promptEvents?: readonly PiPromptEvent[];
+  } = {},
+) {
   const actionMessages: { readonly text: string; readonly buttons: unknown }[] = [];
   const promptInputs: unknown[] = [];
   const replies: string[] = [];
   const updates: { readonly text: string }[] = [];
+  let emitMessage: ((event: unknown) => void) | undefined;
 
   const xmux = createXmux({
     harnesses: {
@@ -149,12 +288,8 @@ async function initializeXmux(input: { readonly stt?: Config["stt"] } = {}) {
             getSession: async () => Result.err(new Error("not implemented")),
             async prompt(promptInput) {
               promptInputs.push(promptInput);
-              return Result.ok(
-                toAsync<PiPromptEvent>([
-                  { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "ok" },
-                  { type: "run", phase: "completed", ref: sessionRef, reason: "stop" },
-                ]),
-              );
+              if (input.promptError !== undefined) return Result.err(input.promptError);
+              return Result.ok(toAsync<PiPromptEvent>(input.promptEvents ?? defaultPromptEvents()));
             },
             deleteSession: async () => Result.err(new Error("not implemented")),
             abort: async () => Result.err(new Error("not implemented")),
@@ -175,7 +310,10 @@ async function initializeXmux(input: { readonly stt?: Config["stt"] } = {}) {
         async open() {
           return Result.ok({
             id: "telegram",
-            start: async () => Result.ok(),
+            async start(context) {
+              emitMessage = context.emit as (event: unknown) => void;
+              return Result.ok();
+            },
             async sendMessage(message) {
               return Result.ok(sentMessage(message.text));
             },
@@ -209,7 +347,22 @@ async function initializeXmux(input: { readonly stt?: Config["stt"] } = {}) {
     chatId: "telegram",
     actor: { userId: "user-1", displayName: "Ishak" },
   });
-  return { actionMessages, ctx, promptInputs, replies, updates, xmux };
+  return {
+    actionMessages,
+    ctx,
+    emitMessage: emitMessage as (event: unknown) => void,
+    promptInputs,
+    replies,
+    updates,
+    xmux,
+  };
+}
+
+function defaultPromptEvents(): readonly PiPromptEvent[] {
+  return [
+    { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "ok" },
+    { type: "run", phase: "completed", ref: sessionRef, reason: "stop" },
+  ];
 }
 
 async function bindSession(store: Store) {
@@ -261,6 +414,28 @@ function promptMessageEvent(input: {
   };
 }
 
+function messageEvent(input: {
+  readonly text?: string;
+  readonly attachments?: readonly ChatAttachment[];
+  readonly messageId?: string;
+}) {
+  return {
+    type: "message",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: {
+      chatId: "telegram",
+      conversationId: thread.threadId,
+      messageId: input.messageId ?? "message-1",
+      actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+      text: input.text ?? "",
+      format: "plain",
+      attachments: input.attachments ?? [],
+      adapterData: {},
+    },
+  };
+}
+
 function sttActionEvent(input: {
   readonly value: "cancel" | "send";
   readonly runId: string;
@@ -304,6 +479,24 @@ function audioAttachment(attachmentId: string, open?: ChatAttachment["open"]): C
       open ??
         (async () =>
           Result.ok({ chunks: toAsync([bytes]), filename: "voice.ogg", mimeType: "audio/ogg" })),
+    ),
+  };
+}
+
+function imageAttachment(attachmentId: string): ChatAttachment {
+  return {
+    attachmentId,
+    kind: "image",
+    filename: "image.png",
+    mimeType: "image/png",
+    sizeBytes: 1,
+    adapterData: {},
+    open: vi.fn(async () =>
+      Result.ok({
+        chunks: toAsync([new Uint8Array([1])]),
+        filename: "image.png",
+        mimeType: "image/png",
+      }),
     ),
   };
 }

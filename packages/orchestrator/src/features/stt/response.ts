@@ -1,4 +1,6 @@
 import type { ChatTextInput } from "@xmux/chat-core";
+
+const TRANSCRIPT_PREVIEW_MAX_CHARS = 3500;
 import { markdown, markdownText } from "../../components";
 import { sttActionId } from "../../actions";
 import type { ActionMessage } from "../utils";
@@ -21,7 +23,7 @@ export function formatSttDisabledMessage(): ChatTextInput {
 
 export function formatSttStartedAction(runId: string): ActionMessage {
   return {
-    text: ["🎙️ **Transcribing...**", "", "Please wait."].join("\n"),
+    text: ["**Transcribing...**", "", "Please wait."].join("\n"),
     format: "markdown",
     buttons: formatActionButtonRows([
       {
@@ -41,7 +43,9 @@ export function formatSttTranscriptAction(input: {
   readonly transcript: string;
 }): ActionMessage {
   return {
-    text: ["✅ **Transcription ready**", "", markdownText(input.transcript)].join("\n"),
+    text: ["**Transcription ready**", "", markdownText(transcriptPreview(input.transcript))].join(
+      "\n",
+    ),
     format: "markdown",
     buttons: formatActionButtonRows([
       {
@@ -90,4 +94,34 @@ export function formatSttSendUnavailableAction(error: SttSendTranscriptError): A
     format: "markdown",
     buttons: [],
   };
+}
+
+export function formatSttSendRetryAction(input: {
+  readonly runId: string;
+  readonly message: string;
+}): ActionMessage {
+  return {
+    text: ["**Cannot send transcription**", "", markdownText(input.message)].join("\n"),
+    format: "markdown",
+    buttons: formatActionButtonRows([
+      {
+        id: `stt-send-${input.runId}`,
+        label: "Send",
+        actionId: sttActionId,
+        value: "send",
+        payload: input.runId,
+        style: "success",
+      },
+    ]),
+  };
+}
+
+function transcriptPreview(transcript: string): string {
+  if (transcript.length <= TRANSCRIPT_PREVIEW_MAX_CHARS) return transcript;
+
+  return [
+    transcript.slice(0, TRANSCRIPT_PREVIEW_MAX_CHARS).trimEnd(),
+    "",
+    "[Transcript preview truncated. Press Send to use the full transcription.]",
+  ].join("\n");
 }

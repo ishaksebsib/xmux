@@ -10,11 +10,11 @@ import { Result, type Result as ResultType } from "better-result";
 import { sttActionId, type Actions } from "../../actions";
 import type { HandlerContext } from "../../ctx";
 import {
+  normalizeTextInput,
   replyToChatEvent,
   respondToAction,
   toSendActionInput,
   updateActionMessage,
-  type ActionMessage,
 } from "../utils";
 import {
   promptSessionForThread,
@@ -29,6 +29,7 @@ import {
   formatSttDisabledMessage,
   formatSttFailedMessage,
   formatSttNotRunningAction,
+  formatSttSendRetryAction,
   formatSttSendUnavailableAction,
   formatSttSendingAction,
   formatSttSentAction,
@@ -38,7 +39,10 @@ import {
 } from "./response";
 import {
   SttResponseError,
+  SttRunActorMismatchError,
   SttRunNotReadyError,
+  SttUnexpectedTranscriptionError,
+  type SttTranscribeError,
   type SttUnsupportedAudioMessageError,
 } from "./errors";
 import type { SttRun } from "./run-registry";
@@ -88,15 +92,23 @@ export async function handleSttAudioMessage<
     });
   }
 
+  input.ctx.app.services.sttRuns.pruneExpired(input.ctx.app.services.now().toISOString());
+
   const run = startSttRun(input);
   const sent = await input.ctx.app.chat.sendAction(
     toSendActionInput(input, formatSttStartedAction(run.runId)),
   );
   if (sent.isErr()) {
+    input.ctx.app.services.sttRuns.cancel(
+      run.runId,
+      "failed to send transcribing message",
+      input.ctx.app.services.now().toISOString(),
+    );
+    input.ctx.app.services.sttRuns.delete(run.runId);
     return Result.err(new SttResponseError({ operation: "started", cause: sent.error }));
   }
 
-  void completeSttRun({ ...input, runId: run.runId });
+  void completeSttRun({ ...input, runId: run.runId }).catch(() => undefined);
   return Result.ok();
 }
 
@@ -119,6 +131,8 @@ export async function handleSttAction<
 >(
   input: HandleSttActionInput<TAdapters, TChats>,
 ): Promise<ResultType<void, SttResponseError | PromptResponseError>> {
+  input.ctx.app.services.sttRuns.pruneExpired(input.ctx.app.services.now().toISOString());
+
   const acked = await respondToAction({ command: "stt", respond: () => input.event.ack() });
   if (acked.isErr()) {
     return Result.err(new SttResponseError({ operation: "ack", cause: acked.error }));
@@ -141,44 +155,76 @@ async function completeSttRun<
 >(
   input: HandleSttAudioMessageInput<TAdapters, TChats> & { readonly runId: string },
 ): Promise<void> {
-  const current = input.ctx.app.services.sttRuns.get(input.runId);
-  if (!current || current.state !== "transcribing") return;
+  try {
+    const current = input.ctx.app.services.sttRuns.get(input.runId);
+    if (!current || current.state !== "transcribing") return;
 
-  const transcript = await transcribeAudioAttachment({
-    ctx: input.ctx,
-    attachment: input.attachment,
-    signal: current.signal,
-  });
+    const transcript = await transcribeAudioAttachment({
+      ctx: input.ctx,
+      attachment: input.attachment,
+      signal: current.signal,
+    });
 
-  if (transcript.isErr()) {
-    const failed = input.ctx.app.services.sttRuns.fail(
+    if (transcript.isErr()) {
+      await failBackgroundTranscription({ ...input, error: transcript.error });
+      return;
+    }
+
+    const completed = input.ctx.app.services.sttRuns.complete(
       input.runId,
-      transcript.error,
+      transcript.value,
       input.ctx.app.services.now().toISOString(),
     );
-    if (failed.isErr() || failed.value.state === "cancelled") return;
+    if (completed.isErr() || completed.value.state !== "awaiting_send") return;
 
-    await replyToChatEvent({
-      event: input.event,
-      message: formatSttFailedMessage(transcript.error),
-      onError: (cause) => new SttResponseError({ operation: "failed", cause }),
+    const sent = await input.ctx.app.chat.sendAction(
+      toSendActionInput(
+        input,
+        formatSttTranscriptAction({ runId: input.runId, transcript: transcript.value }),
+      ),
+    );
+
+    if (sent.isErr()) {
+      input.ctx.app.services.sttRuns.delete(input.runId);
+      await replyToChatEvent({
+        event: input.event,
+        message: formatSttFailedMessage(new SttUnexpectedTranscriptionError({ cause: sent.error })),
+        onError: (cause) => new SttResponseError({ operation: "transcript_action_failed", cause }),
+      });
+    }
+  } catch (cause) {
+    await failBackgroundTranscription({
+      ...input,
+      error: new SttUnexpectedTranscriptionError({ cause }),
     });
-    return;
   }
+}
 
-  const completed = input.ctx.app.services.sttRuns.complete(
+async function failBackgroundTranscription<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: HandleSttAudioMessageInput<TAdapters, TChats> & {
+    readonly runId: string;
+    readonly error: SttTranscribeError;
+  },
+): Promise<void> {
+  const failed = input.ctx.app.services.sttRuns.fail(
     input.runId,
-    transcript.value,
+    input.error,
     input.ctx.app.services.now().toISOString(),
   );
-  if (completed.isErr() || completed.value.state !== "awaiting_send") return;
+  if (failed.isErr() || failed.value.state === "cancelled") return;
 
-  await input.ctx.app.chat.sendAction(
-    toSendActionInput(
-      input,
-      formatSttTranscriptAction({ runId: input.runId, transcript: transcript.value }),
-    ),
-  );
+  try {
+    await replyToChatEvent({
+      event: input.event,
+      message: formatSttFailedMessage(input.error),
+      onError: (cause) => new SttResponseError({ operation: "failed", cause }),
+    });
+  } finally {
+    input.ctx.app.services.sttRuns.delete(input.runId);
+  }
 }
 
 async function cancelSttRun<
@@ -190,10 +236,24 @@ async function cancelSttRun<
   readonly runId: string;
 }): Promise<ResultType<void, SttResponseError>> {
   const run = input.ctx.app.services.sttRuns.get(input.runId);
+  if (run !== undefined && !isRequesterAction(input.ctx.actor?.userId, run)) {
+    return Result.mapError(
+      await updateActionMessage({
+        command: "stt",
+        event: input.event,
+        message: formatSttSendUnavailableAction(
+          new SttRunActorMismatchError({ runId: input.runId }),
+        ),
+      }),
+      (cause) => new SttResponseError({ operation: "cancel", cause }),
+    );
+  }
+
   const message =
     !run || run.state !== "transcribing" ? formatSttNotRunningAction() : formatSttCancelledAction();
 
-  if (run?.state === "transcribing") {
+  const shouldDelete = run?.state === "transcribing";
+  if (shouldDelete) {
     input.ctx.app.services.sttRuns.cancel(
       input.runId,
       "cancelled by user",
@@ -201,10 +261,12 @@ async function cancelSttRun<
     );
   }
 
-  return Result.mapError(
+  const updated = Result.mapError(
     await updateActionMessage({ command: "stt", event: input.event, message }),
     (cause) => new SttResponseError({ operation: "cancel", cause }),
   );
+  if (shouldDelete) input.ctx.app.services.sttRuns.delete(input.runId);
+  return updated;
 }
 
 async function sendSttTranscript<
@@ -215,6 +277,20 @@ async function sendSttTranscript<
   readonly event: HandleSttActionInput<TAdapters, TChats>["event"];
   readonly runId: string;
 }): Promise<ResultType<void, SttResponseError | PromptResponseError>> {
+  const existingRun = input.ctx.app.services.sttRuns.get(input.runId);
+  if (existingRun !== undefined && !isRequesterAction(input.ctx.actor?.userId, existingRun)) {
+    return Result.mapError(
+      await updateActionMessage({
+        command: "stt",
+        event: input.event,
+        message: formatSttSendUnavailableAction(
+          new SttRunActorMismatchError({ runId: input.runId }),
+        ),
+      }),
+      (cause) => new SttResponseError({ operation: "send_actor_mismatch", cause }),
+    );
+  }
+
   const sending = input.ctx.app.services.sttRuns.markSending(
     input.runId,
     input.ctx.app.services.now().toISOString(),
@@ -233,6 +309,7 @@ async function sendSttTranscript<
 
   const run = sending.value;
   if (run.transcript === undefined) {
+    await revertSending(input.ctx, input.runId);
     return Result.mapError(
       await updateActionMessage({
         command: "stt",
@@ -251,6 +328,7 @@ async function sendSttTranscript<
     message: formatSttSendingAction(),
   });
   if (updated.isErr()) {
+    await revertSending(input.ctx, input.runId);
     return Result.err(new SttResponseError({ operation: "sending", cause: updated.error }));
   }
 
@@ -266,11 +344,15 @@ async function sendSttTranscript<
   });
 
   if (prompted.isErr()) {
+    await revertSending(input.ctx, input.runId);
     return Result.mapError(
       await updateActionMessage({
         command: "stt",
         event: input.event,
-        message: textInputToActionMessage(formatPromptFailure(prompted.error)),
+        message: formatSttSendRetryAction({
+          runId: input.runId,
+          message: normalizeTextInput(formatPromptFailure(prompted.error)).text,
+        }),
       }),
       (cause) => new SttResponseError({ operation: "prompt_failure", cause }),
     );
@@ -287,18 +369,39 @@ async function sendSttTranscript<
   if (streamed.isErr()) {
     prompted.value.cancel(streamed.error);
     prompted.value.release();
+    await revertSending(input.ctx, input.runId);
+    await updateActionMessage({
+      command: "stt",
+      event: input.event,
+      message: formatSttSendRetryAction({ runId: input.runId, message: streamed.error.message }),
+    });
     return streamed;
   }
 
   input.ctx.app.services.sttRuns.markSent(input.runId, input.ctx.app.services.now().toISOString());
-  return Result.mapError(
-    await updateActionMessage({
-      command: "stt",
-      event: input.event,
-      message: formatSttSentAction(),
-    }),
-    (cause) => new SttResponseError({ operation: "sent", cause }),
-  );
+  try {
+    return Result.mapError(
+      await updateActionMessage({
+        command: "stt",
+        event: input.event,
+        message: formatSttSentAction(),
+      }),
+      (cause) => new SttResponseError({ operation: "sent", cause }),
+    );
+  } finally {
+    input.ctx.app.services.sttRuns.delete(input.runId);
+  }
+}
+
+async function revertSending<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(ctx: HandlerContext<TAdapters, TChats>, runId: string): Promise<void> {
+  ctx.app.services.sttRuns.markAwaitingSend(runId, ctx.app.services.now().toISOString());
+}
+
+function isRequesterAction(actorUserId: string | undefined, run: SttRun): boolean {
+  return run.requester === undefined || actorUserId === run.requester.userId;
 }
 
 function promptEventFromRun<
@@ -346,9 +449,4 @@ async function replyWithCollectedStream(input: {
   }
 
   return input.event.reply({ text, format: input.content.format });
-}
-
-function textInputToActionMessage(input: ChatTextInput): ActionMessage {
-  const normalized = typeof input === "string" ? { text: input } : input;
-  return { text: normalized.text, format: normalized.format, buttons: [] };
 }

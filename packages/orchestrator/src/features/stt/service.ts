@@ -10,6 +10,7 @@ import {
   SttAttachmentReadError,
   SttAttachmentTooLargeError,
   SttClientCreateError,
+  SttDisabledError,
   SttTranscriptionError,
   SttUnsupportedAudioMessageError,
   type SttTranscribeError,
@@ -76,7 +77,7 @@ export async function transcribeAudioAttachment<
 }): Promise<ResultType<string, SttTranscribeError>> {
   const config = input.ctx.app.config.stt;
   if (!config.enabled) {
-    throw new Error("transcribeAudioAttachment called while STT is disabled");
+    return Result.err(new SttDisabledError());
   }
 
   const client = createSpeechToTextClient(config.clientConfig);

@@ -29,6 +29,14 @@ export class SttUnsupportedAudioMessageError extends TaggedError(
   }
 }
 
+export class SttDisabledError extends TaggedError("SttDisabledError")<{
+  readonly message: string;
+}>() {
+  constructor() {
+    super({ message: "STT is not enabled." });
+  }
+}
+
 export class SttClientCreateError extends TaggedError("SttClientCreateError")<{
   readonly cause: SpeechToTextCreateClientError;
   readonly message: string;
@@ -69,6 +77,20 @@ export class SttAttachmentTooLargeError extends TaggedError("SttAttachmentTooLar
   }
 }
 
+export class SttUnexpectedTranscriptionError extends TaggedError(
+  "SttUnexpectedTranscriptionError",
+)<{
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly cause: unknown }) {
+    super({
+      cause: args.cause,
+      message: `Unexpected transcription failure: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 export class SttTranscriptionError extends TaggedError("SttTranscriptionError")<{
   readonly cause: SpeechToTextClientError;
   readonly message: string;
@@ -97,6 +119,15 @@ export class SttRunNotReadyError extends TaggedError("SttRunNotReadyError")<{
   }
 }
 
+export class SttRunActorMismatchError extends TaggedError("SttRunActorMismatchError")<{
+  readonly runId: string;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly runId: string }) {
+    super({ ...args, message: "Only the requester can use this transcription action." });
+  }
+}
+
 export class SttRunStateConflictError extends TaggedError("SttRunStateConflictError")<{
   readonly runId: string;
   readonly state: string;
@@ -118,12 +149,15 @@ export class SttResponseError extends TaggedError("SttResponseError")<{
 }
 
 export type SttTranscribeError =
+  | SttDisabledError
   | SttClientCreateError
   | SttAttachmentReadError
   | SttAttachmentTooLargeError
+  | SttUnexpectedTranscriptionError
   | SttTranscriptionError;
 
 export type SttSendTranscriptError =
   | SttRunNotFoundError
   | SttRunNotReadyError
+  | SttRunActorMismatchError
   | SttRunStateConflictError;
