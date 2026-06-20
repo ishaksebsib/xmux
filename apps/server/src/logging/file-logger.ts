@@ -2,7 +2,7 @@ import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "e
 import type { ServerLogLevel } from "../contracts/config";
 import { LogEntry, type LogLevel as EntryLogLevel } from "./schema";
 import { LogFileError } from "../errors";
-import { HostRuntime, type HostRuntimeService } from "../runtime/host";
+import { HostRuntime, type HostRuntimeService } from "../services/host";
 import { redactRecord, redactString, redactUnknown } from "./redaction";
 
 export const SERVER_LOG_FILE_NAME = "server.log";

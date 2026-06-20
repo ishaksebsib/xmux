@@ -6,7 +6,7 @@ import {
 } from "../contracts/constants";
 import { ManifestEndpoint, ServerManifest, ServerOwnerMetadata } from "../contracts/manifest";
 import { ManifestError } from "../errors";
-import { HostRuntime } from "../runtime/host";
+import { HostRuntime } from "../services/host";
 import type { ServerRuntimePaths } from "./paths";
 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);

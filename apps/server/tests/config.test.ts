@@ -13,7 +13,7 @@ import { loadServerConfigFile } from "../src/config/load-jsonc";
 import { redactServerConfig } from "../src/config/redact";
 import { loadEffectiveServerConfig, validateServerConfig } from "../src/config/service";
 import { makeSecretResolverLayer } from "../src/config/resolve-secrets";
-import type { HostRuntime } from "../src/runtime/host";
+import type { HostRuntime } from "../src/services/host";
 import { NodeHostRuntime } from "../src/platform/node";
 
 const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);

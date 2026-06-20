@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
-import { ShutdownCoordinator } from "../../../runtime/shutdown-coordinator";
-import { StatusRegistry } from "../../../runtime/status-registry";
+import { ShutdownCoordinator } from "../../../services/shutdown-coordinator";
+import { StatusRegistry } from "../../../services/status-registry";
 import { serverApi } from "../../api";
 import { ShutdownResponse } from "./schemas";
 

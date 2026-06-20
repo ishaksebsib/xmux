@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { ActiveServerError } from "../errors";
-import { HostRuntime } from "../runtime/host";
+import { HostRuntime } from "../services/host";
 import { readServerManifest, removeServerManifest } from "./manifest";
 import type { ServerRuntimePaths } from "./paths";
 import { ServerProbe } from "./server-probe";

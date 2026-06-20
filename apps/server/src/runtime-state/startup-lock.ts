@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
 import { StartupLockError } from "../errors";
-import { HostRuntime } from "../runtime/host";
+import { HostRuntime } from "../services/host";
 
 class StartupLockPayload extends Schema.Class<StartupLockPayload>("StartupLockPayload")({
   pid: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)),

@@ -3,8 +3,8 @@ import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { API_VERSION } from "../../../contracts/constants";
 import { ManifestEndpoint } from "../../../contracts/manifest";
 import { RuntimePaths } from "../../../runtime-state/runtime-paths-service";
-import { ServerIdentity } from "../../../runtime/server-identity";
-import { StatusRegistry } from "../../../runtime/status-registry";
+import { ServerIdentity } from "../../../services/server-identity";
+import { StatusRegistry } from "../../../services/status-registry";
 import { serverApi } from "../../api";
 import { StatusResponse } from "./schemas";
 

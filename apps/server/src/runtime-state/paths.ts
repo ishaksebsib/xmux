@@ -18,7 +18,7 @@ import {
 } from "../contracts/constants";
 import { RuntimePathError } from "../errors";
 import type { ParsedServerOptions } from "../options";
-import { HostRuntime } from "../runtime/host";
+import { HostRuntime } from "../services/host";
 
 declare const resolvedPathBrand: unique symbol;
 

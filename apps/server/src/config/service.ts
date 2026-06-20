@@ -13,7 +13,7 @@ import {
   type ServerFileServerConfig,
 } from "../contracts/config";
 import { ConfigValidationError, type ConfigError } from "../errors";
-import { HostRuntime } from "../runtime/host";
+import { HostRuntime } from "../services/host";
 import { loadServerConfigFile } from "./load-jsonc";
 import { redactServerConfig } from "./redact";
 import { resolveSecretRef, SecretResolver } from "./resolve-secrets";

@@ -9,7 +9,7 @@ import {
 } from "../src/logging/file-logger";
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
-import type { HostRuntime } from "../src/runtime/host";
+import type { HostRuntime } from "../src/services/host";
 import { NodeHostRuntime } from "../src/platform/node";
 
 const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);

@@ -17,9 +17,9 @@ import { ServerConfigLayer } from "../src/config/service";
 import { LogReaderLayer } from "../src/logging/log-reader";
 import type { ServerRuntimePaths } from "../src/runtime-state/paths";
 import { RuntimePaths } from "../src/runtime-state/runtime-paths-service";
-import { ServerIdentity } from "../src/runtime/server-identity";
-import { ShutdownCoordinator, ShutdownCoordinatorLayer } from "../src/runtime/shutdown-coordinator";
-import { StatusRegistry, StatusRegistryLayer } from "../src/runtime/status-registry";
+import { ServerIdentity } from "../src/services/server-identity";
+import { ShutdownCoordinator, ShutdownCoordinatorLayer } from "../src/services/shutdown-coordinator";
+import { StatusRegistry, StatusRegistryLayer } from "../src/services/status-registry";
 import { unixSocketFetch } from "../src/api/client";
 import {
   NodeHostRuntime,
