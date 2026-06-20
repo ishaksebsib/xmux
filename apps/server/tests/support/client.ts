@@ -1,13 +1,6 @@
 import { request as httpRequest } from "node:http";
-import { Effect, Option, Schema } from "effect";
-import {
-  ConfigValidateResponse,
-  EffectiveConfigResponse,
-} from "../../src/api/groups/config/schemas";
-import { ShutdownResponse } from "../../src/api/groups/lifecycle/schemas";
-import { LogsResponse } from "../../src/api/groups/log/schemas";
-import { StatusResponse } from "../../src/api/groups/status/schemas";
-import { HealthResponse } from "../../src/api/groups/system/schemas";
+import { Effect, Schema } from "effect";
+import { createXmuxClient } from "../../src/platform/node";
 
 export interface TestHttpResponse {
   readonly statusCode: number;
@@ -23,7 +16,8 @@ export class UnixSocketRequestError extends Schema.TaggedErrorClass<UnixSocketRe
   },
 ) {}
 
-export const requestUnix = (input: {
+/** Raw HTTP escape hatch for wire-level assertions that the typed API client intentionally hides. */
+export const requestRawUnixHttp = (input: {
   readonly socketPath: string;
   readonly method: "GET" | "POST" | "DELETE" | "PATCH";
   readonly path: string;
@@ -62,85 +56,50 @@ export const requestUnix = (input: {
     catch: (cause) => new UnixSocketRequestError({ message: "Unix socket request failed", cause }),
   });
 
-const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
-const decodeHealthResponse = Schema.decodeUnknownOption(HealthResponse);
-const decodeStatusResponse = Schema.decodeUnknownOption(StatusResponse);
-const decodeEffectiveConfigResponse = Schema.decodeUnknownOption(EffectiveConfigResponse);
-const decodeConfigValidateResponse = Schema.decodeUnknownOption(ConfigValidateResponse);
-const decodeLogsResponse = Schema.decodeUnknownOption(LogsResponse);
-const decodeShutdownResponse = Schema.decodeUnknownOption(ShutdownResponse);
+export const getHealth = (socketPath: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath });
+      return yield* client.system.health();
+    }),
+  );
 
-const json = (body: string): unknown => {
-  const decoded = decodeJson(body);
-  if (Option.isNone(decoded)) throw new Error(`Expected JSON response: ${body}`);
-  return decoded.value;
-};
+export const getStatus = (socketPath: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath });
+      return yield* client.status.status();
+    }),
+  );
 
-export const decodeHealth = (body: string): HealthResponse => {
-  const decoded = decodeHealthResponse(json(body));
-  if (Option.isNone(decoded)) throw new Error(`Response failed health schema decode: ${body}`);
-  return decoded.value;
-};
-export const decodeStatus = (body: string): StatusResponse => {
-  const decoded = decodeStatusResponse(json(body));
-  if (Option.isNone(decoded)) throw new Error(`Response failed status schema decode: ${body}`);
-  return decoded.value;
-};
-export const decodeEffectiveConfig = (body: string): EffectiveConfigResponse => {
-  const decoded = decodeEffectiveConfigResponse(json(body));
-  if (Option.isNone(decoded)) throw new Error(`Response failed config schema decode: ${body}`);
-  return decoded.value;
-};
-export const decodeConfigValidate = (body: string): ConfigValidateResponse => {
-  const decoded = decodeConfigValidateResponse(json(body));
-  if (Option.isNone(decoded)) throw new Error(`Response failed validate schema decode: ${body}`);
-  return decoded.value;
-};
-export const decodeLogs = (body: string): LogsResponse => {
-  const decoded = decodeLogsResponse(json(body));
-  if (Option.isNone(decoded)) throw new Error(`Response failed logs schema decode: ${body}`);
-  return decoded.value;
-};
-export const decodeShutdown = (body: string): ShutdownResponse => {
-  const decoded = decodeShutdownResponse(json(body));
-  if (Option.isNone(decoded)) throw new Error(`Response failed shutdown schema decode: ${body}`);
-  return decoded.value;
-};
+export const getEffectiveConfig = (socketPath: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath });
+      return yield* client.config.effective();
+    }),
+  );
 
-export const getHealth = (
-  socketPath: string,
-): Effect.Effect<HealthResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: "/healthz" }).pipe(
-    Effect.map((r) => decodeHealth(r.body)),
+export const validateConfig = (socketPath: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath });
+      return yield* client.config.validate();
+    }),
   );
-export const getStatus = (
-  socketPath: string,
-): Effect.Effect<StatusResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: "/v1/status" }).pipe(
-    Effect.map((r) => decodeStatus(r.body)),
+
+export const tailLogs = (socketPath: string, tail = 20) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath });
+      return yield* client.logs.tail({ query: { tail } });
+    }),
   );
-export const getEffectiveConfig = (
-  socketPath: string,
-): Effect.Effect<EffectiveConfigResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: "/v1/config/effective" }).pipe(
-    Effect.map((r) => decodeEffectiveConfig(r.body)),
-  );
-export const validateConfig = (
-  socketPath: string,
-): Effect.Effect<ConfigValidateResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "POST", path: "/v1/config/validate" }).pipe(
-    Effect.map((r) => decodeConfigValidate(r.body)),
-  );
-export const tailLogs = (
-  socketPath: string,
-  tail = 20,
-): Effect.Effect<LogsResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "GET", path: `/v1/logs?tail=${tail}` }).pipe(
-    Effect.map((r) => decodeLogs(r.body)),
-  );
-export const requestShutdown = (
-  socketPath: string,
-): Effect.Effect<ShutdownResponse, UnixSocketRequestError> =>
-  requestUnix({ socketPath, method: "POST", path: "/v1/shutdown" }).pipe(
-    Effect.map((r) => decodeShutdown(r.body)),
+
+export const requestShutdown = (socketPath: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath });
+      return yield* client.lifecycle.shutdown();
+    }),
   );

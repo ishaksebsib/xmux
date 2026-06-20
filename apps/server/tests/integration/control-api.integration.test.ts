@@ -1,12 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { createXmuxClient } from "../../src/platform/node";
 import { assertNoSecret, assertServerPublished } from "../support/assertions";
 import {
   getEffectiveConfig,
   getHealth,
   getStatus,
-  requestUnix,
+  requestRawUnixHttp,
   tailLogs,
   validateConfig,
 } from "../support/client";
@@ -26,7 +25,7 @@ describeIntegration("control API integration", () => {
         assert.isTrue(health.ready);
         const status = yield* getStatus(socketPath);
         assert.strictEqual(status.state, "ready");
-        const configResponse = yield* requestUnix({
+        const configResponse = yield* requestRawUnixHttp({
           socketPath,
           method: "GET",
           path: "/v1/config/effective",
@@ -38,13 +37,13 @@ describeIntegration("control API integration", () => {
         const valid = yield* validateConfig(socketPath);
         assert.isTrue(valid.valid);
         yield* writeConfig(paths.configPath, invalidLogLevelConfig);
-        const invalid = yield* requestUnix({
+        const invalid = yield* requestRawUnixHttp({
           socketPath,
           method: "POST",
           path: "/v1/config/validate",
         });
         assert.strictEqual(invalid.statusCode, 422);
-        const logsResponse = yield* requestUnix({
+        const logsResponse = yield* requestRawUnixHttp({
           socketPath,
           method: "GET",
           path: "/v1/logs?tail=5",
@@ -53,17 +52,14 @@ describeIntegration("control API integration", () => {
         yield* assertNoSecret(logsResponse.body, secret);
         const logs = yield* tailLogs(socketPath, 5);
         assert.isAtMost(logs.entries.length, 5);
-        const missing = yield* requestUnix({ socketPath, method: "GET", path: "/missing" });
+        const missing = yield* requestRawUnixHttp({ socketPath, method: "GET", path: "/missing" });
         assert.strictEqual(missing.statusCode, 404);
-        const wrongMethod = yield* requestUnix({ socketPath, method: "POST", path: "/healthz" });
+        const wrongMethod = yield* requestRawUnixHttp({
+          socketPath,
+          method: "POST",
+          path: "/healthz",
+        });
         assert.isAtLeast(wrongMethod.statusCode, 400);
-        const typedHealth = yield* Effect.scoped(
-          Effect.gen(function* () {
-            const client = yield* createXmuxClient({ socketPath });
-            return yield* client.system.health();
-          }),
-        );
-        assert.isTrue(typedHealth.alive);
       }),
     ),
   );
