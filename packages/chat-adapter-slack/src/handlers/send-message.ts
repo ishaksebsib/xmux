@@ -22,6 +22,7 @@ export async function sendMessage<TChatId extends string>(args: {
     return Result.ok(
       encodeSlackSentMessage({
         chatId: args.chatId,
+        conversationId: args.input.conversationId,
         text: args.input.text,
         format: args.input.format,
         slackMessage,

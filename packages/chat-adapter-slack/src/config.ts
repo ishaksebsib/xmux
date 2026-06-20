@@ -6,6 +6,7 @@ import type {
   SlackActionStore,
   SlackAdapterMode,
   SlackCommandMode,
+  SlackConversationScope,
   SlackMentionCommandOptions,
   SlackStreamOptions,
 } from "./types";
@@ -33,6 +34,7 @@ export interface SlackAdapterConfig {
   readonly mode: SlackAdapterConfigMode;
   readonly commandMode: SlackCommandMode;
   readonly mentionCommands: Required<SlackMentionCommandOptions>;
+  readonly conversationScope: SlackConversationScope;
   readonly actionStore?: SlackActionStore;
   readonly stream: Required<SlackStreamOptions>;
 }
@@ -49,6 +51,8 @@ export const defaultSlackCommandMode = {
 export const defaultSlackMentionCommandOptions = {
   enabled: false,
 } as const satisfies Required<SlackMentionCommandOptions>;
+
+export const defaultSlackConversationScope = "channel" as const satisfies SlackConversationScope;
 
 export const defaultSlackStreamOptions = {
   bufferSize: 256,
@@ -68,6 +72,7 @@ export function parseSlackAdapterConfig<TChatId extends string>(
     const mode = yield* validateSlackMode(normalizeSlackMode(options.mode));
     const commandMode = yield* normalizeSlackCommandMode(options.commandMode);
     const mentionCommands = normalizeSlackMentionCommandOptions(options.mentionCommands);
+    const conversationScope = yield* normalizeSlackConversationScope(options.conversationScope);
     const stream = yield* normalizeSlackStreamOptions(options.stream);
 
     return Result.ok({
@@ -75,6 +80,7 @@ export function parseSlackAdapterConfig<TChatId extends string>(
       mode,
       commandMode,
       mentionCommands,
+      conversationScope,
       ...(options.actionStore === undefined ? {} : { actionStore: options.actionStore }),
       stream,
     });
@@ -201,6 +207,21 @@ function normalizeSlackMentionCommandOptions(
   return {
     enabled: mentionCommands?.enabled ?? defaultSlackMentionCommandOptions.enabled,
   };
+}
+
+function normalizeSlackConversationScope(
+  conversationScope?: SlackConversationScope,
+): Result<SlackConversationScope, SlackConfigurationError> {
+  const resolved = conversationScope ?? defaultSlackConversationScope;
+
+  return resolved === "channel" || resolved === "thread"
+    ? Result.ok(resolved)
+    : Result.err(
+        new SlackConfigurationError({
+          field: "conversationScope",
+          reason: 'Slack conversationScope must be either "channel" or "thread"',
+        }),
+      );
 }
 
 function normalizeSlackStreamOptions(

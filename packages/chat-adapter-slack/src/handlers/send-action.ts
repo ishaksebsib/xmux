@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type { ChatAdapterSendActionInput, ChatSentMessage } from "@xmux/chat-core";
 import type { SlackBotClient } from "../client";
 import type { SlackAdapterConfig } from "../config";
+import { parseSlackConversationId } from "../conversation";
 import { encodeSlackSendAction } from "../conversions/actions";
 import { encodeSlackSentMessage } from "../conversions/outbound";
 import { nonEmptySlackStreamValue } from "../conversions/streaming";
@@ -21,10 +22,13 @@ export async function sendAction<TChatId extends string>(args: {
       encodeSlackSendAction(args.input, { actionStore: args.config.actionStore }),
     );
 
-    const threadTs = resolveSlackSendActionThreadTs({
-      input: args.input,
-      streamSourceRegistry: args.streamSourceRegistry,
-    });
+    const target = parseSlackConversationId(args.input.conversationId);
+    const threadTs =
+      resolveSlackSendActionThreadTs({
+        input: args.input,
+        channelId: target.channelId,
+        streamSourceRegistry: args.streamSourceRegistry,
+      }) ?? target.threadTs;
 
     const slackMessage = yield* Result.await(
       Result.tryPromise({
@@ -44,6 +48,7 @@ export async function sendAction<TChatId extends string>(args: {
     return Result.ok(
       encodeSlackSentMessage({
         chatId: args.chatId,
+        conversationId: args.input.conversationId,
         text: args.input.text,
         format: args.input.format,
         slackMessage,
@@ -54,13 +59,14 @@ export async function sendAction<TChatId extends string>(args: {
 
 function resolveSlackSendActionThreadTs(args: {
   readonly input: ChatAdapterSendActionInput<string, SlackAdapterOptions>;
+  readonly channelId: string;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): string | undefined {
   const messageTs = nonEmptySlackStreamValue(args.input.message?.messageId);
   if (messageTs === undefined) return undefined;
 
   const source = args.streamSourceRegistry.get({
-    channelId: args.input.conversationId,
+    channelId: args.channelId,
     messageTs,
   });
 

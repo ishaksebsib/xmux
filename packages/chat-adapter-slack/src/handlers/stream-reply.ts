@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type { ChatAdapterStreamReplyInput, ChatSentMessage } from "@xmux/chat-core";
 import type { SlackBotClient } from "../client";
 import type { SlackAdapterConfig } from "../config";
+import { parseSlackConversationId, type SlackConversationTarget } from "../conversation";
 import {
   encodeSlackStreamedMessage,
   nonEmptySlackStreamValue,
@@ -26,8 +27,10 @@ export async function streamReply<TChatId extends string>(args: {
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackStreamReplyError>> {
   return Result.gen(async function* () {
+    const conversationTarget = parseSlackConversationId(args.input.conversationId);
     const nativeTarget = resolveSlackStreamReplyTarget({
       input: args.input,
+      conversationTarget,
       streamSourceRegistry: args.streamSourceRegistry,
     });
     const target = nativeTarget.isOk()
@@ -36,6 +39,7 @@ export async function streamReply<TChatId extends string>(args: {
           type: "update" as const,
           target: yield* resolveSlackStreamReplyUpdateTarget({
             input: args.input,
+            conversationTarget,
             streamSourceRegistry: args.streamSourceRegistry,
           }),
         };
@@ -82,6 +86,7 @@ export async function streamReply<TChatId extends string>(args: {
 
 function resolveSlackStreamReplyUpdateTarget(args: {
   readonly input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>;
+  readonly conversationTarget: SlackConversationTarget;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): Result<SlackMessageUpdateStreamTarget, SlackStreamReplyError> {
   const input = args.input;
@@ -95,8 +100,8 @@ function resolveSlackStreamReplyUpdateTarget(args: {
   }
 
   return Result.ok({
-    channel: input.conversationId,
-    ...(mode === "conversation" || threadTs === undefined ? {} : { threadTs }),
+    channel: args.conversationTarget.channelId,
+    ...(threadTs === undefined ? {} : { threadTs }),
     ...(mode === "conversation" ||
     threadTs === undefined ||
     input.adapterOptions.replyBroadcast === undefined
@@ -107,6 +112,7 @@ function resolveSlackStreamReplyUpdateTarget(args: {
 
 function resolveSlackStreamReplyTarget(args: {
   readonly input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>;
+  readonly conversationTarget: SlackConversationTarget;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): Result<SlackNativeStreamTarget, SlackStreamReplyError> {
   const input = args.input;
@@ -114,15 +120,17 @@ function resolveSlackStreamReplyTarget(args: {
   const stream = input.adapterOptions.stream;
   const sourceContext = resolveSlackStreamReplySourceContext({
     input,
+    conversationTarget: args.conversationTarget,
     streamSourceRegistry: args.streamSourceRegistry,
   });
   const adapterThreadTs = nonEmptySlackStreamValue(stream?.threadTs);
   const messageThreadTs = nonEmptySlackStreamValue(input.message?.messageId);
   const sourceThreadTs = nonEmptySlackStreamValue(sourceContext?.threadTs);
+  const conversationThreadTs = args.conversationTarget.threadTs;
   const threadTs =
     mode === "conversation"
-      ? adapterThreadTs
-      : (sourceThreadTs ?? messageThreadTs ?? adapterThreadTs);
+      ? (adapterThreadTs ?? conversationThreadTs)
+      : (sourceThreadTs ?? conversationThreadTs ?? messageThreadTs ?? adapterThreadTs);
 
   if (threadTs === undefined || threadTs.length === 0) {
     return Result.err(
@@ -136,7 +144,7 @@ function resolveSlackStreamReplyTarget(args: {
   }
 
   return validateSlackNativeStreamTarget({
-    conversationId: input.conversationId,
+    conversationId: args.conversationTarget.channelId,
     threadTs,
     recipientTeamId:
       nonEmptySlackStreamValue(stream?.recipientTeamId) ?? sourceContext?.recipientTeamId,
@@ -149,26 +157,36 @@ function resolveSlackStreamReplyTarget(args: {
 
 function resolveSlackStreamReplyThreadTs(args: {
   readonly input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>;
+  readonly conversationTarget: SlackConversationTarget;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): string | undefined {
   const sourceContext = resolveSlackStreamReplySourceContext(args);
 
+  const mode = args.input.mode ?? "auto";
+  const adapterThreadTs = nonEmptySlackStreamValue(args.input.adapterOptions.stream?.threadTs);
+
+  if (mode === "conversation") {
+    return adapterThreadTs ?? args.conversationTarget.threadTs;
+  }
+
   return (
     nonEmptySlackStreamValue(sourceContext?.threadTs) ??
+    args.conversationTarget.threadTs ??
     nonEmptySlackStreamValue(args.input.message?.messageId) ??
-    nonEmptySlackStreamValue(args.input.adapterOptions.stream?.threadTs)
+    adapterThreadTs
   );
 }
 
 function resolveSlackStreamReplySourceContext(args: {
   readonly input: ChatAdapterStreamReplyInput<string, SlackAdapterOptions>;
+  readonly conversationTarget: SlackConversationTarget;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): SlackStreamSourceContext | undefined {
   const messageTs = nonEmptySlackStreamValue(args.input.message?.messageId);
   if (messageTs === undefined) return undefined;
 
   return args.streamSourceRegistry.get({
-    channelId: args.input.conversationId,
+    channelId: args.conversationTarget.channelId,
     messageTs,
   });
 }

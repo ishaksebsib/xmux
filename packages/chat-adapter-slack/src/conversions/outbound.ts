@@ -6,6 +6,7 @@ import type {
 } from "@xmux/chat-core";
 import type { SlackPostMessageRequest, SlackSentMessage } from "../client";
 import { slackMarkdownTextLimit, slackTextLimit } from "../constants";
+import { parseSlackConversationId } from "../conversation";
 import { SlackFormattingError, SlackReplyError, SlackSendMessageError } from "../errors";
 import type { SlackAdapterData, SlackAdapterOptions } from "../types";
 import { formatSlackText, type SlackFormattedText } from "./formatting";
@@ -27,9 +28,15 @@ export function encodeSlackSendMessage(
       (cause) => new SlackSendMessageError({ cause }),
     );
 
+    const target = parseSlackConversationId(input.conversationId);
+
     return Result.ok({
-      channel: input.conversationId,
+      channel: target.channelId,
+      ...(target.threadTs === undefined ? {} : { thread_ts: target.threadTs }),
       ...encodeSlackMessagePayload({ formatted, adapterOptions: input.adapterOptions }),
+      ...(target.threadTs === undefined || input.adapterOptions.replyBroadcast === undefined
+        ? {}
+        : { reply_broadcast: input.adapterOptions.replyBroadcast }),
     });
   });
 }
@@ -51,14 +58,15 @@ export function encodeSlackReplyMessage(
       formatted,
       adapterOptions: input.adapterOptions,
     });
-    const threadTs = resolveSlackReplyThreadTs(input, mode);
+    const target = parseSlackConversationId(input.conversationId);
+    const threadTs = resolveSlackReplyThreadTs(input, mode, target.threadTs);
 
     if (threadTs.isErr()) {
       return Result.err(threadTs.error);
     }
 
     return Result.ok({
-      channel: input.conversationId,
+      channel: target.channelId,
       ...messagePayload,
       ...(threadTs.value === undefined ? {} : { thread_ts: threadTs.value }),
       ...(threadTs.value === undefined || input.adapterOptions.replyBroadcast === undefined
@@ -72,11 +80,12 @@ export function encodeSlackSentMessage<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly text: string;
   readonly format?: ChatAdapterSendMessageInput<TChatId, SlackAdapterOptions>["format"];
+  readonly conversationId?: string;
   readonly slackMessage: SlackSentMessage;
 }): ChatSentMessage<TChatId, SlackAdapterData> {
   return {
     chatId: args.chatId,
-    conversationId: args.slackMessage.channelId,
+    conversationId: args.conversationId ?? args.slackMessage.channelId,
     messageId: args.slackMessage.messageTs,
     text: args.text,
     format: args.format,
@@ -164,24 +173,31 @@ function shouldUseNativeMarkdown(args: {
 function resolveSlackReplyThreadTs(
   input: ChatAdapterReplyInput<string, SlackAdapterOptions>,
   mode: NonNullable<ChatAdapterReplyInput<string, SlackAdapterOptions>["mode"]>,
+  conversationThreadTs: string | undefined,
 ): Result<string | undefined, SlackReplyError> {
   if (mode === "conversation") {
-    return Result.ok(undefined);
+    return Result.ok(conversationThreadTs);
   }
 
   const messageId = input.message?.messageId.trim();
 
   if (mode === "thread") {
+    if (conversationThreadTs !== undefined) return Result.ok(conversationThreadTs);
+
     return messageId === undefined || messageId.length === 0
       ? Result.err(new SlackReplyError({ reason: "Slack thread replies require a message id" }))
       : Result.ok(messageId);
   }
 
   if (mode === "quote") {
+    if (conversationThreadTs !== undefined) return Result.ok(conversationThreadTs);
+
     return messageId === undefined || messageId.length === 0
       ? Result.err(new SlackReplyError({ reason: "Slack quote replies require a message id" }))
       : Result.ok(messageId);
   }
+
+  if (conversationThreadTs !== undefined) return Result.ok(conversationThreadTs);
 
   return messageId === undefined || messageId.length === 0
     ? Result.ok(undefined)

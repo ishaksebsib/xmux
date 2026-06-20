@@ -1,5 +1,7 @@
 import type { ChatReactionAddedEvent, ChatReactionRemovedEvent } from "@xmux/chat-core";
 import type { SlackBotIdentity, SlackReactionEvent } from "../client";
+import { createSlackConversationId } from "../conversation";
+import type { SlackConversationScope } from "../types";
 
 export type SlackReactionDecodeResult<TChatId extends string> =
   | {
@@ -14,6 +16,7 @@ interface SlackReactionLike {
     readonly type?: string;
     readonly channel?: string;
     readonly ts?: string;
+    readonly thread_ts?: string;
   };
   readonly reaction?: string;
   readonly user?: string;
@@ -23,6 +26,7 @@ export function decodeSlackReactionEvent<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly event: SlackReactionEvent["event"];
   readonly botIdentity?: SlackBotIdentity;
+  readonly conversationScope?: SlackConversationScope;
 }): SlackReactionDecodeResult<TChatId> {
   const event = args.event as SlackReactionLike;
 
@@ -39,6 +43,13 @@ export function decodeSlackReactionEvent<TChatId extends string>(args: {
     return { status: "ignored", reason: "non_message_item" };
   }
 
+  const conversationId = createSlackConversationId({
+    conversationScope: args.conversationScope ?? "channel",
+    channelId: event.item.channel,
+    threadTs: event.item.thread_ts,
+    messageTs: event.item.ts,
+  });
+
   return {
     status: "event",
     event: {
@@ -46,7 +57,7 @@ export function decodeSlackReactionEvent<TChatId extends string>(args: {
       chatId: args.chatId,
       message: {
         chatId: args.chatId,
-        conversationId: event.item.channel,
+        conversationId,
         messageId: event.item.ts,
       },
       actor:

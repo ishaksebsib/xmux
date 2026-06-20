@@ -46,6 +46,25 @@ describe("Slack outbound conversion", () => {
     }
   });
 
+  test("thread-scoped sendMessage targets the underlying Slack thread", () => {
+    const result = encodeSlackSendMessage({
+      chatId: "slack",
+      conversationId: "C123:171.000100",
+      text: "thread message",
+      adapterOptions: { replyBroadcast: true },
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000100",
+        reply_broadcast: true,
+        text: "thread message",
+      });
+    }
+  });
+
   test("markdown sendMessage falls back to mrkdwn when blocks are present", () => {
     const result = encodeSlackSendMessage({
       chatId: "slack",
@@ -79,6 +98,25 @@ describe("Slack outbound conversion", () => {
     if (result.isOk()) {
       expect(result.value.thread_ts).toBe("171.000100");
       expect(result.value.reply_broadcast).toBe(true);
+    }
+  });
+
+  test("thread-scoped conversation replies stay in the Slack thread", () => {
+    const result = encodeSlackReplyMessage({
+      chatId: "slack",
+      conversationId: "C123:171.000100",
+      message: { chatId: "slack", conversationId: "C123:171.000100", messageId: "171.000200" },
+      mode: "conversation",
+      text: "conversation reply",
+      adapterOptions: {},
+    });
+
+    expect(result.isOk()).toBe(true);
+    if (result.isOk()) {
+      expect(result.value).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000100",
+      });
     }
   });
 

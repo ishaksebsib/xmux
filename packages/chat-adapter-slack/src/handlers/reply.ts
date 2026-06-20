@@ -1,6 +1,7 @@
 import { Result } from "better-result";
 import type { ChatAdapterReplyInput, ChatSentMessage } from "@xmux/chat-core";
 import type { SlackBotClient } from "../client";
+import { parseSlackConversationId } from "../conversation";
 import { encodeSlackReplyMessage, encodeSlackSentMessage } from "../conversions/outbound";
 import { nonEmptySlackStreamValue } from "../conversions/streaming";
 import { SlackReplyError } from "../errors";
@@ -35,6 +36,7 @@ export async function reply<TChatId extends string>(args: {
     return Result.ok(
       encodeSlackSentMessage({
         chatId: args.chatId,
+        conversationId: args.input.conversationId,
         text: args.input.text,
         format: args.input.format,
         slackMessage,
@@ -53,8 +55,9 @@ function resolveSlackReplySourceThreadTs(args: {
   const messageTs = nonEmptySlackStreamValue(args.input.message?.messageId);
   if (messageTs === undefined) return undefined;
 
+  const target = parseSlackConversationId(args.input.conversationId);
   const source = args.streamSourceRegistry.get({
-    channelId: args.input.conversationId,
+    channelId: target.channelId,
     messageTs,
   });
 

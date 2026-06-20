@@ -2,6 +2,7 @@ import { Result } from "better-result";
 import type { ChatAdapterStreamMessageInput, ChatSentMessage } from "@xmux/chat-core";
 import type { SlackBotClient } from "../client";
 import type { SlackAdapterConfig } from "../config";
+import { parseSlackConversationId, type SlackConversationTarget } from "../conversation";
 import {
   encodeSlackStreamedMessage,
   nonEmptySlackStreamValue,
@@ -21,10 +22,17 @@ export async function streamMessage<TChatId extends string>(args: {
   readonly input: ChatAdapterStreamMessageInput<TChatId, SlackAdapterOptions>;
 }): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackStreamMessageError>> {
   return Result.gen(async function* () {
-    const nativeTarget = resolveSlackStreamMessageTarget(args.input);
+    const conversationTarget = parseSlackConversationId(args.input.conversationId);
+    const nativeTarget = resolveSlackStreamMessageTarget({
+      input: args.input,
+      conversationTarget,
+    });
     const target = nativeTarget.isOk()
       ? { type: "native" as const, target: nativeTarget.value }
-      : { type: "update" as const, target: resolveSlackStreamMessageUpdateTarget(args.input) };
+      : {
+          type: "update" as const,
+          target: resolveSlackStreamMessageUpdateTarget({ input: args.input, conversationTarget }),
+        };
     const streamed = yield* Result.await(
       target.type === "native"
         ? streamSlackNativeText({
@@ -67,21 +75,27 @@ export async function streamMessage<TChatId extends string>(args: {
   });
 }
 
-function resolveSlackStreamMessageUpdateTarget(
-  input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>,
-): SlackMessageUpdateStreamTarget {
-  const threadTs = nonEmptySlackStreamValue(input.adapterOptions.stream?.threadTs);
+function resolveSlackStreamMessageUpdateTarget(args: {
+  readonly input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>;
+  readonly conversationTarget: SlackConversationTarget;
+}): SlackMessageUpdateStreamTarget {
+  const threadTs =
+    nonEmptySlackStreamValue(args.input.adapterOptions.stream?.threadTs) ??
+    args.conversationTarget.threadTs;
 
   return {
-    channel: input.conversationId,
+    channel: args.conversationTarget.channelId,
     ...(threadTs === undefined ? {} : { threadTs }),
   };
 }
 
-function resolveSlackStreamMessageTarget(
-  input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>,
-): Result<SlackNativeStreamTarget, SlackStreamMessageError> {
-  const threadTs = nonEmptySlackStreamValue(input.adapterOptions.stream?.threadTs);
+function resolveSlackStreamMessageTarget(args: {
+  readonly input: ChatAdapterStreamMessageInput<string, SlackAdapterOptions>;
+  readonly conversationTarget: SlackConversationTarget;
+}): Result<SlackNativeStreamTarget, SlackStreamMessageError> {
+  const threadTs =
+    nonEmptySlackStreamValue(args.input.adapterOptions.stream?.threadTs) ??
+    args.conversationTarget.threadTs;
   if (threadTs === undefined || threadTs.length === 0) {
     return Result.err(
       new SlackStreamMessageError({
@@ -92,11 +106,11 @@ function resolveSlackStreamMessageTarget(
   }
 
   return validateSlackNativeStreamTarget({
-    conversationId: input.conversationId,
+    conversationId: args.conversationTarget.channelId,
     threadTs,
-    recipientTeamId: input.adapterOptions.stream?.recipientTeamId,
-    recipientUserId: input.adapterOptions.stream?.recipientUserId,
-    taskDisplayMode: input.adapterOptions.stream?.taskDisplayMode,
+    recipientTeamId: args.input.adapterOptions.stream?.recipientTeamId,
+    recipientUserId: args.input.adapterOptions.stream?.recipientUserId,
+    taskDisplayMode: args.input.adapterOptions.stream?.taskDisplayMode,
     createError: (reason) => new SlackStreamMessageError({ reason }),
   });
 }

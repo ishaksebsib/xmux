@@ -29,6 +29,9 @@ export interface SlackMentionCommandOptions {
   readonly enabled?: boolean;
 }
 
+/** Controls how Slack conversations map to chat-core session routing keys. */
+export type SlackConversationScope = "channel" | "thread";
+
 /** Minimal JSON-like Slack Block Kit block shape accepted as native adapter options. */
 export type SlackBlock = Readonly<Record<string, unknown>> & {
   readonly type: string;
@@ -132,6 +135,14 @@ export interface CreateSlackAdapterOptions<TChatId extends string = "slack"> {
   readonly commandMode?: SlackCommandMode;
   /** App-mention command routing. Default: disabled. */
   readonly mentionCommands?: SlackMentionCommandOptions;
+  /**
+   * Conversation/session routing scope. Default: "channel".
+   *
+   * When set to "thread", messages inside Slack threads use a synthetic
+   * conversation id (`channelId:threadTs`) so each Slack thread can have its own
+   * xmux session, while top-level channel messages remain channel-scoped.
+   */
+  readonly conversationScope?: SlackConversationScope;
   /** Store for oversized button payloads. Default: none; oversized payloads error. */
   readonly actionStore?: SlackActionStore;
   /** Native stream defaults. Default: bufferSize 256, maxSegmentChars 12,000, emptyText "". */

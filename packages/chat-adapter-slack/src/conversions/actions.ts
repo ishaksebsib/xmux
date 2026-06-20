@@ -15,6 +15,7 @@ import type {
   SlackPostMessageRequest,
   SlackUpdateMessageRequest,
 } from "../client";
+import { createSlackConversationId, parseSlackConversationId } from "../conversation";
 import { SlackActionResponseError, SlackInboundDecodeError, SlackSendActionError } from "../errors";
 import {
   createSlackActionInteractionId,
@@ -27,6 +28,7 @@ import type {
   SlackAdapterData,
   SlackAdapterOptions,
   SlackBlock,
+  SlackConversationScope,
 } from "../types";
 import { unescapeSlackText, type SlackFormattedText } from "./formatting";
 import { encodeSlackMessagePayload, encodeSlackText, slackMarkdownTextLimit } from "./outbound";
@@ -224,8 +226,11 @@ export async function encodeSlackSendAction(
       }),
     );
 
+    const target = parseSlackConversationId(input.conversationId);
+
     return Result.ok({
-      channel: input.conversationId,
+      channel: target.channelId,
+      ...(target.threadTs === undefined ? {} : { thread_ts: target.threadTs }),
       ...sharedSlackMessageOptions(input.adapterOptions),
       text: formatted.text,
       mrkdwn: formatted.mrkdwn,
@@ -299,7 +304,7 @@ export async function encodeSlackActionResponse(
         : Result.ok({
             kind: "reply",
             postMessage: {
-              channel: input.conversationId,
+              channel: args.interaction.channelId,
               ...encodeSlackMessagePayload({ formatted, adapterOptions: input.adapterOptions }),
               thread_ts: args.interaction.threadTs,
               signal: input.signal,
@@ -323,7 +328,7 @@ export async function encodeSlackActionResponse(
       return Result.ok({
         kind: "update",
         update: {
-          channel: input.conversationId,
+          channel: args.interaction.channelId,
           ts: input.message.messageId,
           ...(formatted === undefined
             ? {}
@@ -358,7 +363,7 @@ export async function encodeSlackActionResponse(
     return Result.ok({
       kind: "update",
       update: {
-        channel: input.conversationId,
+        channel: args.interaction.channelId,
         ts: input.message.messageId,
         ...(formatted === undefined ? {} : { text: formatted.text }),
         blocks,
@@ -372,6 +377,7 @@ export async function decodeSlackActionEvent<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly event: SlackActionEvent;
   readonly actionStore?: SlackActionStore;
+  readonly conversationScope?: SlackConversationScope;
 }): Promise<Result<SlackActionDecodeResult<TChatId>, SlackInboundDecodeError>> {
   return Result.gen(async function* () {
     const action = args.event.action;
@@ -417,6 +423,12 @@ export async function decodeSlackActionEvent<TChatId extends string>(args: {
 
     const interactionId = createSlackActionInteractionId(args.event);
     const threadTs = resolveSlackActionThreadTs({ body, messageTs });
+    const conversationId = createSlackConversationId({
+      conversationScope: args.conversationScope ?? "channel",
+      channelId,
+      threadTs,
+      messageTs,
+    });
     const context: SlackActionInteractionContext = {
       interactionId,
       channelId,
@@ -435,8 +447,8 @@ export async function decodeSlackActionEvent<TChatId extends string>(args: {
     const event = {
       type: "action",
       chatId: args.chatId,
-      conversation: { chatId: args.chatId, conversationId: channelId },
-      message: { chatId: args.chatId, conversationId: channelId, messageId: messageTs },
+      conversation: { chatId: args.chatId, conversationId },
+      message: { chatId: args.chatId, conversationId, messageId: messageTs },
       interactionId,
       actor: createSlackActionActor({ body, channelId, userId }),
       actionId: envelope.actionId,

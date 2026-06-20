@@ -9,7 +9,8 @@ import type {
   ChatMessageRef,
 } from "@xmux/chat-core";
 import type { SlackCommandEvent } from "../client";
-import type { SlackAdapterData } from "../types";
+import { createSlackConversationId } from "../conversation";
+import type { SlackAdapterData, SlackConversationScope } from "../types";
 
 export function createSlackCommandEvent<
   TCommands extends ChatCommandRegistry,
@@ -17,6 +18,7 @@ export function createSlackCommandEvent<
 >(args: {
   readonly chatId: TChatId;
   readonly payload: SlackCommandEvent["payload"];
+  readonly conversationScope?: SlackConversationScope;
   readonly command: ChatCommandValues<TCommands>;
 }): ChatAdapterCommandEvent<TCommands, keyof TCommands, TChatId> {
   return {
@@ -31,6 +33,7 @@ export function createSlackCommandEvent<
 export function createSlackUnknownCommandEvent<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly payload: SlackCommandEvent["payload"];
+  readonly conversationScope?: SlackConversationScope;
   readonly commandName: string;
 }): ChatAdapterUnknownCommandEvent<TChatId> {
   return {
@@ -76,6 +79,7 @@ export function createSlackMentionUnknownCommandEvent<TChatId extends string>(ar
 export function createSlackInvalidCommandEvent<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly payload: SlackCommandEvent["payload"];
+  readonly conversationScope?: SlackConversationScope;
   readonly commandName: string;
   readonly reason: string;
   readonly optionName?: string;
@@ -123,10 +127,15 @@ export function createSlackCommandActor(payload: SlackCommandEvent["payload"]): 
 function createConversation<TChatId extends string>(args: {
   readonly chatId: TChatId;
   readonly payload: SlackCommandEvent["payload"];
+  readonly conversationScope?: SlackConversationScope;
 }) {
   return {
     chatId: args.chatId,
-    conversationId: args.payload.channel_id,
+    conversationId: createSlackConversationId({
+      conversationScope: args.conversationScope ?? "channel",
+      channelId: args.payload.channel_id,
+      threadTs: readSlackCommandThreadTs(args.payload),
+    }),
   } as const;
 }
 
@@ -148,6 +157,17 @@ function createSlackCommandAdapterData(payload: SlackCommandEvent["payload"]): S
     slackUserId: payload.user_id,
     raw: payload,
   };
+}
+
+function readSlackCommandThreadTs(payload: SlackCommandEvent["payload"]): string | undefined {
+  if (!isRecord(payload)) return undefined;
+
+  const threadTs = payload["thread_ts"];
+  return typeof threadTs === "string" ? threadTs : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function nonEmpty(value: string | undefined): string | undefined {

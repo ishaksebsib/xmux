@@ -196,6 +196,7 @@ export function encodeSlackStreamedMessage<TChatId extends string>(args: {
 
   return encodeSlackSentMessage({
     chatId: args.chatId,
+    conversationId: args.conversationId,
     text: args.text,
     format: args.format,
     slackMessage: {

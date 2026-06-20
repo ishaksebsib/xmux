@@ -52,6 +52,66 @@ describe("Slack inbound contract", () => {
     }
   });
 
+  test("thread conversation scope keeps channel and thread messages in separate conversations", async () => {
+    const fake = createFakeSlackClient({
+      botIdentity: { botUserId: "U_BOT", botId: "B_BOT", raw: {} },
+    });
+    const messages: SlackMessageEventForTest[] = [];
+    const chat = createTestChat(fake, { conversationScope: "thread" });
+
+    chat.on("message", (event) => {
+      messages.push(event);
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitMessage(slackMessage({ text: "channel" }));
+      await fake.emitMessage(
+        slackMessage({ text: "thread", ts: "171.000200", thread_ts: "171.000001" }),
+      );
+
+      await waitForCondition(() => messages.length === 2);
+      expect(messages.map((event) => event.conversation.conversationId)).toEqual([
+        "C123",
+        "C123:171.000001",
+      ]);
+    } finally {
+      await chat.close();
+    }
+  });
+
+  test("thread conversation scope replies back into the underlying Slack thread", async () => {
+    const fake = createFakeSlackClient({
+      botIdentity: { botUserId: "U_BOT", botId: "B_BOT", raw: {} },
+    });
+    const replies: boolean[] = [];
+    const chat = createTestChat(fake, { conversationScope: "thread" });
+
+    chat.on("message", async (event) => {
+      const result = await event.reply("thread reply", { mode: "conversation" });
+      replies.push(result.isOk());
+    });
+
+    try {
+      expect((await chat.start()).isOk()).toBe(true);
+
+      await fake.emitMessage(
+        slackMessage({ text: "thread", ts: "171.000200", thread_ts: "171.000001" }),
+      );
+
+      await waitForCondition(() => replies.length === 1);
+      expect(replies).toEqual([true]);
+      expect(fake.postMessageCalls[0]).toMatchObject({
+        channel: "C123",
+        thread_ts: "171.000001",
+        text: "thread reply",
+      });
+    } finally {
+      await chat.close();
+    }
+  });
+
   test("emits normalized reaction events", async () => {
     const fake = createFakeSlackClient();
     const reactions: SlackReactionAddedEventForTest[] = [];
@@ -80,16 +140,23 @@ describe("Slack inbound contract", () => {
   });
 });
 
-function createTestChat(fake: ReturnType<typeof createFakeSlackClient>) {
+function createTestChat(
+  fake: ReturnType<typeof createFakeSlackClient>,
+  options: Partial<CreateSlackAdapterOptions<"slack">> = {},
+) {
   return createChat({
-    adapters: { slack: createTestAdapter(fake) },
+    adapters: { slack: createTestAdapter(fake, options) },
     commands: {},
   });
 }
 
-function createTestAdapter(fake: ReturnType<typeof createFakeSlackClient>) {
+function createTestAdapter(
+  fake: ReturnType<typeof createFakeSlackClient>,
+  options: Partial<CreateSlackAdapterOptions<"slack">> = {},
+) {
   return createSlackAdapter<"slack">({
     ...socketOptions(),
+    ...options,
     createClient: (() => fake) satisfies CreateSlackBotClient,
   });
 }
@@ -102,7 +169,11 @@ function socketOptions(): CreateSlackAdapterOptions<"slack"> {
 }
 
 function slackMessage(
-  overrides: Partial<{ readonly text: string }> = {},
+  overrides: Partial<{
+    readonly text: string;
+    readonly ts: string;
+    readonly thread_ts: string;
+  }> = {},
 ): SlackMessageEvent["event"] {
   return {
     type: "message",

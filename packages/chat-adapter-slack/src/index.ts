@@ -11,6 +11,7 @@ export type {
   SlackBlock,
   SlackClientOptions,
   SlackCommandMode,
+  SlackConversationScope,
   SlackMentionCommandOptions,
   SlackMessageMetadata,
   SlackNativeStreamOptions,

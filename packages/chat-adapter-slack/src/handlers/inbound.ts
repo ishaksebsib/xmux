@@ -37,6 +37,7 @@ import type {
   SlackActionStore,
   SlackAdapterData,
   SlackCommandMode,
+  SlackConversationScope,
   SlackMentionCommandOptions,
 } from "../types";
 import type { SlackAdapterError } from "../errors";
@@ -49,6 +50,7 @@ export function registerInboundHandlers<
   readonly client: SlackBotClient;
   readonly commandMode: SlackCommandMode;
   readonly mentionCommands: Required<SlackMentionCommandOptions>;
+  readonly conversationScope: SlackConversationScope;
   readonly actionStore?: SlackActionStore;
   readonly botIdentity?: SlackBotIdentity;
   readonly context: ChatAdapterStartContext<
@@ -143,6 +145,7 @@ function handleMessageEvent<TChatId extends string, TCommands extends ChatComman
   readonly event: SlackMessageEvent;
   readonly logger: SlackLogScope;
   readonly mentionCommands: Required<SlackMentionCommandOptions>;
+  readonly conversationScope: SlackConversationScope;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): void {
   if (isSlackRetry(args.event)) {
@@ -175,6 +178,7 @@ function handleAppMentionEvent<
   >;
   readonly event: SlackAppMentionEvent;
   readonly logger: SlackLogScope;
+  readonly conversationScope: SlackConversationScope;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): void {
   if (isSlackRetry(args.event)) {
@@ -258,6 +262,7 @@ function decodeSlackInboundMessage<
   readonly event: SlackMessageEvent | SlackAppMentionEvent;
   readonly logger: SlackLogScope;
   readonly operation: "message" | "app_mention";
+  readonly conversationScope: SlackConversationScope;
   readonly streamSourceRegistry: SlackStreamSourceRegistry;
 }): ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError> | undefined {
   const decoded = decodeSlackMessageEvent({
@@ -265,6 +270,7 @@ function decodeSlackInboundMessage<
     client: args.client,
     event: args.event.event,
     botIdentity: args.botIdentity,
+    conversationScope: args.conversationScope,
   });
 
   if (decoded.status === "ignored") {
@@ -311,7 +317,7 @@ function rememberSlackStreamSource<TChatId extends string>(args: {
   readonly event: ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError>;
   readonly registry: SlackStreamSourceRegistry;
 }): void {
-  const channelId = nonEmpty(args.event.conversation.conversationId);
+  const channelId = nonEmpty(args.event.message.adapterData.slackChannelId);
   const messageTs = nonEmpty(args.event.message.messageId);
   if (channelId === undefined || messageTs === undefined) return;
 
@@ -345,11 +351,13 @@ async function handleActionEvent<
   readonly event: SlackActionEvent;
   readonly interactionRegistry: SlackInteractionRegistry;
   readonly logger: SlackLogScope;
+  readonly conversationScope: SlackConversationScope;
 }): Promise<void> {
   const decoded = await decodeSlackActionEvent({
     chatId: args.chatId,
     event: args.event,
     actionStore: args.actionStore,
+    conversationScope: args.conversationScope,
   });
   if (decoded.isErr()) {
     throw decoded.error;
@@ -387,6 +395,7 @@ function handleReactionEvent<TChatId extends string, TCommands extends ChatComma
   >;
   readonly event: SlackReactionEvent;
   readonly logger: SlackLogScope;
+  readonly conversationScope: SlackConversationScope;
   readonly operation: "reaction_added" | "reaction_removed";
 }): void {
   void runInboundHandler({
@@ -402,6 +411,7 @@ function handleReactionEvent<TChatId extends string, TCommands extends ChatComma
         chatId: args.chatId,
         event: args.event.event,
         botIdentity: args.botIdentity,
+        conversationScope: args.conversationScope,
       });
 
       if (decoded.status === "ignored") {
@@ -427,6 +437,7 @@ function handleReactionEvent<TChatId extends string, TCommands extends ChatComma
 function handleCommandEvent<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {
   readonly chatId: TChatId;
   readonly commandMode: SlackCommandMode;
+  readonly conversationScope: SlackConversationScope;
   readonly context: ChatAdapterStartContext<
     TCommands,
     TChatId,
@@ -450,17 +461,20 @@ function handleCommandEvent<TChatId extends string, TCommands extends ChatComman
       ? createSlackCommandEvent({
           chatId: args.chatId,
           payload: args.event.payload,
+          conversationScope: args.conversationScope,
           command: parsed.command,
         })
       : parsed.status === "unknown"
         ? createSlackUnknownCommandEvent({
             chatId: args.chatId,
             payload: args.event.payload,
+            conversationScope: args.conversationScope,
             commandName: parsed.commandName,
           })
         : createSlackInvalidCommandEvent({
             chatId: args.chatId,
             payload: args.event.payload,
+            conversationScope: args.conversationScope,
             commandName: parsed.commandName,
             reason: parsed.reason,
             optionName: parsed.optionName,

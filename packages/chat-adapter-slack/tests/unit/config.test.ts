@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   defaultSlackCommandMode,
+  defaultSlackConversationScope,
   defaultSlackMentionCommandOptions,
   normalizeSlackMode,
   parseSlackAdapterConfig,
@@ -68,6 +69,10 @@ describe("Slack adapter config", () => {
 
   test("mention commands are disabled by default", () => {
     expect(defaultSlackMentionCommandOptions).toEqual({ enabled: false });
+  });
+
+  test("conversation scope defaults to channel", () => {
+    expect(defaultSlackConversationScope).toBe("channel");
   });
 
   test("missing app token fails when socket mode is defaulted", () => {
@@ -180,6 +185,7 @@ describe("Slack adapter config", () => {
       expect(result.value.mode).toEqual({ type: "socket", appToken: "xapp-token" });
       expect(result.value.commandMode).toEqual({ type: "direct" });
       expect(result.value.mentionCommands).toEqual({ enabled: false });
+      expect(result.value.conversationScope).toBe("channel");
       expect(result.value.stream).toEqual({
         bufferSize: 256,
         maxSegmentChars: 12_000,

@@ -192,6 +192,7 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       client: this.client,
       commandMode: this.config.commandMode,
       mentionCommands: this.config.mentionCommands,
+      conversationScope: this.config.conversationScope,
       actionStore: this.config.actionStore,
       botIdentity,
       context,

@@ -32,6 +32,47 @@ describe("Slack inbound message conversion", () => {
     }
   });
 
+  test("thread conversation scope separates Slack thread messages from channel messages", () => {
+    const fake = createFakeSlackClient();
+
+    const threaded = decodeSlackMessageEvent({
+      chatId: "slack",
+      client: fake,
+      conversationScope: "thread",
+      event: slackMessage({ thread_ts: "100.000000" }),
+    });
+    const channel = decodeSlackMessageEvent({
+      chatId: "slack",
+      client: fake,
+      conversationScope: "thread",
+      event: slackMessage({ thread_ts: undefined }),
+    });
+    const rootWithOwnThreadTs = decodeSlackMessageEvent({
+      chatId: "slack",
+      client: fake,
+      conversationScope: "thread",
+      event: slackMessage({ ts: "171.000100", thread_ts: "171.000100" }),
+    });
+
+    expect(threaded.status).toBe("event");
+    if (threaded.status === "event") {
+      expect(threaded.event.conversation.conversationId).toBe("C123:100.000000");
+      expect(threaded.event.message.conversationId).toBe("C123:100.000000");
+      expect(threaded.event.message.adapterData.slackChannelId).toBe("C123");
+      expect(threaded.event.message.adapterData.slackThreadTs).toBe("100.000000");
+    }
+
+    expect(channel.status).toBe("event");
+    if (channel.status === "event") {
+      expect(channel.event.conversation.conversationId).toBe("C123");
+    }
+
+    expect(rootWithOwnThreadTs.status).toBe("event");
+    if (rootWithOwnThreadTs.status === "event") {
+      expect(rootWithOwnThreadTs.event.conversation.conversationId).toBe("C123");
+    }
+  });
+
   test("ignores self, bot, changed, and system subtype messages", () => {
     const fake = createFakeSlackClient();
     const botIdentity = { botUserId: "U_BOT", botId: "B_BOT", raw: {} };

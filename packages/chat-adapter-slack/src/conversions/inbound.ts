@@ -12,8 +12,9 @@ import type {
   SlackBotIdentity,
   SlackMessageEvent,
 } from "../client";
+import { createSlackConversationId } from "../conversation";
 import { SlackAttachmentReadError, type SlackAdapterError } from "../errors";
-import type { SlackAdapterData } from "../types";
+import type { SlackAdapterData, SlackConversationScope } from "../types";
 import { unescapeSlackText } from "./formatting";
 
 export type SlackInboundDecodeResult<TEvent> =
@@ -85,6 +86,7 @@ export function decodeSlackMessageEvent<TChatId extends string>(args: {
   readonly client: SlackBotClient;
   readonly event: SlackMessageEvent["event"] | SlackAppMentionEvent["event"];
   readonly botIdentity?: SlackBotIdentity;
+  readonly conversationScope?: SlackConversationScope;
 }): SlackInboundDecodeResult<
   ChatAdapterMessageEvent<TChatId, SlackAdapterData, SlackAdapterError>
 > {
@@ -115,7 +117,15 @@ export function decodeSlackMessageEvent<TChatId extends string>(args: {
   }
 
   const adapterData = createSlackMessageAdapterData(event);
-  const conversation = { chatId: args.chatId, conversationId: event.channel };
+  const conversation = {
+    chatId: args.chatId,
+    conversationId: createSlackConversationId({
+      conversationScope: args.conversationScope ?? "channel",
+      channelId: event.channel,
+      threadTs: event.thread_ts,
+      messageTs: event.ts,
+    }),
+  };
 
   return {
     status: "event",
