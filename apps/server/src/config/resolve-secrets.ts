@@ -1,8 +1,22 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import type { SecretRef } from "../contracts/config";
 import { EnvSecretRef, InlineSecretRef } from "../contracts/config";
 import { ConfigSecretError } from "../errors";
-import { EnvResolvedSecret, ValueResolvedSecret } from "./schema";
+
+/** Resolved secrets are internal only; do not expose this shape on control routes. */
+export class EnvResolvedSecret extends Schema.Class<EnvResolvedSecret>("EnvResolvedSecret")({
+  source: Schema.Literal("env"),
+  env: Schema.String.check(Schema.isNonEmpty()),
+  value: Schema.String.check(Schema.isNonEmpty()),
+}) {}
+
+export class ValueResolvedSecret extends Schema.Class<ValueResolvedSecret>("ValueResolvedSecret")({
+  source: Schema.Literal("value"),
+  value: Schema.String.check(Schema.isNonEmpty()),
+}) {}
+
+export const ResolvedSecret = Schema.Union([EnvResolvedSecret, ValueResolvedSecret]);
+export type ResolvedSecret = typeof ResolvedSecret.Type;
 
 /** SecretResolver is a seam so tests avoid mutating the real process env. */
 export class SecretResolver extends Context.Service<
@@ -14,20 +28,6 @@ export class SecretResolver extends Context.Service<
     }) => Effect.Effect<string, ConfigSecretError>;
   }
 >()("@xmux/server/SecretResolver") {}
-
-/** Production secrets currently come from environment variables only. */
-export const SecretResolverLive = Layer.succeed(SecretResolver)({
-  resolveEnv: ({ configPath, env }) =>
-    Effect.gen(function* () {
-      const value = process.env[env];
-      if (value !== undefined && value.length > 0) return value;
-      return yield* ConfigSecretError.make({
-        path: configPath,
-        env,
-        message: `Missing required environment secret: ${env}`,
-      });
-    }),
-});
 
 /** Test helper keeps config tests deterministic without touching process.env. */
 export const makeSecretResolverLayer = (
