@@ -1,8 +1,5 @@
 # `@xmux/chat-core` Development Guide
 
-This file protects the package architecture: clear boundaries, explicit flow,
-strong types, safe errors, and minimal bloat.
-
 ## Purpose
 `@xmux/chat-core` is the platform-agnostic chat runtime. It defines adapter
 contracts, registries, lifecycle, outbound operations, inbound events,
@@ -76,19 +73,6 @@ receive dependencies explicitly and must not reach into runtime state.
 `handlers/adapter-inputs.ts` maps facade inputs to adapter inputs;
 `handlers/stream.ts` owns stream fallback utilities; `handlers/utils.ts` stays
 small and must not become a re-export hub.
-
-## Logging Pattern
-- `createChat({ logger })` accepts the `ts-log` compatible `ChatLogger` type and
-  remains silent by default through `dummyChatLogger`.
-- Use `chatLogEvents` constants instead of string literals for chat-core log
-  event names.
-- Use `ChatLogMetadata` for structured metadata. Prefer stable IDs, operation
-  names, durations, counts, and formats; do not log message text, raw adapter
-  payloads, adapter options, tokens, or secrets.
-- Logging is best-effort. Always use `createChatLogScope`/`logChatResult` so a
-  broken user logger cannot change runtime behavior.
-- Returned `Result.err(...)` failures should generally log at `debug`; use
-  `error` only for background failures that cannot be returned to the caller.
 
 ## Type And Error Safety
 - Use focused aliases for repeated derivations.

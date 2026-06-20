@@ -1,6 +1,4 @@
 # `@xmux/harness-core` Development Guide
-This file protects the package architecture: clear public API, explicit runtime
-flow, strong harness-id typing, safe errors, and minimal bloat.
 
 ## Purpose
 `@xmux/harness-core` is the platform-agnostic harness runtime. It defines the
@@ -66,30 +64,6 @@ Each outbound operation should live in its own handler. Handlers should:
 Do not create a generic operation dispatcher. `invokeAdapter` is only for the
 throwing/rejecting `Promise<Result<...>>` adapter boundary.
 
-## Prompt Stream Pattern
-Adapters return raw prompt event streams. Core wraps them with prompt supervision
-so consumers see a sane lifecycle: a started run event and exactly one terminal
-run event. Abort cleanup must not call iterator `.return()` while `.next()` is in
-flight.
-
-## Logging Pattern
-- `createHarness({ logger })` accepts the `ts-log` compatible `HarnessLogger`
-  type and remains silent by default through `dummyHarnessLogger`.
-- `logger.ts` owns the public logger contract and typed log event names.
-  `logger-utils.ts` owns safe log dispatch, timing, result logging, and bounded
-  error serialization.
-- Use `harnessLogEvents` constants instead of string literals for harness-core
-  log events.
-- Use `HarnessLogMetadata` for structured metadata. Prefer stable IDs,
-  operation names, result state, duration, and sanitized error metadata.
-- Never log prompt content, raw adapter options, credentials, API URLs, or
-  workspace-local payloads unless explicitly sanitized.
-- Logging is best-effort. Always use `createHarnessLogScope`,
-  `logHarnessOperation`, or `logHarnessResult` so a broken user logger cannot
-  change runtime behavior.
-- Pass the raw injected logger to adapter `open(context.logger)`. Adapter
-  packages should create their own package-scoped loggers and event names.
-
 ## Type And Error Safety
 - Use focused aliases for repeated derivations.
 - Cast only at real type boundaries.
@@ -103,15 +77,4 @@ The package root exports public names only. Public API should serve consumers an
 adapter authors, not expose every internal derivation helper. Keep useful generic
 bounds public when downstream packages need them.
 
-## Verification
-```sh
-pnpm --filter @xmux/harness-core typecheck
-pnpm --filter @xmux/harness-core test -- --run
-pnpm --filter @xmux/harness-opencode typecheck
-pnpm --filter @xmux/harness-opencode test -- --run
-pnpm --filter @xmux/orchestrator typecheck
-pnpm --filter @xmux/demo typecheck
-pnpm --filter @xmux/harness-core build
-pnpm --filter @xmux/harness-opencode build
-```
 Desired code is idiomatic, safe, and boring: one concern per place, explicit control flow, strong public types, narrow casts, and no files kept only for convenience.
