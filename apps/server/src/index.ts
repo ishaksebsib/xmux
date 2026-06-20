@@ -11,6 +11,7 @@ export {
   LogFileError,
   ManifestError,
   RuntimePathError,
+  ServerShutdownError,
   ServerStartupError,
   StartupLockError,
   type ConfigError,
