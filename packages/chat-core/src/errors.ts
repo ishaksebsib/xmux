@@ -10,6 +10,8 @@ export type ChatLifecycleOperation =
   | "close"
   | "sendMessage"
   | "sendAction"
+  | "updateAction"
+  | "injectMessage"
   | "respondToAction"
   | "reply"
   | "streamMessage"
@@ -61,6 +63,11 @@ export class ChatSendActionError extends chatCauseError(
 ) {}
 
 /** Wraps adapter action response failures while preserving the original cause. */
+export class ChatUpdateActionError extends chatCauseError(
+  "ChatUpdateActionError",
+  (chatId) => `Failed to update chat action with "${chatId}"`,
+) {}
+
 export class ChatActionResponseError extends chatCauseError(
   "ChatActionResponseError",
   (chatId) => `Failed to respond to chat action with "${chatId}"`,
@@ -194,6 +201,16 @@ export type ChatSendActionFailure =
   | UnknownChatAdapterError
   | ChatLifecycleError
   | ChatSendActionError;
+
+/** Errors returned by `chat.updateAction()`. */
+export type ChatUpdateActionFailure =
+  | UnknownChatAdapterError
+  | ChatLifecycleError
+  | UnsupportedChatOperationError
+  | ChatUpdateActionError;
+
+/** Errors returned by `chat.injectMessage()`. */
+export type ChatInjectMessageFailure = UnknownChatAdapterError | ChatLifecycleError;
 
 /** Errors returned by action event ack/reply/update helpers. */
 export type ChatActionResponseFailure =

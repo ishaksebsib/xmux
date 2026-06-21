@@ -108,6 +108,8 @@ export function createRuntimeAdapter<const TId extends string>(args: {
   readonly typingThrow?: unknown;
   readonly sendActionError?: unknown;
   readonly sendActionThrow?: unknown;
+  readonly updateActionError?: unknown;
+  readonly updateActionThrow?: unknown;
   readonly respondToActionError?: unknown;
   readonly respondToActionThrow?: unknown;
   readonly streamMessageError?: unknown;
@@ -124,6 +126,13 @@ export function createRuntimeAdapter<const TId extends string>(args: {
   readonly onSendAction?: (input: {
     readonly adapterOptions: Record<never, never>;
     readonly conversationId: string;
+    readonly text: string;
+    readonly buttons: readonly (readonly unknown[])[];
+  }) => void;
+  readonly onUpdateAction?: (input: {
+    readonly adapterOptions: Record<never, never>;
+    readonly conversationId: string;
+    readonly message: { readonly messageId: string };
     readonly text: string;
     readonly buttons: readonly (readonly unknown[])[];
   }) => void;
@@ -199,6 +208,19 @@ export function createRuntimeAdapter<const TId extends string>(args: {
             chatId: args.id,
             conversationId: input.conversationId,
             messageId: `${args.id}-action`,
+            text: input.text,
+            format: input.format,
+            adapterData: {},
+          });
+        },
+        async updateAction(input) {
+          args.onUpdateAction?.(input);
+          if (args.updateActionThrow !== undefined) throw args.updateActionThrow;
+          if (args.updateActionError !== undefined) return Result.err(args.updateActionError);
+          return Result.ok({
+            chatId: this.id,
+            conversationId: input.conversationId,
+            messageId: input.message.messageId,
             text: input.text,
             format: input.format,
             adapterData: {},

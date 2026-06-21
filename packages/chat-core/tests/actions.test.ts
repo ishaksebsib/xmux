@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   ChatActionResponseError,
   ChatSendActionError,
+  ChatUpdateActionError,
   actionValue,
   createChat,
   defineChatAction,
@@ -78,6 +79,63 @@ describe("chat actions", () => {
     await vi.waitFor(() => {
       expect(responses).toEqual(["interaction-1:ack", "interaction-1:update"]);
     });
+  });
+
+  test("updateAction preserves adapter runtime this binding", async () => {
+    const updates: unknown[] = [];
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          onUpdateAction: (input) => {
+            updates.push(input);
+          },
+        }),
+      },
+      commands,
+      actions,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    const updated = await chat.updateAction({
+      chatId: "alpha",
+      conversationId: "conversation",
+      messageId: "action-message",
+      text: "Ready",
+      buttons: [],
+    });
+
+    expect(updated.isOk()).toBe(true);
+    if (updated.isOk()) expect(updated.value.messageId).toBe("action-message");
+    expect(updates).toHaveLength(1);
+  });
+
+  test("updateAction wraps adapter returned and thrown failures", async () => {
+    async function exercise(adapterFailure: {
+      updateActionError?: unknown;
+      updateActionThrow?: unknown;
+    }) {
+      const chat = createChat({
+        adapters: { alpha: createRuntimeAdapter({ id: "alpha", ...adapterFailure }) },
+        commands,
+        actions,
+      });
+
+      expect((await chat.start()).isOk()).toBe(true);
+      const updated = await chat.updateAction({
+        chatId: "alpha",
+        conversationId: "conversation",
+        messageId: "action-message",
+        text: "Ready",
+        buttons: [],
+      });
+
+      expect(updated.isErr()).toBe(true);
+      if (updated.isErr()) expect(updated.error).toBeInstanceOf(ChatUpdateActionError);
+    }
+
+    await exercise({ updateActionError: new Error("update action failed") });
+    await exercise({ updateActionThrow: new Error("update action threw") });
   });
 
   test("sendAction wraps adapter returned and thrown failures", async () => {

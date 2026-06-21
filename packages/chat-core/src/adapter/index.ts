@@ -16,6 +16,7 @@ export type {
   ChatAdapterStartContext,
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
+  ChatAdapterUpdateActionInput,
   OpenChatAdapterContext,
 } from "./io";
 export type { ChatAdapterCapabilities } from "../capabilities";

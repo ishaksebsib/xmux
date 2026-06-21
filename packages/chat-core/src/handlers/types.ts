@@ -1,7 +1,11 @@
 import type { Result } from "better-result";
 import type { ChatAdapterCapabilities } from "../capabilities";
 import type { ChatAdapterDefinition, OpenedChatAdapter } from "../adapter/definition";
-import type { ChatAdapterStreamMessageInput, ChatAdapterStreamReplyInput } from "../adapter/io";
+import type {
+  ChatAdapterStreamMessageInput,
+  ChatAdapterStreamReplyInput,
+  ChatAdapterUpdateActionInput,
+} from "../adapter/io";
 import type { ChatActionRegistry } from "../registry/actions";
 import type { ChatAdapterObject, ChatSentMessage } from "../contracts";
 import type {
@@ -9,6 +13,7 @@ import type {
   ChatReplyFailure,
   ChatSendActionFailure,
   ChatSendMessageFailure,
+  ChatUpdateActionFailure,
   ChatStreamMessageFailure,
   ChatStreamReplyFailure,
   ChatTypingIndicatorFailure,
@@ -25,6 +30,7 @@ import type {
   ChatReplyInput,
   ChatSendActionInput,
   ChatSendMessageInput,
+  ChatUpdateActionInput,
   ChatSentMessageFromInput,
   ChatStreamMessageInput,
   ChatStreamReplyInput,
@@ -72,6 +78,8 @@ export type StreamReplyRuntime = {
 export type ChatRuntimeOperation =
   | "sendMessage"
   | "sendAction"
+  | "updateAction"
+  | "injectMessage"
   | "respondToAction"
   | "reply"
   | "streamMessage"
@@ -90,6 +98,19 @@ export type SendActionHandler<
 > = <TInput extends ChatSendActionInput<TAdapters, TActions>>(
   input: TInput,
 ) => Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatSendActionFailure>>;
+
+export type UpdateActionHandler<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+  TActions extends ChatActionRegistry,
+> = <TInput extends ChatUpdateActionInput<TAdapters, TActions>>(
+  input: TInput,
+) => Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatUpdateActionFailure>>;
+
+export type UpdateActionRuntime = {
+  updateAction(
+    input: ChatAdapterUpdateActionInput<string, ChatAdapterObject>,
+  ): Promise<Result<ChatSentMessage<string, ChatAdapterObject>, unknown>>;
+};
 
 export type ReplyHandler<TAdapters extends ChatAdapterDefinitions<TAdapters>> = <
   TInput extends ChatReplyInput<TAdapters>,

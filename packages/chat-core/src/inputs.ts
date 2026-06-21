@@ -1,10 +1,17 @@
 import type { ChatActionPayloadFor, ChatActionRegistry } from "./registry/actions";
 import type { ChatAdapterDefinition } from "./adapter/definition";
 import type { ChatAdapterCapabilities } from "./capabilities";
-import type { AdapterCapabilitiesFor, AdapterDataFor, AdapterOptionsFor } from "./adapter/registry";
+import type {
+  AdapterCapabilitiesFor,
+  AdapterDataFor,
+  AdapterErrorFor,
+  AdapterOptionsFor,
+} from "./adapter/registry";
 import type {
   ChatActionButton,
+  ChatActor,
   ChatAdapterObject,
+  ChatAttachment,
   ChatMessageFormat,
   ChatReplyMode,
   ChatSentMessage,
@@ -113,6 +120,52 @@ export type ChatSendActionInput<
   TActions extends ChatActionRegistry,
 > = {
   readonly [TChatId in keyof TAdapters]: ChatSendActionInputFor<TAdapters, TActions, TChatId>;
+}[keyof TAdapters];
+
+/** Update action input narrowed to one registered chat adapter. */
+export type ChatUpdateActionInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TActions extends ChatActionRegistry,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly buttons: readonly (readonly ChatButtonInput<TActions>[])[];
+  readonly signal?: AbortSignal;
+} & AdapterOptionsProp<AdapterOptionsFor<TAdapters, TChatId>>;
+
+/** Update action input union for all registered chat adapters. */
+export type ChatUpdateActionInput<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TActions extends ChatActionRegistry,
+> = {
+  readonly [TChatId in keyof TAdapters]: ChatUpdateActionInputFor<TAdapters, TActions, TChatId>;
+}[keyof TAdapters];
+
+/** Injected inbound message input narrowed to one registered chat adapter. */
+export type ChatInjectMessageInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TChatId extends keyof TAdapters,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly actor: ChatActor;
+  readonly text: string;
+  readonly format?: ChatMessageFormat;
+  readonly attachments?: readonly ChatAttachment<
+    AdapterDataFor<TAdapters, TChatId>,
+    AdapterErrorFor<TAdapters, TChatId>
+  >[];
+  readonly adapterData: ChatAdapterObject;
+};
+
+/** Injected inbound message input union for all registered chat adapters. */
+export type ChatInjectMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
+  readonly [TChatId in keyof TAdapters]: ChatInjectMessageInputFor<TAdapters, TChatId>;
 }[keyof TAdapters];
 
 /** Sent message result narrowed to one registered chat adapter. */
