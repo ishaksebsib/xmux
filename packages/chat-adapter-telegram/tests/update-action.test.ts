@@ -1,5 +1,4 @@
 import { describe, expect, test, vi } from "vitest";
-import { Result } from "better-result";
 import { updateAction } from "../src/handlers/update-action";
 import type { TelegramBotClient } from "../src/client";
 

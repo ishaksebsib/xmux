@@ -50,7 +50,10 @@ describe("discord updateAction", () => {
         components: [
           expect.objectContaining({
             components: [
-              expect.objectContaining({ label: "Send", custom_id: expect.stringContaining("xmux:a:") }),
+              expect.objectContaining({
+                label: "Send",
+                custom_id: expect.stringContaining("xmux:a:"),
+              }),
             ],
           }),
         ],

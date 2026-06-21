@@ -357,7 +357,10 @@ export function createChat<
 
   const sendMessage = createSendMessageHandler<TAdapters>({ getStartedRuntime, logger });
   const sendAction = createSendActionHandler<TAdapters, TActions>({ getStartedRuntime, logger });
-  const updateAction = createUpdateActionHandler<TAdapters, TActions>({ getStartedRuntime, logger });
+  const updateAction = createUpdateActionHandler<TAdapters, TActions>({
+    getStartedRuntime,
+    logger,
+  });
   const reply = createReplyHandler<TAdapters>({ getStartedRuntime, logger });
   const respondToAction = createRespondToActionHandler<TAdapters>({ getStartedRuntime, logger });
   const streamMessage = createStreamMessageHandler<TAdapters>({

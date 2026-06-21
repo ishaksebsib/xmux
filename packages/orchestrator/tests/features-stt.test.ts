@@ -147,7 +147,9 @@ describe("STT voice messages", () => {
     const attachment = audioAttachment("voice-route");
     emitMessage(messageEvent({ attachments: [attachment] }));
 
-    await eventually(() => updates.some((update) => update.text.includes("**Transcription ready**")));
+    await eventually(() =>
+      updates.some((update) => update.text.includes("**Transcription ready**")),
+    );
 
     expect(actionMessages).toHaveLength(1);
     expect(promptInputs).toHaveLength(0);
@@ -196,7 +198,9 @@ describe("STT voice messages", () => {
     expect(started.isOk()).toBe(true);
 
     const runId = firstPayload(actionMessages[0]?.buttons);
-    await eventually(() => updates.some((update) => update.text.includes("**Transcription failed**")));
+    await eventually(() =>
+      updates.some((update) => update.text.includes("**Transcription failed**")),
+    );
 
     expect(replies).toHaveLength(0);
     expect(updates.at(-1)?.text).toContain("**Transcription failed**");
@@ -267,7 +271,9 @@ describe("STT voice messages", () => {
 
     const started = await handleSttAudioMessage({ ctx, event, attachment });
     expect(started.isOk()).toBe(true);
-    await eventually(() => updates.some((update) => update.text.includes("**Transcription ready**")));
+    await eventually(() =>
+      updates.some((update) => update.text.includes("**Transcription ready**")),
+    );
     const runId = firstPayload(actionMessages[0]?.buttons);
 
     const sent = await handleSttAction({

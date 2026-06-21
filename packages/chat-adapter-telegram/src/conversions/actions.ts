@@ -220,7 +220,9 @@ function encodeTelegramActionUpdateRequest<TError extends Error>(args: {
     options: {
       ...formattedText.options,
       ...args.adapterOptions,
-      ...(args.buttons === undefined ? {} : { reply_markup: encodeTelegramInlineKeyboard(args.buttons) }),
+      ...(args.buttons === undefined
+        ? {}
+        : { reply_markup: encodeTelegramInlineKeyboard(args.buttons) }),
     } as TelegramEditMessageOptions,
     signal: args.signal,
   };

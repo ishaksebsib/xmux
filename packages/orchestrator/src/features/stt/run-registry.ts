@@ -75,7 +75,10 @@ export interface SttRunRegistry {
     message: ChatMessageRef<TChatId>,
     now: string,
   ): ResultType<SttRun<TChatId>, SttRunNotFoundError | SttRunStateConflictError>;
-  complete<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+  complete<
+    TChatId extends string = string,
+    TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+  >(
     runId: string,
     transcript: string,
     now: string,
@@ -90,10 +93,16 @@ export interface SttRunRegistry {
     reason: unknown,
     now: string,
   ): ResultType<SttRun<TChatId>, SttRunNotFoundError>;
-  markSending<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+  markSending<
+    TChatId extends string = string,
+    TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+  >(
     runId: string,
     now: string,
-  ): ResultType<SttRun<TChatId, TAdapterData>, SttRunNotFoundError | SttRunNotReadyError | SttRunStateConflictError>;
+  ): ResultType<
+    SttRun<TChatId, TAdapterData>,
+    SttRunNotFoundError | SttRunNotReadyError | SttRunStateConflictError
+  >;
   markAwaitingSend(
     runId: string,
     now: string,
@@ -121,9 +130,10 @@ export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): S
       return run.snapshot() as SttRun<TChatId, TAdapterData>;
     },
 
-    get<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
-      runId: string,
-    ) {
+    get<
+      TChatId extends string = string,
+      TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+    >(runId: string) {
       return runs.get(runId)?.snapshot() as SttRun<TChatId, TAdapterData> | undefined;
     },
 
@@ -140,11 +150,10 @@ export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): S
       >;
     },
 
-    complete<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
-      runId: string,
-      transcript: string,
-      now: string,
-    ) {
+    complete<
+      TChatId extends string = string,
+      TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+    >(runId: string, transcript: string, now: string) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
@@ -154,11 +163,10 @@ export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): S
       >;
     },
 
-    fail<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
-      runId: string,
-      error: SttTranscribeError,
-      now: string,
-    ) {
+    fail<
+      TChatId extends string = string,
+      TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+    >(runId: string, error: SttTranscribeError, now: string) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
@@ -176,10 +184,10 @@ export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): S
       return Result.ok(run.snapshot()) as ResultType<SttRun<TChatId>, SttRunNotFoundError>;
     },
 
-    markSending<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
-      runId: string,
-      now: string,
-    ) {
+    markSending<
+      TChatId extends string = string,
+      TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+    >(runId: string, now: string) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
@@ -418,5 +426,7 @@ function pruneExpiredRuns(runs: Map<string, MutableSttRun>, now: string, ttlMs: 
 }
 
 function isPrunableState(state: SttRunState): boolean {
-  return state === "awaiting_send" || state === "cancelled" || state === "failed" || state === "sent";
+  return (
+    state === "awaiting_send" || state === "cancelled" || state === "failed" || state === "sent"
+  );
 }

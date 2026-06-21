@@ -146,9 +146,7 @@ export function handleSttUnsupportedMessage<
 export async function handleSttAction<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: HandleSttActionInput<TAdapters, TChats>,
-): Promise<ResultType<void, SttResponseError>> {
+>(input: HandleSttActionInput<TAdapters, TChats>): Promise<ResultType<void, SttResponseError>> {
   input.ctx.app.services.sttRuns.pruneExpired(input.ctx.app.services.now().toISOString());
 
   const acked = await respondToAction({ command: "stt", respond: () => input.event.ack() });

@@ -1,5 +1,4 @@
 import { describe, expect, test, vi } from "vitest";
-import { Result } from "better-result";
 import { createChat } from "../src";
 import { commands, createRuntimeAdapter } from "./fixtures/test-adapter";
 
@@ -41,8 +40,15 @@ describe("chat.injectMessage", () => {
     expect(injected.isOk()).toBe(true);
     await vi.waitFor(() => expect(replies).toHaveLength(1));
     await vi.waitFor(() => expect(streamReplies).toHaveLength(1));
-    expect(replies[0]).toMatchObject({ message: { messageId: "injected-1" }, text: "reply text", mode: "quote" });
-    expect(streamReplies[0]).toMatchObject({ message: { messageId: "injected-1" }, mode: "thread" });
+    expect(replies[0]).toMatchObject({
+      message: { messageId: "injected-1" },
+      text: "reply text",
+      mode: "quote",
+    });
+    expect(streamReplies[0]).toMatchObject({
+      message: { messageId: "injected-1" },
+      mode: "thread",
+    });
   });
 
   test("injected messages receive bound typingIndicator helper", async () => {
@@ -75,7 +81,10 @@ describe("chat.injectMessage", () => {
 
     expect(injected.isOk()).toBe(true);
     await vi.waitFor(() => expect(typing).toHaveLength(1));
-    expect(typing[0]).toMatchObject({ conversationId: "conversation", message: { messageId: "injected-typing" } });
+    expect(typing[0]).toMatchObject({
+      conversationId: "conversation",
+      message: { messageId: "injected-typing" },
+    });
   });
 });
 
