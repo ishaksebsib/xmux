@@ -1,4 +1,4 @@
-import type { ChatAttachment, ChatMessage } from "@xmux/chat-core";
+import type { AdapterDataFor, ChatAttachment, ChatMessage } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { createSpeechToTextClient, type SpeechToTextAudioInput } from "@xmux/stt";
@@ -46,12 +46,13 @@ export function classifyAudioMessage(message: ChatMessage): AudioMessageClassifi
 export function startSttRun<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
+  TChatId extends Extract<keyof TChats, string>,
 >(input: {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: PromptMessageEvent;
+  readonly ctx: HandlerContext<TAdapters, TChats, TChatId>;
+  readonly event: PromptMessageEvent<TChatId, AdapterDataFor<TChats, TChatId>>;
   readonly attachment: ChatAttachment;
-}): SttRun {
-  return input.ctx.app.services.sttRuns.start({
+}): SttRun<TChatId, AdapterDataFor<TChats, TChatId>> {
+  return input.ctx.app.services.sttRuns.start<TChatId, AdapterDataFor<TChats, TChatId>>({
     thread: threadFromChatEvent(input.event),
     conversation: input.event.conversation,
     message: {
@@ -61,6 +62,7 @@ export function startSttRun<
     },
     caption: input.event.message.text,
     actor: input.event.message.actor,
+    adapterData: input.event.message.adapterData,
     requester: input.ctx.actor,
     attachmentId: input.attachment.attachmentId,
     now: input.ctx.app.services.now().toISOString(),

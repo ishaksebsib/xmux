@@ -1,4 +1,4 @@
-import type { Unsubscribe } from "@xmux/chat-core";
+import type { AdapterDataFor, Unsubscribe } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Result } from "better-result";
@@ -17,7 +17,10 @@ export function registerPromptRoute<
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
   return ctx.chat.on("message", async (event) => {
-    const promptEvent = event as PromptMessageEvent<Extract<keyof TChats, string>>;
+    const promptEvent = event as PromptMessageEvent<
+      Extract<keyof TChats, string>,
+      AdapterDataFor<TChats, Extract<keyof TChats, string>>
+    >;
 
     if (!isUserPromptActor(promptEvent.message.actor)) {
       return;

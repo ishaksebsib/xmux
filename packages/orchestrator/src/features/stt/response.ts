@@ -1,6 +1,4 @@
 import type { ChatTextInput } from "@xmux/chat-core";
-
-const TRANSCRIPT_PREVIEW_MAX_CHARS = 3500;
 import { markdown, markdownText } from "../../components";
 import { sttActionId } from "../../actions";
 import type { ActionMessage } from "../utils";
@@ -10,6 +8,8 @@ import type {
   SttTranscribeError,
   SttUnsupportedAudioMessageError,
 } from "./errors";
+
+const TRANSCRIPT_PREVIEW_MAX_CHARS = 1600;
 
 export function formatSttDisabledMessage(): ChatTextInput {
   return markdown({
@@ -60,10 +60,12 @@ export function formatSttTranscriptAction(input: {
   };
 }
 
-export function formatSttFailedMessage(error: SttTranscribeError): ChatTextInput {
-  return markdown({
+export function formatSttFailedAction(error: SttTranscribeError): ActionMessage {
+  return {
     text: ["**Transcription failed**", "", markdownText(error.message)].join("\n"),
-  });
+    format: "markdown",
+    buttons: [],
+  };
 }
 
 export function formatSttUnsupportedMessage(error: SttUnsupportedAudioMessageError): ChatTextInput {
@@ -78,10 +80,6 @@ export function formatSttCancelledAction(): ActionMessage {
 
 export function formatSttNotRunningAction(): ActionMessage {
   return { text: "**Transcription is no longer running**", format: "markdown", buttons: [] };
-}
-
-export function formatSttSendingAction(): ActionMessage {
-  return { text: "**Sending transcription...**", format: "markdown", buttons: [] };
 }
 
 export function formatSttSentAction(): ActionMessage {

@@ -1,5 +1,10 @@
 import { randomBytes } from "node:crypto";
-import type { ChatActor, ChatConversationRef, ChatMessageRef } from "@xmux/chat-core";
+import type {
+  ChatActor,
+  ChatAdapterObject,
+  ChatConversationRef,
+  ChatMessageRef,
+} from "@xmux/chat-core";
 import { Result, type Result as ResultType } from "better-result";
 import type { Actor } from "../../ctx";
 import type { ChatThreadRef } from "../../store";
@@ -20,14 +25,19 @@ export type SttRunState =
   | "sending"
   | "sent";
 
-export interface SttRun {
+export interface SttRun<
+  TChatId extends string = string,
+  TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+> {
   readonly runId: string;
   readonly state: SttRunState;
   readonly thread: ChatThreadRef;
-  readonly conversation: ChatConversationRef;
-  readonly message: ChatMessageRef;
+  readonly conversation: ChatConversationRef<TChatId>;
+  readonly message: ChatMessageRef<TChatId>;
+  readonly actionMessage?: ChatMessageRef<TChatId>;
   readonly caption: string;
-  readonly actor: ChatActor;
+  readonly actor: ChatActor<TAdapterData>;
+  readonly adapterData: TAdapterData;
   readonly requester?: Actor;
   readonly attachmentId: string;
   readonly controller: AbortController;
@@ -38,35 +48,52 @@ export interface SttRun {
   readonly updatedAt: string;
 }
 
-export interface SttRunStartInput {
+export interface SttRunStartInput<
+  TChatId extends string = string,
+  TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+> {
   readonly thread: ChatThreadRef;
-  readonly conversation: ChatConversationRef;
-  readonly message: ChatMessageRef;
+  readonly conversation: ChatConversationRef<TChatId>;
+  readonly message: ChatMessageRef<TChatId>;
   readonly caption: string;
-  readonly actor: ChatActor;
+  readonly actor: ChatActor<TAdapterData>;
+  readonly adapterData: TAdapterData;
   readonly requester?: Actor;
   readonly attachmentId: string;
   readonly now: string;
 }
 
 export interface SttRunRegistry {
-  start(input: SttRunStartInput): SttRun;
-  get(runId: string): SttRun | undefined;
-  complete(
+  start<TChatId extends string, TAdapterData extends ChatAdapterObject>(
+    input: SttRunStartInput<TChatId, TAdapterData>,
+  ): SttRun<TChatId, TAdapterData>;
+  get<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+    runId: string,
+  ): SttRun<TChatId, TAdapterData> | undefined;
+  attachActionMessage<TChatId extends string = string>(
+    runId: string,
+    message: ChatMessageRef<TChatId>,
+    now: string,
+  ): ResultType<SttRun<TChatId>, SttRunNotFoundError | SttRunStateConflictError>;
+  complete<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
     runId: string,
     transcript: string,
     now: string,
-  ): ResultType<SttRun, SttRunNotFoundError | SttRunStateConflictError>;
-  fail(
+  ): ResultType<SttRun<TChatId, TAdapterData>, SttRunNotFoundError | SttRunStateConflictError>;
+  fail<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
     runId: string,
     error: SttTranscribeError,
     now: string,
-  ): ResultType<SttRun, SttRunNotFoundError | SttRunStateConflictError>;
-  cancel(runId: string, reason: unknown, now: string): ResultType<SttRun, SttRunNotFoundError>;
-  markSending(
+  ): ResultType<SttRun<TChatId, TAdapterData>, SttRunNotFoundError | SttRunStateConflictError>;
+  cancel<TChatId extends string = string>(
+    runId: string,
+    reason: unknown,
+    now: string,
+  ): ResultType<SttRun<TChatId>, SttRunNotFoundError>;
+  markSending<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
     runId: string,
     now: string,
-  ): ResultType<SttRun, SttRunNotFoundError | SttRunNotReadyError | SttRunStateConflictError>;
+  ): ResultType<SttRun<TChatId, TAdapterData>, SttRunNotFoundError | SttRunNotReadyError | SttRunStateConflictError>;
   markAwaitingSend(
     runId: string,
     now: string,
@@ -84,45 +111,82 @@ export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): S
   const runs = new Map<string, MutableSttRun>();
 
   return {
-    start(input) {
+    start<TChatId extends string, TAdapterData extends ChatAdapterObject>(
+      input: SttRunStartInput<TChatId, TAdapterData>,
+    ) {
       pruneExpiredRuns(runs, input.now, ttlMs);
       const runId = createRunId((candidate) => !runs.has(candidate));
       const run = new MutableSttRun({ ...input, runId });
       runs.set(runId, run);
-      return run.snapshot();
+      return run.snapshot() as SttRun<TChatId, TAdapterData>;
     },
 
-    get(runId) {
-      return runs.get(runId)?.snapshot();
+    get<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+      runId: string,
+    ) {
+      return runs.get(runId)?.snapshot() as SttRun<TChatId, TAdapterData> | undefined;
     },
 
-    complete(runId, transcript, now) {
+    attachActionMessage<TChatId extends string = string>(
+      runId: string,
+      message: ChatMessageRef<TChatId>,
+      now: string,
+    ) {
+      const run = runs.get(runId);
+      if (!run) return Result.err(new SttRunNotFoundError({ runId }));
+      return run.attachActionMessage(message, now) as ResultType<
+        SttRun<TChatId>,
+        SttRunStateConflictError
+      >;
+    },
+
+    complete<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+      runId: string,
+      transcript: string,
+      now: string,
+    ) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
-      return run.complete(transcript, now);
+      return run.complete(transcript, now) as ResultType<
+        SttRun<TChatId, TAdapterData>,
+        SttRunStateConflictError
+      >;
     },
 
-    fail(runId, error, now) {
+    fail<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+      runId: string,
+      error: SttTranscribeError,
+      now: string,
+    ) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
-      return run.fail(error, now);
+      return run.fail(error, now) as ResultType<
+        SttRun<TChatId, TAdapterData>,
+        SttRunStateConflictError
+      >;
     },
 
-    cancel(runId, reason, now) {
+    cancel<TChatId extends string = string>(runId: string, reason: unknown, now: string) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
       run.cancel(reason, now);
-      return Result.ok(run.snapshot());
+      return Result.ok(run.snapshot()) as ResultType<SttRun<TChatId>, SttRunNotFoundError>;
     },
 
-    markSending(runId, now) {
+    markSending<TChatId extends string = string, TAdapterData extends ChatAdapterObject = ChatAdapterObject>(
+      runId: string,
+      now: string,
+    ) {
       pruneExpiredRuns(runs, now, ttlMs);
       const run = runs.get(runId);
       if (!run) return Result.err(new SttRunNotFoundError({ runId }));
-      return run.markSending(now);
+      return run.markSending(now) as ResultType<
+        SttRun<TChatId, TAdapterData>,
+        SttRunNotReadyError | SttRunStateConflictError
+      >;
     },
 
     markAwaitingSend(runId, now) {
@@ -149,6 +213,7 @@ export function createSttRunRegistry(input: { readonly ttlMs?: number } = {}): S
 
 class MutableSttRun {
   private stateValue: SttRunState = "transcribing";
+  private actionMessageValue: ChatMessageRef | undefined;
   private transcriptValue: string | undefined;
   private errorValue: SttTranscribeError | undefined;
   private updatedAtValue: string;
@@ -159,6 +224,7 @@ class MutableSttRun {
   readonly message: ChatMessageRef;
   readonly caption: string;
   readonly actor: ChatActor;
+  readonly adapterData: ChatAdapterObject;
   readonly requester?: Actor;
   readonly attachmentId: string;
   readonly controller = new AbortController();
@@ -171,6 +237,7 @@ class MutableSttRun {
     this.message = input.message;
     this.caption = input.caption;
     this.actor = input.actor;
+    this.adapterData = input.adapterData;
     this.requester = input.requester;
     this.attachmentId = input.attachmentId;
     this.createdAt = input.now;
@@ -192,8 +259,12 @@ class MutableSttRun {
       thread: { ...this.thread },
       conversation: { ...this.conversation },
       message: { ...this.message },
+      ...(this.actionMessageValue === undefined
+        ? {}
+        : { actionMessage: { ...this.actionMessageValue } }),
       caption: this.caption,
       actor: this.actor,
+      adapterData: this.adapterData,
       ...(this.requester === undefined ? {} : { requester: this.requester }),
       attachmentId: this.attachmentId,
       controller: this.controller,
@@ -203,6 +274,25 @@ class MutableSttRun {
       createdAt: this.createdAt,
       updatedAt: this.updatedAtValue,
     };
+  }
+
+  attachActionMessage(
+    message: ChatMessageRef,
+    now: string,
+  ): ResultType<SttRun, SttRunStateConflictError> {
+    if (this.stateValue !== "transcribing") {
+      return Result.err(
+        new SttRunStateConflictError({
+          runId: this.runId,
+          state: this.stateValue,
+          message: "Action message can only be attached while transcribing.",
+        }),
+      );
+    }
+
+    this.actionMessageValue = { ...message };
+    this.updatedAtValue = now;
+    return Result.ok(this.snapshot());
   }
 
   complete(transcript: string, now: string): ResultType<SttRun, SttRunStateConflictError> {
@@ -225,12 +315,12 @@ class MutableSttRun {
 
   fail(error: SttTranscribeError, now: string): ResultType<SttRun, SttRunStateConflictError> {
     if (this.stateValue === "cancelled") return Result.ok(this.snapshot());
-    if (this.stateValue !== "transcribing") {
+    if (this.stateValue !== "transcribing" && this.stateValue !== "awaiting_send") {
       return Result.err(
         new SttRunStateConflictError({
           runId: this.runId,
           state: this.stateValue,
-          message: "Transcription can only fail while transcribing.",
+          message: "Transcription can only fail before it is sent.",
         }),
       );
     }
@@ -328,7 +418,5 @@ function pruneExpiredRuns(runs: Map<string, MutableSttRun>, now: string, ttlMs: 
 }
 
 function isPrunableState(state: SttRunState): boolean {
-  return (
-    state === "awaiting_send" || state === "cancelled" || state === "failed" || state === "sent"
-  );
+  return state === "awaiting_send" || state === "cancelled" || state === "failed" || state === "sent";
 }

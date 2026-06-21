@@ -7,13 +7,7 @@ export {
   type HandleSttAudioMessageInput,
   type HandleSttUnsupportedMessageInput,
 } from "./handler";
-export {
-  classifyAudioMessage,
-  composePromptFromTranscript,
-  startSttRun,
-  transcribeAudioAttachment,
-  type AudioMessageClassification,
-} from "./service";
+export { classifyAudioMessage, type AudioMessageClassification } from "./service";
 export {
   createSttRunRegistry,
   type SttRun,

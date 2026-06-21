@@ -78,10 +78,12 @@ describe("STT voice messages", () => {
       signal: expect.any(AbortSignal),
     });
 
-    await eventually(() => actionMessages.length === 2);
+    await eventually(() =>
+      updates.some((update) => update.text === "**Transcription ready**\n\nhello from voice"),
+    );
 
-    expect(actionMessages[1]?.text).toBe("**Transcription ready**\n\nhello from voice");
-    const runId = firstPayload(actionMessages[1]?.buttons);
+    expect(actionMessages).toHaveLength(1);
+    const runId = firstPayload(actionMessages[0]?.buttons);
 
     const sent = await handleSttAction({
       ctx,
@@ -89,13 +91,13 @@ describe("STT voice messages", () => {
     });
 
     expect(sent.isOk()).toBe(true);
-    expect(promptInputs).toHaveLength(1);
+    await eventually(() => promptInputs.length === 1);
     expect(promptInputs[0]).toMatchObject({
       ref: sessionRef,
       content: [{ type: "text", text: "caption\n\nVoice transcription:\nhello from voice" }],
     });
     expect(updates.at(-1)?.text).toBe("**Transcription sent**");
-    expect(replies).toContain("ok");
+    await eventually(() => replies.includes("ok"));
 
     await xmux.shutdown();
   });
@@ -137,7 +139,7 @@ describe("STT voice messages", () => {
           }),
       ),
     );
-    const { actionMessages, emitMessage, promptInputs, xmux } = await initializeXmux({
+    const { actionMessages, emitMessage, promptInputs, updates, xmux } = await initializeXmux({
       stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
     });
     await bindSession(xmux.ctx.store);
@@ -145,11 +147,11 @@ describe("STT voice messages", () => {
     const attachment = audioAttachment("voice-route");
     emitMessage(messageEvent({ attachments: [attachment] }));
 
-    await eventually(() => actionMessages.length === 2);
+    await eventually(() => updates.some((update) => update.text.includes("**Transcription ready**")));
 
+    expect(actionMessages).toHaveLength(1);
     expect(promptInputs).toHaveLength(0);
     expect(attachment.open).toHaveBeenCalledOnce();
-    expect(actionMessages[1]?.text).toContain("**Transcription ready**");
 
     await xmux.shutdown();
   });
@@ -184,7 +186,7 @@ describe("STT voice messages", () => {
       "fetch",
       vi.fn(async () => new Response("provider down", { status: 500 })),
     );
-    const { actionMessages, ctx, replies, xmux } = await initializeXmux({
+    const { actionMessages, ctx, replies, updates, xmux } = await initializeXmux({
       stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
     });
     const attachment = audioAttachment("voice-fail");
@@ -194,10 +196,38 @@ describe("STT voice messages", () => {
     expect(started.isOk()).toBe(true);
 
     const runId = firstPayload(actionMessages[0]?.buttons);
-    await eventually(() => replies.length === 1);
+    await eventually(() => updates.some((update) => update.text.includes("**Transcription failed**")));
 
-    expect(replies[0]).toContain("**Transcription failed**");
+    expect(replies).toHaveLength(0);
+    expect(updates.at(-1)?.text).toContain("**Transcription failed**");
     expect(ctx.app.services.sttRuns.get(runId)).toBeUndefined();
+
+    await xmux.shutdown();
+  });
+
+  test("successful transcript is retained when background action update fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ text: "retained transcript" }), {
+            headers: { "content-type": "application/json" },
+          }),
+      ),
+    );
+    const { actionMessages, ctx, xmux } = await initializeXmux({
+      stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
+      updateActionError: new Error("platform update failed"),
+    });
+    const attachment = audioAttachment("voice-retained");
+    const event = promptMessageEvent({ text: "", attachment });
+
+    const started = await handleSttAudioMessage({ ctx, event, attachment });
+    expect(started.isOk()).toBe(true);
+    const runId = firstPayload(actionMessages[0]?.buttons);
+
+    await eventually(() => ctx.app.services.sttRuns.get(runId)?.state === "awaiting_send");
+    expect(ctx.app.services.sttRuns.get(runId)?.transcript).toBe("retained transcript");
 
     await xmux.shutdown();
   });
@@ -218,7 +248,7 @@ describe("STT voice messages", () => {
     await xmux.shutdown();
   });
 
-  test("send failure reverts to awaiting_send so the user can retry", async () => {
+  test("send injects transcript through chat-core and deletes the run", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -231,29 +261,22 @@ describe("STT voice messages", () => {
     const { actionMessages, ctx, promptInputs, replies, updates, xmux } = await initializeXmux({
       stt: { enabled: true, model: "whisper-test", baseUrl: "http://stt.local/v1" },
     });
+    await bindSession(xmux.ctx.store);
     const attachment = audioAttachment("voice-retry");
     const event = promptMessageEvent({ text: "", attachment });
 
     const started = await handleSttAudioMessage({ ctx, event, attachment });
     expect(started.isOk()).toBe(true);
-    await eventually(() => actionMessages.length === 2);
-    const runId = firstPayload(actionMessages[1]?.buttons);
+    await eventually(() => updates.some((update) => update.text.includes("**Transcription ready**")));
+    const runId = firstPayload(actionMessages[0]?.buttons);
 
-    const firstSend = await handleSttAction({
-      ctx,
-      event: sttActionEvent({ value: "send", runId, updates, replies }),
-    });
-    expect(firstSend.isOk()).toBe(true);
-    expect(ctx.app.services.sttRuns.get(runId)?.state).toBe("awaiting_send");
-
-    await bindSession(xmux.ctx.store);
-    const secondSend = await handleSttAction({
+    const sent = await handleSttAction({
       ctx,
       event: sttActionEvent({ value: "send", runId, updates, replies }),
     });
 
-    expect(secondSend.isOk()).toBe(true);
-    expect(promptInputs).toHaveLength(1);
+    expect(sent.isOk()).toBe(true);
+    await eventually(() => promptInputs.length === 1);
     expect(ctx.app.services.sttRuns.get(runId)).toBeUndefined();
 
     await xmux.shutdown();
@@ -265,6 +288,7 @@ async function initializeXmux(
     readonly stt?: Config["stt"];
     readonly promptError?: unknown;
     readonly promptEvents?: readonly PiPromptEvent[];
+    readonly updateActionError?: unknown;
   } = {},
 ) {
   const actionMessages: { readonly text: string; readonly buttons: unknown }[] = [];
@@ -319,7 +343,12 @@ async function initializeXmux(
             },
             async sendAction(action) {
               actionMessages.push({ text: action.text, buttons: action.buttons });
-              return Result.ok(sentMessage(action.text));
+              return Result.ok(sentMessage(action.text, "action-1"));
+            },
+            async updateAction(action) {
+              updates.push({ text: action.text });
+              if (input.updateActionError !== undefined) return Result.err(input.updateActionError);
+              return Result.ok(sentMessage(action.text, action.message.messageId));
             },
             async respondToAction() {
               return Result.ok();
@@ -515,11 +544,11 @@ function firstPayload(buttons: unknown): string {
   throw new Error("missing payload");
 }
 
-function sentMessage(text: string) {
+function sentMessage(text: string, messageId = "reply-1") {
   return {
     chatId: "telegram" as const,
     conversationId: thread.threadId,
-    messageId: "reply-1",
+    messageId,
     text,
     adapterData: {},
   };
