@@ -1,6 +1,7 @@
 import type {
   HarnessAdapterObject,
   HarnessModelRef,
+  HarnessSessionUsageSnapshot,
   HarnessThinkingLevel,
   HarnessTokenUsage,
   HarnessToolOutput,
@@ -35,6 +36,7 @@ export type HarnessRunEvent<
       readonly reason?: Exclude<HarnessRunReason, "error" | "aborted">;
       readonly usage?: HarnessTokenUsage;
       readonly cost?: number;
+      readonly session?: HarnessSessionUsageSnapshot;
     })
   | (HarnessPromptEventBase<THarnessId, TAdapterData> & {
       readonly type: "run";

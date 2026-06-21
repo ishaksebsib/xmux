@@ -155,6 +155,26 @@ export interface HarnessTokenUsage {
   readonly total?: number;
 }
 
+export type HarnessContextUsage =
+  | {
+      readonly state: "known";
+      readonly used: number;
+      readonly limit?: number;
+    }
+  | {
+      readonly state: "unknown";
+      readonly limit?: number;
+    };
+
+export interface HarnessSessionUsageSnapshot {
+  /** Cumulative usage for the native session/conversation. */
+  readonly usage?: HarnessTokenUsage;
+  /** Cumulative cost for the native session/conversation. */
+  readonly cost?: number;
+  /** Current active context occupancy, not billing usage. */
+  readonly context?: HarnessContextUsage;
+}
+
 /** Tool output content that can be rendered by xmux consumers. */
 export type HarnessToolOutput =
   | { readonly type: "text"; readonly text: string }
