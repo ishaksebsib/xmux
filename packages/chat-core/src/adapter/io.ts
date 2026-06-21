@@ -68,6 +68,17 @@ export interface ChatAdapterSendActionInput<
   readonly signal?: AbortSignal;
 }
 
+/** In-place update for a previously sent action message. */
+export interface ChatAdapterUpdateActionInput<
+  TChatId extends string = string,
+  TAdapterOptions extends ChatAdapterObject = Record<never, never>,
+>
+  extends ChatConversationRef<TChatId>, ChatActionContent {
+  readonly message: ChatMessageRef<TChatId>;
+  readonly adapterOptions: TAdapterOptions;
+  readonly signal?: AbortSignal;
+}
+
 export type ChatAdapterActionResponse =
   | {
       readonly kind: "ack";

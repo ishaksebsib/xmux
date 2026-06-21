@@ -33,6 +33,8 @@ export function ensureStarted(args: {
     ChatLifecycleOperation,
     | "sendMessage"
     | "sendAction"
+    | "updateAction"
+    | "injectMessage"
     | "respondToAction"
     | "reply"
     | "streamMessage"

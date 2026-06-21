@@ -14,6 +14,7 @@ import { parseXmuxConfig, type Config } from "./config";
 import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
 import { createPromptRunRegistry } from "./features/prompt/run-registry";
+import { createSttRunRegistry } from "./features/stt/run-registry";
 import type { XmuxMiddleware } from "./middleware";
 import { registerRoutes } from "./router";
 import { createInMemoryStore } from "./store";
@@ -88,6 +89,7 @@ export function createXmuxResult<
       now: () => new Date(),
       shutdownSignal: shutdownController.signal,
       promptRuns: createPromptRunRegistry(),
+      sttRuns: createSttRunRegistry(),
     }),
   });
   const routeUnsubscribers = registerRoutes(ctx, options.middleware ?? []);

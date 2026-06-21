@@ -8,6 +8,7 @@ import type {
   ChatAdapterSendTypingInput,
   ChatAdapterStartContext,
   ChatAdapterStreamMessageInput,
+  ChatAdapterUpdateActionInput,
   ChatAdapterStreamReplyInput,
   ChatCommandRegistry,
   ChatSentMessage,
@@ -40,6 +41,7 @@ import {
   TelegramSendMessageError,
   TelegramSendTypingError,
   TelegramStartError,
+  TelegramUpdateActionError,
   TelegramStreamMessageError,
   TelegramStreamReplyError,
   TelegramWebhookModeUnsupportedError,
@@ -50,6 +52,7 @@ import { respondToAction as handleRespondToAction } from "./handlers/respond-act
 import { reply as handleReply } from "./handlers/reply";
 import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
+import { updateAction as handleUpdateAction } from "./handlers/update-action";
 import { sendTyping as handleSendTyping } from "./handlers/send-typing";
 import { initializeBot, startPolling } from "./handlers/start-polling";
 import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
@@ -306,6 +309,29 @@ class TelegramRuntime<TChatId extends string> implements OpenedChatAdapter<
     } as const;
     this.logger.debug(telegramLogEvents.outboundBegin, metadata);
     const result = await handleSendAction({ chatId: this.id, bot: this.bot, input });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: telegramLogEvents.outboundSuccess,
+      failureEvent: telegramLogEvents.outboundFailure,
+    });
+    return result;
+  }
+
+  async updateAction(
+    input: ChatAdapterUpdateActionInput<TChatId, TelegramAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TelegramAdapterData>, TelegramUpdateActionError>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("updateAction", input),
+      messageId: input.message.messageId,
+      buttonRows: input.buttons.length,
+      buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
+    } as const;
+    this.logger.debug(telegramLogEvents.outboundBegin, metadata);
+    const result = await handleUpdateAction({ chatId: this.id, bot: this.bot, input });
     logChatResult({
       logger: this.logger,
       result,

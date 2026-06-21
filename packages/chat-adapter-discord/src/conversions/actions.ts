@@ -3,6 +3,7 @@ import { Result } from "better-result";
 import type {
   ChatAdapterRespondToActionInput,
   ChatAdapterSendActionInput,
+  ChatAdapterUpdateActionInput,
   ChatActionButtonStyle,
   ChatButton,
   ChatTextInput,
@@ -20,6 +21,7 @@ import {
   DiscordActionResponseError,
   DiscordInboundDecodeError,
   DiscordSendActionError,
+  DiscordUpdateActionError,
 } from "../errors";
 import type { DiscordActionEnvelope, DiscordActionStore, DiscordAdapterOptions } from "../types";
 import { encodeDiscordMessagePayload, encodeDiscordText } from "./outbound";
@@ -37,6 +39,12 @@ const discordMaxButtonsTotal = 25;
 type DiscordActionComponents = NonNullable<MessageCreateOptions["components"]>;
 type DiscordSendActionPayload = Omit<DiscordSendMessageRequest, "signal">;
 
+export type DiscordActionUpdateRequest = {
+  readonly kind: "update";
+  readonly edit: MessageEditOptions;
+  readonly signal?: AbortSignal;
+};
+
 export type DiscordActionResponseRequest =
   | {
       readonly kind: "ack";
@@ -48,7 +56,7 @@ export type DiscordActionResponseRequest =
       readonly followUp: MessageCreateOptions;
       readonly signal?: AbortSignal;
     }
-  | { readonly kind: "update"; readonly edit: MessageEditOptions; readonly signal?: AbortSignal }
+  | DiscordActionUpdateRequest
   | { readonly kind: "noop" };
 
 export function encodeDiscordActionCustomIdInline(
@@ -222,6 +230,23 @@ export async function encodeDiscordSendAction(
   });
 }
 
+export async function encodeDiscordActionUpdate(
+  input: ChatAdapterUpdateActionInput<string, DiscordAdapterOptions>,
+  defaults: {
+    readonly allowedMentions: APIAllowedMentions;
+    readonly actionStore?: DiscordActionStore;
+  },
+): Promise<Result<DiscordActionUpdateRequest, DiscordUpdateActionError>> {
+  return encodeDiscordActionUpdateRequest({
+    message: { text: input.text, format: input.format },
+    buttons: input.buttons,
+    adapterOptions: input.adapterOptions,
+    signal: input.signal,
+    defaults,
+    createError: (reason, cause) => new DiscordUpdateActionError({ reason, cause }),
+  });
+}
+
 export async function encodeDiscordActionResponse(
   input: ChatAdapterRespondToActionInput<string, DiscordAdapterOptions>,
   defaults: {
@@ -282,22 +307,51 @@ export async function encodeDiscordActionResponse(
       return Result.ok({ kind: "noop" } satisfies DiscordActionResponseRequest);
     }
 
+    const update = yield* Result.await(
+      encodeDiscordActionUpdateRequest({
+        message: input.response.message,
+        buttons: input.response.buttons,
+        adapterOptions: input.adapterOptions,
+        signal: input.signal,
+        defaults,
+        createError: (reason, cause) => new DiscordActionResponseError({ reason, cause }),
+      }),
+    );
+    return Result.ok(update);
+  });
+}
+
+async function encodeDiscordActionUpdateRequest<
+  TError extends DiscordActionResponseError | DiscordUpdateActionError,
+>(args: {
+  readonly message?: ChatTextInput;
+  readonly buttons?: readonly (readonly ChatButton[])[];
+  readonly adapterOptions: DiscordAdapterOptions;
+  readonly signal?: AbortSignal;
+  readonly defaults: {
+    readonly allowedMentions: APIAllowedMentions;
+    readonly actionStore?: DiscordActionStore;
+  };
+  readonly createError: (reason: string, cause?: unknown) => TError;
+}): Promise<Result<DiscordActionUpdateRequest, TError>> {
+  return Result.gen(async function* () {
     const content =
-      input.response.message === undefined
+      args.message === undefined
         ? undefined
-        : yield* encodeDiscordActionResponseText({
-            message: input.response.message,
-            adapterOptions: input.adapterOptions,
+        : yield* encodeDiscordActionText({
+            message: args.message,
+            adapterOptions: args.adapterOptions,
+            createError: args.createError,
           });
     const components =
-      input.response.buttons === undefined
+      args.buttons === undefined
         ? undefined
         : yield* Result.await(
             encodeDiscordActionComponents({
-              buttons: input.response.buttons,
-              actionStore: defaults.actionStore,
+              buttons: args.buttons,
+              actionStore: args.defaults.actionStore,
               requireButtons: false,
-              createError: (reason, cause) => new DiscordActionResponseError({ reason, cause }),
+              createError: args.createError,
             }),
           );
 
@@ -308,17 +362,17 @@ export async function encodeDiscordActionResponse(
         ...(components === undefined ? {} : { components }),
         allowedMentions: encodeDiscordMessagePayload({
           content: content ?? "",
-          adapterOptions: input.adapterOptions,
-          defaults,
+          adapterOptions: args.adapterOptions,
+          defaults: args.defaults,
         }).allowedMentions,
       },
-      signal: input.signal,
-    } satisfies DiscordActionResponseRequest);
+      signal: args.signal,
+    } satisfies DiscordActionUpdateRequest);
   });
 }
 
 async function encodeDiscordActionComponents<
-  TError extends DiscordSendActionError | DiscordActionResponseError,
+  TError extends DiscordSendActionError | DiscordActionResponseError | DiscordUpdateActionError,
 >(args: {
   readonly buttons: readonly (readonly ChatButton[])[];
   readonly actionStore?: DiscordActionStore;
@@ -391,7 +445,7 @@ function validateDiscordButtonRows<TError>(
 }
 
 async function encodeDiscordButton<
-  TError extends DiscordSendActionError | DiscordActionResponseError,
+  TError extends DiscordSendActionError | DiscordActionResponseError | DiscordUpdateActionError,
 >(args: {
   readonly button: ChatButton;
   readonly actionStore?: DiscordActionStore;
@@ -490,6 +544,17 @@ function encodeDiscordActionResponseText(args: {
   readonly message: ChatTextInput;
   readonly adapterOptions: DiscordAdapterOptions;
 }): Result<string, DiscordActionResponseError> {
+  return encodeDiscordActionText({
+    ...args,
+    createError: (_reason, cause) => new DiscordActionResponseError({ cause }),
+  });
+}
+
+function encodeDiscordActionText<TError>(args: {
+  readonly message: ChatTextInput;
+  readonly adapterOptions: DiscordAdapterOptions;
+  readonly createError: (reason: string, cause?: unknown) => TError;
+}): Result<string, TError> {
   const content = typeof args.message === "string" ? { text: args.message } : args.message;
   return Result.mapError(
     encodeDiscordText({
@@ -497,7 +562,7 @@ function encodeDiscordActionResponseText(args: {
       format: content.format,
       adapterOptions: args.adapterOptions,
     }),
-    (cause) => new DiscordActionResponseError({ cause }),
+    (cause) => args.createError(cause.message, cause),
   );
 }
 

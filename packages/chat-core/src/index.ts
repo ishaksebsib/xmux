@@ -29,6 +29,7 @@ export {
   ChatStreamMessageError,
   ChatStreamReplyError,
   ChatTypingIndicatorError,
+  ChatUpdateActionError,
   InvalidChatTypingIndicatorInputError,
   UnknownChatAdapterError,
   UnsupportedChatOperationError,
@@ -47,6 +48,7 @@ export type {
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamMethodsFor,
   ChatAdapterStreamReplyInput,
+  ChatAdapterUpdateActionInput,
   OpenChatAdapterContext,
   OpenedChatAdapter,
   OpenedChatAdapterBase,
@@ -115,6 +117,8 @@ export type {
   ChatActionButtonInput,
   ChatActionButtonInputFor,
   ChatButtonInput,
+  ChatInjectMessageInput,
+  ChatInjectMessageInputFor,
   ChatReplyInput,
   ChatReplyInputFor,
   ChatSendActionInput,
@@ -135,6 +139,8 @@ export type {
   ChatTypingIndicatorInputFor,
   ChatTypingIndicatorMode,
   ChatTypingIndicatorResult,
+  ChatUpdateActionInput,
+  ChatUpdateActionInputFor,
 } from "./inputs";
 export type {
   ChatActionDefinition,
@@ -159,6 +165,7 @@ export type {
 export type {
   ChatActionResponseFailure,
   ChatCloseFailure,
+  ChatInjectMessageFailure,
   ChatLifecycleOperation,
   ChatReplyFailure,
   ChatSendActionFailure,
@@ -167,6 +174,7 @@ export type {
   ChatStreamMessageFailure,
   ChatStreamReplyFailure,
   ChatTypingIndicatorFailure,
+  ChatUpdateActionFailure,
 } from "./errors";
 export type {
   ChatActionAck,

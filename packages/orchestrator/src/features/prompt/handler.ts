@@ -1,5 +1,6 @@
 import type {
   ChatActor,
+  ChatAdapterObject,
   ChatConversationRef,
   ChatMessage,
   ChatTextInput,
@@ -28,11 +29,14 @@ export interface HandlePromptMessageInput<
   readonly event: PromptMessageEvent;
 }
 
-export interface PromptMessageEvent<TChatId extends string = string> {
+export interface PromptMessageEvent<
+  TChatId extends string = string,
+  TAdapterData extends ChatAdapterObject = ChatAdapterObject,
+> {
   readonly type: "message";
   readonly chatId: TChatId;
   readonly conversation: ChatConversationRef<TChatId>;
-  readonly message: ChatMessage<TChatId>;
+  readonly message: ChatMessage<TChatId, TAdapterData>;
   readonly reply: (message: ChatTextInput) => Promise<Result<unknown, unknown>>;
   readonly replyStream: (
     content: ChatTextStreamContent,

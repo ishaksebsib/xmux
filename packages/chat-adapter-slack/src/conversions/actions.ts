@@ -5,6 +5,7 @@ import type {
   ChatAdapterActionEvent,
   ChatAdapterRespondToActionInput,
   ChatAdapterSendActionInput,
+  ChatAdapterUpdateActionInput,
   ChatActionButtonStyle,
   ChatButton,
   ChatTextInput,
@@ -16,7 +17,12 @@ import type {
   SlackUpdateMessageRequest,
 } from "../client";
 import { createSlackConversationId, parseSlackConversationId } from "../conversation";
-import { SlackActionResponseError, SlackInboundDecodeError, SlackSendActionError } from "../errors";
+import {
+  SlackActionResponseError,
+  SlackInboundDecodeError,
+  SlackSendActionError,
+  SlackUpdateActionError,
+} from "../errors";
 import {
   createSlackActionInteractionId,
   type SlackActionInteractionContext,
@@ -46,12 +52,17 @@ const slackMaxButtonsTotal = 25;
 
 type SlackSendActionPayload = Omit<SlackPostMessageRequest, "signal">;
 
+export type SlackActionUpdateRequest = {
+  readonly kind: "update";
+  readonly update: SlackUpdateMessageRequest;
+};
+
 export type SlackActionResponseRequest =
   | { readonly kind: "noop" }
   | { readonly kind: "ack"; readonly ephemeral: SlackPostEphemeralRequest }
   | { readonly kind: "reply"; readonly postMessage: SlackPostMessageRequest }
   | { readonly kind: "reply"; readonly postEphemeral: SlackPostEphemeralRequest }
-  | { readonly kind: "update"; readonly update: SlackUpdateMessageRequest };
+  | SlackActionUpdateRequest;
 
 export type SlackActionDecodeResult<TChatId extends string> =
   | {
@@ -239,6 +250,23 @@ export async function encodeSlackSendAction(
   });
 }
 
+export async function encodeSlackActionUpdate(
+  input: ChatAdapterUpdateActionInput<string, SlackAdapterOptions>,
+  args: { readonly actionStore?: SlackActionStore },
+): Promise<Result<SlackActionUpdateRequest, SlackUpdateActionError>> {
+  const target = parseSlackConversationId(input.conversationId);
+  return encodeSlackActionUpdateRequest({
+    channelId: target.channelId,
+    messageTs: input.message.messageId,
+    message: { text: input.text, format: input.format },
+    buttons: input.buttons,
+    adapterOptions: input.adapterOptions,
+    signal: input.signal,
+    actionStore: args.actionStore,
+    createError: (reason, cause) => new SlackUpdateActionError({ reason, cause }),
+  });
+}
+
 export async function encodeSlackActionResponse(
   input: ChatAdapterRespondToActionInput<string, SlackAdapterOptions>,
   args: {
@@ -316,60 +344,19 @@ export async function encodeSlackActionResponse(
       return Result.ok({ kind: "noop" } satisfies SlackActionResponseRequest);
     }
 
-    const formatted =
-      input.response.message === undefined
-        ? undefined
-        : yield* encodeSlackActionResponseText({
-            message: input.response.message,
-            adapterOptions: input.adapterOptions,
-          });
-
-    if (input.response.buttons === undefined) {
-      return Result.ok({
-        kind: "update",
-        update: {
-          channel: args.interaction.channelId,
-          ts: input.message.messageId,
-          ...(formatted === undefined
-            ? {}
-            : encodeSlackUpdateMessagePayload({
-                formatted,
-                adapterOptions: input.adapterOptions,
-              })),
-          signal: input.signal,
-        },
-      } satisfies SlackActionResponseRequest);
-    }
-
-    if (input.adapterOptions.blocks !== undefined) {
-      return Result.err(
-        new SlackActionResponseError({
-          reason:
-            "Slack action updates generate Block Kit blocks; adapterOptions.blocks is not supported when buttons are provided",
-        }),
-      );
-    }
-
-    const blocks = yield* Result.await(
-      encodeSlackActionBlocks({
-        formatted,
+    const update = yield* Result.await(
+      encodeSlackActionUpdateRequest({
+        channelId: args.interaction.channelId,
+        messageTs: input.message.messageId,
+        message: input.response.message,
         buttons: input.response.buttons,
+        adapterOptions: input.adapterOptions,
+        signal: input.signal,
         actionStore: args.actionStore,
-        requireButtons: false,
         createError: (reason, cause) => new SlackActionResponseError({ reason, cause }),
       }),
     );
-
-    return Result.ok({
-      kind: "update",
-      update: {
-        channel: args.interaction.channelId,
-        ts: input.message.messageId,
-        ...(formatted === undefined ? {} : { text: formatted.text }),
-        blocks,
-        signal: input.signal,
-      },
-    } satisfies SlackActionResponseRequest);
+    return Result.ok(update);
   });
 }
 
@@ -460,8 +447,78 @@ export async function decodeSlackActionEvent<TChatId extends string>(args: {
   });
 }
 
+async function encodeSlackActionUpdateRequest<
+  TError extends SlackActionResponseError | SlackUpdateActionError,
+>(args: {
+  readonly channelId: string;
+  readonly messageTs: string;
+  readonly message?: ChatTextInput;
+  readonly buttons?: readonly (readonly ChatButton[])[];
+  readonly adapterOptions: SlackAdapterOptions;
+  readonly signal?: AbortSignal;
+  readonly actionStore?: SlackActionStore;
+  readonly createError: (reason: string, cause?: unknown) => TError;
+}): Promise<Result<SlackActionUpdateRequest, TError>> {
+  return Result.gen(async function* () {
+    const formatted =
+      args.message === undefined
+        ? undefined
+        : yield* encodeSlackActionText({
+            message: args.message,
+            adapterOptions: args.adapterOptions,
+            createError: args.createError,
+          });
+
+    if (args.buttons === undefined) {
+      return Result.ok({
+        kind: "update",
+        update: {
+          channel: args.channelId,
+          ts: args.messageTs,
+          ...(formatted === undefined
+            ? {}
+            : encodeSlackUpdateMessagePayload({
+                formatted,
+                adapterOptions: args.adapterOptions,
+              })),
+          signal: args.signal,
+        },
+      } satisfies SlackActionUpdateRequest);
+    }
+
+    if (args.adapterOptions.blocks !== undefined) {
+      return Result.err(
+        args.createError(
+          "Slack action updates generate Block Kit blocks; adapterOptions.blocks is not supported when buttons are provided",
+        ),
+      );
+    }
+
+    const blocks = yield* Result.await(
+      encodeSlackActionBlocks({
+        formatted,
+        buttons: args.buttons,
+        actionStore: args.actionStore,
+        requireButtons: false,
+        createError: args.createError,
+      }),
+    );
+
+    return Result.ok({
+      kind: "update",
+      update: {
+        channel: args.channelId,
+        ts: args.messageTs,
+        ...(formatted === undefined ? {} : { text: formatted.text }),
+        blocks,
+        signal: args.signal,
+      },
+    } satisfies SlackActionUpdateRequest);
+  });
+}
+
 async function encodeSlackActionBlocks<
-  TError extends SlackSendActionError | SlackActionResponseError,
+  TError extends SlackSendActionError | SlackActionResponseError | SlackUpdateActionError,
 >(args: {
   readonly formatted?: SlackFormattedText;
   readonly buttons: readonly (readonly ChatButton[])[];
@@ -547,7 +604,7 @@ function validateSlackButtonRows<TError>(
 }
 
 async function encodeSlackButton<
-  TError extends SlackSendActionError | SlackActionResponseError,
+  TError extends SlackSendActionError | SlackActionResponseError | SlackUpdateActionError,
 >(args: {
   readonly button: ChatButton;
   readonly actionStore?: SlackActionStore;
@@ -678,6 +735,17 @@ function encodeSlackActionResponseText(args: {
   readonly message: ChatTextInput;
   readonly adapterOptions: SlackAdapterOptions;
 }): Result<SlackFormattedText, SlackActionResponseError> {
+  return encodeSlackActionText({
+    ...args,
+    createError: (_reason, cause) => new SlackActionResponseError({ cause }),
+  });
+}
+
+function encodeSlackActionText<TError>(args: {
+  readonly message: ChatTextInput;
+  readonly adapterOptions: SlackAdapterOptions;
+  readonly createError: (reason: string, cause?: unknown) => TError;
+}): Result<SlackFormattedText, TError> {
   const content = typeof args.message === "string" ? { text: args.message } : args.message;
   return Result.mapError(
     encodeSlackText({
@@ -685,7 +753,7 @@ function encodeSlackActionResponseText(args: {
       format: content.format,
       adapterOptions: args.adapterOptions,
     }),
-    (cause) => new SlackActionResponseError({ cause }),
+    (cause) => args.createError(cause.message, cause),
   );
 }
 

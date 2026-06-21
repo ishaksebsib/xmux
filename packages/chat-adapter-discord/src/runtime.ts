@@ -10,6 +10,7 @@ import {
   type ChatAdapterStartContext,
   type ChatAdapterStreamMessageInput,
   type ChatAdapterStreamReplyInput,
+  type ChatAdapterUpdateActionInput,
   type ChatCommandRegistry,
   type ChatSentMessage,
   type OpenedChatAdapter,
@@ -42,6 +43,7 @@ import {
   DiscordSendTypingError,
   DiscordStreamMessageError,
   DiscordStreamReplyError,
+  DiscordUpdateActionError,
   DiscordWebhookModeUnsupportedError,
 } from "./errors";
 import { registerInboundHandlers } from "./handlers/inbound";
@@ -51,6 +53,7 @@ import { respondToAction as handleRespondToAction } from "./handlers/respond-act
 import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { sendTyping as handleSendTyping } from "./handlers/send-typing";
+import { updateAction as handleUpdateAction } from "./handlers/update-action";
 import { startGateway } from "./handlers/start-gateway";
 import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
 import { streamReply as handleStreamReply } from "./handlers/stream-reply";
@@ -322,6 +325,37 @@ class DiscordRuntime<TChatId extends string> implements DiscordOpenedAdapter<TCh
       client: this.client,
       config: this.config,
       interactionRegistry: this.interactionRegistry,
+      input,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: discordLogEvents.outboundSuccess,
+      failureEvent: discordLogEvents.outboundFailure,
+    });
+    return result;
+  }
+
+  async updateAction(
+    input: ChatAdapterUpdateActionInput<TChatId, DiscordAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, DiscordAdapterData>, DiscordUpdateActionError>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("updateAction", input),
+      messageId: input.message.messageId,
+      buttonRows: input.buttons.length,
+      buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
+    } as const;
+    this.logger.debug(discordLogEvents.outboundBegin, metadata);
+    const result = await handleUpdateAction({
+      chatId: this.id,
+      client: this.client,
+      defaults: {
+        allowedMentions: this.config.defaultAllowedMentions,
+        actionStore: this.config.actionStore,
+      },
       input,
     });
     logChatResult({

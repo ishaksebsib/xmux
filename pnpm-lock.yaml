@@ -335,6 +335,9 @@ importers:
       '@xmux/harness-core':
         specifier: workspace:*
         version: link:../harness-core
+      '@xmux/stt':
+        specifier: workspace:*
+        version: link:../stt
       better-result:
         specifier: ^2.9.1
         version: 2.9.1

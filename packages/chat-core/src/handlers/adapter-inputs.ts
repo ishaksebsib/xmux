@@ -7,6 +7,7 @@ import type {
   ChatAdapterSendTypingInput,
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
+  ChatAdapterUpdateActionInput,
 } from "../adapter/io";
 import type { ChatAdapterDefinitions, AdapterOptionsFor } from "../adapter/registry";
 import type { ChatAdapterObject, ChatMessageRef, ChatSentMessage } from "../contracts";
@@ -18,6 +19,7 @@ import type {
   ChatStreamMessageInput,
   ChatStreamReplyInput,
   ChatTypingIndicatorInput,
+  ChatUpdateActionInput,
 } from "../inputs";
 import type { RuntimeChatAdapterDefinition } from "./types";
 
@@ -87,6 +89,30 @@ export function createAdapterSendActionInput<
     adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
     signal: input.signal,
   } as ChatAdapterSendActionInput<TInput["chatId"], AdapterOptionsFor<TAdapters, TInput["chatId"]>>;
+}
+
+export function createAdapterUpdateActionInput<
+  TAdapters extends ChatAdapterDefinitions<TAdapters>,
+  TActions extends ChatActionRegistry,
+  TInput extends ChatUpdateActionInput<TAdapters, TActions>,
+>(input: TInput) {
+  return {
+    chatId: input.chatId,
+    conversationId: input.conversationId,
+    message: {
+      chatId: input.chatId,
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+    },
+    text: input.text,
+    format: input.format,
+    buttons: input.buttons,
+    adapterOptions: "adapterOptions" in input ? input.adapterOptions : {},
+    signal: input.signal,
+  } as ChatAdapterUpdateActionInput<
+    TInput["chatId"],
+    AdapterOptionsFor<TAdapters, TInput["chatId"]>
+  >;
 }
 
 export function createAdapterRespondToActionInput<

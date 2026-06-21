@@ -106,6 +106,19 @@ export class TelegramSendActionError extends TaggedError("TelegramSendActionErro
   }
 }
 
+/** Telegram updateAction failed. */
+export class TelegramUpdateActionError extends TaggedError("TelegramUpdateActionError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Telegram updateAction failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Telegram action response failed. */
 export class TelegramActionResponseError extends TaggedError("TelegramActionResponseError")<{
   readonly message: string;
@@ -185,6 +198,7 @@ export type TelegramAdapterError =
   | TelegramReplyError
   | TelegramSendActionError
   | TelegramSendMessageError
+  | TelegramUpdateActionError
   | TelegramSendTypingError
   | TelegramStartError
   | TelegramStreamMessageError

@@ -6,6 +6,7 @@ import type { NormalizedConfig } from "./config";
 import type { FileSystemHost } from "./filesystem";
 import type { Store } from "./store";
 import type { PromptRunRegistry } from "./features/prompt/run-registry";
+import type { SttRunRegistry } from "./features/stt/run-registry";
 
 /**
  * Long-lived application context.
@@ -83,6 +84,7 @@ export interface Services {
   readonly now: () => Date;
   readonly shutdownSignal: AbortSignal;
   readonly promptRuns: PromptRunRegistry;
+  readonly sttRuns: SttRunRegistry;
 }
 
 /** User identity associated with a handler invocation. */

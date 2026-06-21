@@ -8,6 +8,7 @@ import type {
   ChatAdapterSendActionInput,
   ChatAdapterSendMessageInput,
   ChatAdapterSendTypingInput,
+  ChatAdapterUpdateActionInput,
   ChatAdapterStreamMessageInput,
   ChatAdapterStreamReplyInput,
   ChatAdapterStartContext,
@@ -51,6 +52,9 @@ export interface OpenedChatAdapterBase<
   ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
   sendAction(
     input: ChatAdapterSendActionInput<TChatId, TAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
+  updateAction?(
+    input: ChatAdapterUpdateActionInput<TChatId, TAdapterOptions>,
   ): Promise<Result<ChatSentMessage<TChatId, TAdapterData>, TAdapterError>>;
   respondToAction(
     input: ChatAdapterRespondToActionInput<TChatId, TAdapterOptions>,

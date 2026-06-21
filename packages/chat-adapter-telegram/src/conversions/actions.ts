@@ -1,12 +1,17 @@
 import type {
   ChatAdapterRespondToActionInput,
   ChatAdapterSendActionInput,
+  ChatAdapterUpdateActionInput,
   ChatButton,
   ChatTextInput,
 } from "@xmux/chat-core";
 import type { InlineKeyboardButton, InlineKeyboardMarkup } from "grammy/types";
 import type { TelegramBotClient } from "../client";
-import { TelegramActionResponseError, TelegramSendActionError } from "../errors";
+import {
+  TelegramActionResponseError,
+  TelegramSendActionError,
+  TelegramUpdateActionError,
+} from "../errors";
 import type { TelegramAdapterOptions } from "../types";
 import { encodeTelegramFormattedText } from "./formatting";
 
@@ -25,6 +30,15 @@ export type TelegramSendActionRequest = {
   readonly signal?: AbortSignal;
 };
 
+export type TelegramActionUpdateRequest = {
+  readonly kind: "update";
+  readonly chatId: string;
+  readonly messageId: number;
+  readonly text: string;
+  readonly options: TelegramEditMessageOptions;
+  readonly signal?: AbortSignal;
+};
+
 export type TelegramActionResponseRequest =
   | {
       readonly kind: "ack";
@@ -39,14 +53,7 @@ export type TelegramActionResponseRequest =
       readonly options: TelegramAdapterOptions;
       readonly signal?: AbortSignal;
     }
-  | {
-      readonly kind: "update";
-      readonly chatId: string;
-      readonly messageId: number;
-      readonly text: string;
-      readonly options: TelegramEditMessageOptions;
-      readonly signal?: AbortSignal;
-    };
+  | TelegramActionUpdateRequest;
 
 export interface TelegramActionCallbackData {
   readonly actionId: string;
@@ -73,6 +80,20 @@ export function encodeTelegramSendAction(
     },
     signal: input.signal,
   };
+}
+
+export function encodeTelegramActionUpdate(
+  input: ChatAdapterUpdateActionInput<string, TelegramAdapterOptions>,
+): TelegramActionUpdateRequest {
+  return encodeTelegramActionUpdateRequest({
+    conversationId: input.conversationId,
+    messageId: input.message.messageId,
+    message: { text: input.text, format: input.format },
+    buttons: input.buttons,
+    adapterOptions: input.adapterOptions,
+    signal: input.signal,
+    createError: (reason) => new TelegramUpdateActionError({ reason }),
+  });
 }
 
 export function encodeTelegramActionResponse(
@@ -114,34 +135,15 @@ export function encodeTelegramActionResponse(
     });
   }
 
-  const messageId = parseTelegramMessageId(input.message.messageId);
-  if (messageId === undefined) {
-    throw new TelegramActionResponseError({
-      reason: `Telegram action update message id must be a positive integer: ${input.message.messageId}`,
-    });
-  }
-
-  const content = normalizeActionTextInput(input.response.message);
-  const formattedText = encodeTelegramFormattedText({
-    text: content.text,
-    format: content.format,
+  return encodeTelegramActionUpdateRequest({
+    conversationId: input.conversationId,
+    messageId: input.message.messageId,
+    message: input.response.message,
+    buttons: input.response.buttons,
     adapterOptions: input.adapterOptions,
-  });
-
-  return {
-    kind: "update",
-    chatId: input.conversationId,
-    messageId,
-    text: formattedText.text,
-    options: {
-      ...formattedText.options,
-      ...input.adapterOptions,
-      ...(input.response.buttons === undefined
-        ? {}
-        : { reply_markup: encodeTelegramInlineKeyboard(input.response.buttons) }),
-    } as TelegramEditMessageOptions,
     signal: input.signal,
-  };
+    createError: (reason) => new TelegramActionResponseError({ reason }),
+  });
 }
 
 export function decodeTelegramActionCallbackData(
@@ -185,6 +187,45 @@ function encodeTelegramInlineKeyboardButton(button: ChatButton): TelegramInlineK
   }
 
   return { text: button.label, callback_data: callbackData };
+}
+
+function encodeTelegramActionUpdateRequest<TError extends Error>(args: {
+  readonly conversationId: string;
+  readonly messageId: string;
+  readonly message: ChatTextInput;
+  readonly buttons?: readonly (readonly ChatButton[])[];
+  readonly adapterOptions: TelegramAdapterOptions;
+  readonly signal?: AbortSignal;
+  readonly createError: (reason: string) => TError;
+}): TelegramActionUpdateRequest {
+  const messageId = parseTelegramMessageId(args.messageId);
+  if (messageId === undefined) {
+    throw args.createError(
+      `Telegram action update message id must be a positive integer: ${args.messageId}`,
+    );
+  }
+
+  const content = normalizeActionTextInput(args.message);
+  const formattedText = encodeTelegramFormattedText({
+    text: content.text,
+    format: content.format,
+    adapterOptions: args.adapterOptions,
+  });
+
+  return {
+    kind: "update",
+    chatId: args.conversationId,
+    messageId,
+    text: formattedText.text,
+    options: {
+      ...formattedText.options,
+      ...args.adapterOptions,
+      ...(args.buttons === undefined
+        ? {}
+        : { reply_markup: encodeTelegramInlineKeyboard(args.buttons) }),
+    } as TelegramEditMessageOptions,
+    signal: args.signal,
+  };
 }
 
 function normalizeActionTextInput(message: ChatTextInput) {

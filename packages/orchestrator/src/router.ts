@@ -11,6 +11,7 @@ import { registerModelRoute } from "./features/model";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
 import { registerResumeRoute } from "./features/resume";
+import { registerSttRoute } from "./features/stt";
 import { registerThinkingRoute } from "./features/thinking";
 import { registerUnknownCommandRoute } from "./features/unknown-command";
 import { registerCdRoute, registerLsRoute, registerPwdRoute } from "./features/workspace";
@@ -32,6 +33,7 @@ export function registerRoutes<
     registerThinkingRoute(ctx, middleware),
     registerCancelRoute(ctx, middleware),
     registerInteractionRoute(ctx, middleware),
+    registerSttRoute(ctx, middleware),
     registerPwdRoute(ctx, middleware),
     registerCdRoute(ctx, middleware),
     registerLsRoute(ctx, middleware),

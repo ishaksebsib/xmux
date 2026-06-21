@@ -585,7 +585,7 @@ function decodeTelegramActor(args: {
   readonly chat: TelegramActorChat;
   readonly from: TelegramActorUser;
   readonly adapterData: TelegramAdapterData;
-}): ChatActor {
+}): ChatActor<TelegramAdapterData> {
   if (args.from === undefined) {
     return {
       kind: "system",

@@ -112,6 +112,19 @@ export class DiscordSendActionError extends TaggedError("DiscordSendActionError"
   }
 }
 
+/** Discord updateAction failed. */
+export class DiscordUpdateActionError extends TaggedError("DiscordUpdateActionError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Discord updateAction failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Discord action response failed. */
 export class DiscordActionResponseError extends TaggedError("DiscordActionResponseError")<{
   readonly message: string;
@@ -237,6 +250,7 @@ export type DiscordAdapterError =
   | DiscordSendMessageError
   | DiscordSendTypingError
   | DiscordStartError
+  | DiscordUpdateActionError
   | DiscordStreamMessageError
   | DiscordStreamReplyError
   | DiscordWebhookModeUnsupportedError;
