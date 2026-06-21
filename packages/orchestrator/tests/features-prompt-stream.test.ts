@@ -278,16 +278,57 @@ describe("prompt stream renderer", () => {
       [
         "done",
         "",
-        "**Stats**",
+        "**Session Stats**",
         "",
         "- _Model: `openai/gpt-5`_",
         "- _Thinking Level: `high`_",
         "- _Harness: `pi`_",
         "- _Tokens: 1,250_",
-        "- _Context: 1,025 used_",
         "- _Cost: $0.01_",
       ].join("\n"),
     );
+  });
+
+  test("prefers completed run session usage over turn usage", async () => {
+    const text = await collectRendered([
+      {
+        type: "turn",
+        phase: "completed",
+        ref,
+        usage: { input: 100, output: 25, total: 125 },
+        cost: 0.01,
+      },
+      {
+        type: "run",
+        phase: "completed",
+        ref,
+        reason: "stop",
+        session: {
+          usage: { input: 1_000, output: 500, total: 1_500 },
+          cost: 0.25,
+          context: { state: "known", used: 12_174, limit: 200_000 },
+        },
+      },
+    ]);
+
+    expect(text).toContain("- _Tokens: 1,500_");
+    expect(text).toContain("- _Context: 12,174 used (6%)_");
+    expect(text).toContain("- _Cost: $0.25_");
+    expect(text).not.toContain("Tokens: 125");
+  });
+
+  test("renders explicit unknown context snapshots", async () => {
+    const text = await collectRendered([
+      {
+        type: "run",
+        phase: "completed",
+        ref,
+        reason: "stop",
+        session: { context: { state: "unknown", limit: 200_000 } },
+      },
+    ]);
+
+    expect(text).toContain("- _Context: unknown / 200,000_");
   });
 });
 

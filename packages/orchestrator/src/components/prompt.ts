@@ -1,3 +1,4 @@
+import type { HarnessContextUsage } from "@xmux/harness-core";
 import { bulletList, inlineCode, markdownText } from "./markdown";
 import type { NormalizedPromptResponseConfig } from "../config";
 
@@ -251,19 +252,20 @@ export function promptUsage(input: {
     readonly cacheWrite?: number;
   };
   readonly cost?: number;
+  readonly context?: HarnessContextUsage;
 }): string {
   const details = [
     input.model === undefined ? undefined : `Model: ${inlineCode(input.model)}`,
     input.thinking === undefined ? undefined : `Thinking Level: ${inlineCode(input.thinking)}`,
     input.harnessId === undefined ? undefined : `Harness: ${inlineCode(input.harnessId)}`,
     formatTokenLine(input.tokens),
-    formatContextLine(input.tokens),
+    formatContextLine(input.context),
     formatCostLine(input.cost),
   ].filter((part): part is string => part !== undefined && part.length > 0);
 
   if (details.length === 0) return "";
 
-  return ["**Stats**", bulletList(details.map((detail) => `_${detail}_`))].join("\n\n");
+  return ["**Session Stats**", bulletList(details.map((detail) => `_${detail}_`))].join("\n\n");
 }
 
 function formatTokenLine(
@@ -287,19 +289,20 @@ function formatTokenLine(
   return total === undefined ? undefined : `Tokens: ${formatNumber(total)}`;
 }
 
-function formatContextLine(
-  tokens:
-    | {
-        readonly input?: number;
-        readonly cacheRead?: number;
-        readonly cacheWrite?: number;
-      }
-    | undefined,
-): string | undefined {
-  if (!tokens) return undefined;
+function formatContextLine(context: HarnessContextUsage | undefined): string | undefined {
+  if (!context) return undefined;
 
-  const context = sumDefined(tokens.input, tokens.cacheRead, tokens.cacheWrite);
-  return context === undefined ? undefined : `Context: ${formatNumber(context)} used`;
+  if (context.state === "unknown") {
+    return context.limit === undefined
+      ? "Context: unknown"
+      : `Context: unknown / ${formatNumber(context.limit)}`;
+  }
+
+  if (context.limit === undefined || context.limit <= 0) {
+    return `Context: ${formatNumber(context.used)} used`;
+  }
+
+  return `Context: ${formatNumber(context.used)} used (${Math.round((context.used / context.limit) * 100)}%)`;
 }
 
 function formatCostLine(cost: number | undefined): string | undefined {

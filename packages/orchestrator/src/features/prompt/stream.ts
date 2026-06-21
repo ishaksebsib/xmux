@@ -1,6 +1,7 @@
 import type { ChatTextStreamChunk } from "@xmux/chat-core";
 import { DEFAULT_PROMPT_RESPONSE_CONFIG, type NormalizedPromptResponseConfig } from "../../config";
 import type {
+  HarnessContextUsage,
   HarnessModelRef,
   HarnessPromptEvent,
   HarnessThinkingLevel,
@@ -39,6 +40,9 @@ interface PromptRenderState {
   thinking?: HarnessThinkingLevel;
   usage?: HarnessTokenUsage;
   cost?: number;
+  sessionUsage?: HarnessTokenUsage;
+  sessionCost?: number;
+  contextUsage?: HarnessContextUsage;
   readonly config: NormalizedPromptResponseConfig;
 }
 
@@ -334,6 +338,15 @@ function renderRunEvent(input: {
     if (input.state.cost === undefined && input.event.cost !== undefined) {
       input.state.cost = input.event.cost;
     }
+    if (input.event.session?.usage !== undefined) {
+      input.state.sessionUsage = input.event.session.usage;
+    }
+    if (input.event.session?.cost !== undefined) {
+      input.state.sessionCost = input.event.session.cost;
+    }
+    if (input.event.session?.context !== undefined) {
+      input.state.contextUsage = input.event.session.context;
+    }
     return appendCompletionSummary(input.state, input.event.ref.harnessId);
   }
 
@@ -383,8 +396,9 @@ function appendCompletionSummary(state: PromptRenderState, harnessId: string): s
     model: state.model === undefined ? undefined : formatPromptModel(state.model, state.thinking),
     harnessId,
     thinking: state.thinking,
-    tokens: state.usage,
-    cost: state.cost,
+    tokens: state.sessionUsage ?? state.usage,
+    cost: state.sessionCost ?? state.cost,
+    context: state.contextUsage,
   });
 
   if (summary.length === 0) {
@@ -400,7 +414,10 @@ function hasCompletionDetails(state: PromptRenderState): boolean {
     state.model !== undefined ||
     state.thinking !== undefined ||
     state.usage !== undefined ||
-    state.cost !== undefined
+    state.cost !== undefined ||
+    state.sessionUsage !== undefined ||
+    state.sessionCost !== undefined ||
+    state.contextUsage !== undefined
   );
 }
 
