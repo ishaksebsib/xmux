@@ -1,3 +1,3 @@
 export { statusApi } from "./api";
-export { status, statusHandlers } from "./handlers";
+export { status, statusHandlerLayer } from "./handlers";
 export { StatusResponse } from "./schemas";

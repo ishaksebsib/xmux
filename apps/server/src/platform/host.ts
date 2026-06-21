@@ -12,7 +12,7 @@ export interface HostRuntimeService {
   /** Environment lookup seam so callers avoid direct process.env access. */
   readonly getEnv: (name: string) => string | undefined;
   /** Host UUID generator for fresh opaque identifiers. */
-  readonly randomUuid: Effect.Effect<string>;
+  readonly randomUuid: () => Effect.Effect<string>;
   /** Host PID probe; only a stale-file hint, never ownership proof. */
   readonly isPidAlive: (pid: number) => Effect.Effect<boolean>;
   /** Last-resort host warning sink when normal logging is unsafe. */

@@ -5,24 +5,21 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
 import { makeSecretResolverLayer } from "./support/secrets";
-import { ServerConfigLayer } from "../src/config/service";
-import { LogReaderLayer } from "../src/logging/log-reader";
-import { NodeHostRuntime } from "../src/platform/node";
+import { ServerConfig } from "../src/config/service";
+import { LogReader } from "../src/logging/log-reader";
+import { nodeHostRuntimeLayer } from "../src/platform/node";
 import { ServerIdentity } from "../src/server-runtime/identity";
-import {
-  ShutdownCoordinator,
-  ShutdownCoordinatorLayer,
-} from "../src/server-runtime/shutdown-coordinator";
-import { StatusRegistryLayer } from "../src/server-runtime/state";
+import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
+import { StatusRegistry } from "../src/server-runtime/state";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
 import { RuntimePaths } from "../src/server-control/paths";
 import { ServerProbe } from "../src/server-control/ports";
 import { ControlTransport, serverMain } from "../src/server";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
-const testTransport = Layer.succeed(ControlTransport)({ bind: Effect.void });
-const SecretLayer = makeSecretResolverLayer(new Map());
-const ServerProbeUnreachable = Layer.succeed(ServerProbe)({
+const testTransport = Layer.succeed(ControlTransport)({ bind: () => Effect.void });
+const secretLayer = makeSecretResolverLayer(new Map());
+const serverProbeUnreachableLayer = Layer.succeed(ServerProbe)({
   isAlive: () => Effect.succeed(false),
 });
 
@@ -59,11 +56,11 @@ const makePaths = (
 
 const makeTestLayer = (paths: ServerRuntimePaths) => {
   const base = Layer.mergeAll(
-    NodeHostRuntime,
+    nodeHostRuntimeLayer,
     NodeFileSystem.layer,
     NodePath.layer,
-    SecretLayer,
-    ServerProbeUnreachable,
+    secretLayer,
+    serverProbeUnreachableLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
       pid: process.pid,
@@ -71,13 +68,13 @@ const makeTestLayer = (paths: ServerRuntimePaths) => {
       sessionId: "unit",
     }),
   );
-  const withConfig = Layer.provideMerge(ServerConfigLayer, base);
-  const withLogReader = Layer.provideMerge(LogReaderLayer, withConfig);
+  const withConfig = Layer.provideMerge(ServerConfig.layer, base);
+  const withLogReader = Layer.provideMerge(LogReader.layer, withConfig);
 
   return Layer.mergeAll(
     withLogReader,
-    StatusRegistryLayer,
-    ShutdownCoordinatorLayer,
+    StatusRegistry.layer,
+    ShutdownCoordinator.layer,
     testTransport,
   );
 };
@@ -91,7 +88,7 @@ it.effect("constructs the server program with injected runtime services", () =>
       Effect.gen(function* () {
         const fiber = yield* Effect.forkScoped(Effect.scoped(serverMain()));
         const shutdown = yield* ShutdownCoordinator;
-        yield* shutdown.completeShutdown;
+        yield* shutdown.completeShutdown();
         yield* Fiber.join(fiber);
       }).pipe(Effect.provide(makeTestLayer(paths))),
     );
@@ -128,7 +125,7 @@ it.effect("runs the server workflow with injected temp runtime paths", () =>
       Effect.gen(function* () {
         const fiber = yield* Effect.forkScoped(Effect.scoped(serverMain()));
         const shutdown = yield* ShutdownCoordinator;
-        yield* shutdown.completeShutdown;
+        yield* shutdown.completeShutdown();
         yield* Fiber.join(fiber);
       }).pipe(Effect.provide(makeTestLayer(paths))),
     );

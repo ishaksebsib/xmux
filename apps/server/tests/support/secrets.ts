@@ -6,14 +6,13 @@ export const makeSecretResolverLayer = (
   values: ReadonlyMap<string, string>,
 ): Layer.Layer<SecretResolver> =>
   Layer.succeed(SecretResolver)({
-    resolveEnv: ({ configPath, env }) =>
-      Effect.gen(function* () {
-        const value = values.get(env);
-        if (value !== undefined && value.length > 0) return value;
-        return yield* ConfigSecretError.make({
-          path: configPath,
-          env,
-          message: `Missing required environment secret: ${env}`,
-        });
-      }),
+    resolveEnv: Effect.fn("SecretResolver.test.resolveEnv")(function* ({ configPath, env }) {
+      const value = values.get(env);
+      if (value !== undefined && value.length > 0) return value;
+      return yield* ConfigSecretError.make({
+        path: configPath,
+        env,
+        message: `Missing required environment secret: ${env}`,
+      });
+    }),
   });

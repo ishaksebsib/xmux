@@ -9,7 +9,7 @@ import { ConfigValidateResponse, EffectiveConfigResponse } from "./schemas";
 export const effective = Effect.fn("api.config.effective")(function* () {
   const config = yield* ServerConfig;
 
-  return yield* config.getRedacted.pipe(
+  return yield* config.getRedacted().pipe(
     Effect.matchEffect({
       onFailure: (error) =>
         Effect.fail(
@@ -33,7 +33,7 @@ export const effective = Effect.fn("api.config.effective")(function* () {
 
 export const validate = Effect.fn("api.config.validate")(function* () {
   const config = yield* ServerConfig;
-  const result = yield* config.validateCurrent;
+  const result = yield* config.validateCurrent();
   if (!result.valid) {
     return yield* Effect.fail(
       ConfigValidateResponse.make({
@@ -54,6 +54,6 @@ export const validate = Effect.fn("api.config.validate")(function* () {
   });
 });
 
-export const configHandlers = HttpApiBuilder.group(serverApi, "config", (handlers) =>
+export const configHandlerLayer = HttpApiBuilder.group(serverApi, "config", (handlers) =>
   handlers.handle("effective", () => effective()).handle("validate", () => validate()),
 );

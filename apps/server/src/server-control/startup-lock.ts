@@ -109,7 +109,7 @@ const acquireLockFile = Effect.fn("server.acquireStartupLockFile")(function* (
   const pathService = yield* Path.Path;
   const host = yield* HostRuntime;
   const startedAtMs = yield* Clock.currentTimeMillis;
-  const nonce = yield* host.randomUuid;
+  const nonce = yield* host.randomUuid();
   const payload = StartupLockPayload.make({
     pid: host.pid,
     startedAt: new Date(startedAtMs).toISOString(),

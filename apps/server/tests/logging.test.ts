@@ -10,9 +10,9 @@ import {
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
 import type { HostRuntime } from "../src/platform/host";
-import { NodeHostRuntime } from "../src/platform/node";
+import { nodeHostRuntimeLayer } from "../src/platform/node";
 
-const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
+const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeHostRuntimeLayer);
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeLogEntry = Schema.decodeUnknownOption(LogEntry);
 
@@ -41,7 +41,7 @@ const decodeJsonLine = (line: string): LogEntry => {
 };
 
 describe("structured file logging", () => {
-  layer(NodeFsPathLayer)((it) => {
+  layer(nodeFsPathLayer)((it) => {
     it.effect("writes redacted JSONL to main and error logs", () =>
       withTempLogDir(({ logDir, paths }) =>
         Effect.gen(function* () {

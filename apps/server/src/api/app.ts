@@ -1,9 +1,9 @@
 import { Layer } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { serverApi } from "./api";
-import { handlers } from "./registry";
+import { handlerLayer } from "./registry";
 
 /** Canonical control API layer; platform transports decide where it is served. */
-export const app = HttpApiBuilder.layer(serverApi, {
+export const appLayer = HttpApiBuilder.layer(serverApi, {
   openapiPath: "/openapi.json",
-}).pipe(Layer.provide(handlers));
+}).pipe(Layer.provide(handlerLayer));

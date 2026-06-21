@@ -119,6 +119,6 @@ const isAlive = (endpoint: ServerControlEndpoint): Effect.Effect<boolean> =>
     }),
   );
 
-export const NodeServerProbe = Layer.succeed(ServerProbe)({
+export const nodeServerProbeLayer = Layer.succeed(ServerProbe)({
   isAlive,
 });

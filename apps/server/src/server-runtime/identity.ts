@@ -9,18 +9,19 @@ export class ServerIdentity extends Context.Service<
     readonly startedAt: Date;
     readonly sessionId: string;
   }
->()("@xmux/server/ServerIdentity") {}
-
-/** Identity layer captures process metadata once at server startup. */
-export const ServerIdentityLayer = Layer.effect(ServerIdentity)(
-  Effect.gen(function* () {
-    const startedAtMs = yield* Clock.currentTimeMillis;
-    const host = yield* HostRuntime;
-    const sessionId = yield* host.randomUuid;
-    return {
-      pid: host.pid,
-      startedAt: new Date(startedAtMs),
-      sessionId,
-    };
-  }),
-);
+>()("@xmux/server/ServerIdentity") {
+  /** Identity layer captures process metadata once at server startup. */
+  static readonly layer = Layer.effect(
+    ServerIdentity,
+    Effect.gen(function* () {
+      const startedAtMs = yield* Clock.currentTimeMillis;
+      const host = yield* HostRuntime;
+      const sessionId = yield* host.randomUuid();
+      return {
+        pid: host.pid,
+        startedAt: new Date(startedAtMs),
+        sessionId,
+      };
+    }),
+  );
+}

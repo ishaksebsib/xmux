@@ -8,20 +8,17 @@ import { StatusResponse } from "../src/api/groups/status/schemas";
 import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
 import { status as statusRoute } from "../src/api/groups/status/handlers";
 import { makeSecretResolverLayer } from "./support/secrets";
-import { ServerConfigLayer } from "../src/config/service";
-import { LogReaderLayer } from "../src/logging/log-reader";
+import { ServerConfig } from "../src/config/service";
+import { LogReader } from "../src/logging/log-reader";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
 import { RuntimePaths } from "../src/server-control/paths";
 import { ServerIdentity } from "../src/server-runtime/identity";
+import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
+import { StatusRegistry } from "../src/server-runtime/state";
 import {
-  ShutdownCoordinator,
-  ShutdownCoordinatorLayer,
-} from "../src/server-runtime/shutdown-coordinator";
-import { StatusRegistry, StatusRegistryLayer } from "../src/server-runtime/state";
-import {
-  NodeHostRuntime,
-  NodeServerProbe,
-  NodeUnixSocketControlTransport,
+  nodeHostRuntimeLayer,
+  nodeServerProbeLayer,
+  nodeUnixSocketControlTransportLayer,
 } from "../src/platform/node";
 import { serverMain } from "../src/server";
 import {
@@ -35,7 +32,7 @@ import {
 } from "./support/client";
 
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
-const SecretLayer = makeSecretResolverLayer(new Map());
+const secretLayer = makeSecretResolverLayer(new Map());
 
 const makeTempRoot = Effect.acquireRelease(
   Effect.promise(() => mkdtemp(join(tmpdir(), "server-control-"))),
@@ -92,11 +89,11 @@ const makePaths = (
 
 const makeServerTestLayer = (paths: ServerRuntimePaths) => {
   const base = Layer.mergeAll(
-    NodeHostRuntime,
+    nodeHostRuntimeLayer,
     NodeFileSystem.layer,
     NodePath.layer,
-    SecretLayer,
-    NodeServerProbe,
+    secretLayer,
+    nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
       pid: process.pid,
@@ -104,11 +101,11 @@ const makeServerTestLayer = (paths: ServerRuntimePaths) => {
       sessionId: "control-test",
     }),
   );
-  const withConfig = Layer.provideMerge(ServerConfigLayer, base);
-  const withLogReader = Layer.provideMerge(LogReaderLayer, withConfig);
-  const withRuntime = Layer.mergeAll(withLogReader, StatusRegistryLayer, ShutdownCoordinatorLayer);
+  const withConfig = Layer.provideMerge(ServerConfig.layer, base);
+  const withLogReader = Layer.provideMerge(LogReader.layer, withConfig);
+  const withRuntime = Layer.mergeAll(withLogReader, StatusRegistry.layer, ShutdownCoordinator.layer);
 
-  return Layer.provideMerge(NodeUnixSocketControlTransport, withRuntime);
+  return Layer.provideMerge(nodeUnixSocketControlTransportLayer, withRuntime);
 };
 
 describe("control handlers", () => {
@@ -117,8 +114,8 @@ describe("control handlers", () => {
       const root = yield* makeTempRoot;
       const paths = makePaths(root);
       const handlerLayer = Layer.mergeAll(
-        StatusRegistryLayer,
-        ShutdownCoordinatorLayer,
+        StatusRegistry.layer,
+        ShutdownCoordinator.layer,
         Layer.succeed(RuntimePaths)(paths),
         Layer.succeed(ServerIdentity)({
           pid: process.pid,
@@ -147,7 +144,7 @@ describe("control handlers", () => {
         const secondShutdownBody = yield* Effect.scoped(shutdownRoute());
         assert.isFalse(secondShutdownBody.accepted);
         assert.isTrue(secondShutdownBody.alreadyStopping);
-        assert.isTrue(yield* shutdown.isShutdownRequested);
+        assert.isTrue(yield* shutdown.isShutdownRequested());
       }).pipe(Effect.provide(handlerLayer));
     }),
   );

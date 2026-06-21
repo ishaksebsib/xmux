@@ -38,11 +38,6 @@ export interface ServerRuntimePaths {
   readonly scopeId: string;
 }
 
-/** RuntimePaths exposes the once-resolved filesystem/control layout as a service. */
-export class RuntimePaths extends Context.Service<RuntimePaths, ServerRuntimePaths>()(
-  "@xmux/server/RuntimePaths",
-) {}
-
 const expandHome = (pathService: Path.Path, home: string, input: string): string => {
   if (input === "~") return home;
   if (input.startsWith("~/")) return pathService.join(home, input.slice(2));
@@ -166,13 +161,19 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   };
 });
 
-/** Resolve paths from normalized server options at the application boundary. */
-export const RuntimePathsLayer = Layer.effect(RuntimePaths)(
-  Effect.gen(function* () {
-    const options = yield* ServerOptions;
-    return yield* resolveRuntimePaths(options);
-  }),
-);
+/** RuntimePaths exposes the once-resolved filesystem/control layout as a service. */
+export class RuntimePaths extends Context.Service<RuntimePaths, ServerRuntimePaths>()(
+  "@xmux/server/RuntimePaths",
+) {
+  /** Resolve paths from normalized server options at the application boundary. */
+  static readonly layer = Layer.effect(
+    RuntimePaths,
+    Effect.gen(function* () {
+      const options = yield* ServerOptions;
+      return yield* resolveRuntimePaths(options);
+    }),
+  );
+}
 
 const makeDirectory = (
   directory: string,

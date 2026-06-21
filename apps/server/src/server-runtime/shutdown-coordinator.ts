@@ -10,29 +10,41 @@ export interface ShutdownRequestResult {
 export class ShutdownCoordinator extends Context.Service<
   ShutdownCoordinator,
   {
-    readonly beginShutdown: Effect.Effect<ShutdownRequestResult>;
-    readonly completeShutdown: Effect.Effect<void>;
-    readonly awaitShutdown: Effect.Effect<void>;
-    readonly isShutdownRequested: Effect.Effect<boolean>;
+    readonly beginShutdown: () => Effect.Effect<ShutdownRequestResult>;
+    readonly completeShutdown: () => Effect.Effect<void>;
+    readonly awaitShutdown: () => Effect.Effect<void>;
+    readonly isShutdownRequested: () => Effect.Effect<boolean>;
   }
->()("@xmux/server/ShutdownCoordinator") {}
+>()("@xmux/server/ShutdownCoordinator") {
+  /** Coordinator layer is one deferred signal plus a ref for idempotent requests. */
+  static readonly layer = Layer.effect(
+    ShutdownCoordinator,
+    Effect.gen(function* () {
+      const requested = yield* Ref.make(false);
+      const signal = yield* Deferred.make<void>();
 
-/** Coordinator layer is one deferred signal plus a ref for idempotent requests. */
-export const ShutdownCoordinatorLayer = Layer.effect(ShutdownCoordinator)(
-  Effect.gen(function* () {
-    const requested = yield* Ref.make(false);
-    const signal = yield* Deferred.make<void>();
+      const beginShutdown = Effect.fn("ShutdownCoordinator.beginShutdown")(function* () {
+        return yield* Ref.modify(requested, (wasRequested): [ShutdownRequestResult, boolean] => {
+          if (wasRequested) {
+            return [{ accepted: false, alreadyStopping: true }, true];
+          }
+          return [{ accepted: true, alreadyStopping: false }, true];
+        });
+      });
 
-    return {
-      beginShutdown: Ref.modify(requested, (wasRequested): [ShutdownRequestResult, boolean] => {
-        if (wasRequested) {
-          return [{ accepted: false, alreadyStopping: true }, true];
-        }
-        return [{ accepted: true, alreadyStopping: false }, true];
-      }),
-      completeShutdown: Deferred.succeed(signal, undefined).pipe(Effect.asVoid),
-      awaitShutdown: Deferred.await(signal),
-      isShutdownRequested: Ref.get(requested),
-    };
-  }),
-);
+      const completeShutdown = Effect.fn("ShutdownCoordinator.completeShutdown")(function* () {
+        yield* Deferred.succeed(signal, undefined);
+      });
+
+      const awaitShutdown = Effect.fn("ShutdownCoordinator.awaitShutdown")(function* () {
+        yield* Deferred.await(signal);
+      });
+
+      const isShutdownRequested = Effect.fn("ShutdownCoordinator.isShutdownRequested")(function* () {
+        return yield* Ref.get(requested);
+      });
+
+      return { beginShutdown, completeShutdown, awaitShutdown, isShutdownRequested };
+    }),
+  );
+}

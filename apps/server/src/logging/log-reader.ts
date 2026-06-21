@@ -169,19 +169,21 @@ export class LogReader extends Context.Service<
       input: ReadServerLogTailInput,
     ) => Effect.Effect<readonly LogEntry[], LogFileError>;
   }
->()("@xmux/server/LogReader") {}
+>()("@xmux/server/LogReader") {
+  static readonly layer = Layer.effect(
+    LogReader,
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const pathService = yield* Path.Path;
 
-export const LogReaderLayer = Layer.effect(LogReader)(
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const pathService = yield* Path.Path;
-
-    return {
-      readTail: (input: ReadServerLogTailInput) =>
-        readServerLogTail(input).pipe(
+      const readTail = Effect.fn("LogReader.readTail")(function* (input: ReadServerLogTailInput) {
+        return yield* readServerLogTail(input).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
           Effect.provideService(Path.Path, pathService),
-        ),
-    };
-  }),
-);
+        );
+      });
+
+      return { readTail };
+    }),
+  );
+}

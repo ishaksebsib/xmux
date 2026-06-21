@@ -1,4 +1,4 @@
-import { Context, Effect, Scope } from "effect";
+import { Context, Effect } from "effect";
 import type { ServerControlEndpoint } from "../contracts/control";
 import type { ControlServerError } from "../errors";
 
@@ -6,7 +6,7 @@ import type { ControlServerError } from "../errors";
 export class ControlTransport extends Context.Service<
   ControlTransport,
   {
-    readonly bind: Effect.Effect<void, ControlServerError, Scope.Scope>;
+    readonly bind: () => Effect.Effect<void, ControlServerError>;
   }
 >()("@xmux/server/ControlTransport") {}
 

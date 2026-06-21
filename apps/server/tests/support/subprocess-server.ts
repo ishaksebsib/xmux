@@ -52,7 +52,7 @@ const resolveExpectedPaths = (input: {
     pid: process.pid,
     executablePath: process.execPath,
     getEnv: (name: string) => input.env[name],
-    randomUuid: Effect.succeed("subprocess-test"),
+    randomUuid: () => Effect.succeed("subprocess-test"),
     isPidAlive: () => Effect.succeed(true),
     emitWarning: () => Effect.void,
   });

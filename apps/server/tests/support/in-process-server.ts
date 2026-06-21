@@ -1,19 +1,19 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Schema, Scope } from "effect";
 import { makeSecretResolverLayer } from "./secrets";
-import { ServerConfigLayer } from "../../src/config/service";
-import { LogReaderLayer } from "../../src/logging/log-reader";
+import { ServerConfig } from "../../src/config/service";
+import { LogReader } from "../../src/logging/log-reader";
 import {
-  NodeHostRuntime,
-  NodeSecretResolver,
-  NodeServerProbe,
-  NodeUnixSocketControlTransport,
+  nodeHostRuntimeLayer,
+  nodeSecretResolverLayer,
+  nodeServerProbeLayer,
+  nodeUnixSocketControlTransportLayer,
 } from "../../src/platform/node";
 import type { ServerRuntimePaths } from "../../src/server-control/paths";
 import { RuntimePaths } from "../../src/server-control/paths";
 import { ServerIdentity } from "../../src/server-runtime/identity";
-import { ShutdownCoordinatorLayer } from "../../src/server-runtime/shutdown-coordinator";
-import { StatusRegistryLayer } from "../../src/server-runtime/state";
+import { ShutdownCoordinator } from "../../src/server-runtime/shutdown-coordinator";
+import { StatusRegistry } from "../../src/server-runtime/state";
 import { serverMain } from "../../src/server";
 import { requestShutdown } from "./client";
 import { makeSandbox } from "./sandbox";
@@ -32,14 +32,14 @@ export const makeInProcessServerLayer = (input: {
 }) => {
   const secretLayer =
     input.env === undefined
-      ? Layer.provideMerge(NodeSecretResolver, NodeHostRuntime)
+      ? Layer.provideMerge(nodeSecretResolverLayer, nodeHostRuntimeLayer)
       : makeSecretResolverLayer(input.env);
   const base = Layer.mergeAll(
-    NodeHostRuntime,
+    nodeHostRuntimeLayer,
     NodeFileSystem.layer,
     NodePath.layer,
     secretLayer,
-    NodeServerProbe,
+    nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(input.paths),
     Layer.succeed(ServerIdentity)({
       pid: process.pid,
@@ -47,10 +47,10 @@ export const makeInProcessServerLayer = (input: {
       sessionId: "integration-test",
     }),
   );
-  const withConfig = Layer.provideMerge(ServerConfigLayer, base);
-  const withLogReader = Layer.provideMerge(LogReaderLayer, withConfig);
-  const core = Layer.mergeAll(withLogReader, StatusRegistryLayer, ShutdownCoordinatorLayer);
-  return Layer.provideMerge(NodeUnixSocketControlTransport, core);
+  const withConfig = Layer.provideMerge(ServerConfig.layer, base);
+  const withLogReader = Layer.provideMerge(LogReader.layer, withConfig);
+  const core = Layer.mergeAll(withLogReader, StatusRegistry.layer, ShutdownCoordinator.layer);
+  return Layer.provideMerge(nodeUnixSocketControlTransportLayer, core);
 };
 
 export const withInProcessServer = <A>(

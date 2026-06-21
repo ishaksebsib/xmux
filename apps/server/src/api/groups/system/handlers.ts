@@ -8,7 +8,7 @@ const isReady = (state: string): boolean => state === "ready";
 
 export const health = Effect.fn("api.system.health")(function* () {
   const status = yield* StatusRegistry;
-  const state = yield* status.getState;
+  const state = yield* status.getState();
 
   return HealthResponse.make({
     alive: true,
@@ -17,6 +17,6 @@ export const health = Effect.fn("api.system.health")(function* () {
   });
 });
 
-export const systemHandlers = HttpApiBuilder.group(serverApi, "system", (handlers) =>
+export const systemHandlerLayer = HttpApiBuilder.group(serverApi, "system", (handlers) =>
   handlers.handle("health", () => health()),
 );

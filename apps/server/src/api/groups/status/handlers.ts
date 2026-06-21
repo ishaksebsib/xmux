@@ -13,7 +13,7 @@ export const status = Effect.fn("api.status.get")(function* () {
   const identity = yield* ServerIdentity;
   const registry = yield* StatusRegistry;
 
-  const state = yield* registry.getState;
+  const state = yield* registry.getState();
   const nowMs = yield* Clock.currentTimeMillis;
   const uptimeMs = Math.max(0, nowMs - identity.startedAt.getTime());
 
@@ -34,6 +34,6 @@ export const status = Effect.fn("api.status.get")(function* () {
   });
 });
 
-export const statusHandlers = HttpApiBuilder.group(serverApi, "status", (handlers) =>
+export const statusHandlerLayer = HttpApiBuilder.group(serverApi, "status", (handlers) =>
   handlers.handle("status", () => status()),
 );

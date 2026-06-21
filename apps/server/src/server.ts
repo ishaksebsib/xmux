@@ -1,31 +1,28 @@
 import { Effect, Layer } from "effect";
-import { ServerConfig, ServerConfigLayer } from "./config/service";
+import { ServerConfig } from "./config/service";
 import type { ServerError } from "./errors";
 import { withFileLogger } from "./logging/file-logger";
-import { LogReaderLayer } from "./logging/log-reader";
+import { LogReader } from "./logging/log-reader";
 import { assertNoActiveServer } from "./server-control/active-server";
 import { acquireManifestOwnership } from "./server-control/manifest";
 import { ensureRuntimeDirectories } from "./server-control/paths";
-import { RuntimePaths, RuntimePathsLayer } from "./server-control/paths";
+import { RuntimePaths } from "./server-control/paths";
 import { withStartupLock } from "./server-control/startup-lock";
 import { ControlTransport } from "./server-control/ports";
-import { ServerIdentity, ServerIdentityLayer } from "./server-runtime/identity";
-import {
-  ShutdownCoordinator,
-  ShutdownCoordinatorLayer,
-} from "./server-runtime/shutdown-coordinator";
-import { StatusRegistry, StatusRegistryLayer } from "./server-runtime/state";
+import { ServerIdentity } from "./server-runtime/identity";
+import { ShutdownCoordinator } from "./server-runtime/shutdown-coordinator";
+import { StatusRegistry } from "./server-runtime/state";
 
 export { ControlTransport } from "./server-control/ports";
 
 /** Platform-neutral server services; host layers provide platform, secrets, probe, and transport. */
-export const ServerRuntimeServices = Layer.mergeAll(
-  RuntimePathsLayer,
-  ServerConfigLayer,
-  LogReaderLayer,
-  ServerIdentityLayer,
-  ShutdownCoordinatorLayer,
-  StatusRegistryLayer,
+export const serverRuntimeLayer = Layer.mergeAll(
+  RuntimePaths.layer,
+  ServerConfig.layer,
+  LogReader.layer,
+  ServerIdentity.layer,
+  ShutdownCoordinator.layer,
+  StatusRegistry.layer,
 );
 
 /** Main server workflow owns startup ordering while services come from context. */
@@ -49,7 +46,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
         { startupLockPath: paths.startupLockPath },
         Effect.gen(function* () {
           yield* assertNoActiveServer(paths);
-          yield* transport.bind;
+          yield* transport.bind();
           yield* acquireManifestOwnership({
             paths,
             startedAt: identity.startedAt,
@@ -73,7 +70,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
         scopeId: paths.scopeId,
       });
 
-      yield* shutdown.awaitShutdown;
+      yield* shutdown.awaitShutdown();
     }),
   );
 });

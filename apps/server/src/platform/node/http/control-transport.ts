@@ -10,7 +10,7 @@ import { ShutdownCoordinator } from "../../../server-runtime/shutdown-coordinato
 import { StatusRegistry } from "../../../server-runtime/state";
 import { RuntimePaths } from "../../../server-control/paths";
 import { ControlTransport } from "../../../server-control/ports";
-import { app } from "../../../api/app";
+import { appLayer } from "../../../api/app";
 
 export const removeSocket = (
   socketPath: string,
@@ -59,7 +59,7 @@ const makeUnixSocketHttpServerLayer = (socketPath: string) =>
   ).pipe(Layer.provideMerge(NodeHttpServer.layerHttpServices));
 
 /** Node Unix-socket transport for the local control API. */
-export const NodeUnixSocketControlTransport = Layer.effect(ControlTransport)(
+export const nodeUnixSocketControlTransportLayer = Layer.effect(ControlTransport)(
   Effect.gen(function* () {
     const paths = yield* RuntimePaths;
     const config = yield* ServerConfig;
@@ -78,13 +78,16 @@ export const NodeUnixSocketControlTransport = Layer.effect(ControlTransport)(
       Layer.succeed(StatusRegistry)(status),
     );
     const httpServer = makeUnixSocketHttpServerLayer(socketPath);
-    const servingLayer = HttpRouter.serve(app, {
+    const servingLayer = HttpRouter.serve(appLayer, {
       disableListenLog: true,
       disableLogger: true,
     }).pipe(Layer.provideMerge(httpServer), Layer.provide(apiDependencies));
+    const transportScope = yield* Effect.scope;
 
-    return {
-      bind: Layer.build(servingLayer).pipe(Effect.asVoid),
-    };
+    const bind = Effect.fn("ControlTransport.bind")(function* () {
+      yield* Layer.buildWithScope(servingLayer, transportScope);
+    });
+
+    return { bind };
   }),
 );

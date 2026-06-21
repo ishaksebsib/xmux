@@ -14,16 +14,16 @@ import { redactServerConfig } from "../src/config/redact";
 import { loadEffectiveServerConfig, validateServerConfig } from "../src/config/normalize";
 import { makeSecretResolverLayer } from "./support/secrets";
 import type { HostRuntime } from "../src/platform/host";
-import { NodeHostRuntime } from "../src/platform/node";
+import { nodeHostRuntimeLayer } from "../src/platform/node";
 
-const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
-const SecretLayer = makeSecretResolverLayer(
+const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeHostRuntimeLayer);
+const secretLayer = makeSecretResolverLayer(
   new Map([
     ["TELEGRAM_BOT_TOKEN", "telegram-secret"],
     ["DISCORD_BOT_TOKEN", "discord-secret"],
   ]),
 );
-const ConfigTestLayer = Layer.mergeAll(NodeFsPathLayer, SecretLayer);
+const configTestLayer = Layer.mergeAll(nodeFsPathLayer, secretLayer);
 
 const decodeFileConfig = Schema.decodeUnknownSync(ServerFileConfig);
 const decodeRedactedConfig = Schema.decodeUnknownSync(RedactedServerConfig);
@@ -87,7 +87,7 @@ describe("ServerFileConfig schema", () => {
 });
 
 describe("config loading and validation", () => {
-  layer(ConfigTestLayer)((it) => {
+  layer(configTestLayer)((it) => {
     it.effect("loads JSONC with comments and trailing commas", () =>
       withTempConfigPath("xmux.jsonc", (configPath) =>
         Effect.gen(function* () {

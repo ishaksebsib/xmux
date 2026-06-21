@@ -23,16 +23,16 @@ import {
   type ServerRuntimePaths,
 } from "../src/server-control/paths";
 import { acquireStartupLock, releaseStartupLock } from "../src/server-control/startup-lock";
-import { NodeHostRuntime, isPidAlive } from "../src/platform/node";
+import { nodeHostRuntimeLayer, isPidAlive } from "../src/platform/node";
 
-const NodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, NodeHostRuntime);
-const ServerProbeUnreachable = Layer.succeed(ServerProbe)({
+const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeHostRuntimeLayer);
+const serverProbeUnreachableLayer = Layer.succeed(ServerProbe)({
   isAlive: () => Effect.succeed(false),
 });
-const ServerProbeReachable = Layer.succeed(ServerProbe)({
+const serverProbeReachableLayer = Layer.succeed(ServerProbe)({
   isAlive: () => Effect.succeed(true),
 });
-const NodeFsPathControlLayer = Layer.mergeAll(NodeFsPathLayer, ServerProbeUnreachable);
+const nodeFsPathControlLayer = Layer.mergeAll(nodeFsPathLayer, serverProbeUnreachableLayer);
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedSessionId = "test-session";
 
@@ -97,7 +97,7 @@ const makeRuntimePaths = (
 };
 
 describe("runtime paths", () => {
-  layer(Layer.mergeAll(NodePath.layer, NodeHostRuntime))((it) => {
+  layer(Layer.mergeAll(NodePath.layer, nodeHostRuntimeLayer))((it) => {
     it.effect("resolves stable path-safe scope ids", () =>
       Effect.gen(function* () {
         const paths = yield* resolveRuntimePaths(
@@ -119,7 +119,7 @@ describe("runtime paths", () => {
 });
 
 describe("manifest state", () => {
-  layer(NodeFsPathControlLayer)((it) => {
+  layer(nodeFsPathControlLayer)((it) => {
     it.effect("round-trips a manifest in a temp directory", () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -217,7 +217,7 @@ describe("manifest state", () => {
 
         yield* writeServerManifest(manifestPath, activeManifest);
         const error = yield* assertNoActiveServer(paths).pipe(
-          Effect.provide(ServerProbeReachable),
+          Effect.provide(serverProbeReachableLayer),
           Effect.flip,
         );
 
@@ -307,7 +307,7 @@ describe("manifest state", () => {
 });
 
 describe("startup lock", () => {
-  layer(NodeFsPathLayer)((it) => {
+  layer(nodeFsPathLayer)((it) => {
     it.effect("blocks a second acquire", () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;

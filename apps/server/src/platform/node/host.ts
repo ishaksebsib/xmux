@@ -20,13 +20,19 @@ export const isPidAlive = (pid: number): boolean => {
 };
 
 /** Node implementation of host process/environment services. */
-export const NodeHostRuntime = Layer.succeed(HostRuntime)({
+export const nodeHostRuntimeLayer = Layer.succeed(HostRuntime)({
   platform: process.platform,
   homeDir: homedir(),
   pid: process.pid,
   executablePath: process.argv[1] ?? process.execPath,
   getEnv: (name) => process.env[name],
-  randomUuid: Effect.sync(() => randomUUID()),
-  isPidAlive: (pid) => Effect.sync(() => isPidAlive(pid)),
-  emitWarning: (message) => Effect.sync(() => process.emitWarning(message)),
+  randomUuid: Effect.fn("HostRuntime.randomUuid")(function* () {
+    return yield* Effect.sync(() => randomUUID());
+  }),
+  isPidAlive: Effect.fn("HostRuntime.isPidAlive")(function* (pid: number) {
+    return yield* Effect.sync(() => isPidAlive(pid));
+  }),
+  emitWarning: Effect.fn("HostRuntime.emitWarning")(function* (message: string) {
+    yield* Effect.sync(() => process.emitWarning(message));
+  }),
 });

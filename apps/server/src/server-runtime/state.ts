@@ -15,19 +15,26 @@ export type ServerStatusState = typeof ServerStatusState.Type;
 export class StatusRegistry extends Context.Service<
   StatusRegistry,
   {
-    readonly getState: Effect.Effect<ServerStatusState>;
+    readonly getState: () => Effect.Effect<ServerStatusState>;
     readonly setState: (state: ServerStatusState) => Effect.Effect<void>;
   }
->()("@xmux/server/StatusRegistry") {}
+>()("@xmux/server/StatusRegistry") {
+  /** Status layer starts as `starting`; the shell marks readiness after publish. */
+  static readonly layer = Layer.effect(
+    StatusRegistry,
+    Effect.gen(function* () {
+      const state = yield* Ref.make<ServerStatusState>("starting");
 
-/** Status layer starts as `starting`; the shell marks readiness after publish. */
-export const StatusRegistryLayer = Layer.effect(StatusRegistry)(
-  Effect.gen(function* () {
-    const state = yield* Ref.make<ServerStatusState>("starting");
+      const getState = Effect.fn("StatusRegistry.getState")(function* () {
+        return yield* Ref.get(state);
+      });
+      const setState = Effect.fn("StatusRegistry.setState")(function* (
+        nextState: ServerStatusState,
+      ) {
+        yield* Ref.set(state, nextState);
+      });
 
-    return {
-      getState: Ref.get(state),
-      setState: (nextState: ServerStatusState) => Ref.set(state, nextState),
-    };
-  }),
-);
+      return { getState, setState };
+    }),
+  );
+}

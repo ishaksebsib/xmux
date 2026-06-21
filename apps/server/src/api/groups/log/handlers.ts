@@ -32,6 +32,6 @@ export const tail = Effect.fn("api.logs.tail")(function* (tail: number | undefin
   );
 });
 
-export const logsHandlers = HttpApiBuilder.group(serverApi, "logs", (handlers) =>
+export const logsHandlerLayer = HttpApiBuilder.group(serverApi, "logs", (handlers) =>
   handlers.handle("tail", ({ query }) => tail(query.tail)),
 );

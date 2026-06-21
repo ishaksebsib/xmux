@@ -9,10 +9,10 @@ export const shutdown = Effect.fn("api.lifecycle.shutdown")(function* () {
   const coordinator = yield* ShutdownCoordinator;
   const status = yield* StatusRegistry;
 
-  const result = yield* coordinator.beginShutdown;
+  const result = yield* coordinator.beginShutdown();
   if (result.accepted) {
     yield* status.setState("stopping");
-    yield* Effect.addFinalizer(() => coordinator.completeShutdown);
+    yield* Effect.addFinalizer(() => coordinator.completeShutdown());
   }
 
   return ShutdownResponse.make({
@@ -21,6 +21,6 @@ export const shutdown = Effect.fn("api.lifecycle.shutdown")(function* () {
   });
 });
 
-export const lifecycleHandlers = HttpApiBuilder.group(serverApi, "lifecycle", (handlers) =>
+export const lifecycleHandlerLayer = HttpApiBuilder.group(serverApi, "lifecycle", (handlers) =>
   handlers.handle("shutdown", () => shutdown()),
 );
