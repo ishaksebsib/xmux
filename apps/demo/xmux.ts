@@ -63,6 +63,11 @@ export async function runXmuxDemo() {
       userName: "xmux",
       defaultWorkingDirectory: process.env.XMUX_WORKDIR ?? process.cwd(),
       deliveryMode: "requester_only",
+      stt: {
+        enabled: true,
+        apiKey: process.env.OPENAI_API_KEY,
+        model: "gpt-4o-mini-transcribe",
+      },
     },
     store: createInMemoryStore(),
     middleware: [
