@@ -106,7 +106,6 @@ export interface NormalizedPromptConfig {
 }
 
 export interface Config {
-  readonly userName: string;
   readonly defaultWorkingDirectory: string;
   readonly deliveryMode: DeliveryMode;
   readonly workspace?: WorkspaceConfig;
@@ -117,7 +116,6 @@ export interface Config {
 }
 
 export interface NormalizedConfig {
-  readonly userName: string;
   readonly defaultWorkingDirectory: AbsolutePath;
   readonly deliveryMode: DeliveryMode;
   readonly workspace: NormalizedWorkspaceConfig;
@@ -461,7 +459,6 @@ export function parseXmuxConfig(
   config: Config,
 ): ResultType<NormalizedConfig, XmuxConfigurationError> {
   return Result.gen(function* () {
-    const userName = yield* parseNonEmptyString(config.userName, "userName");
     const defaultWorkingDirectory = yield* parseDefaultWorkingDirectory(
       config.defaultWorkingDirectory,
     );
@@ -474,7 +471,6 @@ export function parseXmuxConfig(
 
     return Result.ok(
       Object.freeze({
-        userName,
         defaultWorkingDirectory,
         deliveryMode,
         workspace,

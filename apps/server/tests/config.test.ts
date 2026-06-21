@@ -50,7 +50,6 @@ describe("ServerFileConfig schema", () => {
       assert.instanceOf(minimal, ServerFileConfig);
 
       const full = decodeFileConfig({
-        userName: "Ishak",
         defaultWorkingDirectory: "~/dev",
         deliveryMode: "requester_only",
         server: { logLevel: "debug" },
@@ -74,7 +73,7 @@ describe("ServerFileConfig schema", () => {
         },
       });
 
-      assert.strictEqual(full.userName, "Ishak");
+      assert.strictEqual(full.defaultWorkingDirectory, "~/dev");
       assert.instanceOf(full.chats?.telegram?.token, EnvSecretRef);
       assert.instanceOf(full.chats?.discord?.token, InlineSecretRef);
     }),
@@ -97,14 +96,13 @@ describe("config loading and validation", () => {
             configPath,
             `{
   // comments are accepted
-  "userName": "xmux",
   "defaultWorkingDirectory": "./workspace",
   "server": { "logLevel": "info" },
 }`,
           );
 
           const config = yield* loadServerConfigFile(configPath);
-          assert.strictEqual(config?.userName, "xmux");
+          assert.strictEqual(config?.defaultWorkingDirectory, "./workspace");
         }),
       ),
     );

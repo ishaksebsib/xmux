@@ -103,7 +103,6 @@ const redactPi = (pi: EffectivePiConfig): RedactedPiConfig => {
 /** Redact effective runtime config before it crosses the control boundary. */
 export const redactServerConfig = (config: EffectiveServerConfig): RedactedServerConfig =>
   RedactedServerConfig.make({
-    userName: config.userName,
     defaultWorkingDirectory: config.defaultWorkingDirectory,
     deliveryMode: config.deliveryMode,
     server: config.server,

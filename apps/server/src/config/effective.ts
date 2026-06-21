@@ -37,7 +37,6 @@ export class EffectiveHarnessesConfig extends Schema.Class<EffectiveHarnessesCon
 export class EffectiveServerConfig extends Schema.Class<EffectiveServerConfig>(
   "EffectiveServerConfig",
 )({
-  userName: Schema.String,
   defaultWorkingDirectory: Schema.String,
   deliveryMode: DeliveryMode,
   server: EffectiveServerSettings,

@@ -162,7 +162,6 @@ function createTestXmux(input: { readonly defaultWorkingDirectory: string }) {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: input.defaultWorkingDirectory,
       deliveryMode: "requester_only",
     },

@@ -419,7 +419,6 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
       ...(input.maxSessionsPerHarness === undefined

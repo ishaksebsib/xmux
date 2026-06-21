@@ -11,12 +11,10 @@ export class WriteConfigError extends Schema.TaggedErrorClass<WriteConfigError>(
 ) {}
 
 export const minimalConfig = (overrides = ""): string => `{
-  "userName": "integration-test",
   "defaultWorkingDirectory": "./workspace"${overrides === "" ? "" : `,\n  ${overrides}`}
 }`;
 
 export const validTelegramConfig = (token: string): string => `{
-  "userName": "integration-test",
   "defaultWorkingDirectory": "./workspace",
   "chats": { "telegram": { "enabled": true, "token": { "value": "${token}" } } }
 }`;

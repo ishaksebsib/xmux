@@ -114,7 +114,6 @@ export class HarnessesFileConfig extends Schema.Class<HarnessesFileConfig>("Harn
 
 /** Raw JSONC config contract. Missing keys are defaulted after decoding. */
 export class ServerFileConfig extends Schema.Class<ServerFileConfig>("ServerFileConfig")({
-  userName: Schema.optionalKey(NonEmptyString),
   defaultWorkingDirectory: Schema.optionalKey(NonEmptyString),
   deliveryMode: Schema.optionalKey(DeliveryMode),
   server: Schema.optionalKey(ServerFileServerConfig),
@@ -188,7 +187,6 @@ export class RedactedHarnessesConfig extends Schema.Class<RedactedHarnessesConfi
 export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
   "RedactedServerConfig",
 )({
-  userName: Schema.String,
   defaultWorkingDirectory: Schema.String,
   deliveryMode: DeliveryMode,
   server: ServerSettingsConfig,

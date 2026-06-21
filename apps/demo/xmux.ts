@@ -60,7 +60,6 @@ export async function runXmuxDemo() {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.env.XMUX_WORKDIR ?? process.cwd(),
       deliveryMode: "requester_only",
       stt: {

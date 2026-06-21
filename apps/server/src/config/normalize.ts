@@ -37,7 +37,6 @@ import { loadServerConfigFile } from "./load-jsonc";
 import { redactServerConfig } from "./redact";
 import { resolveSecretRef } from "./resolve-secrets";
 
-const DEFAULT_USER_NAME = "xmux";
 
 const expandHome = (pathService: Path.Path, homeDir: string, input: string): string => {
   if (input === "~") return homeDir;
@@ -278,7 +277,6 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
     const middleware = config.middleware;
 
     return EffectiveServerConfig.make({
-      userName: config.userName ?? DEFAULT_USER_NAME,
       defaultWorkingDirectory,
       deliveryMode: config.deliveryMode ?? "requester_only",
       server: normalizeServerSettings(config.server),

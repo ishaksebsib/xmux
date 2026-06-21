@@ -212,7 +212,6 @@ async function initializeXmux(options: InitializeXmuxInput = {}) {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
     },

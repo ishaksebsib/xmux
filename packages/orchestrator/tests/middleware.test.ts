@@ -100,7 +100,6 @@ async function initializeXmux(
     chats,
     middleware: input.middleware,
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
     },

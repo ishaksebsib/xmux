@@ -100,7 +100,6 @@ describe("/new command", () => {
         }),
       },
       config: {
-        userName: "xmux",
         defaultWorkingDirectory: process.cwd(),
         deliveryMode: "requester_only",
       },
@@ -234,7 +233,6 @@ describe("/new command", () => {
         }),
       },
       config: {
-        userName: "xmux",
         defaultWorkingDirectory: process.cwd(),
         deliveryMode: "requester_only",
       },
@@ -470,7 +468,6 @@ async function initializeNewXmux() {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
     },

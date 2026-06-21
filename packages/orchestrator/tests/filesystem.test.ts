@@ -13,7 +13,6 @@ import {
 describe("workspace filesystem", () => {
   test("normalizes workspace config defaults safely", () => {
     const config = normalizeConfig({
-      userName: "xmux",
       defaultWorkingDirectory: ".",
       deliveryMode: "requester_only",
     });
@@ -37,7 +36,6 @@ describe("workspace filesystem", () => {
 
   test("normalizes prompt attachment config", () => {
     const config = normalizeConfig({
-      userName: "xmux",
       defaultWorkingDirectory: ".",
       deliveryMode: "requester_only",
       prompt: {
@@ -58,7 +56,6 @@ describe("workspace filesystem", () => {
 
   test("normalizes prompt response config", () => {
     const config = normalizeConfig({
-      userName: "xmux",
       defaultWorkingDirectory: ".",
       deliveryMode: "requester_only",
       prompt: {
@@ -87,7 +84,6 @@ describe("workspace filesystem", () => {
 
   test("rejects malformed prompt response limits", () => {
     const config = parseXmuxConfig({
-      userName: "xmux",
       defaultWorkingDirectory: ".",
       deliveryMode: "requester_only",
       prompt: {

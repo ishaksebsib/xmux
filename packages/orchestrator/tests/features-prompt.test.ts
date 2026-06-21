@@ -568,7 +568,6 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
       prompt: { attachments: input.promptAttachments },
@@ -639,7 +638,6 @@ async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
       prompt: { attachments: input.promptAttachments },

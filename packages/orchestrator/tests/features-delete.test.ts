@@ -405,7 +405,6 @@ async function initializeXmux(
       }),
     },
     config: {
-      userName: "xmux",
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
     },

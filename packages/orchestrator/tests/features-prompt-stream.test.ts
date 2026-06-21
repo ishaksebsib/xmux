@@ -331,7 +331,6 @@ function promptResponseConfig(
 ): NormalizedPromptResponseConfig {
   return {
     ...normalizeConfig({
-      userName: "xmux",
       defaultWorkingDirectory: ".",
       deliveryMode: "requester_only",
     }).prompt.response,

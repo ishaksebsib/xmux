@@ -166,7 +166,6 @@ describe("control server", () => {
         writeFile(
           configPath,
           `{
-  "userName": "control-test",
   "defaultWorkingDirectory": "./workspace",
   "chats": {
     "telegram": {
@@ -211,7 +210,7 @@ describe("control server", () => {
       assert.strictEqual(methodResponse.statusCode, 404);
 
       const effectiveConfig = yield* getEffectiveConfig(socketPath);
-      assert.strictEqual(effectiveConfig.config.userName, "control-test");
+      assert.strictEqual(effectiveConfig.config.defaultWorkingDirectory, join(root, "workspace"));
       assert.strictEqual(effectiveConfig.config.chats.telegram.token?.source, "value");
 
       const configResponse = yield* requestRawUnixHttp({
