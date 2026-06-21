@@ -13,6 +13,7 @@ import {
   sessionIdle,
   wrapped,
 } from "../fixtures/events";
+import { nativeModel, nativeProvider, nativeSession } from "../fixtures/builders";
 import { startFakeOpenCodeServer } from "../fixtures/fake-opencode-server";
 
 function createOpenCodeHarness(baseUrl: string) {
@@ -106,6 +107,96 @@ describe("OpenCode prompt stream contract", () => {
       expect(fakeOpenCode.requests).toContainEqual(
         expect.objectContaining({ method: "POST", path: "/session/session-1/prompt_async" }),
       );
+    } finally {
+      await harness.close();
+      await fakeOpenCode.close();
+    }
+  });
+
+  test("enriches completed runs with native session usage and context limit", async () => {
+    const fakeOpenCode = await startFakeOpenCodeServer({
+      sessions: [
+        nativeSession({
+          id: "session-1",
+          cost: 1.23,
+          tokens: { input: 1_000, output: 200, reasoning: 50, cache: { read: 30, write: 20 } },
+          model: { providerID: "provider-1", id: "model-1" },
+        }),
+      ],
+      providers: [nativeProvider({ models: { "model-1": nativeModel({ id: "model-1" }) } })],
+    });
+    fakeOpenCode.enqueueEvents(
+      nextStepStarted("session-1"),
+      nextStepEnded("session-1", {
+        tokens: { input: 10, output: 20, reasoning: 30, cache: { read: 40, write: 50 } },
+      }),
+      sessionIdle("session-1"),
+    );
+    const harness = createOpenCodeHarness(fakeOpenCode.url);
+
+    try {
+      const prompted = await harness.prompt({
+        ref: { harnessId: "opencode", sessionId: "session-1" },
+        cwd: process.cwd(),
+        content: [{ type: "text", text: "stats" }],
+      });
+      const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+      expect(events.at(-1)).toMatchObject({
+        type: "run",
+        phase: "completed",
+        usage: { input: 10, output: 20, reasoning: 30, cacheRead: 40, cacheWrite: 50 },
+        session: {
+          usage: { input: 1_000, output: 200, reasoning: 50, cacheRead: 30, cacheWrite: 20 },
+          cost: 1.23,
+          context: { state: "known", used: 150, limit: 1000 },
+        },
+      });
+    } finally {
+      await harness.close();
+      await fakeOpenCode.close();
+    }
+  });
+
+  test("keeps prompt successful when OpenCode model limit lookup fails", async () => {
+    const fakeOpenCode = await startFakeOpenCodeServer({
+      sessions: [
+        nativeSession({
+          id: "session-1",
+          tokens: { input: 1, output: 2, reasoning: 3, cache: { read: 4, write: 5 } },
+          model: { providerID: "provider-1", id: "model-1" },
+        }),
+      ],
+    });
+    fakeOpenCode.forceResponse("GET", "/config/providers", {
+      status: 500,
+      body: { error: "nope" },
+    });
+    fakeOpenCode.enqueueEvents(
+      nextStepStarted("session-1"),
+      nextStepEnded("session-1", {
+        tokens: { input: 100, output: 20, reasoning: 5, cache: { read: 0, write: 0 } },
+      }),
+      sessionIdle("session-1"),
+    );
+    const harness = createOpenCodeHarness(fakeOpenCode.url);
+
+    try {
+      const prompted = await harness.prompt({
+        ref: { harnessId: "opencode", sessionId: "session-1" },
+        cwd: process.cwd(),
+        content: [{ type: "text", text: "stats" }],
+      });
+      const events = await collectAsync(prompted.unwrap("prompt stream"));
+
+      expect(events.at(-1)).toMatchObject({
+        type: "run",
+        phase: "completed",
+        session: {
+          usage: { input: 1, output: 2, reasoning: 3, cacheRead: 4, cacheWrite: 5 },
+          context: { state: "known", used: 125 },
+        },
+      });
     } finally {
       await harness.close();
       await fakeOpenCode.close();

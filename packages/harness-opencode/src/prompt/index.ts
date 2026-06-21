@@ -1,7 +1,9 @@
 import type {
   HarnessAdapterPromptInput,
   HarnessAdapterPromptResult,
+  HarnessSessionUsageSnapshot,
   HarnessThinkingLevel,
+  HarnessTokenUsage,
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import {
@@ -11,7 +13,12 @@ import {
 } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
 import { toPromptParts } from "./content";
-import { createStreamEndedError, isAbortError, normalizeOpenCodeStreamEvent } from "./event-utils";
+import {
+  createStreamEndedError,
+  isAbortError,
+  normalizeOpenCodeStreamEvent,
+  toUsage,
+} from "./event-utils";
 import { mapOpenCodeEvent } from "./event-mapper";
 import { createPromptStreamState } from "./state";
 import type { OpenCodePromptEvent, OpenCodePromptPart, SelectedOpenCodeModel } from "./types";
@@ -19,6 +26,152 @@ import type { OpenCodeCreateOptions } from "../types";
 import { normalizeOpenCodeModelRef } from "../handlers/models";
 import { applyThinkingToModel, getEffectiveThinking } from "../handlers/thinking";
 import { describeResponseError } from "../handlers/utils";
+
+function sumUsage(usage: HarnessTokenUsage | undefined): number | undefined {
+  if (usage?.total !== undefined) return usage.total;
+
+  let total = 0;
+  let found = false;
+  for (const value of [
+    usage?.input,
+    usage?.output,
+    usage?.reasoning,
+    usage?.cacheRead,
+    usage?.cacheWrite,
+  ]) {
+    if (value === undefined) continue;
+    total += value;
+    found = true;
+  }
+
+  return found ? total : undefined;
+}
+
+function modelLimitKey(model: SelectedOpenCodeModel): string {
+  return `${model.providerID}/${model.modelID}`;
+}
+
+function selectedModelFromSnapshot(args: {
+  readonly runtime: OpenCodeRuntime;
+  readonly session: {
+    readonly id: string;
+    readonly model?: {
+      readonly id: string;
+      readonly providerID: string;
+      readonly variant?: string;
+    };
+  };
+}): SelectedOpenCodeModel | undefined {
+  if (args.session.model) {
+    return {
+      providerID: args.session.model.providerID,
+      modelID: args.session.model.id,
+      variant: args.session.model.variant,
+    };
+  }
+
+  const remembered = args.runtime.sessionModels.get(args.session.id);
+  return remembered?.providerId === undefined
+    ? undefined
+    : {
+        providerID: remembered.providerId,
+        modelID: remembered.modelId,
+        variant: remembered.variant,
+      };
+}
+
+function toSnapshot(args: {
+  readonly usage?: HarnessTokenUsage;
+  readonly cost?: number;
+  readonly contextUsed?: number;
+  readonly contextLimit?: number;
+}): HarnessSessionUsageSnapshot | undefined {
+  const context =
+    args.contextUsed === undefined
+      ? undefined
+      : {
+          state: "known" as const,
+          used: args.contextUsed,
+          ...(args.contextLimit === undefined ? {} : { limit: args.contextLimit }),
+        };
+
+  if (args.usage === undefined && args.cost === undefined && context === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(args.usage === undefined ? {} : { usage: args.usage }),
+    ...(args.cost === undefined ? {} : { cost: args.cost }),
+    ...(context === undefined ? {} : { context }),
+  };
+}
+
+async function resolveModelContextLimit(args: {
+  readonly runtime: OpenCodeRuntime;
+  readonly input: HarnessAdapterPromptInput<"opencode", OpenCodeCreateOptions>;
+  readonly model: SelectedOpenCodeModel;
+}): Promise<number | undefined> {
+  const key = modelLimitKey(args.model);
+  const cached = args.runtime.modelContextLimits.get(key);
+  if (cached !== undefined) return cached;
+
+  const response = await args.runtime.client.config.providers({
+    directory: args.input.cwd,
+    workspace: args.input.adapterOptions.workspace,
+  });
+  if (response.error !== undefined || response.data === undefined) return undefined;
+
+  for (const provider of response.data.providers) {
+    for (const model of Object.values(provider.models)) {
+      const limit = model.limit.context;
+      if (Number.isFinite(limit)) {
+        args.runtime.modelContextLimits.set(
+          modelLimitKey({ providerID: provider.id, modelID: model.id }),
+          limit,
+        );
+      }
+    }
+  }
+
+  return args.runtime.modelContextLimits.get(key);
+}
+
+async function enrichCompletedRunEvent(args: {
+  readonly event: OpenCodePromptEvent;
+  readonly runtime: OpenCodeRuntime;
+  readonly input: HarnessAdapterPromptInput<"opencode", OpenCodeCreateOptions>;
+  readonly state: ReturnType<typeof createPromptStreamState>;
+}): Promise<OpenCodePromptEvent> {
+  if (args.event.type !== "run" || args.event.phase !== "completed") return args.event;
+
+  try {
+    const response = await args.runtime.client.session.get({
+      sessionID: args.input.ref.sessionId,
+      workspace: args.input.adapterOptions.workspace,
+    });
+    if (response.error !== undefined || response.data === undefined) return args.event;
+
+    const session = response.data;
+    const contextUsed = sumUsage(args.state.completedRun?.usage);
+    const model = selectedModelFromSnapshot({ runtime: args.runtime, session });
+    const contextLimit =
+      contextUsed === undefined || model === undefined
+        ? undefined
+        : await resolveModelContextLimit({ runtime: args.runtime, input: args.input, model }).catch(
+            () => undefined,
+          );
+    const sessionSnapshot = toSnapshot({
+      usage: toUsage(session.tokens),
+      cost: session.cost,
+      contextUsed,
+      contextLimit,
+    });
+
+    return sessionSnapshot === undefined ? args.event : { ...args.event, session: sessionSnapshot };
+  } catch {
+    return args.event;
+  }
+}
 
 function createResponseError(args: { readonly status: number; readonly error: unknown }) {
   return new OpenCodeSessionResponseError({
@@ -147,7 +300,12 @@ function createPromptEventStream(args: {
           ref: args.input.ref,
           state,
         })) {
-          yield promptEvent;
+          yield await enrichCompletedRunEvent({
+            event: promptEvent,
+            runtime: args.runtime,
+            input: args.input,
+            state,
+          });
         }
 
         if (state.terminalRun) {
@@ -170,14 +328,19 @@ function createPromptEventStream(args: {
 
       if (!state.terminalRun) {
         if (state.completedRun) {
-          yield {
-            type: "run",
-            phase: "completed",
-            ref: args.input.ref,
-            reason: state.completedRun.reason,
-            usage: state.completedRun.usage,
-            cost: state.completedRun.cost,
-          };
+          yield await enrichCompletedRunEvent({
+            event: {
+              type: "run",
+              phase: "completed",
+              ref: args.input.ref,
+              reason: state.completedRun.reason,
+              usage: state.completedRun.usage,
+              cost: state.completedRun.cost,
+            },
+            runtime: args.runtime,
+            input: args.input,
+            state,
+          });
           return;
         }
 

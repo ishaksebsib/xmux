@@ -24,6 +24,7 @@ export type OpenCodeRuntime = {
   defaultThinking?: HarnessThinkingLevel;
   readonly sessionModels: Map<string, HarnessModelRef>;
   readonly sessionThinking: Map<string, HarnessThinkingLevel>;
+  readonly modelContextLimits: Map<string, number>;
   close(): Promise<void>;
 };
 
@@ -46,6 +47,7 @@ function createExternalRuntime(
       defaultThinking: config.defaultThinking,
       sessionModels: new Map<string, HarnessModelRef>(),
       sessionThinking: new Map<string, HarnessThinkingLevel>(),
+      modelContextLimits: new Map<string, number>(),
       close: async () => {
         return undefined;
       },
@@ -68,6 +70,7 @@ async function createEmbeddedRuntime(
         defaultThinking: config.defaultThinking,
         sessionModels: new Map<string, HarnessModelRef>(),
         sessionThinking: new Map<string, HarnessThinkingLevel>(),
+        modelContextLimits: new Map<string, number>(),
         close: async () => {
           runtime.server.close();
         },

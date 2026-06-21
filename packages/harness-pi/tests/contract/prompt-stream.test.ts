@@ -127,7 +127,18 @@ describe("Pi prompt stream contract", () => {
           text: "hello from faux",
         }),
       );
-      expect(events.at(-1)).toMatchObject({ type: "run", phase: "completed", reason: "stop" });
+      const completedRun = events.find(
+        (event) => event.type === "run" && event.phase === "completed",
+      );
+      expect(completedRun).toMatchObject({
+        type: "run",
+        phase: "completed",
+        reason: "stop",
+        session: {
+          usage: expect.objectContaining({ total: expect.any(Number) }),
+          context: expect.objectContaining({ state: expect.stringMatching(/known|unknown/) }),
+        },
+      });
     } finally {
       await harness.close();
     }

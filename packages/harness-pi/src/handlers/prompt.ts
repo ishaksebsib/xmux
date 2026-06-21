@@ -1,4 +1,10 @@
-import type { HarnessAdapterPromptInput, HarnessAdapterPromptResult } from "@xmux/harness-core";
+import type {
+  HarnessAdapterPromptInput,
+  HarnessAdapterPromptResult,
+  HarnessContextUsage,
+  HarnessPromptEvent,
+  HarnessSessionUsageSnapshot,
+} from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import {
   PiModelRequestError,
@@ -36,6 +42,51 @@ type PromptQueue = {
   readonly events: AsyncIterable<PiPromptEvent>;
   readonly isDone: () => boolean;
 };
+
+function optionalFiniteNumber(value: number | undefined): number | undefined {
+  return value === undefined || !Number.isFinite(value) ? undefined : value;
+}
+
+function toHarnessContextUsage(
+  context: ReturnType<PiSessionHandle["session"]["getContextUsage"]>,
+): HarnessContextUsage | undefined {
+  if (context === undefined) return undefined;
+
+  const limit = optionalFiniteNumber(context.contextWindow);
+  return context.tokens === null
+    ? { state: "unknown", ...(limit === undefined ? {} : { limit }) }
+    : { state: "known", used: context.tokens, ...(limit === undefined ? {} : { limit }) };
+}
+
+function readPiSessionSnapshot(handle: PiSessionHandle): HarnessSessionUsageSnapshot | undefined {
+  try {
+    const stats = handle.session.getSessionStats();
+    const context = toHarnessContextUsage(handle.session.getContextUsage());
+    return {
+      usage: {
+        input: stats.tokens.input,
+        output: stats.tokens.output,
+        cacheRead: stats.tokens.cacheRead,
+        cacheWrite: stats.tokens.cacheWrite,
+        total: stats.tokens.total,
+      },
+      cost: stats.cost,
+      ...(context === undefined ? {} : { context }),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function enrichPiPromptEvent(args: {
+  readonly event: PiPromptEvent;
+  readonly handle: PiSessionHandle;
+}): HarnessPromptEvent<"pi"> {
+  if (args.event.type !== "run" || args.event.phase !== "completed") return args.event;
+
+  const session = readPiSessionSnapshot(args.handle);
+  return session === undefined ? args.event : { ...args.event, session };
+}
 
 function isTerminalRunEvent(event: PiPromptEvent): boolean {
   return (
@@ -189,15 +240,15 @@ function createPiPromptStream(args: {
 
       const unsubscribe = args.handle.session.subscribe((event) => {
         for (const mapped of mapPiSessionEvent({ event, ref: args.input.ref, state })) {
-          queue.push(
+          const withTurnMetadata =
             mapped.type === "turn" && mapped.phase === "started"
               ? {
                   ...mapped,
                   model: toModelRef(args.handle.session.model),
                   thinking: toHarnessThinkingLevel(args.handle.session.thinkingLevel),
                 }
-              : mapped,
-          );
+              : mapped;
+          queue.push(enrichPiPromptEvent({ event: withTurnMetadata, handle: args.handle }));
         }
       });
 
