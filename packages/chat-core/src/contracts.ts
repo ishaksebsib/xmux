@@ -168,7 +168,7 @@ export interface ChatMessage<
   TAttachmentReadError = unknown,
 >
   extends ChatMessageRef<TChatId>, ChatTextContent {
-  readonly actor: ChatActor;
+  readonly actor: ChatActor<TAdapterData>;
   readonly attachments: readonly ChatAttachment<TAdapterData, TAttachmentReadError>[];
   readonly adapterData: TAdapterData;
 }

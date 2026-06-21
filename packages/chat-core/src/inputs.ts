@@ -57,7 +57,7 @@ type AnyChatAdapterDefinition = ChatAdapterDefinition<
 /** Send input narrowed to one registered chat adapter. */
 export type ChatSendMessageInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -68,8 +68,8 @@ export type ChatSendMessageInputFor<
 
 /** Send input union for all registered chat adapters. */
 export type ChatSendMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatSendMessageInputFor<TAdapters, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatSendMessageInputFor<TAdapters, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 type ChatActionButtonPayloadProp<TPayload> = [TPayload] extends [undefined]
   ? { readonly payload?: undefined }
@@ -103,7 +103,7 @@ export type ChatButtonInput<TActions extends ChatActionRegistry> =
 export type ChatSendActionInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TActions extends ChatActionRegistry,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -119,14 +119,14 @@ export type ChatSendActionInput<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TActions extends ChatActionRegistry,
 > = {
-  readonly [TChatId in keyof TAdapters]: ChatSendActionInputFor<TAdapters, TActions, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatSendActionInputFor<TAdapters, TActions, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 /** Update action input narrowed to one registered chat adapter. */
 export type ChatUpdateActionInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TActions extends ChatActionRegistry,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -142,50 +142,50 @@ export type ChatUpdateActionInput<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TActions extends ChatActionRegistry,
 > = {
-  readonly [TChatId in keyof TAdapters]: ChatUpdateActionInputFor<TAdapters, TActions, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatUpdateActionInputFor<TAdapters, TActions, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 /** Injected inbound message input narrowed to one registered chat adapter. */
 export type ChatInjectMessageInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
   readonly messageId: string;
-  readonly actor: ChatActor;
+  readonly actor: ChatActor<AdapterDataFor<TAdapters, TChatId>>;
   readonly text: string;
   readonly format?: ChatMessageFormat;
   readonly attachments?: readonly ChatAttachment<
     AdapterDataFor<TAdapters, TChatId>,
     AdapterErrorFor<TAdapters, TChatId>
   >[];
-  readonly adapterData: ChatAdapterObject;
+  readonly adapterData: AdapterDataFor<TAdapters, TChatId>;
 };
 
 /** Injected inbound message input union for all registered chat adapters. */
 export type ChatInjectMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatInjectMessageInputFor<TAdapters, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatInjectMessageInputFor<TAdapters, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 /** Sent message result narrowed to one registered chat adapter. */
 export type ChatSentMessageFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = ChatSentMessage<Extract<TChatId, string>, AdapterDataFor<TAdapters, TChatId>>;
 
 /** Sent message result selected from a send/reply input's chat id. */
 export type ChatSentMessageFromInput<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
   TInput,
-> = TInput extends { readonly chatId: infer TChatId extends keyof TAdapters }
+> = TInput extends { readonly chatId: infer TChatId extends Extract<keyof TAdapters, string> }
   ? ChatSentMessageFor<TAdapters, TChatId>
   : never;
 
 /** Reply input narrowed to one registered chat adapter. */
 export type ChatReplyInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -198,13 +198,13 @@ export type ChatReplyInputFor<
 
 /** Reply input union for all registered chat adapters. */
 export type ChatReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatReplyInputFor<TAdapters, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatReplyInputFor<TAdapters, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 /** Typing indicator input narrowed to one registered chat adapter. */
 export type ChatTypingIndicatorInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -217,12 +217,12 @@ export type ChatTypingIndicatorInputFor<
 
 /** Typing indicator input union for all registered chat adapters. */
 export type ChatTypingIndicatorInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatTypingIndicatorInputFor<TAdapters, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatTypingIndicatorInputFor<TAdapters, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 export type ChatStreamFallbackFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
   TKind extends "send" | "reply",
 > = AdapterCapabilitiesFor<TAdapters, TChatId>["messages"] extends {
   readonly stream: { readonly [TKey in TKind]: true };
@@ -233,7 +233,7 @@ export type ChatStreamFallbackFor<
 /** Stream send input narrowed to one registered chat adapter. */
 export type ChatStreamMessageInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -244,13 +244,13 @@ export type ChatStreamMessageInputFor<
 
 /** Stream send input union for all registered chat adapters. */
 export type ChatStreamMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatStreamMessageInputFor<TAdapters, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatStreamMessageInputFor<TAdapters, TChatId>;
+}[Extract<keyof TAdapters, string>];
 
 /** Stream reply input narrowed to one registered chat adapter. */
 export type ChatStreamReplyInputFor<
   TAdapters extends Record<string, AnyChatAdapterDefinition>,
-  TChatId extends keyof TAdapters,
+  TChatId extends Extract<keyof TAdapters, string>,
 > = {
   readonly chatId: Extract<TChatId, string>;
   readonly conversationId: string;
@@ -263,5 +263,5 @@ export type ChatStreamReplyInputFor<
 
 /** Stream reply input union for all registered chat adapters. */
 export type ChatStreamReplyInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
-  readonly [TChatId in keyof TAdapters]: ChatStreamReplyInputFor<TAdapters, TChatId>;
-}[keyof TAdapters];
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatStreamReplyInputFor<TAdapters, TChatId>;
+}[Extract<keyof TAdapters, string>];

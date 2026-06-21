@@ -171,7 +171,7 @@ function normalizeSlackInboundText(text: string): string {
 function createSlackMessageActor(
   event: SlackMessageLike,
   adapterData: SlackAdapterData,
-): ChatActor {
+): ChatActor<SlackAdapterData> {
   if (event.user !== undefined) {
     return {
       kind: "user",

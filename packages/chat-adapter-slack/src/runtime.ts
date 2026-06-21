@@ -7,6 +7,7 @@ import {
   type ChatAdapterSendActionInput,
   type ChatAdapterSendMessageInput,
   type ChatAdapterStartContext,
+  type ChatAdapterUpdateActionInput,
   type ChatAdapterStreamMessageInput,
   type ChatAdapterStreamReplyInput,
   type ChatCommandRegistry,
@@ -27,6 +28,7 @@ import {
   SlackSendMessageError,
   SlackStreamMessageError,
   SlackStreamReplyError,
+  SlackUpdateActionError,
 } from "./errors";
 import { registerInboundHandlers } from "./handlers/inbound";
 import { reply as handleReply } from "./handlers/reply";
@@ -34,6 +36,7 @@ import { respondToAction as handleRespondToAction } from "./handlers/respond-act
 import { sendAction as handleSendAction } from "./handlers/send-action";
 import { sendMessage as handleSendMessage } from "./handlers/send-message";
 import { startSocket } from "./handlers/start-socket";
+import { updateAction as handleUpdateAction } from "./handlers/update-action";
 import { streamMessage as handleStreamMessage } from "./handlers/stream-message";
 import { streamReply as handleStreamReply } from "./handlers/stream-reply";
 import {
@@ -286,6 +289,34 @@ class SlackRuntime<TChatId extends string> implements SlackOpenedAdapter<TChatId
       config: this.config,
       input,
       streamSourceRegistry: this.streamSourceRegistry,
+    });
+    logChatResult({
+      logger: this.logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: slackLogEvents.outboundSuccess,
+      failureEvent: slackLogEvents.outboundFailure,
+    });
+    return result;
+  }
+
+  async updateAction(
+    input: ChatAdapterUpdateActionInput<TChatId, SlackAdapterOptions>,
+  ): Promise<Result<ChatSentMessage<TChatId, SlackAdapterData>, SlackUpdateActionError>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      ...outboundMessageMetadata("updateAction", input),
+      messageId: input.message.messageId,
+      buttonRows: input.buttons.length,
+      buttonCount: input.buttons.reduce((count, row) => count + row.length, 0),
+    } as const;
+    this.logger.debug(slackLogEvents.outboundBegin, metadata);
+    const result = await handleUpdateAction({
+      chatId: this.id,
+      client: this.client,
+      config: this.config,
+      input,
     });
     logChatResult({
       logger: this.logger,

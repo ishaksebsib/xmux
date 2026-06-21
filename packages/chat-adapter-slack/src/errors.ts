@@ -103,6 +103,19 @@ export class SlackSendActionError extends TaggedError("SlackSendActionError")<{
   }
 }
 
+/** Slack updateAction failed. */
+export class SlackUpdateActionError extends TaggedError("SlackUpdateActionError")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: { readonly reason?: string; readonly cause?: unknown }) {
+    super({
+      cause: args.cause,
+      message: args.reason ?? `Slack updateAction failed: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Slack action response failed. */
 export class SlackActionResponseError extends TaggedError("SlackActionResponseError")<{
   readonly message: string;
@@ -213,4 +226,5 @@ export type SlackAdapterError =
   | SlackSendMessageError
   | SlackStartError
   | SlackStreamMessageError
-  | SlackStreamReplyError;
+  | SlackStreamReplyError
+  | SlackUpdateActionError;

@@ -375,6 +375,19 @@ export function createChat<
   async function injectMessage<TInput extends ChatInjectMessageInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<void, ChatInjectMessageFailure>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      chatId: String(input.chatId),
+      operation: "injectMessage",
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      textLength: input.text.length,
+      format: input.format,
+      attachmentCount: input.attachments?.length ?? 0,
+    } as const;
+
+    logger?.debug(chatLogEvents.operationBegin, metadata);
+
     const result = Result.andThen(
       await getStartedRuntime({ chatId: input.chatId, operation: "injectMessage" }),
       () => {
@@ -399,6 +412,15 @@ export function createChat<
         return Result.ok();
       },
     );
+
+    logChatResult({
+      logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.operationSuccess,
+      failureEvent: chatLogEvents.operationFailure,
+    });
 
     return result;
   }
