@@ -114,5 +114,4 @@ export const redactServerConfig = (config: EffectiveServerConfig): RedactedServe
       opencode: redactOpenCode(config.harnesses.opencode),
       pi: redactPi(config.harnesses.pi),
     }),
-    ...(config.middleware === undefined ? {} : { middleware: config.middleware }),
   });

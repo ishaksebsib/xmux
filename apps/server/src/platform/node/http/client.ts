@@ -16,7 +16,7 @@ export class XmuxClientCreateError extends Schema.TaggedErrorClass<XmuxClientCre
   "XmuxClientCreateError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 

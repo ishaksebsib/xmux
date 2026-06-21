@@ -12,7 +12,7 @@ import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../src/server-runtime/state";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
-import { RuntimePaths } from "../src/server-control/paths";
+import { resolvedPathFromString, RuntimePaths } from "../src/server-control/paths";
 import { ServerProbe } from "../src/server-control/ports";
 import { ControlTransport, serverMain } from "../src/server";
 
@@ -40,16 +40,16 @@ const makePaths = (
   root: string,
   configPath: string = join(root, "config.jsonc"),
 ): ServerRuntimePaths => ({
-  configPath,
-  stateDir: join(root, "state"),
-  runtimeDir: join(root, "runtime"),
-  logDir: join(root, "logs"),
-  dbPath: join(root, "state", "server.db"),
-  manifestPath: join(root, "server.json"),
-  startupLockPath: join(root, "startup.lock"),
+  configPath: resolvedPathFromString(configPath),
+  stateDir: resolvedPathFromString(join(root, "state")),
+  runtimeDir: resolvedPathFromString(join(root, "runtime")),
+  logDir: resolvedPathFromString(join(root, "logs")),
+  dbPath: resolvedPathFromString(join(root, "state", "server.db")),
+  manifestPath: resolvedPathFromString(join(root, "server.json")),
+  startupLockPath: resolvedPathFromString(join(root, "startup.lock")),
   controlEndpoint: {
     kind: "unix-socket",
-    path: join(root, "server.sock"),
+    path: resolvedPathFromString(join(root, "server.sock")),
   },
   scopeId: "testscope",
 });

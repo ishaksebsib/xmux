@@ -18,7 +18,7 @@ export class ConfigParseError extends Schema.TaggedErrorClass<ConfigParseError>(
   {
     path: Schema.String,
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -28,7 +28,7 @@ export class ConfigValidationError extends Schema.TaggedErrorClass<ConfigValidat
   {
     path: Schema.String,
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -39,7 +39,7 @@ export class ConfigSecretError extends Schema.TaggedErrorClass<ConfigSecretError
     path: Schema.String,
     message: Schema.String,
     env: Schema.optionalKey(Schema.String),
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -48,7 +48,7 @@ export class ServerStartupError extends Schema.TaggedErrorClass<ServerStartupErr
   "ServerStartupError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -57,7 +57,7 @@ export class ServerShutdownError extends Schema.TaggedErrorClass<ServerShutdownE
   "ServerShutdownError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -67,7 +67,7 @@ export class RuntimePathError extends Schema.TaggedErrorClass<RuntimePathError>(
   {
     message: Schema.String,
     path: Schema.optionalKey(Schema.String),
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -76,7 +76,7 @@ export class ManifestError extends Schema.TaggedErrorClass<ManifestError>()("Man
   operation: Schema.Literals(["read", "write", "remove"]),
   path: Schema.String,
   message: Schema.String,
-  cause: Schema.optionalKey(Schema.Unknown),
+  cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
 /** Startup lock failures keep duplicate-server prevention distinguishable. */
@@ -86,7 +86,7 @@ export class StartupLockError extends Schema.TaggedErrorClass<StartupLockError>(
     operation: Schema.Literals(["acquire", "release"]),
     path: Schema.String,
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
@@ -95,7 +95,7 @@ export class LogFileError extends Schema.TaggedErrorClass<LogFileError>()("LogFi
   operation: Schema.Literals(["setup", "read", "write"]),
   path: Schema.String,
   message: Schema.String,
-  cause: Schema.optionalKey(Schema.Unknown),
+  cause: Schema.optionalKey(Schema.Defect()),
 }) {}
 
 /** Control server failures isolate local transport setup from runtime startup. */
@@ -105,19 +105,30 @@ export class ControlServerError extends Schema.TaggedErrorClass<ControlServerErr
     operation: Schema.Literals(["bind", "close"]),
     path: Schema.String,
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 
-/** Public server failure union for CLI/control surfaces. */
-export type ConfigError = ConfigParseError | ConfigValidationError | ConfigSecretError;
+/** Public config failure schema and type for config/CLI boundaries. */
+export const ConfigError = Schema.Union([
+  ConfigParseError,
+  ConfigValidationError,
+  ConfigSecretError,
+]);
+export type ConfigError = typeof ConfigError.Type;
 
-export type ServerError =
-  | ActiveServerError
-  | ConfigError
-  | ServerStartupError
-  | RuntimePathError
-  | ManifestError
-  | StartupLockError
-  | LogFileError
-  | ControlServerError;
+/** Public server failure schema and type for CLI/control surfaces. */
+export const ServerError = Schema.Union([
+  ActiveServerError,
+  ConfigParseError,
+  ConfigValidationError,
+  ConfigSecretError,
+  ServerStartupError,
+  ServerShutdownError,
+  RuntimePathError,
+  ManifestError,
+  StartupLockError,
+  LogFileError,
+  ControlServerError,
+]);
+export type ServerError = typeof ServerError.Type;

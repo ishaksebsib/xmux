@@ -35,14 +35,12 @@ export const validate = Effect.fn("api.config.validate")(function* () {
   const config = yield* ServerConfig;
   const result = yield* config.validateCurrent();
   if (!result.valid) {
-    return yield* Effect.fail(
-      ConfigValidateResponse.make({
-        version: API_VERSION,
-        configPath: result.configPath,
-        valid: false,
-        issues: result.issues,
-      }),
-    );
+    return ConfigValidateResponse.make({
+      version: API_VERSION,
+      configPath: result.configPath,
+      valid: false,
+      issues: result.issues,
+    });
   }
 
   return ConfigValidateResponse.make({

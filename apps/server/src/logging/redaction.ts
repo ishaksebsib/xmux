@@ -1,3 +1,11 @@
+export type JsonLogValue =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly JsonLogValue[]
+  | { readonly [key: string]: JsonLogValue };
+
 const REDACTED = "[redacted]";
 const SECRET_KEY_PATTERN =
   /(?:token|password|secret|api[-_]?key|authorization|client[-_]?secret|bot[-_]?token)/iu;
@@ -16,9 +24,16 @@ export const redactString = (value: string): string =>
 const isRecordLike = (value: object): boolean =>
   Object.prototype.toString.call(value) === "[object Object]";
 
-const redactUnknownInternal = (value: unknown, seen: WeakSet<object>): unknown => {
+const primitiveToJson = (value: unknown): JsonLogValue => {
+  if (value === null || typeof value === "boolean") return value;
   if (typeof value === "string") return redactString(value);
-  if (typeof value !== "object" || value === null) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : String(value);
+  if (typeof value === "undefined") return null;
+  return redactString(String(value));
+};
+
+const redactUnknownInternal = (value: unknown, seen: WeakSet<object>): JsonLogValue => {
+  if (typeof value !== "object" || value === null) return primitiveToJson(value);
 
   if (seen.has(value)) return "[circular]";
   seen.add(value);
@@ -27,20 +42,20 @@ const redactUnknownInternal = (value: unknown, seen: WeakSet<object>): unknown =
 
   if (!isRecordLike(value)) return redactString(String(value));
 
-  const output: Record<string, unknown> = {};
+  const output: Record<string, JsonLogValue> = {};
   for (const [key, entry] of Object.entries(value)) {
     output[key] = isSecretKey(key) ? REDACTED : redactUnknownInternal(entry, seen);
   }
   return output;
 };
 
-/** Recursively redact log metadata before it can reach disk or control routes. */
-export const redactUnknown = (value: unknown): unknown =>
+/** Recursively redact log metadata into schema-valid JSON before disk/API boundaries. */
+export const redactUnknown = (value: unknown): JsonLogValue =>
   redactUnknownInternal(value, new WeakSet());
 
-/** Redact a record while preserving its record type for schema constructors. */
-export const redactRecord = (value: Record<string, unknown>): Record<string, unknown> => {
-  const redacted: Record<string, unknown> = {};
+/** Redact a record while preserving JSON-only values for schema constructors. */
+export const redactRecord = (value: Record<string, unknown>): Record<string, JsonLogValue> => {
+  const redacted: Record<string, JsonLogValue> = {};
   for (const [key, entry] of Object.entries(value)) {
     redacted[key] = isSecretKey(key) ? REDACTED : redactUnknown(entry);
   }

@@ -2,6 +2,7 @@ export { openApi as serverOpenApi, openApiJson as serverOpenApiJson } from "./ap
 export type { RunXmuxServerOptions } from "./options";
 export {
   ActiveServerError,
+  ConfigError,
   ConfigParseError,
   ConfigSecretError,
   ConfigValidationError,
@@ -9,9 +10,9 @@ export {
   LogFileError,
   ManifestError,
   RuntimePathError,
+  ServerError,
   ServerShutdownError,
   ServerStartupError,
   StartupLockError,
-  type ConfigError,
-  type ServerError,
 } from "./errors";
+export type { ConfigError as ConfigErrorType, ServerError as ServerErrorType } from "./errors";

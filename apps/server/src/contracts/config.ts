@@ -119,8 +119,6 @@ export class ServerFileConfig extends Schema.Class<ServerFileConfig>("ServerFile
   server: Schema.optionalKey(ServerFileServerConfig),
   chats: Schema.optionalKey(ChatsFileConfig),
   harnesses: Schema.optionalKey(HarnessesFileConfig),
-  // TODO: harden this type, and think about the design more
-  middleware: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
 /** Redacted secret metadata is safe for local status and support output. */
@@ -192,7 +190,6 @@ export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
   server: ServerSettingsConfig,
   chats: RedactedChatsConfig,
   harnesses: RedactedHarnessesConfig,
-  middleware: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
 /** Redacted config snapshot is domain data; API groups wrap it in response envelopes. */

@@ -12,7 +12,7 @@ export class UnixSocketRequestError extends Schema.TaggedErrorClass<UnixSocketRe
   "UnixSocketRequestError",
   {
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 

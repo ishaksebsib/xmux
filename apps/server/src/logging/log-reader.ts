@@ -39,14 +39,24 @@ const decodeLine = (line: string): LogEntry | null => {
   return Option.isSome(decoded) ? decoded.value : null;
 };
 
-const parseLogLines = (raw: string): readonly LogEntry[] => {
+interface ParsedLogLines {
+  readonly entries: readonly LogEntry[];
+  readonly invalidLineCount: number;
+}
+
+const parseLogLines = (raw: string): ParsedLogLines => {
   const lines = raw.split("\n").filter((line) => line.trim().length > 0);
   const entries: LogEntry[] = [];
+  let invalidLineCount = 0;
   for (const line of lines) {
     const entry = decodeLine(line);
-    if (entry !== null) entries.push(entry);
+    if (entry === null) {
+      invalidLineCount += 1;
+    } else {
+      entries.push(entry);
+    }
   }
-  return entries;
+  return { entries, invalidLineCount };
 };
 
 const readBoundedFileTail = (
@@ -131,13 +141,22 @@ const readTailAcrossRotatedFiles = Effect.fn("server.readTailAcrossRotatedFiles"
   }) {
     let remainingBytes = Math.max(input.maxBytes, 0);
     let entries: readonly LogEntry[] = [];
+    let invalidLineCount = 0;
 
     for (const path of logPathsNewestFirst(input.activePath, input.maxFiles)) {
       if (entries.length >= input.tail || remainingBytes <= 0) break;
       const raw = yield* Effect.scoped(readBoundedFileTail(path, remainingBytes));
       remainingBytes = Math.max(0, remainingBytes - byteLength(raw));
-      const fileEntries = parseLogLines(raw);
-      entries = [...fileEntries, ...entries].slice(-input.tail);
+      const parsed = parseLogLines(raw);
+      invalidLineCount += parsed.invalidLineCount;
+      entries = [...parsed.entries, ...entries].slice(-input.tail);
+    }
+
+    if (invalidLineCount > 0) {
+      yield* Effect.logWarning("ignored invalid server log lines", {
+        activePath: input.activePath,
+        invalidLineCount,
+      });
     }
 
     return entries.slice(-input.tail);

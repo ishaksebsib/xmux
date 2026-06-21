@@ -11,6 +11,10 @@ class StartupLockPayload extends Schema.Class<StartupLockPayload>("StartupLockPa
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeStartupLockPayload = Schema.decodeUnknownOption(StartupLockPayload);
 
+type ParseStartupLockResult =
+  | { readonly _tag: "Valid"; readonly payload: StartupLockPayload }
+  | { readonly _tag: "Invalid"; readonly reason: "invalid_json" | "invalid_lock" };
+
 /** Startup locks are short-lived guards around manifest/socket publication. */
 export interface StartupLock {
   readonly path: string;
@@ -22,11 +26,12 @@ export interface AcquireStartupLockOptions {
   readonly startupLockPath: string;
 }
 
-const parseStartupLockPayload = (raw: string): StartupLockPayload | null => {
+const parseStartupLockPayloadResult = (raw: string): ParseStartupLockResult => {
   const json = decodeUnknownJsonOption(raw);
-  if (Option.isNone(json)) return null;
+  if (Option.isNone(json)) return { _tag: "Invalid", reason: "invalid_json" };
   const decoded = decodeStartupLockPayload(json.value);
-  return Option.isSome(decoded) ? decoded.value : null;
+  if (Option.isNone(decoded)) return { _tag: "Invalid", reason: "invalid_lock" };
+  return { _tag: "Valid", payload: decoded.value };
 };
 
 const readStartupLockPayload = (
@@ -50,7 +55,14 @@ const readStartupLockPayload = (
       ),
     );
     if (raw === null) return null;
-    return parseStartupLockPayload(raw);
+    const parsed = parseStartupLockPayloadResult(raw);
+    if (parsed._tag === "Valid") return parsed.payload;
+    yield* Effect.logWarning("ignoring invalid startup lock", {
+      startupLockPath,
+      operation,
+      reason: parsed.reason,
+    });
+    return null;
   });
 
 const serializeStartupLockPayload = (payload: StartupLockPayload): string =>

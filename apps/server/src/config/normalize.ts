@@ -274,8 +274,6 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
       config: config.harnesses?.opencode,
     });
 
-    const middleware = config.middleware;
-
     return EffectiveServerConfig.make({
       defaultWorkingDirectory,
       deliveryMode: config.deliveryMode ?? "requester_only",
@@ -290,7 +288,6 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
           config: config.harnesses?.pi,
         }),
       }),
-      ...(middleware === undefined ? {} : { middleware }),
     });
   },
 );

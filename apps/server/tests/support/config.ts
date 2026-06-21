@@ -6,7 +6,7 @@ export class WriteConfigError extends Schema.TaggedErrorClass<WriteConfigError>(
   {
     path: Schema.String,
     message: Schema.String,
-    cause: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
 

@@ -9,8 +9,8 @@ export type LogLevel = typeof LogLevel.Type;
 export class LogEntry extends Schema.Class<LogEntry>("LogEntry")({
   timestamp: NonEmptyString,
   level: LogLevel,
-  message: Schema.Unknown,
-  annotations: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
+  message: Schema.Json,
+  annotations: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
   spans: Schema.optionalKey(Schema.Record(Schema.String, Schema.Number)),
   cause: Schema.optionalKey(NonEmptyString),
 }) {}

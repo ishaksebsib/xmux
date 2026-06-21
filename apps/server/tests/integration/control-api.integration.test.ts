@@ -42,7 +42,9 @@ describeIntegration("control API integration", () => {
           method: "POST",
           path: "/v1/config/validate",
         });
-        assert.strictEqual(invalid.statusCode, 422);
+        assert.strictEqual(invalid.statusCode, 200);
+        const invalidValidation = yield* validateConfig(socketPath);
+        assert.isFalse(invalidValidation.valid);
         const logsResponse = yield* requestRawUnixHttp({
           socketPath,
           method: "GET",

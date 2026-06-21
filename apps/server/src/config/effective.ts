@@ -42,5 +42,4 @@ export class EffectiveServerConfig extends Schema.Class<EffectiveServerConfig>(
   server: EffectiveServerSettings,
   chats: EffectiveChatsConfig,
   harnesses: EffectiveHarnessesConfig,
-  middleware: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}

@@ -22,4 +22,3 @@ export class ConfigValidateResponse extends Schema.Class<ConfigValidateResponse>
   config: Schema.optionalKey(RedactedServerConfig),
 }) {}
 
-export const InvalidConfigResponse = ConfigValidateResponse.annotate({ httpApiStatus: 422 });

@@ -1,6 +1,6 @@
 import { HttpApiEndpoint, HttpApiGroup } from "effect/unstable/httpapi";
 import { ApiError } from "../../shared/errors";
-import { ConfigValidateResponse, EffectiveConfigResponse, InvalidConfigResponse } from "./schemas";
+import { ConfigValidateResponse, EffectiveConfigResponse } from "./schemas";
 
 /** Configuration inspection and validation endpoints. */
 export const configApi = HttpApiGroup.make("config")
@@ -13,6 +13,5 @@ export const configApi = HttpApiGroup.make("config")
   .add(
     HttpApiEndpoint.post("validate", "/v1/config/validate", {
       success: ConfigValidateResponse,
-      error: InvalidConfigResponse,
     }),
   );

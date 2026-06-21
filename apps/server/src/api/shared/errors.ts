@@ -2,9 +2,12 @@ import { Schema } from "effect";
 import { HttpServerRespondable, HttpServerResponse } from "effect/unstable/http";
 import { API_VERSION } from "../../contracts/constants";
 
+export const ApiErrorCode = Schema.Literals(["config_unavailable", "log_read_failed"]);
+export type ApiErrorCode = typeof ApiErrorCode.Type;
+
 /** Control errors are schema-backed because clients render them directly. */
 export class ApiErrorPayload extends Schema.Class<ApiErrorPayload>("ApiErrorPayload")({
-  code: Schema.String,
+  code: ApiErrorCode,
   message: Schema.String,
 }) {}
 
@@ -19,7 +22,7 @@ const encodeError = HttpServerResponse.schemaJson(ApiErrorResponse);
 /** Build the stable JSON error envelope as a normal HTTP response. */
 export const jsonError = (input: {
   readonly status: number;
-  readonly code: string;
+  readonly code: ApiErrorCode;
   readonly message: string;
 }) =>
   encodeError(
@@ -32,8 +35,10 @@ export const jsonError = (input: {
 
 /** Schema-backed route failure that Effect HTTP can render as JSON. */
 export class ApiError extends Schema.TaggedErrorClass<ApiError>()("ApiError", {
-  status: Schema.Int,
-  code: Schema.String,
+  status: Schema.Int.check(Schema.isGreaterThanOrEqualTo(400)).check(
+    Schema.isLessThanOrEqualTo(599),
+  ),
+  code: ApiErrorCode,
   message: Schema.String,
 }) {
   [HttpServerRespondable.symbol]() {
@@ -47,6 +52,6 @@ export class ApiError extends Schema.TaggedErrorClass<ApiError>()("ApiError", {
 
 export const apiError = (input: {
   readonly status: number;
-  readonly code: string;
+  readonly code: ApiErrorCode;
   readonly message: string;
 }): ApiError => ApiError.make(input);

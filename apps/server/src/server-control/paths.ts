@@ -1,4 +1,4 @@
-import { Context, Effect, FileSystem, Layer, Path } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import {
   APP_DIR_NAME,
   DEFAULT_CONFIG_FILE_NAME,
@@ -20,10 +20,14 @@ import { RuntimePathError } from "../errors";
 import { ServerOptions, type ParsedServerOptions } from "../options";
 import { HostRuntime } from "../platform/host";
 
-declare const resolvedPathBrand: unique symbol;
+/** Absolute non-empty path resolved once at the server runtime boundary. */
+export const ResolvedPath = Schema.String.check(Schema.isNonEmpty()).pipe(
+  Schema.brand("@xmux/server/ResolvedPath"),
+);
+export type ResolvedPath = typeof ResolvedPath.Type;
 
-/** Absolute path resolved once at the server runtime boundary. */
-export type ResolvedPath = string & { readonly [resolvedPathBrand]?: true };
+const decodeResolvedPath = Schema.decodeUnknownEffect(ResolvedPath);
+export const resolvedPathFromString = Schema.decodeSync(ResolvedPath);
 
 /** Resolved paths are explicit so the CLI and server agree on one local scope. */
 export interface ServerRuntimePaths {
@@ -44,10 +48,28 @@ const expandHome = (pathService: Path.Path, home: string, input: string): string
   return input;
 };
 
-const asResolvedPath = (path: string): ResolvedPath => path as ResolvedPath;
+const parseResolvedPath = (input: {
+  readonly path: string;
+  readonly message: string;
+}): Effect.Effect<ResolvedPath, RuntimePathError> =>
+  decodeResolvedPath(input.path).pipe(
+    Effect.mapError((cause) =>
+      RuntimePathError.make({
+        message: input.message,
+        path: input.path,
+        cause,
+      }),
+    ),
+  );
 
-const resolveInputPath = (pathService: Path.Path, home: string, input: string): ResolvedPath =>
-  asResolvedPath(pathService.resolve(expandHome(pathService, home, input)));
+const resolveInputPath = (
+  pathService: Path.Path,
+  home: string,
+  input: string,
+): Effect.Effect<ResolvedPath, RuntimePathError> => {
+  const path = pathService.resolve(expandHome(pathService, home, input));
+  return parseResolvedPath({ path, message: `Resolved path is invalid: ${path}` });
+};
 
 const fnv1a32 = (value: string, seed: number): number => {
   let hash = seed >>> 0;
@@ -75,16 +97,16 @@ const defaultLayout = (
   platform: string,
   getEnv: (name: string) => string | undefined,
 ): {
-  readonly configPath: ResolvedPath;
-  readonly stateDir: ResolvedPath;
-  readonly logDir: ResolvedPath;
+  readonly configPath: string;
+  readonly stateDir: string;
+  readonly logDir: string;
 } => {
   if (platform === "darwin") {
     const appSupportDir = pathService.join(home, "Library", "Application Support", APP_DIR_NAME);
     return {
-      configPath: asResolvedPath(pathService.join(appSupportDir, DEFAULT_CONFIG_FILE_NAME)),
-      stateDir: asResolvedPath(appSupportDir),
-      logDir: asResolvedPath(pathService.join(home, "Library", "Logs", APP_DIR_NAME)),
+      configPath: pathService.join(appSupportDir, DEFAULT_CONFIG_FILE_NAME),
+      stateDir: appSupportDir,
+      logDir: pathService.join(home, "Library", "Logs", APP_DIR_NAME),
     };
   }
 
@@ -92,11 +114,9 @@ const defaultLayout = (
   const stateHome = getEnv(XDG_STATE_HOME_ENV) ?? pathService.join(home, ".local", "state");
 
   return {
-    configPath: asResolvedPath(
-      pathService.join(configHome, APP_DIR_NAME, DEFAULT_CONFIG_FILE_NAME),
-    ),
-    stateDir: asResolvedPath(pathService.join(stateHome, APP_DIR_NAME)),
-    logDir: asResolvedPath(pathService.join(stateHome, APP_DIR_NAME, LOG_DIR_NAME)),
+    configPath: pathService.join(configHome, APP_DIR_NAME, DEFAULT_CONFIG_FILE_NAME),
+    stateDir: pathService.join(stateHome, APP_DIR_NAME),
+    logDir: pathService.join(stateHome, APP_DIR_NAME, LOG_DIR_NAME),
   };
 };
 
@@ -115,37 +135,63 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     });
   }
 
-  const configPath = resolveInputPath(pathService, home, options.configPath ?? defaults.configPath);
-  const stateDir = asResolvedPath(pathService.resolve(defaults.stateDir));
-  const logDir = asResolvedPath(pathService.resolve(defaults.logDir));
-  const runtimeHome = host.getEnv(XDG_RUNTIME_DIR_ENV);
-  const runtimeDir = asResolvedPath(
-    pathService.resolve(
-      runtimeHome === undefined
-        ? pathService.join(stateDir, RUNTIME_DIR_NAME)
-        : pathService.join(runtimeHome, APP_DIR_NAME),
-    ),
+  const configPath = yield* resolveInputPath(
+    pathService,
+    home,
+    options.configPath ?? defaults.configPath,
   );
-  const dbPath = asResolvedPath(pathService.join(stateDir, DEFAULT_DB_FILE_NAME));
+  const stateDir = yield* parseResolvedPath({
+    path: pathService.resolve(defaults.stateDir),
+    message: `Resolved state directory is invalid: ${defaults.stateDir}`,
+  });
+  const logDir = yield* parseResolvedPath({
+    path: pathService.resolve(defaults.logDir),
+    message: `Resolved log directory is invalid: ${defaults.logDir}`,
+  });
+  const runtimeHome = host.getEnv(XDG_RUNTIME_DIR_ENV);
+  const runtimeDirInput = pathService.resolve(
+    runtimeHome === undefined
+      ? pathService.join(stateDir, RUNTIME_DIR_NAME)
+      : pathService.join(runtimeHome, APP_DIR_NAME),
+  );
+  const runtimeDir = yield* parseResolvedPath({
+    path: runtimeDirInput,
+    message: `Resolved runtime directory is invalid: ${runtimeDirInput}`,
+  });
+  const dbPathInput = pathService.join(stateDir, DEFAULT_DB_FILE_NAME);
+  const dbPath = yield* parseResolvedPath({
+    path: dbPathInput,
+    message: `Resolved database path is invalid: ${dbPathInput}`,
+  });
   const scopeId = createScopeId({ configPath, stateDir });
   const controlDir = pathService.join(stateDir, SERVER_CONTROL_DIR_NAME);
-  const manifestPath = asResolvedPath(
-    pathService.join(controlDir, `${SERVER_MANIFEST_FILE_PREFIX}-${scopeId}.json`),
+  const manifestPathInput = pathService.join(
+    controlDir,
+    `${SERVER_MANIFEST_FILE_PREFIX}-${scopeId}.json`,
   );
-  const startupLockPath = asResolvedPath(
-    pathService.join(
-      controlDir,
-      `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
-    ),
+  const manifestPath = yield* parseResolvedPath({
+    path: manifestPathInput,
+    message: `Resolved manifest path is invalid: ${manifestPathInput}`,
+  });
+  const startupLockPathInput = pathService.join(
+    controlDir,
+    `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
   );
+  const startupLockPath = yield* parseResolvedPath({
+    path: startupLockPathInput,
+    message: `Resolved startup lock path is invalid: ${startupLockPathInput}`,
+  });
+  const endpointPathInput = pathService.join(
+    runtimeDir,
+    `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
+  );
+  const endpointPath = yield* parseResolvedPath({
+    path: endpointPathInput,
+    message: `Resolved control endpoint path is invalid: ${endpointPathInput}`,
+  });
   const defaultControlEndpoint = ServerControlEndpoint.make({
     kind: "unix-socket",
-    path: asResolvedPath(
-      pathService.join(
-        runtimeDir,
-        `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
-      ),
-    ),
+    path: endpointPath,
   });
 
   return {

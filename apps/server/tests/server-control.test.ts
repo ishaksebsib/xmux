@@ -19,6 +19,7 @@ import {
 } from "../src/server-control/manifest";
 import {
   createScopeId,
+  resolvedPathFromString,
   resolveRuntimePaths,
   type ServerRuntimePaths,
 } from "../src/server-control/paths";
@@ -72,7 +73,9 @@ const makeManifest = (input: {
 const makeRuntimePaths = (
   pathService: Path.Path,
   root: string,
-  overrides: Partial<Pick<ServerRuntimePaths, "manifestPath" | "startupLockPath">> & {
+  overrides: {
+    readonly manifestPath?: string;
+    readonly startupLockPath?: string;
     readonly socketPath?: string;
   } = {},
 ): ServerRuntimePaths => {
@@ -81,16 +84,20 @@ const makeRuntimePaths = (
   const scopeId = createScopeId({ configPath, stateDir });
 
   return {
-    configPath,
-    stateDir,
-    runtimeDir: pathService.join(root, "runtime"),
-    logDir: pathService.join(root, "logs"),
-    dbPath: pathService.join(root, "state", "server.db"),
-    manifestPath: overrides.manifestPath ?? pathService.join(root, "server.json"),
-    startupLockPath: overrides.startupLockPath ?? pathService.join(root, "startup.lock"),
+    configPath: resolvedPathFromString(configPath),
+    stateDir: resolvedPathFromString(stateDir),
+    runtimeDir: resolvedPathFromString(pathService.join(root, "runtime")),
+    logDir: resolvedPathFromString(pathService.join(root, "logs")),
+    dbPath: resolvedPathFromString(pathService.join(root, "state", "server.db")),
+    manifestPath: resolvedPathFromString(
+      overrides.manifestPath ?? pathService.join(root, "server.json"),
+    ),
+    startupLockPath: resolvedPathFromString(
+      overrides.startupLockPath ?? pathService.join(root, "startup.lock"),
+    ),
     controlEndpoint: {
       kind: "unix-socket",
-      path: overrides.socketPath ?? pathService.join(root, "server.sock"),
+      path: resolvedPathFromString(overrides.socketPath ?? pathService.join(root, "server.sock")),
     },
     scopeId,
   };

@@ -11,7 +11,7 @@ import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfig } from "../src/config/service";
 import { LogReader } from "../src/logging/log-reader";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
-import { RuntimePaths } from "../src/server-control/paths";
+import { resolvedPathFromString, RuntimePaths } from "../src/server-control/paths";
 import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../src/server-runtime/state";
@@ -67,22 +67,25 @@ const waitForMissingPath = (path: string): Effect.Effect<void> =>
 
 const makePaths = (
   root: string,
-  overrides: Partial<
-    Pick<ServerRuntimePaths, "configPath" | "manifestPath" | "startupLockPath">
-  > & {
+  overrides: {
+    readonly configPath?: string;
+    readonly manifestPath?: string;
+    readonly startupLockPath?: string;
     readonly socketPath?: string;
   } = {},
 ): ServerRuntimePaths => ({
-  configPath: overrides.configPath ?? join(root, "config.jsonc"),
-  stateDir: join(root, "state"),
-  runtimeDir: join(root, "runtime"),
-  logDir: join(root, "logs"),
-  dbPath: join(root, "state", "server.db"),
-  manifestPath: overrides.manifestPath ?? join(root, "server.json"),
-  startupLockPath: overrides.startupLockPath ?? join(root, "startup.lock"),
+  configPath: resolvedPathFromString(overrides.configPath ?? join(root, "config.jsonc")),
+  stateDir: resolvedPathFromString(join(root, "state")),
+  runtimeDir: resolvedPathFromString(join(root, "runtime")),
+  logDir: resolvedPathFromString(join(root, "logs")),
+  dbPath: resolvedPathFromString(join(root, "state", "server.db")),
+  manifestPath: resolvedPathFromString(overrides.manifestPath ?? join(root, "server.json")),
+  startupLockPath: resolvedPathFromString(
+    overrides.startupLockPath ?? join(root, "startup.lock"),
+  ),
   controlEndpoint: {
     kind: "unix-socket",
-    path: overrides.socketPath ?? join(root, "server.sock"),
+    path: resolvedPathFromString(overrides.socketPath ?? join(root, "server.sock")),
   },
   scopeId: "testscope",
 });
@@ -232,7 +235,9 @@ describe("control server", () => {
         method: "POST",
         path: "/v1/config/validate",
       });
-      assert.strictEqual(invalidValidateResponse.statusCode, 422);
+      assert.strictEqual(invalidValidateResponse.statusCode, 200);
+      const invalidValidation = yield* validateConfig(socketPath);
+      assert.isFalse(invalidValidation.valid);
 
       yield* Effect.sleep(Duration.millis(150));
       const logs = yield* tailLogs(socketPath, 5);

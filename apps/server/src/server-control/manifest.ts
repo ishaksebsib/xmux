@@ -10,6 +10,10 @@ import type { ServerRuntimePaths } from "./paths";
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeManifest = Schema.decodeUnknownOption(ServerManifest);
 
+type ParseManifestResult =
+  | { readonly _tag: "Valid"; readonly manifest: ServerManifest }
+  | { readonly _tag: "Invalid"; readonly reason: "invalid_json" | "invalid_manifest" };
+
 /** Manifest ownership tracks only the file this process is allowed to remove. */
 export interface ManifestOwnership {
   readonly path: string;
@@ -34,13 +38,18 @@ export interface AcquireManifestOwnershipInput {
   readonly owner?: ServerOwnerMetadata;
 }
 
+const parseServerManifestResult = (raw: string): ParseManifestResult => {
+  const json = decodeUnknownJsonOption(raw);
+  if (Option.isNone(json)) return { _tag: "Invalid", reason: "invalid_json" };
+  const decoded = decodeManifest(json.value);
+  if (Option.isNone(decoded)) return { _tag: "Invalid", reason: "invalid_manifest" };
+  return { _tag: "Valid", manifest: decoded.value };
+};
+
 /** Invalid manifests return null so discovery never crashes the CLI. */
 export const parseServerManifest = (raw: string): ServerManifest | null => {
-  const json = decodeUnknownJsonOption(raw);
-  if (Option.isNone(json)) return null;
-  const decoded = decodeManifest(json.value);
-  if (Option.isNone(decoded)) return null;
-  return decoded.value;
+  const result = parseServerManifestResult(raw);
+  return result._tag === "Valid" ? result.manifest : null;
 };
 
 /** Serialize through one helper so manifest files remain stable for snapshots. */
@@ -92,7 +101,13 @@ export const readServerManifest = (
       ),
     );
     if (raw === null) return null;
-    return parseServerManifest(raw);
+    const parsed = parseServerManifestResult(raw);
+    if (parsed._tag === "Valid") return parsed.manifest;
+    yield* Effect.logWarning("ignoring invalid server manifest", {
+      manifestPath,
+      reason: parsed.reason,
+    });
+    return null;
   });
 
 /** Write owner-only manifests so local discovery metadata does not leak paths. */
