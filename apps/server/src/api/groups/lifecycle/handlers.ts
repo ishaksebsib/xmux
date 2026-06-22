@@ -11,7 +11,9 @@ export const shutdown = Effect.fn("api.lifecycle.shutdown")(function* () {
 
   const result = yield* coordinator.beginShutdown();
   if (result.accepted) {
-    yield* status.setState("stopping");
+    yield* status.beginShutdown().pipe(
+      Effect.catchTag("StatusTransitionError", () => Effect.void),
+    );
     yield* Effect.addFinalizer(() => coordinator.completeShutdown());
   }
 

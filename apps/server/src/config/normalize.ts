@@ -12,6 +12,7 @@ import {
   TelegramModeConfig,
   type TelegramFileConfig,
 } from "../contracts/config";
+import { ConfigPath, resolvedPathFromString, type ResolvedPath } from "../contracts/primitives";
 import { ConfigValidationError, type ConfigError } from "../errors";
 import { HostRuntime } from "../platform/host";
 import {
@@ -47,16 +48,18 @@ const expandHome = (pathService: Path.Path, homeDir: string, input: string): str
 const resolveConfigRelativePath = (
   pathService: Path.Path,
   homeDir: string,
-  configPath: string,
+  configPath: ConfigPath,
   input: string,
-): string => {
+): ResolvedPath => {
   const expanded = expandHome(pathService, homeDir, input);
-  if (pathService.isAbsolute(expanded)) return pathService.resolve(expanded);
-  return pathService.resolve(pathService.dirname(configPath), expanded);
+  const resolved = pathService.isAbsolute(expanded)
+    ? pathService.resolve(expanded)
+    : pathService.resolve(pathService.dirname(configPath), expanded);
+  return resolvedPathFromString(resolved);
 };
 
 const validationError = (input: {
-  readonly configPath: string;
+  readonly configPath: ConfigPath;
   readonly message: string;
 }): ConfigValidationError =>
   ConfigValidationError.make({ path: input.configPath, message: input.message });
@@ -69,7 +72,7 @@ const normalizeServerSettings = (
   });
 
 const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* (input: {
-  readonly configPath: string;
+  readonly configPath: ConfigPath;
   readonly config: TelegramFileConfig | undefined;
 }) {
   const enabled = input.config?.enabled ?? false;
@@ -88,7 +91,7 @@ const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* 
 });
 
 const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (input: {
-  readonly configPath: string;
+  readonly configPath: ConfigPath;
   readonly config: DiscordFileConfig | undefined;
 }) {
   const enabled = input.config?.enabled ?? false;
@@ -150,7 +153,7 @@ const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (i
 });
 
 const normalizeOpenCode = Effect.fn("server.normalizeOpenCodeConfig")(function* (input: {
-  readonly configPath: string;
+  readonly configPath: ConfigPath;
   readonly config: OpenCodeFileConfig | undefined;
 }) {
   const mode = input.config?.mode ?? "embedded";
@@ -207,7 +210,7 @@ const normalizeOpenCode = Effect.fn("server.normalizeOpenCodeConfig")(function* 
 const normalizePi = (input: {
   readonly pathService: Path.Path;
   readonly homeDir: string;
-  readonly configPath: string;
+  readonly configPath: ConfigPath;
   readonly config: PiFileConfig | undefined;
 }): EffectivePiConfig => {
   const agentDir =
@@ -251,7 +254,7 @@ const normalizePi = (input: {
 
 /** Normalize decoded file config, resolve enabled secrets, and fill defaults. */
 export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveServerConfig")(
-  function* (input: { readonly configPath: string; readonly fileConfig: ServerFileConfig | null }) {
+  function* (input: { readonly configPath: ConfigPath; readonly fileConfig: ServerFileConfig | null }) {
     const pathService = yield* Path.Path;
     const host = yield* HostRuntime;
     const config = input.fileConfig ?? ServerFileConfig.make({});
@@ -294,7 +297,7 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
 
 /** Load config from disk into the internal, resolved runtime shape. */
 export const loadEffectiveServerConfig = Effect.fn("server.loadEffectiveServerConfig")(function* (
-  configPath: string,
+  configPath: ConfigPath,
 ) {
   const fileConfig = yield* loadServerConfigFile(configPath);
   return yield* resolveEffectiveServerConfig({ configPath, fileConfig });
@@ -304,12 +307,12 @@ const issueFromConfigError = (error: ConfigError): ConfigValidationIssue =>
   ConfigValidationIssue.make({
     code: error._tag,
     message: error.message,
-    path: error.path,
+    ...("path" in error ? { path: error.path } : {}),
   });
 
 /** Validate current config path without constructing adapters or starting runtime work. */
 export const validateServerConfig = Effect.fn("server.validateServerConfig")(function* (
-  configPath: string,
+  configPath: ConfigPath,
 ) {
   return yield* loadEffectiveServerConfig(configPath).pipe(
     Effect.match({

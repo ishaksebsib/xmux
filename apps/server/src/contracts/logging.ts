@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { NonEmptyString } from "./primitives";
+import { IsoTimestamp, NonEmptyString } from "./primitives";
 
 /** Log levels are normalized to lowercase for stable config, JSONL, and API output. */
 export const LogLevel = Schema.Literals(["trace", "debug", "info", "warn", "error"]);
@@ -7,7 +7,7 @@ export type LogLevel = typeof LogLevel.Type;
 
 /** JSONL log entries are schema-backed because the API returns them. */
 export class LogEntry extends Schema.Class<LogEntry>("LogEntry")({
-  timestamp: NonEmptyString,
+  timestamp: IsoTimestamp,
   level: LogLevel,
   message: Schema.Json,
   annotations: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),

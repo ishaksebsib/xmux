@@ -11,8 +11,22 @@ import { nodeHostRuntimeLayer } from "../src/platform/node";
 import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../src/server-runtime/state";
+import {
+  configPathFromString,
+  databasePathFromString,
+  isoTimestampFromString,
+  logDirFromString,
+  manifestPathFromString,
+  processIdFromNumber,
+  runtimeDirFromString,
+  scopeIdFromString,
+  sessionIdFromString,
+  startupLockPathFromString,
+  stateDirFromString,
+  unixSocketPathFromString,
+} from "../src/contracts/primitives";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
-import { resolvedPathFromString, RuntimePaths } from "../src/server-control/paths";
+import { RuntimePaths } from "../src/server-control/paths";
 import { ServerProbe } from "../src/server-control/ports";
 import { ControlTransport, serverMain } from "../src/server";
 
@@ -40,18 +54,18 @@ const makePaths = (
   root: string,
   configPath: string = join(root, "config.jsonc"),
 ): ServerRuntimePaths => ({
-  configPath: resolvedPathFromString(configPath),
-  stateDir: resolvedPathFromString(join(root, "state")),
-  runtimeDir: resolvedPathFromString(join(root, "runtime")),
-  logDir: resolvedPathFromString(join(root, "logs")),
-  dbPath: resolvedPathFromString(join(root, "state", "server.db")),
-  manifestPath: resolvedPathFromString(join(root, "server.json")),
-  startupLockPath: resolvedPathFromString(join(root, "startup.lock")),
+  configPath: configPathFromString(configPath),
+  stateDir: stateDirFromString(join(root, "state")),
+  runtimeDir: runtimeDirFromString(join(root, "runtime")),
+  logDir: logDirFromString(join(root, "logs")),
+  dbPath: databasePathFromString(join(root, "state", "server.db")),
+  manifestPath: manifestPathFromString(join(root, "server.json")),
+  startupLockPath: startupLockPathFromString(join(root, "startup.lock")),
   controlEndpoint: {
     kind: "unix-socket",
-    path: resolvedPathFromString(join(root, "server.sock")),
+    path: unixSocketPathFromString(join(root, "server.sock")),
   },
-  scopeId: "testscope",
+  scopeId: scopeIdFromString("testscope"),
 });
 
 const makeTestLayer = (paths: ServerRuntimePaths) => {
@@ -63,9 +77,10 @@ const makeTestLayer = (paths: ServerRuntimePaths) => {
     serverProbeUnreachableLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
-      pid: process.pid,
+      pid: processIdFromNumber(process.pid),
       startedAt: fixedStartedAt,
-      sessionId: "unit",
+      startedAtIso: isoTimestampFromString(fixedStartedAt.toISOString()),
+      sessionId: sessionIdFromString("unit"),
     }),
   );
   const withConfig = Layer.provideMerge(ServerConfig.layer, base);

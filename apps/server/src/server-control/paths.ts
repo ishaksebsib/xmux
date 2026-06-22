@@ -1,4 +1,4 @@
-import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
 import {
   APP_DIR_NAME,
   DEFAULT_CONFIG_FILE_NAME,
@@ -11,35 +11,48 @@ import {
   STARTUP_LOCK_FILE_EXTENSION,
   STARTUP_LOCK_FILE_PREFIX,
   UNIX_SOCKET_FILE_EXTENSION,
-  XDG_CONFIG_HOME_ENV,
-  XDG_RUNTIME_DIR_ENV,
-  XDG_STATE_HOME_ENV,
 } from "./constants";
+import { ServerBootConfig, type ServerBootConfigService } from "../config/boot";
 import { ServerControlEndpoint } from "../contracts/control";
+import {
+  ConfigPath,
+  DatabasePath,
+  LogDir,
+  ManifestPath,
+  RuntimeDir,
+  ScopeId,
+  scopeIdFromString,
+  resolvedPathFromString,
+  StartupLockPath,
+  StateDir,
+  UnixSocketPath,
+} from "../contracts/primitives";
 import { RuntimePathError } from "../errors";
 import { ServerOptions, type ParsedServerOptions } from "../options";
 import { HostRuntime } from "../platform/host";
 
-/** Absolute non-empty path resolved once at the server runtime boundary. */
-export const ResolvedPath = Schema.String.check(Schema.isNonEmpty()).pipe(
-  Schema.brand("@xmux/server/ResolvedPath"),
-);
-export type ResolvedPath = typeof ResolvedPath.Type;
+export { resolvedPathFromString };
 
-const decodeResolvedPath = Schema.decodeUnknownEffect(ResolvedPath);
-export const resolvedPathFromString = Schema.decodeSync(ResolvedPath);
+const decodeConfigPath = Schema.decodeUnknownEffect(ConfigPath);
+const decodeStateDir = Schema.decodeUnknownEffect(StateDir);
+const decodeRuntimeDir = Schema.decodeUnknownEffect(RuntimeDir);
+const decodeLogDir = Schema.decodeUnknownEffect(LogDir);
+const decodeDatabasePath = Schema.decodeUnknownEffect(DatabasePath);
+const decodeManifestPath = Schema.decodeUnknownEffect(ManifestPath);
+const decodeStartupLockPath = Schema.decodeUnknownEffect(StartupLockPath);
+const decodeUnixSocketPath = Schema.decodeUnknownEffect(UnixSocketPath);
 
 /** Resolved paths are explicit so the CLI and server agree on one local scope. */
 export interface ServerRuntimePaths {
-  readonly configPath: ResolvedPath;
-  readonly stateDir: ResolvedPath;
-  readonly runtimeDir: ResolvedPath;
-  readonly logDir: ResolvedPath;
-  readonly dbPath: ResolvedPath;
-  readonly manifestPath: ResolvedPath;
-  readonly startupLockPath: ResolvedPath;
+  readonly configPath: ConfigPath;
+  readonly stateDir: StateDir;
+  readonly runtimeDir: RuntimeDir;
+  readonly logDir: LogDir;
+  readonly dbPath: DatabasePath;
+  readonly manifestPath: ManifestPath;
+  readonly startupLockPath: StartupLockPath;
   readonly controlEndpoint: ServerControlEndpoint;
-  readonly scopeId: string;
+  readonly scopeId: ScopeId;
 }
 
 const expandHome = (pathService: Path.Path, home: string, input: string): string => {
@@ -48,11 +61,14 @@ const expandHome = (pathService: Path.Path, home: string, input: string): string
   return input;
 };
 
-const parseResolvedPath = (input: {
-  readonly path: string;
-  readonly message: string;
-}): Effect.Effect<ResolvedPath, RuntimePathError> =>
-  decodeResolvedPath(input.path).pipe(
+const parseWith = <A>(
+  decode: (u: unknown) => Effect.Effect<A, Schema.SchemaError>,
+  input: {
+    readonly path: string;
+    readonly message: string;
+  },
+): Effect.Effect<A, RuntimePathError> =>
+  decode(input.path).pipe(
     Effect.mapError((cause) =>
       RuntimePathError.make({
         message: input.message,
@@ -62,13 +78,13 @@ const parseResolvedPath = (input: {
     ),
   );
 
-const resolveInputPath = (
+const resolveInputConfigPath = (
   pathService: Path.Path,
   home: string,
   input: string,
-): Effect.Effect<ResolvedPath, RuntimePathError> => {
+): Effect.Effect<ConfigPath, RuntimePathError> => {
   const path = pathService.resolve(expandHome(pathService, home, input));
-  return parseResolvedPath({ path, message: `Resolved path is invalid: ${path}` });
+  return parseWith(decodeConfigPath, { path, message: `Resolved config path is invalid: ${path}` });
 };
 
 const fnv1a32 = (value: string, seed: number): number => {
@@ -86,16 +102,18 @@ const hex32 = (value: number): string => value.toString(16).padStart(8, "0");
 export const createScopeId = (input: {
   readonly configPath: string;
   readonly stateDir: string;
-}): string => {
+}): ScopeId => {
   const value = `${input.configPath}\0${input.stateDir}`;
-  return `${hex32(fnv1a32(value, 0x811c9dc5))}${hex32(fnv1a32(value, 0x01000193))}`;
+  return scopeIdFromString(
+    `${hex32(fnv1a32(value, 0x811c9dc5))}${hex32(fnv1a32(value, 0x01000193))}`,
+  );
 };
 
 const defaultLayout = (
   pathService: Path.Path,
   home: string,
   platform: string,
-  getEnv: (name: string) => string | undefined,
+  boot: ServerBootConfigService,
 ): {
   readonly configPath: string;
   readonly stateDir: string;
@@ -110,8 +128,10 @@ const defaultLayout = (
     };
   }
 
-  const configHome = getEnv(XDG_CONFIG_HOME_ENV) ?? pathService.join(home, ".config");
-  const stateHome = getEnv(XDG_STATE_HOME_ENV) ?? pathService.join(home, ".local", "state");
+  const configHome = boot.xdgConfigHome.pipe(Option.getOrElse(() => pathService.join(home, ".config")));
+  const stateHome = boot.xdgStateHome.pipe(
+    Option.getOrElse(() => pathService.join(home, ".local", "state")),
+  );
 
   return {
     configPath: pathService.join(configHome, APP_DIR_NAME, DEFAULT_CONFIG_FILE_NAME),
@@ -127,7 +147,8 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
   const pathService = yield* Path.Path;
   const host = yield* HostRuntime;
   const home = host.homeDir;
-  const defaults = defaultLayout(pathService, home, host.platform, host.getEnv);
+  const boot = yield* ServerBootConfig;
+  const defaults = defaultLayout(pathService, home, host.platform, boot);
 
   if (host.platform === "win32") {
     return yield* RuntimePathError.make({
@@ -135,31 +156,31 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     });
   }
 
-  const configPath = yield* resolveInputPath(
+  const configPath = yield* resolveInputConfigPath(
     pathService,
     home,
     options.configPath ?? defaults.configPath,
   );
-  const stateDir = yield* parseResolvedPath({
+  const stateDir = yield* parseWith(decodeStateDir, {
     path: pathService.resolve(defaults.stateDir),
     message: `Resolved state directory is invalid: ${defaults.stateDir}`,
   });
-  const logDir = yield* parseResolvedPath({
+  const logDir = yield* parseWith(decodeLogDir, {
     path: pathService.resolve(defaults.logDir),
     message: `Resolved log directory is invalid: ${defaults.logDir}`,
   });
-  const runtimeHome = host.getEnv(XDG_RUNTIME_DIR_ENV);
+  const runtimeHome = Option.getOrUndefined(boot.xdgRuntimeDir);
   const runtimeDirInput = pathService.resolve(
     runtimeHome === undefined
       ? pathService.join(stateDir, RUNTIME_DIR_NAME)
       : pathService.join(runtimeHome, APP_DIR_NAME),
   );
-  const runtimeDir = yield* parseResolvedPath({
+  const runtimeDir = yield* parseWith(decodeRuntimeDir, {
     path: runtimeDirInput,
     message: `Resolved runtime directory is invalid: ${runtimeDirInput}`,
   });
   const dbPathInput = pathService.join(stateDir, DEFAULT_DB_FILE_NAME);
-  const dbPath = yield* parseResolvedPath({
+  const dbPath = yield* parseWith(decodeDatabasePath, {
     path: dbPathInput,
     message: `Resolved database path is invalid: ${dbPathInput}`,
   });
@@ -169,7 +190,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     controlDir,
     `${SERVER_MANIFEST_FILE_PREFIX}-${scopeId}.json`,
   );
-  const manifestPath = yield* parseResolvedPath({
+  const manifestPath = yield* parseWith(decodeManifestPath, {
     path: manifestPathInput,
     message: `Resolved manifest path is invalid: ${manifestPathInput}`,
   });
@@ -177,7 +198,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     controlDir,
     `${STARTUP_LOCK_FILE_PREFIX}-${scopeId}.${STARTUP_LOCK_FILE_EXTENSION}`,
   );
-  const startupLockPath = yield* parseResolvedPath({
+  const startupLockPath = yield* parseWith(decodeStartupLockPath, {
     path: startupLockPathInput,
     message: `Resolved startup lock path is invalid: ${startupLockPathInput}`,
   });
@@ -185,7 +206,7 @@ export const resolveRuntimePaths = Effect.fn("server.resolveRuntimePaths")(funct
     runtimeDir,
     `${SERVER_SOCKET_FILE_PREFIX}-${scopeId}.${UNIX_SOCKET_FILE_EXTENSION}`,
   );
-  const endpointPath = yield* parseResolvedPath({
+  const endpointPath = yield* parseWith(decodeUnixSocketPath, {
     path: endpointPathInput,
     message: `Resolved control endpoint path is invalid: ${endpointPathInput}`,
   });

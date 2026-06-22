@@ -1,6 +1,7 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import { Effect, FileSystem, Layer, Option, Path } from "effect";
+import { ServerBootConfig } from "../src/config/boot";
 import { API_VERSION, SERVER_MANIFEST_VERSION } from "../src/contracts/constants";
 import { SERVER_PACKAGE_VERSION } from "../src/server-control/constants";
 import { ServerControlEndpoint } from "../src/contracts/control";
@@ -19,10 +20,22 @@ import {
 } from "../src/server-control/manifest";
 import {
   createScopeId,
-  resolvedPathFromString,
   resolveRuntimePaths,
   type ServerRuntimePaths,
 } from "../src/server-control/paths";
+import {
+  configPathFromString,
+  databasePathFromString,
+  isoTimestampFromString,
+  logDirFromString,
+  manifestPathFromString,
+  processIdFromNumber,
+  runtimeDirFromString,
+  sessionIdFromString,
+  startupLockPathFromString,
+  stateDirFromString,
+  unixSocketPathFromString,
+} from "../src/contracts/primitives";
 import { acquireStartupLock, releaseStartupLock } from "../src/server-control/startup-lock";
 import { nodeHostRuntimeLayer, isPidAlive } from "../src/platform/node";
 
@@ -36,6 +49,11 @@ const serverProbeReachableLayer = Layer.succeed(ServerProbe)({
 const nodeFsPathControlLayer = Layer.mergeAll(nodeFsPathLayer, serverProbeUnreachableLayer);
 const fixedStartedAt = new Date("2026-06-16T00:00:00.000Z");
 const fixedSessionId = "test-session";
+const testBootLayer = Layer.succeed(ServerBootConfig)({
+  xdgConfigHome: Option.none(),
+  xdgStateHome: Option.none(),
+  xdgRuntimeDir: Option.none(),
+});
 
 const findDeadPid = (): number => {
   let candidate = 9_999_999;
@@ -56,13 +74,16 @@ const makeManifest = (input: {
   ServerManifest.make({
     version: SERVER_MANIFEST_VERSION,
     protocolVersion: API_VERSION,
-    pid: input.pid,
-    sessionId: input.sessionId ?? fixedSessionId,
-    startedAt: fixedStartedAt.toISOString(),
-    configPath: input.configPath,
-    stateDir: input.stateDir,
-    scopeId: input.scopeId,
-    endpoint: ServerControlEndpoint.make({ kind: "unix-socket", path: input.socketPath }),
+    pid: processIdFromNumber(input.pid),
+    sessionId: sessionIdFromString(input.sessionId ?? fixedSessionId),
+    startedAt: isoTimestampFromString(fixedStartedAt.toISOString()),
+    configPath: configPathFromString(input.configPath),
+    stateDir: stateDirFromString(input.stateDir),
+    scopeId: createScopeId({ configPath: input.configPath, stateDir: input.stateDir }),
+    endpoint: ServerControlEndpoint.make({
+      kind: "unix-socket",
+      path: unixSocketPathFromString(input.socketPath),
+    }),
     owner: ServerOwnerMetadata.make({
       client: "test",
       version: "0.0.0",
@@ -84,27 +105,27 @@ const makeRuntimePaths = (
   const scopeId = createScopeId({ configPath, stateDir });
 
   return {
-    configPath: resolvedPathFromString(configPath),
-    stateDir: resolvedPathFromString(stateDir),
-    runtimeDir: resolvedPathFromString(pathService.join(root, "runtime")),
-    logDir: resolvedPathFromString(pathService.join(root, "logs")),
-    dbPath: resolvedPathFromString(pathService.join(root, "state", "server.db")),
-    manifestPath: resolvedPathFromString(
+    configPath: configPathFromString(configPath),
+    stateDir: stateDirFromString(stateDir),
+    runtimeDir: runtimeDirFromString(pathService.join(root, "runtime")),
+    logDir: logDirFromString(pathService.join(root, "logs")),
+    dbPath: databasePathFromString(pathService.join(root, "state", "server.db")),
+    manifestPath: manifestPathFromString(
       overrides.manifestPath ?? pathService.join(root, "server.json"),
     ),
-    startupLockPath: resolvedPathFromString(
+    startupLockPath: startupLockPathFromString(
       overrides.startupLockPath ?? pathService.join(root, "startup.lock"),
     ),
     controlEndpoint: {
       kind: "unix-socket",
-      path: resolvedPathFromString(overrides.socketPath ?? pathService.join(root, "server.sock")),
+      path: unixSocketPathFromString(overrides.socketPath ?? pathService.join(root, "server.sock")),
     },
     scopeId,
   };
 };
 
 describe("runtime paths", () => {
-  layer(Layer.mergeAll(NodePath.layer, nodeHostRuntimeLayer))((it) => {
+  layer(Layer.mergeAll(NodePath.layer, nodeHostRuntimeLayer, testBootLayer))((it) => {
     it.effect("resolves stable path-safe scope ids", () =>
       Effect.gen(function* () {
         const paths = yield* resolveRuntimePaths(
@@ -138,8 +159,8 @@ describe("manifest state", () => {
         const manifest = createServerManifest({
           paths,
           startedAt: fixedStartedAt,
-          sessionId: fixedSessionId,
-          pid: process.pid,
+          sessionId: sessionIdFromString(fixedSessionId),
+          pid: processIdFromNumber(process.pid),
           executablePath: process.execPath,
         });
         yield* writeServerManifest(paths.manifestPath, manifest);
@@ -254,8 +275,8 @@ describe("manifest state", () => {
         yield* writeServerManifest(manifestPath, otherManifest);
         yield* removeServerManifestIfOwnedBy({
           manifestPath,
-          pid: process.pid,
-          sessionId: fixedSessionId,
+          pid: processIdFromNumber(process.pid),
+          sessionId: sessionIdFromString(fixedSessionId),
         });
 
         assert.isTrue(yield* fs.exists(manifestPath));
@@ -280,8 +301,8 @@ describe("manifest state", () => {
         yield* writeServerManifest(manifestPath, otherSessionManifest);
         yield* removeServerManifestIfOwnedBy({
           manifestPath,
-          pid: process.pid,
-          sessionId: fixedSessionId,
+          pid: processIdFromNumber(process.pid),
+          sessionId: sessionIdFromString(fixedSessionId),
         });
 
         assert.isTrue(yield* fs.exists(manifestPath));
@@ -301,7 +322,7 @@ describe("manifest state", () => {
             yield* acquireManifestOwnership({
               paths,
               startedAt: fixedStartedAt,
-              sessionId: fixedSessionId,
+              sessionId: sessionIdFromString(fixedSessionId),
             });
             assert.isTrue(yield* fs.exists(manifestPath));
           }),

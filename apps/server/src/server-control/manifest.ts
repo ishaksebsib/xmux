@@ -3,6 +3,13 @@ import { API_VERSION, SERVER_MANIFEST_VERSION } from "../contracts/constants";
 import { SERVER_PACKAGE_VERSION } from "./constants";
 import { ServerControlEndpoint } from "../contracts/control";
 import { ServerManifest, ServerOwnerMetadata } from "../contracts/manifest";
+import {
+  isoTimestampFromString,
+  processIdFromNumber,
+  type ManifestPath,
+  type ProcessId,
+  type SessionId,
+} from "../contracts/primitives";
 import { ManifestError } from "../errors";
 import { HostRuntime } from "../platform/host";
 import type { ServerRuntimePaths } from "./paths";
@@ -16,17 +23,17 @@ type ParseManifestResult =
 
 /** Manifest ownership tracks only the file this process is allowed to remove. */
 export interface ManifestOwnership {
-  readonly path: string;
-  readonly pid: number;
-  readonly sessionId: string;
+  readonly path: ManifestPath;
+  readonly pid: ProcessId;
+  readonly sessionId: SessionId;
 }
 
 /** Manifest creation input is explicit to keep process metadata at the shell edge. */
 export interface CreateManifestInput {
   readonly paths: ServerRuntimePaths;
   readonly startedAt: Date;
-  readonly sessionId: string;
-  readonly pid: number;
+  readonly sessionId: SessionId;
+  readonly pid: ProcessId;
   readonly executablePath: string;
   readonly owner?: ServerOwnerMetadata;
 }
@@ -34,7 +41,7 @@ export interface CreateManifestInput {
 export interface AcquireManifestOwnershipInput {
   readonly paths: ServerRuntimePaths;
   readonly startedAt: Date;
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
   readonly owner?: ServerOwnerMetadata;
 }
 
@@ -63,7 +70,7 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
     protocolVersion: API_VERSION,
     pid: input.pid,
     sessionId: input.sessionId,
-    startedAt: input.startedAt.toISOString(),
+    startedAt: isoTimestampFromString(input.startedAt.toISOString()),
     configPath: input.paths.configPath,
     stateDir: input.paths.stateDir,
     scopeId: input.paths.scopeId,
@@ -82,7 +89,7 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
 
 /** Read manifests defensively because the file is only discovery metadata. */
 export const readServerManifest = (
-  manifestPath: string,
+  manifestPath: ManifestPath | string,
 ): Effect.Effect<ServerManifest | null, ManifestError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -112,7 +119,7 @@ export const readServerManifest = (
 
 /** Write owner-only manifests so local discovery metadata does not leak paths. */
 export const writeServerManifest = (
-  manifestPath: string,
+  manifestPath: ManifestPath | string,
   manifest: ServerManifest,
 ): Effect.Effect<void, ManifestError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
@@ -158,7 +165,7 @@ export const writeServerManifest = (
 
 /** Remove manifest files only after callers establish stale or owned status. */
 export const removeServerManifest = (
-  manifestPath: string,
+  manifestPath: ManifestPath | string,
 ): Effect.Effect<void, ManifestError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -176,9 +183,9 @@ export const removeServerManifest = (
 
 /** Remove only the manifest owned by this process/session pair. */
 export const removeServerManifestIfOwnedBy = (input: {
-  readonly manifestPath: string;
-  readonly pid: number;
-  readonly sessionId: string;
+  readonly manifestPath: ManifestPath | string;
+  readonly pid: ProcessId;
+  readonly sessionId: SessionId;
 }): Effect.Effect<void, ManifestError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const manifest = yield* readServerManifest(input.manifestPath);
@@ -193,7 +200,7 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
   const host = yield* HostRuntime;
   const manifest = createServerManifest({
     ...input,
-    pid: host.pid,
+    pid: processIdFromNumber(host.pid),
     executablePath: host.executablePath,
   });
 
@@ -202,7 +209,7 @@ export const acquireManifestOwnership = Effect.fn("server.acquireManifestOwnersh
       Effect.map(
         (): ManifestOwnership => ({
           path: input.paths.manifestPath,
-          pid: host.pid,
+          pid: processIdFromNumber(host.pid),
           sessionId: input.sessionId,
         }),
       ),

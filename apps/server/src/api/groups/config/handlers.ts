@@ -4,7 +4,11 @@ import { ServerConfig } from "../../../config/service";
 import { API_VERSION } from "../../../contracts/constants";
 import { serverApi } from "../../api";
 import { apiError } from "../../shared/errors";
-import { ConfigValidateResponse, EffectiveConfigResponse } from "./schemas";
+import {
+  EffectiveConfigResponse,
+  InvalidConfigValidateResponse,
+  ValidConfigValidateResponse,
+} from "./schemas";
 
 export const effective = Effect.fn("api.config.effective")(function* () {
   const config = yield* ServerConfig;
@@ -35,7 +39,7 @@ export const validate = Effect.fn("api.config.validate")(function* () {
   const config = yield* ServerConfig;
   const result = yield* config.validateCurrent();
   if (!result.valid) {
-    return ConfigValidateResponse.make({
+    return InvalidConfigValidateResponse.make({
       version: API_VERSION,
       configPath: result.configPath,
       valid: false,
@@ -43,7 +47,7 @@ export const validate = Effect.fn("api.config.validate")(function* () {
     });
   }
 
-  return ConfigValidateResponse.make({
+  return ValidConfigValidateResponse.make({
     version: API_VERSION,
     configPath: result.configPath,
     valid: true,

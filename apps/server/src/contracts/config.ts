@@ -1,15 +1,29 @@
 import { Schema } from "effect";
 import { LogLevel } from "./logging";
-import { NonEmptyString, PositiveInteger } from "./primitives";
+import {
+  BaseUrl,
+  ConfigPath,
+  DiscordApplicationId,
+  DiscordGuildId,
+  DiscordPublicKey,
+  EnvironmentVariableName,
+  ModelId,
+  ModelVariant,
+  NonEmptyString,
+  Port,
+  ProviderId,
+  ResolvedPath,
+  SecretValue,
+} from "./primitives";
 
 /** Secret references let config point at credentials without exposing them in status. */
 export class EnvSecretRef extends Schema.Class<EnvSecretRef>("EnvSecretRef")({
-  env: NonEmptyString,
+  env: EnvironmentVariableName,
 }) {}
 
 /** Inline secrets are supported for convenience but always redacted at boundaries. */
 export class InlineSecretRef extends Schema.Class<InlineSecretRef>("InlineSecretRef")({
-  value: NonEmptyString,
+  value: SecretValue,
 }) {}
 
 export const SecretRef = Schema.Union([EnvSecretRef, InlineSecretRef]);
@@ -68,9 +82,9 @@ export class DiscordModeConfig extends Schema.Class<DiscordModeConfig>("DiscordM
 export class DiscordFileConfig extends Schema.Class<DiscordFileConfig>("DiscordFileConfig")({
   enabled: Schema.optionalKey(Schema.Boolean),
   token: Schema.optionalKey(SecretRef),
-  applicationId: Schema.optionalKey(NonEmptyString),
-  guildId: Schema.optionalKey(NonEmptyString),
-  publicKey: Schema.optionalKey(NonEmptyString),
+  applicationId: Schema.optionalKey(DiscordApplicationId),
+  guildId: Schema.optionalKey(DiscordGuildId),
+  publicKey: Schema.optionalKey(DiscordPublicKey),
   mode: Schema.optionalKey(DiscordModeConfig),
 }) {}
 
@@ -82,16 +96,16 @@ export class ChatsFileConfig extends Schema.Class<ChatsFileConfig>("ChatsFileCon
 export class HarnessModelRefConfig extends Schema.Class<HarnessModelRefConfig>(
   "HarnessModelRefConfig",
 )({
-  providerId: Schema.optionalKey(NonEmptyString),
-  modelId: NonEmptyString,
-  variant: Schema.optionalKey(NonEmptyString),
+  providerId: Schema.optionalKey(ProviderId),
+  modelId: ModelId,
+  variant: Schema.optionalKey(ModelVariant),
 }) {}
 
 export class OpenCodeFileConfig extends Schema.Class<OpenCodeFileConfig>("OpenCodeFileConfig")({
   enabled: Schema.optionalKey(Schema.Boolean),
   mode: Schema.optionalKey(OpenCodeMode),
-  baseUrl: Schema.optionalKey(NonEmptyString),
-  port: Schema.optionalKey(PositiveInteger),
+  baseUrl: Schema.optionalKey(BaseUrl),
+  port: Schema.optionalKey(Port),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
@@ -122,11 +136,23 @@ export class ServerFileConfig extends Schema.Class<ServerFileConfig>("ServerFile
 }) {}
 
 /** Redacted secret metadata is safe for local status and support output. */
-export class RedactedSecretRef extends Schema.Class<RedactedSecretRef>("RedactedSecretRef")({
-  source: Schema.Literals(["env", "value"]),
-  env: Schema.optionalKey(Schema.String),
+export class RedactedEnvSecretRef extends Schema.Class<RedactedEnvSecretRef>(
+  "RedactedEnvSecretRef",
+)({
+  source: Schema.Literal("env"),
+  env: EnvironmentVariableName,
   redacted: Schema.Literal(true),
 }) {}
+
+export class RedactedInlineSecretRef extends Schema.Class<RedactedInlineSecretRef>(
+  "RedactedInlineSecretRef",
+)({
+  source: Schema.Literal("value"),
+  redacted: Schema.Literal(true),
+}) {}
+
+export const RedactedSecretRef = Schema.Union([RedactedEnvSecretRef, RedactedInlineSecretRef]);
+export type RedactedSecretRef = typeof RedactedSecretRef.Type;
 
 export class RedactedTelegramConfig extends Schema.Class<RedactedTelegramConfig>(
   "RedactedTelegramConfig",
@@ -141,9 +167,9 @@ export class RedactedDiscordConfig extends Schema.Class<RedactedDiscordConfig>(
 )({
   enabled: Schema.Boolean,
   token: Schema.optionalKey(RedactedSecretRef),
-  applicationId: Schema.optionalKey(Schema.String),
-  guildId: Schema.optionalKey(Schema.String),
-  publicKey: Schema.optionalKey(Schema.String),
+  applicationId: Schema.optionalKey(DiscordApplicationId),
+  guildId: Schema.optionalKey(DiscordGuildId),
+  publicKey: Schema.optionalKey(DiscordPublicKey),
   mode: DiscordModeConfig,
 }) {}
 
@@ -157,20 +183,20 @@ export class RedactedOpenCodeConfig extends Schema.Class<RedactedOpenCodeConfig>
 )({
   enabled: Schema.Boolean,
   mode: OpenCodeMode,
-  baseUrl: Schema.optionalKey(Schema.String),
-  port: Schema.optionalKey(PositiveInteger),
+  baseUrl: Schema.optionalKey(BaseUrl),
+  port: Schema.optionalKey(Port),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
 
 export class RedactedPiConfig extends Schema.Class<RedactedPiConfig>("RedactedPiConfig")({
   enabled: Schema.Boolean,
-  agentDir: Schema.optionalKey(Schema.String),
-  sessionDir: Schema.optionalKey(Schema.String),
+  agentDir: Schema.optionalKey(ResolvedPath),
+  sessionDir: Schema.optionalKey(ResolvedPath),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
-  tools: Schema.optionalKey(Schema.Array(Schema.String)),
-  excludeTools: Schema.optionalKey(Schema.Array(Schema.String)),
+  tools: Schema.optionalKey(Schema.Array(NonEmptyString)),
+  excludeTools: Schema.optionalKey(Schema.Array(NonEmptyString)),
   noTools: Schema.optionalKey(PiNoToolsMode),
 }) {}
 
@@ -185,7 +211,7 @@ export class RedactedHarnessesConfig extends Schema.Class<RedactedHarnessesConfi
 export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
   "RedactedServerConfig",
 )({
-  defaultWorkingDirectory: Schema.String,
+  defaultWorkingDirectory: ResolvedPath,
   deliveryMode: DeliveryMode,
   server: ServerSettingsConfig,
   chats: RedactedChatsConfig,
@@ -196,7 +222,7 @@ export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
 export class RedactedConfigSnapshot extends Schema.Class<RedactedConfigSnapshot>(
   "RedactedConfigSnapshot",
 )({
-  configPath: Schema.String,
+  configPath: ConfigPath,
   config: RedactedServerConfig,
 }) {}
 
@@ -212,7 +238,7 @@ export class ConfigValidationIssue extends Schema.Class<ConfigValidationIssue>(
 export class ValidConfigValidationResult extends Schema.Class<ValidConfigValidationResult>(
   "ValidConfigValidationResult",
 )({
-  configPath: NonEmptyString,
+  configPath: ConfigPath,
   valid: Schema.Literal(true),
   issues: Schema.Tuple([]),
   config: RedactedServerConfig,
@@ -221,7 +247,7 @@ export class ValidConfigValidationResult extends Schema.Class<ValidConfigValidat
 export class InvalidConfigValidationResult extends Schema.Class<InvalidConfigValidationResult>(
   "InvalidConfigValidationResult",
 )({
-  configPath: Schema.String,
+  configPath: ConfigPath,
   valid: Schema.Literal(false),
   issues: Schema.NonEmptyArray(ConfigValidationIssue),
 }) {}

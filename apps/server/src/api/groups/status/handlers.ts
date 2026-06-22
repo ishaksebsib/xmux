@@ -21,7 +21,7 @@ export const status = Effect.fn("api.status.get")(function* () {
     version: API_VERSION,
     protocolVersion: API_VERSION,
     pid: identity.pid,
-    startedAt: identity.startedAt.toISOString(),
+    startedAt: identity.startedAtIso,
     uptimeMs,
     state,
     configPath: paths.configPath,

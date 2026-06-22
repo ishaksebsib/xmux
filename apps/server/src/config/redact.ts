@@ -4,6 +4,8 @@ import {
   RedactedHarnessesConfig,
   RedactedOpenCodeConfig,
   RedactedPiConfig,
+  RedactedEnvSecretRef,
+  RedactedInlineSecretRef,
   RedactedSecretRef,
   RedactedServerConfig,
   RedactedTelegramConfig,
@@ -18,15 +20,15 @@ import type {
 } from "./effective";
 
 const redactSecret = (secret: ResolvedSecret): RedactedSecretRef => {
-  if (secret.source === "env" && secret.env !== undefined) {
-    return RedactedSecretRef.make({
+  if (secret.source === "env") {
+    return RedactedEnvSecretRef.make({
       source: "env",
       env: secret.env,
       redacted: true,
     });
   }
 
-  return RedactedSecretRef.make({
+  return RedactedInlineSecretRef.make({
     source: "value",
     redacted: true,
   });

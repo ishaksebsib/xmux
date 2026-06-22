@@ -10,8 +10,22 @@ import { status as statusRoute } from "../src/api/groups/status/handlers";
 import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfig } from "../src/config/service";
 import { LogReader } from "../src/logging/log-reader";
+import {
+  configPathFromString,
+  databasePathFromString,
+  isoTimestampFromString,
+  logDirFromString,
+  manifestPathFromString,
+  processIdFromNumber,
+  runtimeDirFromString,
+  scopeIdFromString,
+  sessionIdFromString,
+  startupLockPathFromString,
+  stateDirFromString,
+  unixSocketPathFromString,
+} from "../src/contracts/primitives";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
-import { resolvedPathFromString, RuntimePaths } from "../src/server-control/paths";
+import { RuntimePaths } from "../src/server-control/paths";
 import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../src/server-runtime/state";
@@ -74,20 +88,20 @@ const makePaths = (
     readonly socketPath?: string;
   } = {},
 ): ServerRuntimePaths => ({
-  configPath: resolvedPathFromString(overrides.configPath ?? join(root, "config.jsonc")),
-  stateDir: resolvedPathFromString(join(root, "state")),
-  runtimeDir: resolvedPathFromString(join(root, "runtime")),
-  logDir: resolvedPathFromString(join(root, "logs")),
-  dbPath: resolvedPathFromString(join(root, "state", "server.db")),
-  manifestPath: resolvedPathFromString(overrides.manifestPath ?? join(root, "server.json")),
-  startupLockPath: resolvedPathFromString(
+  configPath: configPathFromString(overrides.configPath ?? join(root, "config.jsonc")),
+  stateDir: stateDirFromString(join(root, "state")),
+  runtimeDir: runtimeDirFromString(join(root, "runtime")),
+  logDir: logDirFromString(join(root, "logs")),
+  dbPath: databasePathFromString(join(root, "state", "server.db")),
+  manifestPath: manifestPathFromString(overrides.manifestPath ?? join(root, "server.json")),
+  startupLockPath: startupLockPathFromString(
     overrides.startupLockPath ?? join(root, "startup.lock"),
   ),
   controlEndpoint: {
     kind: "unix-socket",
-    path: resolvedPathFromString(overrides.socketPath ?? join(root, "server.sock")),
+    path: unixSocketPathFromString(overrides.socketPath ?? join(root, "server.sock")),
   },
-  scopeId: "testscope",
+  scopeId: scopeIdFromString("testscope"),
 });
 
 const makeServerTestLayer = (paths: ServerRuntimePaths) => {
@@ -99,9 +113,10 @@ const makeServerTestLayer = (paths: ServerRuntimePaths) => {
     nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
-      pid: process.pid,
+      pid: processIdFromNumber(process.pid),
       startedAt: fixedStartedAt,
-      sessionId: "control-test",
+      startedAtIso: isoTimestampFromString(fixedStartedAt.toISOString()),
+      sessionId: sessionIdFromString("control-test"),
     }),
   );
   const withConfig = Layer.provideMerge(ServerConfig.layer, base);
@@ -110,6 +125,18 @@ const makeServerTestLayer = (paths: ServerRuntimePaths) => {
 
   return Layer.provideMerge(nodeUnixSocketControlTransportLayer, withRuntime);
 };
+
+describe("status transitions", () => {
+  it.effect("rejects illegal transitions with StatusTransitionError", () =>
+    Effect.gen(function* () {
+      const registry = yield* StatusRegistry;
+      const error = yield* registry.beginReload().pipe(Effect.flip);
+      assert.strictEqual(error._tag, "StatusTransitionError");
+      assert.strictEqual(error.from, "starting");
+      assert.strictEqual(error.to, "reloading");
+    }).pipe(Effect.provide(StatusRegistry.layer)),
+  );
+});
 
 describe("control handlers", () => {
   it.effect("returns schema-valid status and idempotent shutdown responses", () =>
@@ -121,16 +148,17 @@ describe("control handlers", () => {
         ShutdownCoordinator.layer,
         Layer.succeed(RuntimePaths)(paths),
         Layer.succeed(ServerIdentity)({
-          pid: process.pid,
+          pid: processIdFromNumber(process.pid),
           startedAt: fixedStartedAt,
-          sessionId: "unit",
+          startedAtIso: isoTimestampFromString(fixedStartedAt.toISOString()),
+          sessionId: sessionIdFromString("unit"),
         }),
       );
 
       yield* Effect.gen(function* () {
         const status = yield* StatusRegistry;
         const shutdown = yield* ShutdownCoordinator;
-        yield* status.setState("ready");
+        yield* status.markReady();
 
         const statusBody = yield* statusRoute();
         if (!(statusBody instanceof StatusResponse)) {

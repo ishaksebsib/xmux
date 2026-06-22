@@ -1,7 +1,15 @@
 import { Schema } from "effect";
 import { ServerControlEndpoint } from "./control";
 import { API_VERSION, SERVER_MANIFEST_VERSION } from "./constants";
-import { NonEmptyString, PositiveInteger } from "./primitives";
+import {
+  ConfigPath,
+  IsoTimestamp,
+  NonEmptyString,
+  ProcessId,
+  ScopeId,
+  SessionId,
+  StateDir,
+} from "./primitives";
 
 /** Owner metadata helps users identify which binary wrote the manifest. */
 export class ServerOwnerMetadata extends Schema.Class<ServerOwnerMetadata>("ServerOwnerMetadata")({
@@ -14,12 +22,12 @@ export class ServerOwnerMetadata extends Schema.Class<ServerOwnerMetadata>("Serv
 export class ServerManifest extends Schema.Class<ServerManifest>("ServerManifest")({
   version: Schema.Literal(SERVER_MANIFEST_VERSION),
   protocolVersion: Schema.Literal(API_VERSION),
-  pid: PositiveInteger,
-  sessionId: NonEmptyString,
-  startedAt: NonEmptyString,
-  configPath: NonEmptyString,
-  stateDir: NonEmptyString,
-  scopeId: NonEmptyString,
+  pid: ProcessId,
+  sessionId: SessionId,
+  startedAt: IsoTimestamp,
+  configPath: ConfigPath,
+  stateDir: StateDir,
+  scopeId: ScopeId,
   endpoint: ServerControlEndpoint,
   owner: ServerOwnerMetadata,
 }) {}

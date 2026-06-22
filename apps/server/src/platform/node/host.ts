@@ -25,7 +25,6 @@ export const nodeHostRuntimeLayer = Layer.succeed(HostRuntime)({
   homeDir: homedir(),
   pid: process.pid,
   executablePath: process.argv[1] ?? process.execPath,
-  getEnv: (name) => process.env[name],
   randomUuid: Effect.fn("HostRuntime.randomUuid")(function* () {
     return yield* Effect.sync(() => randomUUID());
   }),

@@ -16,9 +16,10 @@ import { StatusRegistry } from "./server-runtime/state";
 export { ControlTransport } from "./server-control/ports";
 
 /** Platform-neutral server services; host layers provide platform, secrets, probe, and transport. */
+const runtimePathsAndConfigLayer = Layer.provideMerge(ServerConfig.layer, RuntimePaths.layer);
+
 export const serverRuntimeLayer = Layer.mergeAll(
-  RuntimePaths.layer,
-  ServerConfig.layer,
+  runtimePathsAndConfigLayer,
   LogReader.layer,
   ServerIdentity.layer,
   ShutdownCoordinator.layer,
@@ -55,10 +56,10 @@ export const serverMain = Effect.fn("server.main")(function* () {
         }),
       );
 
-      yield* status.setState("ready");
+      yield* status.markReady();
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
-          yield* status.setState("stopping");
+          yield* status.beginShutdown();
           yield* Effect.logInfo("server stopped", {
             startedAt: identity.startedAt.toISOString(),
           });

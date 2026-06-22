@@ -1,13 +1,17 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { ConfigProvider, Effect, FileSystem, Layer, Option, Path, Redacted, Schema } from "effect";
 import {
   ConfigValidationResult,
   EnvSecretRef,
   InlineSecretRef,
+  RedactedSecretRef,
   RedactedServerConfig,
   ServerFileConfig,
 } from "../src/contracts/config";
+import { ConfigValidateResponse } from "../src/api/groups/config/schemas";
+import { ServerBootConfig } from "../src/config/boot";
+import { configPathFromString } from "../src/contracts/primitives";
 import { ConfigParseError, ConfigSecretError, ConfigValidationError } from "../src/errors";
 import { loadServerConfigFile } from "../src/config/load-jsonc";
 import { redactServerConfig } from "../src/config/redact";
@@ -28,11 +32,13 @@ const configTestLayer = Layer.mergeAll(nodeFsPathLayer, secretLayer);
 const decodeFileConfig = Schema.decodeUnknownSync(ServerFileConfig);
 const decodeRedactedConfig = Schema.decodeUnknownSync(RedactedServerConfig);
 const decodeValidateResponse = Schema.decodeUnknownSync(ConfigValidationResult);
+const decodeApiValidateResponse = Schema.decodeUnknownSync(ConfigValidateResponse);
+const decodeRedactedSecret = Schema.decodeUnknownSync(RedactedSecretRef);
 
 const withTempConfigPath = <A, E, R>(
   name: string,
   use: (
-    path: string,
+    path: ReturnType<typeof configPathFromString>,
     root: string,
   ) => Effect.Effect<A, E, R | FileSystem.FileSystem | Path.Path | HostRuntime>,
 ) =>
@@ -40,7 +46,7 @@ const withTempConfigPath = <A, E, R>(
     const fs = yield* FileSystem.FileSystem;
     const pathService = yield* Path.Path;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "server-config-" });
-    return yield* use(pathService.join(root, name), root);
+    return yield* use(configPathFromString(pathService.join(root, name)), root);
   });
 
 describe("ServerFileConfig schema", () => {
@@ -82,6 +88,75 @@ describe("ServerFileConfig schema", () => {
   it.effect("rejects invalid delivery modes", () =>
     Effect.sync(() => {
       assert.throws(() => decodeFileConfig({ deliveryMode: "everyone" }));
+    }),
+  );
+});
+
+describe("invalid-state schemas", () => {
+  it.effect("rejects invalid config validate API responses", () =>
+    Effect.sync(() => {
+      assert.throws(() =>
+        decodeApiValidateResponse({
+          version: "v1",
+          configPath: "/tmp/xmux/config.jsonc",
+          valid: true,
+          issues: [],
+        }),
+      );
+      assert.throws(() =>
+        decodeApiValidateResponse({
+          version: "v1",
+          configPath: "/tmp/xmux/config.jsonc",
+          valid: false,
+          issues: [],
+        }),
+      );
+    }),
+  );
+
+  it.effect("rejects invalid redacted secret variants", () =>
+    Effect.sync(() => {
+      assert.throws(() => decodeRedactedSecret({ source: "env", redacted: true }));
+    }),
+  );
+});
+
+describe("ServerBootConfig", () => {
+  it.effect("loads XDG paths from an Effect ConfigProvider", () =>
+    Effect.gen(function* () {
+      const boot = yield* ServerBootConfig;
+      assert.deepStrictEqual(Option.getOrUndefined(boot.xdgConfigHome), "/tmp/xmux-config");
+      assert.deepStrictEqual(Option.getOrUndefined(boot.xdgStateHome), "/tmp/xmux-state");
+      assert.deepStrictEqual(Option.getOrUndefined(boot.xdgRuntimeDir), "/tmp/xmux-runtime");
+    }).pipe(
+      Effect.provide(
+        ServerBootConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({
+          XDG_CONFIG_HOME: "/tmp/xmux-config",
+          XDG_STATE_HOME: "/tmp/xmux-state",
+          XDG_RUNTIME_DIR: "/tmp/xmux-runtime",
+        })))),
+      ),
+    ),
+  );
+
+  it.effect("defaults missing XDG paths to none and fails invalid paths", () =>
+    Effect.gen(function* () {
+      const defaults = yield* ServerBootConfig.pipe(
+        Effect.provide(
+          ServerBootConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({})))),
+        ),
+      );
+      assert.isTrue(Option.isNone(defaults.xdgConfigHome));
+
+      const invalid = yield* ServerBootConfig.pipe(
+        Effect.provide(
+          ServerBootConfig.layer.pipe(
+            Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_CONFIG_HOME: "relative" }))),
+          ),
+        ),
+        Effect.flip,
+      );
+      assert.strictEqual(invalid._tag, "BootConfigError");
     }),
   );
 });
@@ -158,13 +233,26 @@ describe("config loading and validation", () => {
           );
 
           const effective = yield* loadEffectiveServerConfig(configPath);
-          assert.strictEqual(effective.chats.telegram.token?.value, "telegram-secret");
-          assert.strictEqual(effective.chats.discord.token?.value, "discord-inline");
+          const telegramToken = effective.chats.telegram.token?.value;
+          const discordToken = effective.chats.discord.token?.value;
+          assert.strictEqual(
+            telegramToken === undefined ? undefined : Redacted.value(telegramToken),
+            "telegram-secret",
+          );
+          assert.strictEqual(
+            discordToken === undefined ? undefined : Redacted.value(discordToken),
+            "discord-inline",
+          );
 
           const redacted = redactServerConfig(effective);
           const decoded = decodeRedactedConfig(redacted);
           assert.isTrue(decoded.chats.telegram.token?.redacted);
-          assert.strictEqual(decoded.chats.telegram.token?.env, "TELEGRAM_BOT_TOKEN");
+          assert.strictEqual(
+            decoded.chats.telegram.token?.source === "env"
+              ? decoded.chats.telegram.token.env
+              : undefined,
+            "TELEGRAM_BOT_TOKEN",
+          );
           assert.strictEqual(decoded.chats.discord.token?.source, "value");
           assert.notInclude(JSON.stringify(decoded), "telegram-secret");
           assert.notInclude(JSON.stringify(decoded), "discord-inline");

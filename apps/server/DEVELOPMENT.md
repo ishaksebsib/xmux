@@ -38,6 +38,20 @@ logs, and wires platform implementations at the outer edge.
 
 Keep lifecycle ownership and cleanup visible in this flow.
 
+## Schema & Domain Modeling
+- Put semantic scalars in `contracts/primitives.ts` as branded/refined schemas.
+- Do not pass important IDs, paths, URLs, ports, timestamps, counts, or tokens as raw `string`/`number` past a boundary.
+- Use `Schema.Class` for named records and tagged variants/unions for alternatives.
+- Avoid boolean-plus-optional shapes when variants can make invalid states impossible.
+- Decode unknown input and encode persisted/API/control/log payloads through Schema.
+
+## Effect Config & Secrets
+- Use Effect `Config` for env/runtime config; use `Config.schema` with branded schemas for validation.
+- Keep JSONC product config Schema-decoded and separate from env/boot config services.
+- Expose config through Context services/layers; tests should usually provide `Layer.succeed(...)` values.
+- Use `Config.redacted` / `Redacted` for secrets and unwrap only at adapter edges.
+- Do not keep raw secret strings in effective runtime config, logs, API responses, or errors.
+
 ## Export Rules
 Root exports stay platform-neutral. Node-specific runtime/client exports belong
 under `@xmux/server/platform/node`.

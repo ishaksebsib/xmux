@@ -6,14 +6,16 @@ import {
   RedactedConfigSnapshot,
 } from "../contracts/config";
 import { ConfigValidationError, type ConfigError } from "../errors";
+import type { ConfigPath } from "../contracts/primitives";
 import { HostRuntime } from "../platform/host";
+import { RuntimePaths } from "../server-control/paths";
 import type { EffectiveServerConfig } from "./effective";
 import { loadEffectiveServerConfig, validateServerConfig } from "./normalize";
 import { redactServerConfig } from "./redact";
 import { SecretResolver } from "./resolve-secrets";
 
 interface LoadedConfig {
-  readonly configPath: string;
+  readonly configPath: ConfigPath;
   readonly effective: EffectiveServerConfig;
 }
 
@@ -21,7 +23,7 @@ interface LoadedConfig {
 export class ServerConfig extends Context.Service<
   ServerConfig,
   {
-    readonly loadCurrent: (configPath: string) => Effect.Effect<EffectiveServerConfig, ConfigError>;
+    readonly loadCurrent: (configPath: ConfigPath) => Effect.Effect<EffectiveServerConfig, ConfigError>;
     readonly getEffective: () => Effect.Effect<EffectiveServerConfig, ConfigValidationError>;
     readonly getRedacted: () => Effect.Effect<RedactedConfigSnapshot, ConfigValidationError>;
     readonly validateCurrent: () => Effect.Effect<ConfigValidationResult>;
@@ -35,6 +37,7 @@ export class ServerConfig extends Context.Service<
       const pathService = yield* Path.Path;
       const host = yield* HostRuntime;
       const secretResolver = yield* SecretResolver;
+      const runtimePaths = yield* RuntimePaths;
       const current = yield* Ref.make<LoadedConfig | null>(null);
 
       const withCapturedConfigDependencies = <A, E>(
@@ -51,7 +54,7 @@ export class ServerConfig extends Context.Service<
           Effect.provideService(SecretResolver, secretResolver),
         );
 
-      const loadCurrent = Effect.fn("ServerConfig.loadCurrent")(function* (configPath: string) {
+      const loadCurrent = Effect.fn("ServerConfig.loadCurrent")(function* (configPath: ConfigPath) {
         return yield* withCapturedConfigDependencies(
           loadEffectiveServerConfig(configPath).pipe(
             Effect.tap((effective) => Ref.set(current, { configPath, effective })),
@@ -63,7 +66,7 @@ export class ServerConfig extends Context.Service<
         const loaded = yield* Ref.get(current);
         if (loaded !== null) return loaded;
         return yield* ConfigValidationError.make({
-          path: "",
+          path: runtimePaths.configPath,
           message: "Server config has not been loaded yet.",
         });
       });
@@ -85,7 +88,7 @@ export class ServerConfig extends Context.Service<
         const loaded = yield* Ref.get(current);
         if (loaded === null) {
           return InvalidConfigValidationResult.make({
-            configPath: "",
+            configPath: runtimePaths.configPath,
             valid: false,
             issues: [
               ConfigValidationIssue.make({

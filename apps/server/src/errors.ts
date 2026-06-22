@@ -1,4 +1,6 @@
 import { Schema } from "effect";
+import { ProcessId, SessionId } from "./contracts/primitives";
+import { StatusTransitionError } from "./server-runtime/state";
 
 /** Active-server checks prevent duplicate local runtimes for the same scope. */
 export class ActiveServerError extends Schema.TaggedErrorClass<ActiveServerError>()(
@@ -6,8 +8,8 @@ export class ActiveServerError extends Schema.TaggedErrorClass<ActiveServerError
   {
     manifestPath: Schema.String,
     endpointPath: Schema.String,
-    pid: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)),
-    sessionId: Schema.String,
+    pid: ProcessId,
+    sessionId: SessionId,
     message: Schema.String,
   },
 ) {}
@@ -27,6 +29,15 @@ export class ConfigValidationError extends Schema.TaggedErrorClass<ConfigValidat
   "ConfigValidationError",
   {
     path: Schema.String,
+    message: Schema.String,
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
+
+/** Boot/env config failures are separate from product file config failures. */
+export class BootConfigError extends Schema.TaggedErrorClass<BootConfigError>()(
+  "BootConfigError",
+  {
     message: Schema.String,
     cause: Schema.optionalKey(Schema.Defect()),
   },
@@ -114,6 +125,7 @@ export const ConfigError = Schema.Union([
   ConfigParseError,
   ConfigValidationError,
   ConfigSecretError,
+  BootConfigError,
 ]);
 export type ConfigError = typeof ConfigError.Type;
 
@@ -123,6 +135,7 @@ export const ServerError = Schema.Union([
   ConfigParseError,
   ConfigValidationError,
   ConfigSecretError,
+  BootConfigError,
   ServerStartupError,
   ServerShutdownError,
   RuntimePathError,
@@ -130,5 +143,6 @@ export const ServerError = Schema.Union([
   StartupLockError,
   LogFileError,
   ControlServerError,
+  StatusTransitionError,
 ]);
 export type ServerError = typeof ServerError.Type;

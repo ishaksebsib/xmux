@@ -1,14 +1,14 @@
 import { Schema } from "effect";
 import { HarnessModelRefConfig, HarnessThinkingLevel, OpenCodeMode } from "../../contracts/config";
-import { PositiveInteger } from "../../contracts/primitives";
+import { BaseUrl, Port } from "../../contracts/primitives";
 
 export class EffectiveOpenCodeDisabled extends Schema.TaggedClass<EffectiveOpenCodeDisabled>()(
   "OpenCodeDisabled",
   {
     enabled: Schema.Literal(false),
     mode: OpenCodeMode,
-    baseUrl: Schema.optionalKey(Schema.String),
-    port: Schema.optionalKey(PositiveInteger),
+    baseUrl: Schema.optionalKey(BaseUrl),
+    port: Schema.optionalKey(Port),
     defaultModel: Schema.optionalKey(HarnessModelRefConfig),
     defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
   },
@@ -19,7 +19,7 @@ export class EffectiveOpenCodeEmbedded extends Schema.TaggedClass<EffectiveOpenC
   {
     enabled: Schema.Literal(true),
     mode: Schema.Literal("embedded"),
-    port: Schema.optionalKey(PositiveInteger),
+    port: Schema.optionalKey(Port),
     defaultModel: Schema.optionalKey(HarnessModelRefConfig),
     defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
   },
@@ -30,7 +30,7 @@ export class EffectiveOpenCodeExternal extends Schema.TaggedClass<EffectiveOpenC
   {
     enabled: Schema.Literal(true),
     mode: Schema.Literal("external"),
-    baseUrl: Schema.String.check(Schema.isNonEmpty()),
+    baseUrl: BaseUrl,
     defaultModel: Schema.optionalKey(HarnessModelRefConfig),
     defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
   },

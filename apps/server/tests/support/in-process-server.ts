@@ -1,6 +1,11 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Effect, Fiber, Layer, Schema, Scope } from "effect";
 import { makeSecretResolverLayer } from "./secrets";
+import {
+  isoTimestampFromString,
+  processIdFromNumber,
+  sessionIdFromString,
+} from "../../src/contracts/primitives";
 import { ServerConfig } from "../../src/config/service";
 import { LogReader } from "../../src/logging/log-reader";
 import {
@@ -42,9 +47,10 @@ export const makeInProcessServerLayer = (input: {
     nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(input.paths),
     Layer.succeed(ServerIdentity)({
-      pid: process.pid,
+      pid: processIdFromNumber(process.pid),
       startedAt: fixedStartedAt,
-      sessionId: "integration-test",
+      startedAtIso: isoTimestampFromString(fixedStartedAt.toISOString()),
+      sessionId: sessionIdFromString("integration-test"),
     }),
   );
   const withConfig = Layer.provideMerge(ServerConfig.layer, base);

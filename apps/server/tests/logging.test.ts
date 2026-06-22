@@ -1,6 +1,11 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import {
+  isoTimestampFromString,
+  logByteCountFromNumber,
+  logRotationFileCountFromNumber,
+} from "../src/contracts/primitives";
 import { LogEntry } from "../src/contracts/logging";
 import {
   resolveServerLogFilePaths,
@@ -108,7 +113,11 @@ describe("structured file logging", () => {
 
           yield* Effect.scoped(
             withFileLogger(
-              { logDir, maxBytes: 320, maxFiles: 3 },
+              {
+                logDir,
+                maxBytes: logByteCountFromNumber(320),
+                maxFiles: logRotationFileCountFromNumber(3),
+              },
               Effect.gen(function* () {
                 for (let index = 0; index < 10; index += 1) {
                   yield* Effect.logInfo(`rotation-${index}`, { payload: "x".repeat(160) });
@@ -142,17 +151,17 @@ describe("structured file logging", () => {
           const fs = yield* FileSystem.FileSystem;
           const lines = [
             LogEntry.make({
-              timestamp: "2026-06-16T00:00:00.000Z",
+              timestamp: isoTimestampFromString("2026-06-16T00:00:00.000Z"),
               level: "info",
               message: "one",
             }),
             LogEntry.make({
-              timestamp: "2026-06-16T00:00:01.000Z",
+              timestamp: isoTimestampFromString("2026-06-16T00:00:01.000Z"),
               level: "warn",
               message: "two",
             }),
             LogEntry.make({
-              timestamp: "2026-06-16T00:00:02.000Z",
+              timestamp: isoTimestampFromString("2026-06-16T00:00:02.000Z"),
               level: "error",
               message: "three",
             }),

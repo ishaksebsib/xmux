@@ -1,5 +1,6 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { Layer } from "effect";
+import { ServerBootConfig } from "../../config/boot";
 import type { ParsedServerOptions } from "../../options";
 import { ServerOptions } from "../../options";
 import { serverRuntimeLayer } from "../../server";
@@ -17,7 +18,11 @@ export const nodePlatformLayer = Layer.mergeAll(
 
 /** Production Node server layer. Construct once at the runtime boundary. */
 export const makeNodeServerLayer = (options: ParsedServerOptions) => {
-  const bootLayer = Layer.mergeAll(nodePlatformLayer, Layer.succeed(ServerOptions)(options));
+  const bootLayer = Layer.mergeAll(
+    nodePlatformLayer,
+    ServerBootConfig.layer,
+    Layer.succeed(ServerOptions)(options),
+  );
   const secretLayer = Layer.provideMerge(nodeSecretResolverLayer, bootLayer);
   const runtimeLayer = Layer.provideMerge(serverRuntimeLayer, secretLayer);
   const runtimeWithProbeLayer = Layer.mergeAll(runtimeLayer, nodeServerProbeLayer);

@@ -2,7 +2,9 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { NodePath } from "@effect/platform-node";
-import { Duration, Effect, Layer, Schema, Scope } from "effect";
+import { Duration, Effect, Layer, Option, Schema, Scope } from "effect";
+import { ServerBootConfig } from "../../src/config/boot";
+import { resolvedPathFromString } from "../../src/contracts/primitives";
 import { parseServerOptions } from "../../src/options";
 import { resolveRuntimePaths, type ServerRuntimePaths } from "../../src/server-control/paths";
 import { HostRuntime } from "../../src/platform/host";
@@ -51,13 +53,26 @@ const resolveExpectedPaths = (input: {
     homeDir: join(input.root, "home"),
     pid: process.pid,
     executablePath: process.execPath,
-    getEnv: (name: string) => input.env[name],
     randomUuid: () => Effect.succeed("subprocess-test"),
     isPidAlive: () => Effect.succeed(true),
     emitWarning: () => Effect.void,
   });
+  const boot = Layer.succeed(ServerBootConfig)({
+    xdgConfigHome:
+      input.env.XDG_CONFIG_HOME === undefined
+        ? Option.none()
+        : Option.some(resolvedPathFromString(input.env.XDG_CONFIG_HOME)),
+    xdgStateHome:
+      input.env.XDG_STATE_HOME === undefined
+        ? Option.none()
+        : Option.some(resolvedPathFromString(input.env.XDG_STATE_HOME)),
+    xdgRuntimeDir:
+      input.env.XDG_RUNTIME_DIR === undefined
+        ? Option.none()
+        : Option.some(resolvedPathFromString(input.env.XDG_RUNTIME_DIR)),
+  });
   return resolveRuntimePaths(parseServerOptions({ configPath: input.configPath })).pipe(
-    Effect.provide(Layer.mergeAll(NodePath.layer, host)),
+    Effect.provide(Layer.mergeAll(NodePath.layer, host, boot)),
   );
 };
 

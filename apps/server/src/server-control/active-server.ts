@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import type { ManifestPath, ProcessId, SessionId, UnixSocketPath } from "../contracts/primitives";
 import { ActiveServerError } from "../errors";
 import { HostRuntime } from "../platform/host";
 import { readServerManifest, removeServerManifest } from "./manifest";
@@ -7,11 +8,11 @@ import { ServerProbe } from "./ports";
 
 /** Active server details come from manifest plus a reachable control endpoint. */
 export interface ActiveServerInfo {
-  readonly manifestPath: string;
-  readonly endpointPath: string;
-  readonly pid: number;
+  readonly manifestPath: ManifestPath;
+  readonly endpointPath: UnixSocketPath;
+  readonly pid: ProcessId;
   readonly pidAlive: boolean;
-  readonly sessionId: string;
+  readonly sessionId: SessionId;
 }
 
 /** Discover whether this scope is actively owned; PID liveness is only a hint. */

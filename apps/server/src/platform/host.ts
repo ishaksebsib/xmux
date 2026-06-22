@@ -9,8 +9,6 @@ export interface HostRuntimeService {
   readonly pid: number;
   /** Current executable path for diagnostics and discovery metadata. */
   readonly executablePath: string;
-  /** Environment lookup seam so callers avoid direct process.env access. */
-  readonly getEnv: (name: string) => string | undefined;
   /** Host UUID generator for fresh opaque identifiers. */
   readonly randomUuid: () => Effect.Effect<string>;
   /** Host PID probe; only a stale-file hint, never ownership proof. */

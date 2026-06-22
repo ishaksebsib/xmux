@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { DeliveryMode } from "../contracts/config";
+import { ResolvedPath } from "../contracts/primitives";
 import { LogLevel } from "../contracts/logging";
 import { EffectiveDiscordConfig } from "./effective/discord";
 import { EffectiveOpenCodeConfig } from "./effective/opencode";
@@ -37,7 +38,7 @@ export class EffectiveHarnessesConfig extends Schema.Class<EffectiveHarnessesCon
 export class EffectiveServerConfig extends Schema.Class<EffectiveServerConfig>(
   "EffectiveServerConfig",
 )({
-  defaultWorkingDirectory: Schema.String,
+  defaultWorkingDirectory: ResolvedPath,
   deliveryMode: DeliveryMode,
   server: EffectiveServerSettings,
   chats: EffectiveChatsConfig,

@@ -1,5 +1,6 @@
 import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "effect";
 import { LogEntry, type LogLevel } from "../contracts/logging";
+import { isoTimestampFromString, logByteCountFromNumber, logRotationFileCountFromNumber, type LogByteCount, type LogRotationFileCount } from "../contracts/primitives";
 import { LogFileError } from "../errors";
 import { HostRuntime, type HostRuntimeService } from "../platform/host";
 import { redactRecord, redactString, redactUnknown } from "./redaction";
@@ -17,14 +18,14 @@ export interface ServerLogFilePaths {
 }
 
 export interface LogRotationOptions {
-  readonly maxBytes?: number;
+  readonly maxBytes?: LogByteCount;
   /** Total files per stream, including the active file. */
-  readonly maxFiles?: number;
+  readonly maxFiles?: LogRotationFileCount;
 }
 
 interface NormalizedLogRotationOptions {
-  readonly maxBytes: number;
-  readonly maxFiles: number;
+  readonly maxBytes: LogByteCount;
+  readonly maxFiles: LogRotationFileCount;
 }
 
 interface FileLoggerOptions extends LogRotationOptions {
@@ -51,21 +52,21 @@ const parseRotation = (
   options: LogRotationOptions,
   path: string,
 ): Effect.Effect<NormalizedLogRotationOptions, LogFileError> => {
-  const maxBytes = options.maxBytes ?? DEFAULT_MAX_LOG_FILE_BYTES;
+  const maxBytes = options.maxBytes ?? logByteCountFromNumber(DEFAULT_MAX_LOG_FILE_BYTES);
   if (!Number.isFinite(maxBytes) || maxBytes < 1) {
     return Effect.fail(
       mapLogFileError("setup", path, "Log rotation maxBytes must be greater than 0", undefined),
     );
   }
 
-  const maxFiles = options.maxFiles ?? DEFAULT_MAX_LOG_FILES;
+  const maxFiles = options.maxFiles ?? logRotationFileCountFromNumber(DEFAULT_MAX_LOG_FILES);
   if (!Number.isInteger(maxFiles) || maxFiles < 1) {
     return Effect.fail(
       mapLogFileError("setup", path, "Log rotation maxFiles must be a positive integer", undefined),
     );
   }
 
-  return Effect.succeed({ maxBytes: Math.floor(maxBytes), maxFiles });
+  return Effect.succeed({ maxBytes, maxFiles });
 };
 
 const byteLength = (value: string): number => textEncoder.encode(value).byteLength;
@@ -111,7 +112,7 @@ const safeJsonLine = (entry: LogEntry): string => {
   } catch (cause) {
     return JSON.stringify(
       LogEntry.make({
-        timestamp: new Date().toISOString(),
+        timestamp: isoTimestampFromString(new Date().toISOString()),
         level: "error",
         message: "failed to encode log entry",
         cause: redactString(String(cause)),
@@ -130,7 +131,7 @@ const encodeLogEntry = Logger.make((options): EncodedLogEntry => {
   const hasSpans = Object.keys(spans).length > 0;
 
   const entry = LogEntry.make({
-    timestamp: structured.timestamp,
+    timestamp: isoTimestampFromString(structured.timestamp),
     level,
     message: redactUnknown(structured.message),
     ...(hasAnnotations ? { annotations } : {}),
