@@ -85,6 +85,7 @@ export const withSubprocessServer = <A>(
     readonly socketPath: string;
     readonly paths: ServerRuntimePaths;
     readonly shutdown: Effect.Effect<void, unknown>;
+    readonly output: Effect.Effect<{ readonly stdout: string; readonly stderr: string }>;
   }) => Effect.Effect<A, unknown, never>,
 ): Effect.Effect<A, unknown, Scope.Scope> =>
   Effect.gen(function* () {
@@ -154,5 +155,6 @@ export const withSubprocessServer = <A>(
       manifestPath: paths.manifestPath,
       socketPath: paths.controlEndpoint.path,
       shutdown,
+      output: Effect.sync(() => ({ stdout: tail(stdout), stderr: tail(stderr) })),
     });
   });

@@ -87,41 +87,49 @@ describeIntegration("server file logging integration", () => {
     15_000,
   );
 
-  posixOnly("rotates real log files and enforces the configured file limit", () =>
-    withSubprocessServer(
-      { config: rotatingLogConfig("rotation-token-do-not-leak") },
-      ({ paths, shutdown }) =>
-        Effect.gen(function* () {
-          yield* waitUntil({
-            label: "rotated server log file",
-            probe: Effect.promise(() => readdir(paths.logDir)).pipe(
-              Effect.map((files) => (files.includes(`${SERVER_LOG_FILE_NAME}.1`) ? files : undefined)),
-            ),
-          });
+  posixOnly(
+    "rotates real log files and enforces the configured file limit",
+    () =>
+      withSubprocessServer(
+        { config: rotatingLogConfig("rotation-token-do-not-leak") },
+        ({ paths, shutdown }) =>
+          Effect.gen(function* () {
+            yield* waitUntil({
+              label: "rotated server log file",
+              probe: Effect.promise(() => readdir(paths.logDir)).pipe(
+                Effect.map((files) =>
+                  files.includes(`${SERVER_LOG_FILE_NAME}.1`) ? files : undefined,
+                ),
+              ),
+            });
 
-          yield* shutdown;
+            yield* shutdown;
 
-          const files = yield* Effect.promise(() => readdir(paths.logDir));
-          const mainFiles = files.filter((file) => file.startsWith(SERVER_LOG_FILE_NAME)).sort();
-          const errorFiles = files.filter((file) => file.startsWith(SERVER_ERROR_LOG_FILE_NAME)).sort();
+            const files = yield* Effect.promise(() => readdir(paths.logDir));
+            const mainFiles = files.filter((file) => file.startsWith(SERVER_LOG_FILE_NAME)).sort();
+            const errorFiles = files
+              .filter((file) => file.startsWith(SERVER_ERROR_LOG_FILE_NAME))
+              .sort();
 
-          assert.deepStrictEqual(mainFiles, [SERVER_LOG_FILE_NAME, `${SERVER_LOG_FILE_NAME}.1`]);
-          assert.deepStrictEqual(errorFiles, [SERVER_ERROR_LOG_FILE_NAME]);
-          assert.notInclude(mainFiles.join("\n"), `${SERVER_LOG_FILE_NAME}.2`);
-          assert.notInclude(errorFiles.join("\n"), `${SERVER_ERROR_LOG_FILE_NAME}.1`);
+            assert.deepStrictEqual(mainFiles, [SERVER_LOG_FILE_NAME, `${SERVER_LOG_FILE_NAME}.1`]);
+            assert.deepStrictEqual(errorFiles, [SERVER_ERROR_LOG_FILE_NAME]);
+            assert.notInclude(mainFiles.join("\n"), `${SERVER_LOG_FILE_NAME}.2`);
+            assert.notInclude(errorFiles.join("\n"), `${SERVER_ERROR_LOG_FILE_NAME}.1`);
 
-          const activeLog = yield* Effect.promise(() => readFile(join(paths.logDir, SERVER_LOG_FILE_NAME), "utf8"));
-          const rotatedLog = yield* Effect.promise(() =>
-            readFile(join(paths.logDir, `${SERVER_LOG_FILE_NAME}.1`), "utf8"),
-          );
-          const entries = decodeJsonLines(`${rotatedLog}${activeLog}`);
+            const activeLog = yield* Effect.promise(() =>
+              readFile(join(paths.logDir, SERVER_LOG_FILE_NAME), "utf8"),
+            );
+            const rotatedLog = yield* Effect.promise(() =>
+              readFile(join(paths.logDir, `${SERVER_LOG_FILE_NAME}.1`), "utf8"),
+            );
+            const entries = decodeJsonLines(`${rotatedLog}${activeLog}`);
 
-          assert.lengthOf(entries, 2);
-          assert.isTrue(entries.every((entry) => entry.level === "info"));
-          assert.isTrue(entries.every((entry) => typeof entry.timestamp === "string"));
-          assert.notInclude(`${activeLog}${rotatedLog}`, "rotation-token-do-not-leak");
-        }),
-    ),
+            assert.lengthOf(entries, 2);
+            assert.isTrue(entries.every((entry) => entry.level === "info"));
+            assert.isTrue(entries.every((entry) => typeof entry.timestamp === "string"));
+            assert.notInclude(`${activeLog}${rotatedLog}`, "rotation-token-do-not-leak");
+          }),
+      ),
     15_000,
   );
 });
