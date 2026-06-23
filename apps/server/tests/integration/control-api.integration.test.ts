@@ -33,7 +33,11 @@ describeIntegration("control API integration", () => {
         assert.strictEqual(configResponse.statusCode, 200);
         yield* assertNoSecret(configResponse.body, secret);
         const config = yield* getEffectiveConfig(socketPath);
-        assert.strictEqual(config.config.chats.telegram.token?.source, "value");
+        const telegramConfig = config.config.chats.telegram;
+        if (telegramConfig === undefined) {
+          assert.fail("Expected Telegram config to be present");
+        }
+        assert.strictEqual(telegramConfig.token.source, "value");
         const valid = yield* validateConfig(socketPath);
         assert.isTrue(valid.valid);
         yield* writeConfig(paths.configPath, invalidLogLevelConfig);

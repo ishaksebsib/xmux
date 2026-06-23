@@ -1,0 +1,75 @@
+{
+  "xmux": {
+    "workspace": { "defaultDir": "~/dev/xmux" },
+    "responses": {
+      "thinking": { "hide": false, "maxChars": 640 },
+      "tools": {
+        "hide": false,
+        "maxInputStringChars": 80,
+        "maxInputObjectEntries": 4,
+        "maxTextOutputChars": 1200,
+        "maxJsonOutputChars": 2400,
+      },
+    },
+    "commands": {
+      "resume": { "maxSessionsPerHarness": 8 },
+      "model": { "maxModelsPerProvider": 20 },
+      "ls": { "showHidden": true, "maxEntries": 250 },
+    },
+    "attachments": {
+      "enabled": true,
+      "maxBytes": 12582912,
+      "kinds": ["image", "document", "image", "audio"],
+    },
+  },
+  "server": {
+    "logs": {
+      "level": "debug",
+      "rotation": { "maxBytes": 2097152, "maxFiles": 7 },
+    },
+  },
+  "stt": {
+    "provider": "openai-compatible",
+    "apiKey": { "env": "OPENAI_API_KEY" },
+    "baseUrl": "https://api.openai.example/v1",
+    "endpointPath": "/audio/transcriptions",
+    "model": "gpt-4o-mini-transcribe",
+    "language": "en",
+    "maxBytes": 26214400,
+    "timeoutMs": 30000,
+  },
+  "chats": {
+    "telegram": {
+      "token": { "env": "TELEGRAM_BOT_TOKEN" },
+      "access": { "type": "allow-list", "users": ["123456789"] },
+    },
+    "discord": {
+      "token": { "value": "discord-inline-secret" },
+      "applicationId": "discord-app-id",
+      "guildId": "discord-guild-id",
+      "access": { "type": "allow-list", "users": ["discord-user"] },
+    },
+    "slack": {
+      "botToken": { "env": "SLACK_BOT_TOKEN" },
+      "appToken": { "env": "SLACK_APP_TOKEN" },
+      "access": { "type": "anyone" },
+    },
+  },
+  "harnesses": {
+    "opencode": {
+      "runtime": { "type": "external", "baseUrl": "http://127.0.0.1:4096" },
+      "defaultModel": {
+        "providerId": "anthropic",
+        "modelId": "claude-sonnet-4",
+        "variant": "default",
+      },
+      "defaultThinking": "medium",
+    },
+    "pi": {
+      "agentDir": "./.pi-agent",
+      "sessionDir": "./.pi-sessions",
+      "defaultModel": { "providerId": "openai", "modelId": "gpt-5-mini" },
+      "defaultThinking": "low",
+    },
+  },
+}

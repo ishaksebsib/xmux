@@ -11,20 +11,30 @@ export class WriteConfigError extends Schema.TaggedErrorClass<WriteConfigError>(
 ) {}
 
 export const minimalConfig = (overrides = ""): string => `{
-  "defaultWorkingDirectory": "./workspace"${overrides === "" ? "" : `,\n  ${overrides}`}
+  "xmux": { "workspace": { "defaultDir": "./workspace" } }${overrides === "" ? "" : `,\n  ${overrides}`}
 }`;
 
 export const validTelegramConfig = (token: string): string => `{
-  "defaultWorkingDirectory": "./workspace",
-  "chats": { "telegram": { "enabled": true, "token": { "value": "${token}" } } }
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
+  "chats": {
+    "telegram": {
+      "token": { "value": "${token}" },
+      "access": { "type": "anyone" }
+    }
+  }
 }`;
 
 export const missingEnvSecretConfig = (envName: string): string => `{
-  "chats": { "telegram": { "enabled": true, "token": { "env": "${envName}" } } }
+  "chats": {
+    "telegram": {
+      "token": { "env": "${envName}" },
+      "access": { "type": "anyone" }
+    }
+  }
 }`;
 
 export const invalidJsonConfig = "{ invalid json }";
-export const invalidLogLevelConfig = `{ "server": { "logLevel": "verbose" } }`;
+export const invalidLogLevelConfig = `{ "server": { "logs": { "level": "verbose" } } }`;
 
 export const writeConfig = (path: string, content: string): Effect.Effect<void, WriteConfigError> =>
   Effect.tryPromise({

@@ -1,0 +1,23 @@
+{
+  "xmux": {
+    "workspace": { "defaultDir": "../workspace" },
+    "attachments": { "enabled": false },
+  },
+  "chats": {
+    "telegram": {
+      "token": { "env": "TELEGRAM_BOT_TOKEN" },
+      "access": { "type": "anyone" },
+    },
+  },
+  "harnesses": {
+    "opencode": {
+      "runtime": { "type": "embedded", "port": 34567 },
+      "defaultModel": { "modelId": "qwen3-coder" },
+      "defaultThinking": "high",
+    },
+    "pi": {
+      "agentDir": "~/xmux/pi-agent",
+      "defaultModel": { "modelId": "claude-opus-4" },
+    },
+  },
+}

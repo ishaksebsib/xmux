@@ -1,6 +1,11 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, it, layer } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer, Option, Path, Redacted, Schema } from "effect";
+import { ConfigValidateResponse } from "../src/api/groups/config/schemas";
+import { ServerBootConfig } from "../src/config/boot";
+import { loadServerConfigFile } from "../src/config/load-jsonc";
+import { loadEffectiveServerConfig, validateServerConfig } from "../src/config/normalize";
+import { redactServerConfig } from "../src/config/redact";
 import {
   ConfigValidationResult,
   EnvSecretRef,
@@ -9,16 +14,11 @@ import {
   RedactedServerConfig,
   ServerFileConfig,
 } from "../src/contracts/config";
-import { ConfigValidateResponse } from "../src/api/groups/config/schemas";
-import { ServerBootConfig } from "../src/config/boot";
 import { configPathFromString } from "../src/contracts/primitives";
 import { ConfigParseError, ConfigSecretError, ConfigValidationError } from "../src/errors";
-import { loadServerConfigFile } from "../src/config/load-jsonc";
-import { redactServerConfig } from "../src/config/redact";
-import { loadEffectiveServerConfig, validateServerConfig } from "../src/config/normalize";
-import { makeSecretResolverLayer } from "./support/secrets";
 import type { HostRuntime } from "../src/platform/host";
 import { nodeHostRuntimeLayer } from "../src/platform/node";
+import { makeSecretResolverLayer } from "./support/secrets";
 
 const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeHostRuntimeLayer);
 const secretLayer = makeSecretResolverLayer(
@@ -50,44 +50,80 @@ const withTempConfigPath = <A, E, R>(
   });
 
 describe("ServerFileConfig schema", () => {
-  it.effect("decodes minimal and full config shapes", () =>
+  it.effect("decodes minimal and full product config shapes", () =>
     Effect.sync(() => {
       const minimal = decodeFileConfig({});
       assert.instanceOf(minimal, ServerFileConfig);
 
       const full = decodeFileConfig({
-        defaultWorkingDirectory: "~/dev",
-        deliveryMode: "requester_only",
-        server: { logLevel: "debug" },
+        xmux: {
+          workspace: { defaultDir: "~/dev" },
+          responses: {
+            thinking: { hide: false, maxChars: 320 },
+            tools: {
+              hide: false,
+              maxInputStringChars: 50,
+              maxInputObjectEntries: 2,
+              maxTextOutputChars: 280,
+              maxJsonOutputChars: 400,
+            },
+          },
+          commands: {
+            resume: { maxSessionsPerHarness: 5 },
+            model: { maxModelsPerProvider: 10 },
+            ls: { showHidden: false, maxEntries: 100 },
+          },
+          attachments: {
+            enabled: true,
+            maxBytes: 10_485_760,
+            kinds: ["image", "audio", "document"],
+          },
+        },
+        server: {
+          logs: {
+            level: "debug",
+            rotation: { maxBytes: 10_485_760, maxFiles: 5 },
+          },
+        },
+        stt: {
+          provider: "openai-compatible",
+          apiKey: { env: "OPENAI_API_KEY" },
+          model: "gpt-4o-mini-transcribe",
+          language: "en",
+          maxBytes: 26_214_400,
+        },
         chats: {
           telegram: {
-            enabled: true,
             token: { env: "TELEGRAM_BOT_TOKEN" },
-            mode: { type: "polling" },
+            access: { type: "allow-list", users: ["123456789"] },
           },
           discord: {
-            enabled: true,
             token: { value: "discord-inline" },
             applicationId: "app-id",
             guildId: "guild-id",
-            mode: { type: "gateway" },
+            access: { type: "anyone" },
+          },
+          slack: {
+            botToken: { value: "xoxb-token" },
+            appToken: { value: "xapp-token" },
+            access: { type: "allow-list", users: ["U123456789"] },
           },
         },
         harnesses: {
-          opencode: { enabled: true, mode: "embedded" },
-          pi: { enabled: true, agentDir: "./pi-agent", noTools: "builtin" },
+          opencode: { runtime: { type: "embedded" } },
+          pi: { agentDir: "./pi-agent" },
         },
       });
 
-      assert.strictEqual(full.defaultWorkingDirectory, "~/dev");
+      assert.strictEqual(full.xmux?.workspace?.defaultDir, "~/dev");
       assert.instanceOf(full.chats?.telegram?.token, EnvSecretRef);
       assert.instanceOf(full.chats?.discord?.token, InlineSecretRef);
     }),
   );
 
-  it.effect("rejects invalid delivery modes", () =>
+  it.effect("rejects invalid log levels", () =>
     Effect.sync(() => {
-      assert.throws(() => decodeFileConfig({ deliveryMode: "everyone" }));
+      assert.throws(() => decodeFileConfig({ server: { logs: { level: "verbose" } } }));
     }),
   );
 });
@@ -130,11 +166,17 @@ describe("ServerBootConfig", () => {
       assert.deepStrictEqual(Option.getOrUndefined(boot.xdgRuntimeDir), "/tmp/xmux-runtime");
     }).pipe(
       Effect.provide(
-        ServerBootConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({
-          XDG_CONFIG_HOME: "/tmp/xmux-config",
-          XDG_STATE_HOME: "/tmp/xmux-state",
-          XDG_RUNTIME_DIR: "/tmp/xmux-runtime",
-        })))),
+        ServerBootConfig.layer.pipe(
+          Layer.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                XDG_CONFIG_HOME: "/tmp/xmux-config",
+                XDG_STATE_HOME: "/tmp/xmux-state",
+                XDG_RUNTIME_DIR: "/tmp/xmux-runtime",
+              }),
+            ),
+          ),
+        ),
       ),
     ),
   );
@@ -143,7 +185,9 @@ describe("ServerBootConfig", () => {
     Effect.gen(function* () {
       const defaults = yield* ServerBootConfig.pipe(
         Effect.provide(
-          ServerBootConfig.layer.pipe(Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({})))),
+          ServerBootConfig.layer.pipe(
+            Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+          ),
         ),
       );
       assert.isTrue(Option.isNone(defaults.xdgConfigHome));
@@ -151,7 +195,9 @@ describe("ServerBootConfig", () => {
       const invalid = yield* ServerBootConfig.pipe(
         Effect.provide(
           ServerBootConfig.layer.pipe(
-            Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_CONFIG_HOME: "relative" }))),
+            Layer.provide(
+              ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_CONFIG_HOME: "relative" })),
+            ),
           ),
         ),
         Effect.flip,
@@ -171,13 +217,13 @@ describe("config loading and validation", () => {
             configPath,
             `{
   // comments are accepted
-  "defaultWorkingDirectory": "./workspace",
-  "server": { "logLevel": "info" },
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
+  "server": { "logs": { "level": "info" } },
 }`,
           );
 
           const config = yield* loadServerConfigFile(configPath);
-          assert.strictEqual(config?.defaultWorkingDirectory, "./workspace");
+          assert.strictEqual(config?.xmux?.workspace?.defaultDir, "./workspace");
         }),
       ),
     );
@@ -201,7 +247,7 @@ describe("config loading and validation", () => {
       withTempConfigPath("invalid.jsonc", (configPath) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
-          yield* fs.writeFileString(configPath, `{ "server": { "logLevel": "verbose" } }`);
+          yield* fs.writeFileString(configPath, `{ "server": { "logs": { "level": "verbose" } } }`);
 
           const result = yield* loadServerConfigFile(configPath).pipe(
             Effect.catchTag("ConfigValidationError", (error) => Effect.succeed(error)),
@@ -220,42 +266,67 @@ describe("config loading and validation", () => {
             `{
   "chats": {
     "telegram": {
-      "enabled": true,
-      "token": { "env": "TELEGRAM_BOT_TOKEN" }
+      "token": { "env": "TELEGRAM_BOT_TOKEN" },
+      "access": { "type": "allow-list", "users": ["123456789"] }
     },
     "discord": {
-      "enabled": true,
       "token": { "value": "discord-inline" },
-      "applicationId": "app-id"
+      "applicationId": "app-id",
+      "guildId": "guild-id",
+      "access": { "type": "anyone" }
     }
   }
 }`,
           );
 
           const effective = yield* loadEffectiveServerConfig(configPath);
-          const telegramToken = effective.chats.telegram.token?.value;
-          const discordToken = effective.chats.discord.token?.value;
-          assert.strictEqual(
-            telegramToken === undefined ? undefined : Redacted.value(telegramToken),
-            "telegram-secret",
-          );
-          assert.strictEqual(
-            discordToken === undefined ? undefined : Redacted.value(discordToken),
-            "discord-inline",
-          );
+          const telegram = effective.chats.telegram;
+          const discord = effective.chats.discord;
+          assert.isDefined(telegram);
+          assert.isDefined(discord);
+          if (telegram === undefined || discord === undefined) return;
+
+          assert.strictEqual(Redacted.value(telegram.token.value), "telegram-secret");
+          assert.strictEqual(Redacted.value(discord.token.value), "discord-inline");
 
           const redacted = redactServerConfig(effective);
           const decoded = decodeRedactedConfig(redacted);
-          assert.isTrue(decoded.chats.telegram.token?.redacted);
+          const redactedTelegram = decoded.chats.telegram;
+          const redactedDiscord = decoded.chats.discord;
+          assert.isDefined(redactedTelegram);
+          assert.isDefined(redactedDiscord);
+          if (redactedTelegram === undefined || redactedDiscord === undefined) return;
+
+          assert.isTrue(redactedTelegram.token.redacted);
           assert.strictEqual(
-            decoded.chats.telegram.token?.source === "env"
-              ? decoded.chats.telegram.token.env
-              : undefined,
+            redactedTelegram.token.source === "env" ? redactedTelegram.token.env : undefined,
             "TELEGRAM_BOT_TOKEN",
           );
-          assert.strictEqual(decoded.chats.discord.token?.source, "value");
+          assert.strictEqual(redactedDiscord.token.source, "value");
           assert.notInclude(JSON.stringify(decoded), "telegram-secret");
           assert.notInclude(JSON.stringify(decoded), "discord-inline");
+        }),
+      ),
+    );
+
+    it.effect("fails configured chats without explicit access", () =>
+      withTempConfigPath("missing-access.jsonc", (configPath) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          yield* fs.writeFileString(
+            configPath,
+            `{
+  "chats": {
+    "telegram": { "token": { "env": "TELEGRAM_BOT_TOKEN" } }
+  }
+}`,
+          );
+
+          const result = yield* loadEffectiveServerConfig(configPath).pipe(
+            Effect.catchTag("ConfigValidationError", (error) => Effect.succeed(error)),
+          );
+          assert.instanceOf(result, ConfigValidationError);
+          assert.include(result.message, "chats.telegram.access");
         }),
       ),
     );
@@ -269,8 +340,8 @@ describe("config loading and validation", () => {
             `{
   "chats": {
     "telegram": {
-      "enabled": true,
-      "token": { "env": "MISSING_TOKEN" }
+      "token": { "env": "MISSING_TOKEN" },
+      "access": { "type": "anyone" }
     }
   }
 }`,
@@ -290,7 +361,7 @@ describe("config loading and validation", () => {
       withTempConfigPath("validate.jsonc", (configPath) =>
         Effect.gen(function* () {
           const fs = yield* FileSystem.FileSystem;
-          yield* fs.writeFileString(configPath, `{ "server": { "logLevel": "verbose" } }`);
+          yield* fs.writeFileString(configPath, `{ "server": { "logs": { "level": "verbose" } } }`);
 
           const response = yield* validateServerConfig(configPath);
           const decoded = decodeValidateResponse(response);

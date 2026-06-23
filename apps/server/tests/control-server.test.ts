@@ -121,7 +121,11 @@ const makeServerTestLayer = (paths: ServerRuntimePaths) => {
   );
   const withConfig = Layer.provideMerge(ServerConfig.layer, base);
   const withLogReader = Layer.provideMerge(LogReader.layer, withConfig);
-  const withRuntime = Layer.mergeAll(withLogReader, StatusRegistry.layer, ShutdownCoordinator.layer);
+  const withRuntime = Layer.mergeAll(
+    withLogReader,
+    StatusRegistry.layer,
+    ShutdownCoordinator.layer,
+  );
 
   return Layer.provideMerge(nodeUnixSocketControlTransportLayer, withRuntime);
 };
@@ -194,11 +198,11 @@ describe("control server", () => {
         writeFile(
           configPath,
           `{
-  "defaultWorkingDirectory": "./workspace",
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
   "chats": {
     "telegram": {
-      "enabled": true,
-      "token": { "value": "inline-telegram-token" }
+      "token": { "value": "inline-telegram-token" },
+      "access": { "type": "anyone" }
     }
   }
 }`,
@@ -238,8 +242,12 @@ describe("control server", () => {
       assert.strictEqual(methodResponse.statusCode, 404);
 
       const effectiveConfig = yield* getEffectiveConfig(socketPath);
-      assert.strictEqual(effectiveConfig.config.defaultWorkingDirectory, join(root, "workspace"));
-      assert.strictEqual(effectiveConfig.config.chats.telegram.token?.source, "value");
+      assert.strictEqual(effectiveConfig.config.xmux.workspace.defaultDir, join(root, "workspace"));
+      const telegramConfig = effectiveConfig.config.chats.telegram;
+      if (telegramConfig === undefined) {
+        assert.fail("Expected Telegram config to be present");
+      }
+      assert.strictEqual(telegramConfig.token.source, "value");
 
       const configResponse = yield* requestRawUnixHttp({
         socketPath,
@@ -257,7 +265,9 @@ describe("control server", () => {
       );
       assert.strictEqual(duplicateError._tag, "ActiveServerError");
 
-      yield* Effect.promise(() => writeFile(configPath, `{ "server": { "logLevel": "verbose" } }`));
+      yield* Effect.promise(() =>
+        writeFile(configPath, `{ "server": { "logs": { "level": "verbose" } } }`),
+      );
       const invalidValidateResponse = yield* requestRawUnixHttp({
         socketPath,
         method: "POST",
