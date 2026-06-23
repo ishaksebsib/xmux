@@ -49,6 +49,9 @@ export const commands = defineChatCommands({
   cancel: defineChatCommand({
     description: "Cancel the active harness generation for this chat thread",
   }),
+  id: defineChatCommand({
+    description: "Show your chat user id",
+  }),
   allow: defineChatCommand({
     description: "Allow the current harness permission request",
     options: {
