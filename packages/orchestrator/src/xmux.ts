@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { createChat, type ChatAdapterDefinitions, type ChatLogger } from "@xmux/chat-core";
+import { createChat, type ChatAdapterDefinitions } from "@xmux/chat-core";
 import {
   createHarness,
-  HarnessCloseError,
   type HarnessAdapterDefinitions,
-  type HarnessLogger,
+  type HarnessCloseError,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { actions } from "./actions";
@@ -15,6 +14,15 @@ import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
 import { createPromptRunRegistry } from "./features/prompt/run-registry";
 import { createSttRunRegistry } from "./features/stt/run-registry";
+import type { XmuxLogMetadata } from "./logger";
+import { xmuxLogEvents, type XmuxLogger } from "./logger";
+import {
+  createContextualXmuxLogger,
+  createXmuxLogScope,
+  logXmuxResult,
+  serializeXmuxLogError,
+  startXmuxLogTimer,
+} from "./logger-utils";
 import type { XmuxMiddleware } from "./middleware";
 import { registerRoutes } from "./router";
 import { createInMemoryStore } from "./store";
@@ -43,8 +51,7 @@ export interface CreateXmuxOptions<
   readonly store?: Store;
   readonly fs?: FileSystemHost;
   readonly middleware?: readonly XmuxMiddleware<TAdapters, TChats>[];
-  // TODO: change this to xmux logger later
-  readonly logger?: ChatLogger & HarnessLogger;
+  readonly logger?: XmuxLogger;
 }
 
 export type XmuxCloseCause = {
@@ -58,11 +65,23 @@ export function createXmuxResult<
 >(
   options: CreateXmuxOptions<TAdapters, TChats>,
 ): Result<Xmux<TAdapters, TChats>, XmuxConfigurationError> {
+  const contextualLogger = createContextualXmuxLogger(options.logger);
+  const logger = createXmuxLogScope(contextualLogger, {
+    component: "@xmux/orchestrator",
+    packageName: "@xmux/orchestrator",
+  });
+
   const parsedConfig = parseXmuxConfig(options.config);
-  if (parsedConfig.isErr()) return Result.err(parsedConfig.error);
+  if (parsedConfig.isErr()) {
+    logger.error(xmuxLogEvents.configFailure, {
+      result: "error",
+      error: serializeXmuxLogError(parsedConfig.error),
+    });
+    return Result.err(parsedConfig.error);
+  }
 
   const config = parsedConfig.value;
-  const harness = createHarness({ adapters: options.harnesses, logger: options.logger });
+  const harness = createHarness({ adapters: options.harnesses, logger: contextualLogger });
   const chatIds = Object.freeze(Object.keys(options.chats) as Extract<keyof TChats, string>[]);
   const shutdownController = new AbortController();
   const store = options.store ?? createInMemoryStore();
@@ -72,7 +91,7 @@ export function createXmuxResult<
     adapters: options.chats,
     commands,
     actions,
-    logger: options.logger,
+    logger: contextualLogger,
   });
 
   const ctx: Context<TAdapters, TChats> = Object.freeze({
@@ -84,6 +103,7 @@ export function createXmuxResult<
     chat,
     store,
     fs,
+    logger,
     services: Object.freeze({
       createRequestId: randomUUID,
       now: () => new Date(),
@@ -98,24 +118,68 @@ export function createXmuxResult<
     ctx,
 
     async initialize() {
-      return Result.mapError(await chat.start(), (cause) => new XmuxInitializeError({ cause }));
+      const startedAt = startXmuxLogTimer();
+      const metadata = { operation: "initialize" } satisfies XmuxLogMetadata;
+      logger.debug(xmuxLogEvents.initializeBegin, metadata);
+
+      const started = await Result.tryPromise({
+        try: () => chat.start(),
+        catch: (cause) => new XmuxInitializeError({ cause }),
+      });
+      const result = Result.andThen(started, (inner) =>
+        Result.mapError(inner, (cause) => new XmuxInitializeError({ cause })),
+      );
+
+      logXmuxResult({
+        logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: xmuxLogEvents.initializeSuccess,
+        failureEvent: xmuxLogEvents.initializeFailure,
+        failureLevel: "error",
+      });
+
+      return result;
     },
 
     async shutdown() {
-      shutdownController.abort();
-      for (const unsubscribe of routeUnsubscribers) {
-        unsubscribe();
-      }
+      const startedAt = startXmuxLogTimer();
+      const metadata = { operation: "shutdown" } satisfies XmuxLogMetadata;
+      logger.debug(xmuxLogEvents.shutdownBegin, metadata);
 
-      const chatClose = await chat.close();
-      const harnessClose = await harness.close();
+      const closed = await Result.tryPromise({
+        try: async () => {
+          shutdownController.abort();
+          for (const unsubscribe of routeUnsubscribers) {
+            unsubscribe();
+          }
 
-      const chatError = chatClose.isErr() ? chatClose.error : undefined;
-      const harnessError = harnessClose.isErr() ? harnessClose.error : undefined;
+          const chatClose = await chat.close();
+          const harnessClose = await harness.close();
 
-      return chatError === undefined && harnessError === undefined
-        ? Result.ok()
-        : Result.err(new XmuxCloseError({ chat: chatError, harness: harnessError }));
+          const chatError = chatClose.isErr() ? chatClose.error : undefined;
+          const harnessError = harnessClose.isErr() ? harnessClose.error : undefined;
+
+          return chatError === undefined && harnessError === undefined
+            ? Result.ok()
+            : Result.err(new XmuxCloseError({ chat: chatError, harness: harnessError }));
+        },
+        catch: (cause) => new XmuxCloseError({ chat: cause }),
+      });
+      const result = Result.andThen(closed, (inner) => inner);
+
+      logXmuxResult({
+        logger,
+        result,
+        startedAt,
+        metadata,
+        successEvent: xmuxLogEvents.shutdownSuccess,
+        failureEvent: xmuxLogEvents.shutdownFailure,
+        failureLevel: "warn",
+      });
+
+      return result;
     },
   });
 }

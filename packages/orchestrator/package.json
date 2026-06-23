@@ -38,7 +38,8 @@
     "@xmux/chat-core": "workspace:*",
     "@xmux/harness-core": "workspace:*",
     "@xmux/stt": "workspace:*",
-    "better-result": "^2.9.1"
+    "better-result": "^2.9.1",
+    "ts-log": "^3.0.2"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

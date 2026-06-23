@@ -2,7 +2,9 @@ import type { ChatAdapterDefinitions, ChatConversationRef, ChatEventType } from 
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { createHandlerContext, type Actor, type Context, type HandlerContext } from "./ctx";
-import { XmuxMiddlewareNextAlreadyCalledError } from "./errors";
+import { XmuxMiddlewareExecutionError, XmuxMiddlewareNextAlreadyCalledError } from "./errors";
+import { xmuxLogEvents, type XmuxLogMetadata } from "./logger";
+import { logXmuxResult, runWithXmuxLogContext, startXmuxLogTimer } from "./logger-utils";
 
 /** Chat event shape routed through xmux request middleware. */
 export interface XmuxRoutedChatEvent<TChatId extends string = string> {
@@ -64,12 +66,24 @@ export async function runXmuxHandler<
   TEvent extends XmuxRoutedChatEvent<Extract<keyof TChats, string>>,
   TError,
 >(input: RunXmuxHandlerInput<TAdapters, TChats, TEvent, TError>): Promise<Result<void, unknown>> {
-  const handler = createHandlerContext({
+  const routeName = input.routeName ?? defaultRouteName(input.event);
+  const baseHandler = createHandlerContext({
     app: input.app,
     chatId: input.event.chatId,
     actor: input.actor,
   });
-  const routeName = input.routeName ?? defaultRouteName(input.event);
+  const routeMetadata = {
+    requestId: baseHandler.requestId,
+    routeName,
+    eventType: input.event.type,
+    chatId: input.event.chatId,
+    conversationId: input.event.conversation.conversationId,
+    operation: "route",
+  } satisfies XmuxLogMetadata;
+  const handler = {
+    ...baseHandler,
+    logger: baseHandler.logger.child(routeMetadata),
+  } satisfies HandlerContext<TAdapters, TChats, TEvent["chatId"]>;
   const ctx: XmuxMiddlewareContext<TAdapters, TChats, TEvent> = {
     app: input.app,
     handler,
@@ -96,7 +110,28 @@ export async function runXmuxHandler<
     return await middleware(ctx, () => dispatch(nextIndex + 1));
   }
 
-  return dispatch(0);
+  return await runWithXmuxLogContext(routeMetadata, async () => {
+    const startedAt = startXmuxLogTimer();
+    input.app.logger.debug(xmuxLogEvents.routeBegin, routeMetadata);
+
+    const handled = await Result.tryPromise({
+      try: () => dispatch(0),
+      catch: (cause) => new XmuxMiddlewareExecutionError({ routeName, cause }),
+    });
+    const result = Result.andThen(handled, (inner) => inner);
+
+    logXmuxResult({
+      logger: input.app.logger,
+      result,
+      startedAt,
+      metadata: routeMetadata,
+      successEvent: xmuxLogEvents.routeSuccess,
+      failureEvent: xmuxLogEvents.routeFailure,
+      failureLevel: "error",
+    });
+
+    return result;
+  });
 }
 
 function defaultRouteName(event: XmuxRoutedChatEvent): string {

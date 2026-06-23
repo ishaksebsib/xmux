@@ -5,6 +5,7 @@ import type { Commands } from "./commands";
 import type { NormalizedConfig } from "./config";
 import type { FileSystemHost } from "./filesystem";
 import type { Store } from "./store";
+import type { XmuxLogScope } from "./logger";
 import type { PromptRunRegistry } from "./features/prompt/run-registry";
 import type { SttRunRegistry } from "./features/stt/run-registry";
 
@@ -27,6 +28,7 @@ export interface Context<
   /** Store for owned routing and session metadata. */
   readonly store: Store;
   readonly fs: FileSystemHost;
+  readonly logger: XmuxLogScope;
   readonly services: Services;
 }
 
@@ -43,6 +45,7 @@ export interface HandlerContext<
   readonly chatId: TChatId;
   readonly requestId: string;
   readonly signal: AbortSignal;
+  readonly logger: XmuxLogScope;
   readonly actor?: Actor;
   readonly session?: HandlerSession<THarnessId>;
 }
@@ -68,11 +71,14 @@ export function createHandlerContext<
 >(
   input: CreateHandlerContextInput<TAdapters, TChats, TChatId, THarnessId>,
 ): HandlerContext<TAdapters, TChats, TChatId, THarnessId> {
+  const requestId = input.app.services.createRequestId();
+
   return {
     app: input.app,
     chatId: input.chatId,
-    requestId: input.app.services.createRequestId(),
+    requestId,
     signal: input.app.services.shutdownSignal,
+    logger: input.app.logger.child({ requestId, chatId: input.chatId }),
     actor: input.actor,
     session: input.session,
   };

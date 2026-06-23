@@ -8,6 +8,17 @@ export {
 export { createInMemoryStore } from "./store";
 export { parseConfig, parseXmuxConfig } from "./config";
 export { createXmux, createXmuxResult } from "./xmux";
+export { dummyXmuxLogger, xmuxLogEvents } from "./logger";
+export {
+  createContextualXmuxLogger,
+  createXmuxLogScope,
+  logXmuxResult,
+  runWithXmuxLogContext,
+  serializeXmuxLogError,
+  startXmuxLogTimer,
+  writeXmuxLog,
+  xmuxLogDurationMs,
+} from "./logger-utils";
 export { runXmuxHandler } from "./middleware";
 export type {
   RunXmuxHandlerInput,
@@ -18,6 +29,16 @@ export type {
   XmuxRoutedChatEvent,
 } from "./middleware";
 export type { XmuxMiddlewareError } from "./errors";
+export type {
+  XmuxLogger,
+  XmuxLogErrorMetadata,
+  XmuxLogEventName,
+  XmuxLogLevel,
+  XmuxLogMetadata,
+  XmuxLogOperation,
+  XmuxLogScope,
+} from "./logger";
+export type { XmuxLogContext } from "./logger-utils";
 export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
 export type {
   AbsolutePath,

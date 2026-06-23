@@ -35,7 +35,7 @@ export function registerPromptRoute<
 
     const audio = classifyAudioMessage(promptEvent.message);
 
-    const handled = await runXmuxHandler({
+    await runXmuxHandler({
       app: ctx,
       event,
       middleware,
@@ -60,10 +60,5 @@ export function registerPromptRoute<
         }
       },
     });
-
-    if (handled.isErr()) {
-      // TODO: report handler errors through diagnostics/observability.
-      return;
-    }
   });
 }

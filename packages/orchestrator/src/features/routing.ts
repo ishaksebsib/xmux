@@ -30,9 +30,8 @@ export interface DispatchInput<
 /**
  * Runs one routed chat event through xmux middleware and the route handler.
  *
- * Centralizes the per-route boilerplate: deriving the actor, invoking
- * `runXmuxHandler`, and the single place where handler failures are dropped —
- * the home for future diagnostics/observability.
+ * Centralizes the per-route boilerplate: deriving the actor and invoking
+ * `runXmuxHandler`, which owns route diagnostics and typed execution errors.
  */
 export async function dispatch<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -44,7 +43,7 @@ export async function dispatch<
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[],
   input: DispatchInput<TAdapters, TChats, TEvent, TError>,
 ): Promise<void> {
-  const handled = await runXmuxHandler({
+  await runXmuxHandler({
     app: ctx,
     event: input.event,
     middleware,
@@ -52,10 +51,6 @@ export async function dispatch<
     actor: actorFromChatActor(input.actor),
     handler: input.handler,
   });
-
-  if (handled.isErr()) {
-    // TODO: report handler errors through diagnostics/observability.
-  }
 }
 
 /**
