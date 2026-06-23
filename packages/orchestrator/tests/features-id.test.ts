@@ -45,12 +45,7 @@ describe("/id command", () => {
     await eventually(() => replies.length === 1);
 
     expect(replies[0]).toBe(
-      [
-        "**Your chat user id**",
-        "",
-        "- **Chat:** `telegram`",
-        "- **User ID:** `user-1`",
-      ].join("\n"),
+      ["**Your chat user id**", "", "- **Chat:** `telegram`", "- **User ID:** `user-1`"].join("\n"),
     );
 
     await xmux.shutdown();
@@ -151,7 +146,12 @@ async function initializeXmux() {
 
 function idCommandEvent(
   input: {
-    readonly actor?: { readonly kind: "user"; readonly actorId: string; readonly displayName?: string; readonly adapterData: Record<never, never> };
+    readonly actor?: {
+      readonly kind: "user";
+      readonly actorId: string;
+      readonly displayName?: string;
+      readonly adapterData: Record<never, never>;
+    };
     readonly displayName?: string;
   } = {},
 ) {
@@ -171,7 +171,11 @@ function idCommandEvent(
     chatId: "telegram",
     conversation,
     ...(actor === undefined ? {} : { actor }),
-    message: { chatId: "telegram", conversationId: conversation.conversationId, messageId: "message-1" },
+    message: {
+      chatId: "telegram",
+      conversationId: conversation.conversationId,
+      messageId: "message-1",
+    },
     command: {
       name: "id",
       options: {},

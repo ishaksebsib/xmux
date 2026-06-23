@@ -40,9 +40,11 @@ export class ShutdownCoordinator extends Context.Service<
         yield* Deferred.await(signal);
       });
 
-      const isShutdownRequested = Effect.fn("ShutdownCoordinator.isShutdownRequested")(function* () {
-        return yield* Ref.get(requested);
-      });
+      const isShutdownRequested = Effect.fn("ShutdownCoordinator.isShutdownRequested")(
+        function* () {
+          return yield* Ref.get(requested);
+        },
+      );
 
       return { beginShutdown, completeShutdown, awaitShutdown, isShutdownRequested };
     }),

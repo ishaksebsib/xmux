@@ -9,7 +9,8 @@ export const makeSecretResolverLayer = (
   Layer.succeed(SecretResolver)({
     resolveEnv: Effect.fn("SecretResolver.test.resolveEnv")(function* ({ configPath, env }) {
       const value = values.get(env);
-      if (value !== undefined && value.length > 0) return Redacted.make(secretValueFromString(value));
+      if (value !== undefined && value.length > 0)
+        return Redacted.make(secretValueFromString(value));
       return yield* ConfigSecretError.make({
         path: configPath,
         env,

@@ -1,6 +1,12 @@
 import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "effect";
 import { LogEntry, type LogLevel } from "../contracts/logging";
-import { isoTimestampFromString, logByteCountFromNumber, logRotationFileCountFromNumber, type LogByteCount, type LogRotationFileCount } from "../contracts/primitives";
+import {
+  isoTimestampFromString,
+  logByteCountFromNumber,
+  logRotationFileCountFromNumber,
+  type LogByteCount,
+  type LogRotationFileCount,
+} from "../contracts/primitives";
 import { LogFileError } from "../errors";
 import { HostRuntime, type HostRuntimeService } from "../platform/host";
 import { redactRecord, redactString, redactUnknown } from "./redaction";

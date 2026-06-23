@@ -18,8 +18,7 @@ const isValidUrl = (value: string): boolean => {
   }
 };
 
-const isSafePositiveInteger = (value: number): boolean =>
-  Number.isSafeInteger(value) && value > 0;
+const isSafePositiveInteger = (value: number): boolean => Number.isSafeInteger(value) && value > 0;
 
 export const NonEmptyString = Schema.NonEmptyString;
 export type NonEmptyString = typeof NonEmptyString.Type;
@@ -31,10 +30,9 @@ export const NonNegativeNumber = Schema.Number.check(Schema.isGreaterThanOrEqual
 export type NonNegativeNumber = typeof NonNegativeNumber.Type;
 
 const AbsolutePathString = Schema.NonEmptyString.pipe(
-  Schema.refine(
-    (value): value is string => isAbsolutePath(value),
-    { expected: "an absolute path" },
-  ),
+  Schema.refine((value): value is string => isAbsolutePath(value), {
+    expected: "an absolute path",
+  }),
 );
 
 export const ResolvedPath = AbsolutePathString.pipe(Schema.brand("@xmux/server/ResolvedPath"));
@@ -63,19 +61,17 @@ export const SessionId = Schema.NonEmptyString.pipe(Schema.brand("@xmux/server/S
 export type SessionId = typeof SessionId.Type;
 
 export const ProcessId = Schema.Number.pipe(
-  Schema.refine(
-    (value): value is number => isSafePositiveInteger(value),
-    { expected: "a safe positive process id" },
-  ),
+  Schema.refine((value): value is number => isSafePositiveInteger(value), {
+    expected: "a safe positive process id",
+  }),
   Schema.brand("@xmux/server/ProcessId"),
 );
 export type ProcessId = typeof ProcessId.Type;
 
 export const IsoTimestamp = Schema.String.pipe(
-  Schema.refine(
-    (value): value is string => isValidIsoTimestamp(value),
-    { expected: "an ISO timestamp" },
-  ),
+  Schema.refine((value): value is string => isValidIsoTimestamp(value), {
+    expected: "an ISO timestamp",
+  }),
   Schema.brand("@xmux/server/IsoTimestamp"),
 );
 export type IsoTimestamp = typeof IsoTimestamp.Type;
@@ -90,10 +86,7 @@ export const PortFromString = Schema.NumberFromString.pipe(
 );
 
 export const BaseUrl = Schema.String.pipe(
-  Schema.refine(
-    (value): value is string => isValidUrl(value),
-    { expected: "a URL" },
-  ),
+  Schema.refine((value): value is string => isValidUrl(value), { expected: "a URL" }),
   Schema.brand("@xmux/server/BaseUrl"),
 );
 export type BaseUrl = typeof BaseUrl.Type;
@@ -115,7 +108,9 @@ export const DiscordApplicationId = Schema.NonEmptyString.pipe(
   Schema.brand("@xmux/server/DiscordApplicationId"),
 );
 export type DiscordApplicationId = typeof DiscordApplicationId.Type;
-export const DiscordGuildId = Schema.NonEmptyString.pipe(Schema.brand("@xmux/server/DiscordGuildId"));
+export const DiscordGuildId = Schema.NonEmptyString.pipe(
+  Schema.brand("@xmux/server/DiscordGuildId"),
+);
 export type DiscordGuildId = typeof DiscordGuildId.Type;
 export const DiscordPublicKey = Schema.NonEmptyString.pipe(
   Schema.brand("@xmux/server/DiscordPublicKey"),

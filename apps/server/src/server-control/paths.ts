@@ -128,7 +128,9 @@ const defaultLayout = (
     };
   }
 
-  const configHome = boot.xdgConfigHome.pipe(Option.getOrElse(() => pathService.join(home, ".config")));
+  const configHome = boot.xdgConfigHome.pipe(
+    Option.getOrElse(() => pathService.join(home, ".config")),
+  );
   const stateHome = boot.xdgStateHome.pipe(
     Option.getOrElse(() => pathService.join(home, ".local", "state")),
   );

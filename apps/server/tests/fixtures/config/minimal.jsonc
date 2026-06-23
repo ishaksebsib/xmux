@@ -2,7 +2,7 @@
   // A valid empty-ish user config should normalize to safe defaults.
   "xmux": {
     "workspace": {
-      "defaultDir": "./workspace"
-    }
-  }
+      "defaultDir": "./workspace",
+    },
+  },
 }

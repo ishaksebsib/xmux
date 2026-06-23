@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 import { ServerControlEndpoint } from "../../../contracts/control";
 import { API_VERSION } from "../../../contracts/constants";
-import { ConfigPath, IsoTimestamp, ProcessId, ScopeId, StateDir } from "../../../contracts/primitives";
+import {
+  ConfigPath,
+  IsoTimestamp,
+  ProcessId,
+  ScopeId,
+  StateDir,
+} from "../../../contracts/primitives";
 import { ServerStatusState } from "../../../server-runtime/state";
 
 /** Status is the schema-backed local control payload for CLI discovery. */

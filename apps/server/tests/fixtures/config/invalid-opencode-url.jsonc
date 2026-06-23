@@ -1,7 +1,7 @@
 {
   "harnesses": {
     "opencode": {
-      "runtime": { "type": "external", "baseUrl": "not-a-url" }
-    }
-  }
+      "runtime": { "type": "external", "baseUrl": "not-a-url" },
+    },
+  },
 }

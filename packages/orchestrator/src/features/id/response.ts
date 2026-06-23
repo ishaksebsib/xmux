@@ -7,7 +7,9 @@ export function formatIdOutput(output: IdentifyUserOutput): ChatTextInput {
   const details = [
     `- **Chat:** ${inlineCode(output.chatId)}`,
     `- **User ID:** ${inlineCode(output.userId)}`,
-    output.displayName === undefined ? undefined : `- **Name:** ${markdownText(output.displayName)}`,
+    output.displayName === undefined
+      ? undefined
+      : `- **Name:** ${markdownText(output.displayName)}`,
   ].filter((line): line is string => line !== undefined);
 
   return markdown({

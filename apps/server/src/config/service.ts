@@ -23,7 +23,9 @@ interface LoadedConfig {
 export class ServerConfig extends Context.Service<
   ServerConfig,
   {
-    readonly loadCurrent: (configPath: ConfigPath) => Effect.Effect<EffectiveServerConfig, ConfigError>;
+    readonly loadCurrent: (
+      configPath: ConfigPath,
+    ) => Effect.Effect<EffectiveServerConfig, ConfigError>;
     readonly getEffective: () => Effect.Effect<EffectiveServerConfig, ConfigValidationError>;
     readonly getRedacted: () => Effect.Effect<RedactedConfigSnapshot, ConfigValidationError>;
     readonly validateCurrent: () => Effect.Effect<ConfigValidationResult>;

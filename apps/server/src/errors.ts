@@ -35,13 +35,10 @@ export class ConfigValidationError extends Schema.TaggedErrorClass<ConfigValidat
 ) {}
 
 /** Boot/env config failures are separate from product file config failures. */
-export class BootConfigError extends Schema.TaggedErrorClass<BootConfigError>()(
-  "BootConfigError",
-  {
-    message: Schema.String,
-    cause: Schema.optionalKey(Schema.Defect()),
-  },
-) {}
+export class BootConfigError extends Schema.TaggedErrorClass<BootConfigError>()("BootConfigError", {
+  message: Schema.String,
+  cause: Schema.optionalKey(Schema.Defect()),
+}) {}
 
 /** Secret resolution failures identify the reference but never include the value. */
 export class ConfigSecretError extends Schema.TaggedErrorClass<ConfigSecretError>()(
