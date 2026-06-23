@@ -5,12 +5,14 @@ import {
   ConfigPath,
   DiscordApplicationId,
   DiscordGuildId,
-  DiscordPublicKey,
   EnvironmentVariableName,
+  LogByteCount,
+  LogRotationFileCount,
   ModelId,
   ModelVariant,
   NonEmptyString,
   Port,
+  PositiveInteger,
   ProviderId,
   ResolvedPath,
   SecretValue,
@@ -29,8 +31,30 @@ export class InlineSecretRef extends Schema.Class<InlineSecretRef>("InlineSecret
 export const SecretRef = Schema.Union([EnvSecretRef, InlineSecretRef]);
 export type SecretRef = typeof SecretRef.Type;
 
-export const DeliveryMode = Schema.Literals(["requester_only", "fanout"]);
-export type DeliveryMode = typeof DeliveryMode.Type;
+/** Remote chat access must be explicit because chats can control local agent sessions. */
+export class AnyoneAccessConfig extends Schema.Class<AnyoneAccessConfig>("AnyoneAccessConfig")({
+  type: Schema.Literal("anyone"),
+}) {}
+
+export class AllowListAccessConfig extends Schema.Class<AllowListAccessConfig>(
+  "AllowListAccessConfig",
+)({
+  type: Schema.Literal("allow-list"),
+  users: Schema.NonEmptyArray(NonEmptyString),
+}) {}
+
+export const ChatAccessConfig = Schema.Union([AnyoneAccessConfig, AllowListAccessConfig]);
+export type ChatAccessConfig = typeof ChatAccessConfig.Type;
+
+export const ChatAttachmentKindConfig = Schema.Literals([
+  "image",
+  "audio",
+  "video",
+  "document",
+  "archive",
+  "other",
+]);
+export type ChatAttachmentKindConfig = typeof ChatAttachmentKindConfig.Type;
 
 export const HarnessThinkingLevel = Schema.Literals([
   "off",
@@ -43,54 +67,191 @@ export const HarnessThinkingLevel = Schema.Literals([
 ]);
 export type HarnessThinkingLevel = typeof HarnessThinkingLevel.Type;
 
-export const OpenCodeMode = Schema.Literals(["embedded", "external"]);
-export type OpenCodeMode = typeof OpenCodeMode.Type;
+export class XmuxWorkspaceFileConfig extends Schema.Class<XmuxWorkspaceFileConfig>(
+  "XmuxWorkspaceFileConfig",
+)({
+  defaultDir: Schema.optionalKey(NonEmptyString),
+}) {}
 
-export const PiNoToolsMode = Schema.Literals(["all", "builtin"]);
-export type PiNoToolsMode = typeof PiNoToolsMode.Type;
+export class XmuxWorkspaceSettingsConfig extends Schema.Class<XmuxWorkspaceSettingsConfig>(
+  "XmuxWorkspaceSettingsConfig",
+)({
+  defaultDir: ResolvedPath,
+}) {}
 
-/** User-facing server config knobs. */
+export class XmuxThinkingResponseFileConfig extends Schema.Class<XmuxThinkingResponseFileConfig>(
+  "XmuxThinkingResponseFileConfig",
+)({
+  hide: Schema.optionalKey(Schema.Boolean),
+  maxChars: Schema.optionalKey(PositiveInteger),
+}) {}
+
+export class XmuxThinkingResponseConfig extends Schema.Class<XmuxThinkingResponseConfig>(
+  "XmuxThinkingResponseConfig",
+)({
+  hide: Schema.Boolean,
+  maxChars: PositiveInteger,
+}) {}
+
+export class XmuxToolResponseFileConfig extends Schema.Class<XmuxToolResponseFileConfig>(
+  "XmuxToolResponseFileConfig",
+)({
+  hide: Schema.optionalKey(Schema.Boolean),
+  maxInputStringChars: Schema.optionalKey(PositiveInteger),
+  maxInputObjectEntries: Schema.optionalKey(PositiveInteger),
+  maxTextOutputChars: Schema.optionalKey(PositiveInteger),
+  maxJsonOutputChars: Schema.optionalKey(PositiveInteger),
+}) {}
+
+export class XmuxToolResponseConfig extends Schema.Class<XmuxToolResponseConfig>(
+  "XmuxToolResponseConfig",
+)({
+  hide: Schema.Boolean,
+  maxInputStringChars: PositiveInteger,
+  maxInputObjectEntries: PositiveInteger,
+  maxTextOutputChars: PositiveInteger,
+  maxJsonOutputChars: PositiveInteger,
+}) {}
+
+export class XmuxResponsesFileConfig extends Schema.Class<XmuxResponsesFileConfig>(
+  "XmuxResponsesFileConfig",
+)({
+  thinking: Schema.optionalKey(XmuxThinkingResponseFileConfig),
+  tools: Schema.optionalKey(XmuxToolResponseFileConfig),
+}) {}
+
+export class XmuxResponsesConfig extends Schema.Class<XmuxResponsesConfig>("XmuxResponsesConfig")({
+  thinking: XmuxThinkingResponseConfig,
+  tools: XmuxToolResponseConfig,
+}) {}
+
+export class ResumeCommandFileConfig extends Schema.Class<ResumeCommandFileConfig>(
+  "ResumeCommandFileConfig",
+)({
+  maxSessionsPerHarness: Schema.optionalKey(PositiveInteger),
+}) {}
+
+export class ResumeCommandConfig extends Schema.Class<ResumeCommandConfig>("ResumeCommandConfig")({
+  maxSessionsPerHarness: PositiveInteger,
+}) {}
+
+export class ModelCommandFileConfig extends Schema.Class<ModelCommandFileConfig>(
+  "ModelCommandFileConfig",
+)({
+  maxModelsPerProvider: Schema.optionalKey(PositiveInteger),
+}) {}
+
+export class ModelCommandConfig extends Schema.Class<ModelCommandConfig>("ModelCommandConfig")({
+  maxModelsPerProvider: PositiveInteger,
+}) {}
+
+export class LsCommandFileConfig extends Schema.Class<LsCommandFileConfig>("LsCommandFileConfig")({
+  showHidden: Schema.optionalKey(Schema.Boolean),
+  maxEntries: Schema.optionalKey(PositiveInteger),
+}) {}
+
+export class LsCommandConfig extends Schema.Class<LsCommandConfig>("LsCommandConfig")({
+  showHidden: Schema.Boolean,
+  maxEntries: PositiveInteger,
+}) {}
+
+export class XmuxCommandsFileConfig extends Schema.Class<XmuxCommandsFileConfig>(
+  "XmuxCommandsFileConfig",
+)({
+  resume: Schema.optionalKey(ResumeCommandFileConfig),
+  model: Schema.optionalKey(ModelCommandFileConfig),
+  ls: Schema.optionalKey(LsCommandFileConfig),
+}) {}
+
+export class XmuxCommandsConfig extends Schema.Class<XmuxCommandsConfig>("XmuxCommandsConfig")({
+  resume: ResumeCommandConfig,
+  model: ModelCommandConfig,
+  ls: LsCommandConfig,
+}) {}
+
+export class XmuxAttachmentsFileConfig extends Schema.Class<XmuxAttachmentsFileConfig>(
+  "XmuxAttachmentsFileConfig",
+)({
+  enabled: Schema.optionalKey(Schema.Boolean),
+  maxBytes: Schema.optionalKey(PositiveInteger),
+  kinds: Schema.optionalKey(Schema.Array(ChatAttachmentKindConfig)),
+}) {}
+
+export class XmuxAttachmentsConfig extends Schema.Class<XmuxAttachmentsConfig>(
+  "XmuxAttachmentsConfig",
+)({
+  enabled: Schema.Boolean,
+  maxBytes: PositiveInteger,
+  kinds: Schema.Array(ChatAttachmentKindConfig),
+}) {}
+
+/** Product-level xmux behavior; missing keys are normalized to safe defaults. */
+export class XmuxFileConfig extends Schema.Class<XmuxFileConfig>("XmuxFileConfig")({
+  workspace: Schema.optionalKey(XmuxWorkspaceFileConfig),
+  responses: Schema.optionalKey(XmuxResponsesFileConfig),
+  commands: Schema.optionalKey(XmuxCommandsFileConfig),
+  attachments: Schema.optionalKey(XmuxAttachmentsFileConfig),
+}) {}
+
+export class XmuxSettingsConfig extends Schema.Class<XmuxSettingsConfig>("XmuxSettingsConfig")({
+  workspace: XmuxWorkspaceSettingsConfig,
+  responses: XmuxResponsesConfig,
+  commands: XmuxCommandsConfig,
+  attachments: XmuxAttachmentsConfig,
+}) {}
+
+export class ServerLogRotationFileConfig extends Schema.Class<ServerLogRotationFileConfig>(
+  "ServerLogRotationFileConfig",
+)({
+  maxBytes: Schema.optionalKey(LogByteCount),
+  maxFiles: Schema.optionalKey(LogRotationFileCount),
+}) {}
+
+export class ServerLogRotationConfig extends Schema.Class<ServerLogRotationConfig>(
+  "ServerLogRotationConfig",
+)({
+  maxBytes: LogByteCount,
+  maxFiles: LogRotationFileCount,
+}) {}
+
+export class ServerLogsFileConfig extends Schema.Class<ServerLogsFileConfig>(
+  "ServerLogsFileConfig",
+)({
+  level: Schema.optionalKey(LogLevel),
+  rotation: Schema.optionalKey(ServerLogRotationFileConfig),
+}) {}
+
+export class ServerLogsConfig extends Schema.Class<ServerLogsConfig>("ServerLogsConfig")({
+  level: LogLevel,
+  rotation: ServerLogRotationConfig,
+}) {}
+
+/** User-facing local server config knobs. */
 export class ServerFileServerConfig extends Schema.Class<ServerFileServerConfig>(
   "ServerFileServerConfig",
 )({
-  logLevel: Schema.optionalKey(LogLevel),
+  logs: Schema.optionalKey(ServerLogsFileConfig),
 }) {}
 
-/** Normalized server settings used after defaults have been applied. */
+/** Normalized local server settings used after defaults have been applied. */
 export class ServerSettingsConfig extends Schema.Class<ServerSettingsConfig>(
   "ServerSettingsConfig",
 )({
-  logLevel: LogLevel,
+  logs: ServerLogsConfig,
 }) {}
 
-export class TelegramModeConfig extends Schema.Class<TelegramModeConfig>("TelegramModeConfig")({
-  type: Schema.Literals(["polling", "webhook"]),
-}) {}
+export const SttProvider = Schema.Literal("openai-compatible");
+export type SttProvider = typeof SttProvider.Type;
 
-/** Telegram config is validated before adapter construction exists. */
-export class TelegramFileConfig extends Schema.Class<TelegramFileConfig>("TelegramFileConfig")({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  token: Schema.optionalKey(SecretRef),
-  mode: Schema.optionalKey(TelegramModeConfig),
-}) {}
-
-export class DiscordModeConfig extends Schema.Class<DiscordModeConfig>("DiscordModeConfig")({
-  type: Schema.Literals(["gateway", "webhook"]),
-}) {}
-
-/** Discord config keeps gateway/webhook selection separate from future adapters. */
-export class DiscordFileConfig extends Schema.Class<DiscordFileConfig>("DiscordFileConfig")({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  token: Schema.optionalKey(SecretRef),
-  applicationId: Schema.optionalKey(DiscordApplicationId),
-  guildId: Schema.optionalKey(DiscordGuildId),
-  publicKey: Schema.optionalKey(DiscordPublicKey),
-  mode: Schema.optionalKey(DiscordModeConfig),
-}) {}
-
-export class ChatsFileConfig extends Schema.Class<ChatsFileConfig>("ChatsFileConfig")({
-  telegram: Schema.optionalKey(TelegramFileConfig),
-  discord: Schema.optionalKey(DiscordFileConfig),
+export class SttFileConfig extends Schema.Class<SttFileConfig>("SttFileConfig")({
+  provider: Schema.optionalKey(SttProvider),
+  apiKey: Schema.optionalKey(SecretRef),
+  baseUrl: Schema.optionalKey(BaseUrl),
+  endpointPath: Schema.optionalKey(NonEmptyString),
+  model: Schema.optionalKey(NonEmptyString),
+  language: Schema.optionalKey(NonEmptyString),
+  maxBytes: Schema.optionalKey(PositiveInteger),
+  timeoutMs: Schema.optionalKey(PositiveInteger),
 }) {}
 
 export class HarnessModelRefConfig extends Schema.Class<HarnessModelRefConfig>(
@@ -101,24 +262,64 @@ export class HarnessModelRefConfig extends Schema.Class<HarnessModelRefConfig>(
   variant: Schema.optionalKey(ModelVariant),
 }) {}
 
-export class OpenCodeFileConfig extends Schema.Class<OpenCodeFileConfig>("OpenCodeFileConfig")({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  mode: Schema.optionalKey(OpenCodeMode),
-  baseUrl: Schema.optionalKey(BaseUrl),
+/** Telegram config exists only when the Telegram chat adapter should start. */
+export class TelegramFileConfig extends Schema.Class<TelegramFileConfig>("TelegramFileConfig")({
+  token: Schema.optionalKey(SecretRef),
+  access: Schema.optionalKey(ChatAccessConfig),
+}) {}
+
+/** Discord config exists only when the Discord chat adapter should start. */
+export class DiscordFileConfig extends Schema.Class<DiscordFileConfig>("DiscordFileConfig")({
+  token: Schema.optionalKey(SecretRef),
+  applicationId: Schema.optionalKey(DiscordApplicationId),
+  guildId: Schema.optionalKey(DiscordGuildId),
+  access: Schema.optionalKey(ChatAccessConfig),
+}) {}
+
+/** Slack config exists only when the Slack chat adapter should start. */
+export class SlackFileConfig extends Schema.Class<SlackFileConfig>("SlackFileConfig")({
+  botToken: Schema.optionalKey(SecretRef),
+  appToken: Schema.optionalKey(SecretRef),
+  access: Schema.optionalKey(ChatAccessConfig),
+}) {}
+
+export class ChatsFileConfig extends Schema.Class<ChatsFileConfig>("ChatsFileConfig")({
+  telegram: Schema.optionalKey(TelegramFileConfig),
+  discord: Schema.optionalKey(DiscordFileConfig),
+  slack: Schema.optionalKey(SlackFileConfig),
+}) {}
+
+export class OpenCodeEmbeddedRuntimeConfig extends Schema.Class<OpenCodeEmbeddedRuntimeConfig>(
+  "OpenCodeEmbeddedRuntimeConfig",
+)({
+  type: Schema.Literal("embedded"),
   port: Schema.optionalKey(Port),
+}) {}
+
+export class OpenCodeExternalRuntimeConfig extends Schema.Class<OpenCodeExternalRuntimeConfig>(
+  "OpenCodeExternalRuntimeConfig",
+)({
+  type: Schema.Literal("external"),
+  baseUrl: BaseUrl,
+}) {}
+
+export const OpenCodeRuntimeConfig = Schema.Union([
+  OpenCodeEmbeddedRuntimeConfig,
+  OpenCodeExternalRuntimeConfig,
+]);
+export type OpenCodeRuntimeConfig = typeof OpenCodeRuntimeConfig.Type;
+
+export class OpenCodeFileConfig extends Schema.Class<OpenCodeFileConfig>("OpenCodeFileConfig")({
+  runtime: Schema.optionalKey(OpenCodeRuntimeConfig),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
 
 export class PiFileConfig extends Schema.Class<PiFileConfig>("PiFileConfig")({
-  enabled: Schema.optionalKey(Schema.Boolean),
   agentDir: Schema.optionalKey(NonEmptyString),
   sessionDir: Schema.optionalKey(NonEmptyString),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
-  tools: Schema.optionalKey(Schema.Array(NonEmptyString)),
-  excludeTools: Schema.optionalKey(Schema.Array(NonEmptyString)),
-  noTools: Schema.optionalKey(PiNoToolsMode),
 }) {}
 
 export class HarnessesFileConfig extends Schema.Class<HarnessesFileConfig>("HarnessesFileConfig")({
@@ -128,9 +329,9 @@ export class HarnessesFileConfig extends Schema.Class<HarnessesFileConfig>("Harn
 
 /** Raw JSONC config contract. Missing keys are defaulted after decoding. */
 export class ServerFileConfig extends Schema.Class<ServerFileConfig>("ServerFileConfig")({
-  defaultWorkingDirectory: Schema.optionalKey(NonEmptyString),
-  deliveryMode: Schema.optionalKey(DeliveryMode),
+  xmux: Schema.optionalKey(XmuxFileConfig),
   server: Schema.optionalKey(ServerFileServerConfig),
+  stt: Schema.optionalKey(SttFileConfig),
   chats: Schema.optionalKey(ChatsFileConfig),
   harnesses: Schema.optionalKey(HarnessesFileConfig),
 }) {}
@@ -154,66 +355,74 @@ export class RedactedInlineSecretRef extends Schema.Class<RedactedInlineSecretRe
 export const RedactedSecretRef = Schema.Union([RedactedEnvSecretRef, RedactedInlineSecretRef]);
 export type RedactedSecretRef = typeof RedactedSecretRef.Type;
 
+export class RedactedSttConfig extends Schema.Class<RedactedSttConfig>("RedactedSttConfig")({
+  provider: SttProvider,
+  apiKey: Schema.optionalKey(RedactedSecretRef),
+  baseUrl: Schema.optionalKey(BaseUrl),
+  endpointPath: Schema.optionalKey(NonEmptyString),
+  model: NonEmptyString,
+  language: Schema.optionalKey(NonEmptyString),
+  maxBytes: PositiveInteger,
+  timeoutMs: Schema.optionalKey(PositiveInteger),
+}) {}
+
 export class RedactedTelegramConfig extends Schema.Class<RedactedTelegramConfig>(
   "RedactedTelegramConfig",
 )({
-  enabled: Schema.Boolean,
-  token: Schema.optionalKey(RedactedSecretRef),
-  mode: TelegramModeConfig,
+  token: RedactedSecretRef,
+  access: ChatAccessConfig,
 }) {}
 
 export class RedactedDiscordConfig extends Schema.Class<RedactedDiscordConfig>(
   "RedactedDiscordConfig",
 )({
-  enabled: Schema.Boolean,
-  token: Schema.optionalKey(RedactedSecretRef),
-  applicationId: Schema.optionalKey(DiscordApplicationId),
-  guildId: Schema.optionalKey(DiscordGuildId),
-  publicKey: Schema.optionalKey(DiscordPublicKey),
-  mode: DiscordModeConfig,
+  token: RedactedSecretRef,
+  applicationId: DiscordApplicationId,
+  guildId: DiscordGuildId,
+  access: ChatAccessConfig,
+}) {}
+
+export class RedactedSlackConfig extends Schema.Class<RedactedSlackConfig>("RedactedSlackConfig")({
+  botToken: RedactedSecretRef,
+  appToken: RedactedSecretRef,
+  access: ChatAccessConfig,
 }) {}
 
 export class RedactedChatsConfig extends Schema.Class<RedactedChatsConfig>("RedactedChatsConfig")({
-  telegram: RedactedTelegramConfig,
-  discord: RedactedDiscordConfig,
+  telegram: Schema.optionalKey(RedactedTelegramConfig),
+  discord: Schema.optionalKey(RedactedDiscordConfig),
+  slack: Schema.optionalKey(RedactedSlackConfig),
 }) {}
 
 export class RedactedOpenCodeConfig extends Schema.Class<RedactedOpenCodeConfig>(
   "RedactedOpenCodeConfig",
 )({
-  enabled: Schema.Boolean,
-  mode: OpenCodeMode,
-  baseUrl: Schema.optionalKey(BaseUrl),
-  port: Schema.optionalKey(Port),
+  runtime: OpenCodeRuntimeConfig,
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
 
 export class RedactedPiConfig extends Schema.Class<RedactedPiConfig>("RedactedPiConfig")({
-  enabled: Schema.Boolean,
   agentDir: Schema.optionalKey(ResolvedPath),
   sessionDir: Schema.optionalKey(ResolvedPath),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
-  tools: Schema.optionalKey(Schema.Array(NonEmptyString)),
-  excludeTools: Schema.optionalKey(Schema.Array(NonEmptyString)),
-  noTools: Schema.optionalKey(PiNoToolsMode),
 }) {}
 
 export class RedactedHarnessesConfig extends Schema.Class<RedactedHarnessesConfig>(
   "RedactedHarnessesConfig",
 )({
-  opencode: RedactedOpenCodeConfig,
-  pi: RedactedPiConfig,
+  opencode: Schema.optionalKey(RedactedOpenCodeConfig),
+  pi: Schema.optionalKey(RedactedPiConfig),
 }) {}
 
-/** Effective config redacts credentials but includes normalized server inputs. */
+/** Effective config redacts credentials but includes normalized product inputs. */
 export class RedactedServerConfig extends Schema.Class<RedactedServerConfig>(
   "RedactedServerConfig",
 )({
-  defaultWorkingDirectory: ResolvedPath,
-  deliveryMode: DeliveryMode,
+  xmux: XmuxSettingsConfig,
   server: ServerSettingsConfig,
+  stt: Schema.optionalKey(RedactedSttConfig),
   chats: RedactedChatsConfig,
   harnesses: RedactedHarnessesConfig,
 }) {}

@@ -1,43 +1,76 @@
 import { Effect, Path } from "effect";
 import {
+  type ChatAttachmentKindConfig,
   ConfigValidationIssue,
-  InvalidConfigValidationResult,
-  ValidConfigValidationResult,
-  DiscordModeConfig,
   type DiscordFileConfig,
   type OpenCodeFileConfig,
+  OpenCodeEmbeddedRuntimeConfig,
   type PiFileConfig,
-  ServerFileConfig,
   type ServerFileServerConfig,
-  TelegramModeConfig,
+  ServerFileConfig,
+  ServerLogRotationConfig,
+  ServerLogsConfig,
+  ServerSettingsConfig,
+  type SlackFileConfig,
+  type SttFileConfig,
   type TelegramFileConfig,
+  InvalidConfigValidationResult,
+  LsCommandConfig,
+  ModelCommandConfig,
+  ResumeCommandConfig,
+  ValidConfigValidationResult,
+  XmuxAttachmentsConfig,
+  type XmuxFileConfig,
+  XmuxCommandsConfig,
+  XmuxResponsesConfig,
+  XmuxSettingsConfig,
+  XmuxThinkingResponseConfig,
+  XmuxToolResponseConfig,
+  XmuxWorkspaceSettingsConfig,
 } from "../contracts/config";
-import { ConfigPath, resolvedPathFromString, type ResolvedPath } from "../contracts/primitives";
+import {
+  ConfigPath,
+  logByteCountFromNumber,
+  logRotationFileCountFromNumber,
+  resolvedPathFromString,
+  type ResolvedPath,
+} from "../contracts/primitives";
 import { ConfigValidationError, type ConfigError } from "../errors";
+import { DEFAULT_MAX_LOG_FILE_BYTES, DEFAULT_MAX_LOG_FILES } from "../logging/file-logger";
 import { HostRuntime } from "../platform/host";
 import {
   EffectiveChatsConfig,
-  EffectiveDiscordDisabled,
-  EffectiveDiscordGatewayEnabled,
-  EffectiveDiscordGatewayMode,
-  EffectiveDiscordWebhookEnabled,
-  EffectiveDiscordWebhookMode,
+  EffectiveDiscordConfig,
   EffectiveHarnessesConfig,
-  EffectiveOpenCodeDisabled,
-  EffectiveOpenCodeEmbedded,
-  EffectiveOpenCodeExternal,
-  type EffectivePiConfig,
-  EffectivePiDisabled,
-  EffectivePiEnabled,
+  EffectiveOpenCodeConfig,
+  EffectivePiConfig,
   EffectiveServerConfig,
-  EffectiveServerSettings,
-  EffectiveTelegramDisabled,
-  EffectiveTelegramEnabled,
+  EffectiveSlackConfig,
+  EffectiveSttConfig,
+  EffectiveTelegramConfig,
 } from "./effective";
 import { loadServerConfigFile } from "./load-jsonc";
 import { redactServerConfig } from "./redact";
 import { resolveSecretRef } from "./resolve-secrets";
 
+const DEFAULT_MAX_LIST_ENTRIES = 100;
+const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
+const DEFAULT_MAX_MODELS_PER_PROVIDER = 10;
+const DEFAULT_MAX_THINKING_CHARS = 320;
+const DEFAULT_MAX_TOOL_INPUT_STRING_CHARS = 50;
+const DEFAULT_MAX_TOOL_INPUT_OBJECT_ENTRIES = 2;
+const DEFAULT_MAX_TOOL_TEXT_OUTPUT_CHARS = 280;
+const DEFAULT_MAX_TOOL_JSON_OUTPUT_CHARS = 400;
+const DEFAULT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_STT_MAX_BYTES = 25 * 1024 * 1024;
+const DEFAULT_ATTACHMENT_KINDS: readonly ChatAttachmentKindConfig[] = [
+  "image",
+  "audio",
+  "video",
+  "document",
+  "archive",
+  "other",
+];
 
 const expandHome = (pathService: Path.Path, homeDir: string, input: string): string => {
   if (input === "~") return homeDir;
@@ -64,157 +97,236 @@ const validationError = (input: {
 }): ConfigValidationError =>
   ConfigValidationError.make({ path: input.configPath, message: input.message });
 
+const requireConfigField = <A>(input: {
+  readonly value: A | undefined;
+  readonly configPath: ConfigPath;
+  readonly message: string;
+}): Effect.Effect<A, ConfigValidationError> =>
+  Effect.gen(function* () {
+    const value = input.value;
+    if (value === undefined) {
+      return yield* validationError({ configPath: input.configPath, message: input.message });
+    }
+    return value;
+  });
+
 const normalizeServerSettings = (
   settings: ServerFileServerConfig | undefined,
-): EffectiveServerSettings =>
-  EffectiveServerSettings.make({
-    logLevel: settings?.logLevel ?? "info",
+): ServerSettingsConfig =>
+  ServerSettingsConfig.make({
+    logs: ServerLogsConfig.make({
+      level: settings?.logs?.level ?? "info",
+      rotation: ServerLogRotationConfig.make({
+        maxBytes:
+          settings?.logs?.rotation?.maxBytes ?? logByteCountFromNumber(DEFAULT_MAX_LOG_FILE_BYTES),
+        maxFiles:
+          settings?.logs?.rotation?.maxFiles ??
+          logRotationFileCountFromNumber(DEFAULT_MAX_LOG_FILES),
+      }),
+    }),
   });
+
+const uniqueAttachmentKinds = (
+  kinds: readonly ChatAttachmentKindConfig[] | undefined,
+): readonly ChatAttachmentKindConfig[] => {
+  const unique: ChatAttachmentKindConfig[] = [];
+  for (const kind of kinds ?? DEFAULT_ATTACHMENT_KINDS) {
+    if (!unique.includes(kind)) unique.push(kind);
+  }
+  return unique;
+};
+
+const normalizeXmux = (input: {
+  readonly pathService: Path.Path;
+  readonly homeDir: string;
+  readonly configPath: ConfigPath;
+  readonly config: XmuxFileConfig | undefined;
+}): XmuxSettingsConfig => {
+  const workspace = input.config?.workspace;
+  const responses = input.config?.responses;
+  const commands = input.config?.commands;
+  const attachments = input.config?.attachments;
+  const defaultDir = resolveConfigRelativePath(
+    input.pathService,
+    input.homeDir,
+    input.configPath,
+    workspace?.defaultDir ?? input.homeDir,
+  );
+
+  return XmuxSettingsConfig.make({
+    workspace: XmuxWorkspaceSettingsConfig.make({ defaultDir }),
+    responses: XmuxResponsesConfig.make({
+      thinking: XmuxThinkingResponseConfig.make({
+        hide: responses?.thinking?.hide ?? false,
+        maxChars: responses?.thinking?.maxChars ?? DEFAULT_MAX_THINKING_CHARS,
+      }),
+      tools: XmuxToolResponseConfig.make({
+        hide: responses?.tools?.hide ?? false,
+        maxInputStringChars:
+          responses?.tools?.maxInputStringChars ?? DEFAULT_MAX_TOOL_INPUT_STRING_CHARS,
+        maxInputObjectEntries:
+          responses?.tools?.maxInputObjectEntries ?? DEFAULT_MAX_TOOL_INPUT_OBJECT_ENTRIES,
+        maxTextOutputChars:
+          responses?.tools?.maxTextOutputChars ?? DEFAULT_MAX_TOOL_TEXT_OUTPUT_CHARS,
+        maxJsonOutputChars:
+          responses?.tools?.maxJsonOutputChars ?? DEFAULT_MAX_TOOL_JSON_OUTPUT_CHARS,
+      }),
+    }),
+    commands: XmuxCommandsConfig.make({
+      resume: ResumeCommandConfig.make({
+        maxSessionsPerHarness:
+          commands?.resume?.maxSessionsPerHarness ?? DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS,
+      }),
+      model: ModelCommandConfig.make({
+        maxModelsPerProvider:
+          commands?.model?.maxModelsPerProvider ?? DEFAULT_MAX_MODELS_PER_PROVIDER,
+      }),
+      ls: LsCommandConfig.make({
+        showHidden: commands?.ls?.showHidden ?? false,
+        maxEntries: commands?.ls?.maxEntries ?? DEFAULT_MAX_LIST_ENTRIES,
+      }),
+    }),
+    attachments: XmuxAttachmentsConfig.make({
+      enabled: attachments?.enabled ?? true,
+      maxBytes: attachments?.maxBytes ?? DEFAULT_ATTACHMENT_MAX_BYTES,
+      kinds: uniqueAttachmentKinds(attachments?.kinds),
+    }),
+  });
+};
+
+const requireAccessMessage = (path: string): string =>
+  `${path} is missing. Set it to { "type": "allow-list", "users": [...] } or { "type": "anyone" }.`;
 
 const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* (input: {
   readonly configPath: ConfigPath;
   readonly config: TelegramFileConfig | undefined;
 }) {
-  const enabled = input.config?.enabled ?? false;
-  const mode = input.config?.mode ?? TelegramModeConfig.make({ type: "polling" });
-  if (!enabled) return EffectiveTelegramDisabled.make({ enabled: false, mode });
+  if (input.config === undefined) return undefined;
 
-  if (input.config?.token === undefined) {
-    return yield* validationError({
-      configPath: input.configPath,
-      message: "Telegram is enabled but chats.telegram.token is missing.",
-    });
-  }
+  const tokenRef = yield* requireConfigField({
+    value: input.config.token,
+    configPath: input.configPath,
+    message: "Telegram chat is configured but chats.telegram.token is missing.",
+  });
+  const access = yield* requireConfigField({
+    value: input.config.access,
+    configPath: input.configPath,
+    message: requireAccessMessage("chats.telegram.access"),
+  });
+  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: tokenRef });
 
-  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.token });
-  return EffectiveTelegramEnabled.make({ enabled: true, token, mode });
+  return EffectiveTelegramConfig.make({ token, access });
 });
 
 const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (input: {
   readonly configPath: ConfigPath;
   readonly config: DiscordFileConfig | undefined;
 }) {
-  const enabled = input.config?.enabled ?? false;
-  const mode = input.config?.mode ?? DiscordModeConfig.make({ type: "gateway" });
-  const applicationId = input.config?.applicationId;
-  const guildId = input.config?.guildId;
-  const publicKey = input.config?.publicKey;
+  if (input.config === undefined) return undefined;
 
-  if (!enabled) {
-    return EffectiveDiscordDisabled.make({
-      enabled: false,
-      mode,
-      ...(applicationId === undefined ? {} : { applicationId }),
-      ...(guildId === undefined ? {} : { guildId }),
-      ...(publicKey === undefined ? {} : { publicKey }),
-    });
-  }
-
-  if (input.config?.token === undefined) {
-    return yield* validationError({
-      configPath: input.configPath,
-      message: "Discord is enabled but chats.discord.token is missing.",
-    });
-  }
-  if (applicationId === undefined) {
-    return yield* validationError({
-      configPath: input.configPath,
-      message: "Discord is enabled but chats.discord.applicationId is missing.",
-    });
-  }
-
-  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.token });
-  if (mode.type === "webhook") {
-    if (publicKey === undefined) {
-      return yield* validationError({
-        configPath: input.configPath,
-        message: "Discord webhook mode requires chats.discord.publicKey.",
-      });
-    }
-
-    return EffectiveDiscordWebhookEnabled.make({
-      enabled: true,
-      token,
-      applicationId,
-      publicKey,
-      mode: EffectiveDiscordWebhookMode.make({ type: "webhook" }),
-      ...(guildId === undefined ? {} : { guildId }),
-    });
-  }
-
-  return EffectiveDiscordGatewayEnabled.make({
-    enabled: true,
-    token,
-    applicationId,
-    mode: EffectiveDiscordGatewayMode.make({ type: "gateway" }),
-    ...(guildId === undefined ? {} : { guildId }),
-    ...(publicKey === undefined ? {} : { publicKey }),
+  const tokenRef = yield* requireConfigField({
+    value: input.config.token,
+    configPath: input.configPath,
+    message: "Discord chat is configured but chats.discord.token is missing.",
   });
+  const applicationId = yield* requireConfigField({
+    value: input.config.applicationId,
+    configPath: input.configPath,
+    message: "Discord chat is configured but chats.discord.applicationId is missing.",
+  });
+  const guildId = yield* requireConfigField({
+    value: input.config.guildId,
+    configPath: input.configPath,
+    message: "Discord chat is configured but chats.discord.guildId is missing.",
+  });
+  const access = yield* requireConfigField({
+    value: input.config.access,
+    configPath: input.configPath,
+    message: requireAccessMessage("chats.discord.access"),
+  });
+  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: tokenRef });
+
+  return EffectiveDiscordConfig.make({ token, applicationId, guildId, access });
 });
 
-const normalizeOpenCode = Effect.fn("server.normalizeOpenCodeConfig")(function* (input: {
+const normalizeSlack = Effect.fn("server.normalizeSlackConfig")(function* (input: {
   readonly configPath: ConfigPath;
-  readonly config: OpenCodeFileConfig | undefined;
+  readonly config: SlackFileConfig | undefined;
 }) {
-  const mode = input.config?.mode ?? "embedded";
-  if (mode === "external" && input.config?.baseUrl === undefined) {
-    return yield* validationError({
-      configPath: input.configPath,
-      message: "OpenCode external mode requires harnesses.opencode.baseUrl.",
-    });
-  }
+  if (input.config === undefined) return undefined;
 
-  const baseUrl = input.config?.baseUrl;
-  const port = input.config?.port;
-  const defaultModel = input.config?.defaultModel;
-  const defaultThinking = input.config?.defaultThinking;
+  const botTokenRef = yield* requireConfigField({
+    value: input.config.botToken,
+    configPath: input.configPath,
+    message: "Slack chat is configured but chats.slack.botToken is missing.",
+  });
+  const appTokenRef = yield* requireConfigField({
+    value: input.config.appToken,
+    configPath: input.configPath,
+    message: "Slack chat is configured but chats.slack.appToken is missing.",
+  });
+  const access = yield* requireConfigField({
+    value: input.config.access,
+    configPath: input.configPath,
+    message: requireAccessMessage("chats.slack.access"),
+  });
+  const botToken = yield* resolveSecretRef({ configPath: input.configPath, ref: botTokenRef });
+  const appToken = yield* resolveSecretRef({ configPath: input.configPath, ref: appTokenRef });
 
-  const enabled = input.config?.enabled ?? false;
-  if (!enabled) {
-    return EffectiveOpenCodeDisabled.make({
-      enabled: false,
-      mode,
-      ...(baseUrl === undefined ? {} : { baseUrl }),
-      ...(port === undefined ? {} : { port }),
-      ...(defaultModel === undefined ? {} : { defaultModel }),
-      ...(defaultThinking === undefined ? {} : { defaultThinking }),
-    });
-  }
+  return EffectiveSlackConfig.make({ botToken, appToken, access });
+});
 
-  if (mode === "external") {
-    if (baseUrl === undefined) {
-      return yield* validationError({
-        configPath: input.configPath,
-        message: "OpenCode external mode requires harnesses.opencode.baseUrl.",
-      });
-    }
+const normalizeStt = Effect.fn("server.normalizeSttConfig")(function* (input: {
+  readonly configPath: ConfigPath;
+  readonly config: SttFileConfig | undefined;
+}) {
+  if (input.config === undefined) return undefined;
 
-    return EffectiveOpenCodeExternal.make({
-      enabled: true,
-      mode,
-      baseUrl,
-      ...(defaultModel === undefined ? {} : { defaultModel }),
-      ...(defaultThinking === undefined ? {} : { defaultThinking }),
-    });
-  }
+  const model = yield* requireConfigField({
+    value: input.config.model,
+    configPath: input.configPath,
+    message: "STT is configured but stt.model is missing.",
+  });
+  const apiKey =
+    input.config.apiKey === undefined
+      ? undefined
+      : yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.apiKey });
 
-  return EffectiveOpenCodeEmbedded.make({
-    enabled: true,
-    mode,
-    ...(port === undefined ? {} : { port }),
-    ...(defaultModel === undefined ? {} : { defaultModel }),
-    ...(defaultThinking === undefined ? {} : { defaultThinking }),
+  return EffectiveSttConfig.make({
+    provider: input.config.provider ?? "openai-compatible",
+    ...(apiKey === undefined ? {} : { apiKey }),
+    ...(input.config.baseUrl === undefined ? {} : { baseUrl: input.config.baseUrl }),
+    ...(input.config.endpointPath === undefined ? {} : { endpointPath: input.config.endpointPath }),
+    model,
+    ...(input.config.language === undefined ? {} : { language: input.config.language }),
+    maxBytes: input.config.maxBytes ?? DEFAULT_STT_MAX_BYTES,
+    ...(input.config.timeoutMs === undefined ? {} : { timeoutMs: input.config.timeoutMs }),
   });
 });
+
+const normalizeOpenCode = (
+  config: OpenCodeFileConfig | undefined,
+): EffectiveOpenCodeConfig | undefined => {
+  if (config === undefined) return undefined;
+
+  const runtime = config.runtime ?? OpenCodeEmbeddedRuntimeConfig.make({ type: "embedded" });
+  return EffectiveOpenCodeConfig.make({
+    runtime,
+    ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
+    ...(config.defaultThinking === undefined ? {} : { defaultThinking: config.defaultThinking }),
+  });
+};
 
 const normalizePi = (input: {
   readonly pathService: Path.Path;
   readonly homeDir: string;
   readonly configPath: ConfigPath;
   readonly config: PiFileConfig | undefined;
-}): EffectivePiConfig => {
+}): EffectivePiConfig | undefined => {
+  if (input.config === undefined) return undefined;
+
   const agentDir =
-    input.config?.agentDir === undefined
+    input.config.agentDir === undefined
       ? undefined
       : resolveConfigRelativePath(
           input.pathService,
@@ -223,7 +335,7 @@ const normalizePi = (input: {
           input.config.agentDir,
         );
   const sessionDir =
-    input.config?.sessionDir === undefined
+    input.config.sessionDir === undefined
       ? undefined
       : resolveConfigRelativePath(
           input.pathService,
@@ -231,39 +343,33 @@ const normalizePi = (input: {
           input.configPath,
           input.config.sessionDir,
         );
-  const defaultModel = input.config?.defaultModel;
-  const defaultThinking = input.config?.defaultThinking;
-  const tools = input.config?.tools;
-  const excludeTools = input.config?.excludeTools;
-  const noTools = input.config?.noTools;
 
-  const makeInput = {
+  return EffectivePiConfig.make({
     ...(agentDir === undefined ? {} : { agentDir }),
     ...(sessionDir === undefined ? {} : { sessionDir }),
-    ...(defaultModel === undefined ? {} : { defaultModel }),
-    ...(defaultThinking === undefined ? {} : { defaultThinking }),
-    ...(tools === undefined ? {} : { tools }),
-    ...(excludeTools === undefined ? {} : { excludeTools }),
-    ...(noTools === undefined ? {} : { noTools }),
-  };
-
-  return input.config?.enabled === true
-    ? EffectivePiEnabled.make({ enabled: true, ...makeInput })
-    : EffectivePiDisabled.make({ enabled: false, ...makeInput });
+    ...(input.config.defaultModel === undefined ? {} : { defaultModel: input.config.defaultModel }),
+    ...(input.config.defaultThinking === undefined
+      ? {}
+      : { defaultThinking: input.config.defaultThinking }),
+  });
 };
 
 /** Normalize decoded file config, resolve enabled secrets, and fill defaults. */
 export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveServerConfig")(
-  function* (input: { readonly configPath: ConfigPath; readonly fileConfig: ServerFileConfig | null }) {
+  function* (input: {
+    readonly configPath: ConfigPath;
+    readonly fileConfig: ServerFileConfig | null;
+  }) {
     const pathService = yield* Path.Path;
     const host = yield* HostRuntime;
     const config = input.fileConfig ?? ServerFileConfig.make({});
-    const defaultWorkingDirectory = resolveConfigRelativePath(
+    const xmux = normalizeXmux({
       pathService,
-      host.homeDir,
-      input.configPath,
-      config.defaultWorkingDirectory ?? host.homeDir,
-    );
+      homeDir: host.homeDir,
+      configPath: input.configPath,
+      config: config.xmux,
+    });
+    const stt = yield* normalizeStt({ configPath: input.configPath, config: config.stt });
     const telegram = yield* normalizeTelegram({
       configPath: input.configPath,
       config: config.chats?.telegram,
@@ -272,24 +378,30 @@ export const resolveEffectiveServerConfig = Effect.fn("server.resolveEffectiveSe
       configPath: input.configPath,
       config: config.chats?.discord,
     });
-    const opencode = yield* normalizeOpenCode({
+    const slack = yield* normalizeSlack({
       configPath: input.configPath,
-      config: config.harnesses?.opencode,
+      config: config.chats?.slack,
+    });
+    const opencode = normalizeOpenCode(config.harnesses?.opencode);
+    const pi = normalizePi({
+      pathService,
+      homeDir: host.homeDir,
+      configPath: input.configPath,
+      config: config.harnesses?.pi,
     });
 
     return EffectiveServerConfig.make({
-      defaultWorkingDirectory,
-      deliveryMode: config.deliveryMode ?? "requester_only",
+      xmux,
       server: normalizeServerSettings(config.server),
-      chats: EffectiveChatsConfig.make({ telegram, discord }),
+      ...(stt === undefined ? {} : { stt }),
+      chats: EffectiveChatsConfig.make({
+        ...(telegram === undefined ? {} : { telegram }),
+        ...(discord === undefined ? {} : { discord }),
+        ...(slack === undefined ? {} : { slack }),
+      }),
       harnesses: EffectiveHarnessesConfig.make({
-        opencode,
-        pi: normalizePi({
-          pathService,
-          homeDir: host.homeDir,
-          configPath: input.configPath,
-          config: config.harnesses?.pi,
-        }),
+        ...(opencode === undefined ? {} : { opencode }),
+        ...(pi === undefined ? {} : { pi }),
       }),
     });
   },

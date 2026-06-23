@@ -37,9 +37,15 @@ export const serverMain = Effect.fn("server.main")(function* () {
 
   yield* ensureRuntimeDirectories(paths);
   const effectiveConfig = yield* config.loadCurrent(paths.configPath);
+  const logConfig = effectiveConfig.server.logs;
 
   return yield* withFileLogger(
-    { logDir: paths.logDir, logLevel: effectiveConfig.server.logLevel },
+    {
+      logDir: paths.logDir,
+      logLevel: logConfig.level,
+      maxBytes: logConfig.rotation.maxBytes,
+      maxFiles: logConfig.rotation.maxFiles,
+    },
     Effect.gen(function* () {
       yield* assertNoActiveServer(paths);
 

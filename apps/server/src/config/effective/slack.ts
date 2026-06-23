@@ -2,9 +2,10 @@ import { Schema } from "effect";
 import { ChatAccessConfig } from "../../contracts/config";
 import { ResolvedSecret } from "../resolve-secrets";
 
-export class EffectiveTelegramConfig extends Schema.Class<EffectiveTelegramConfig>(
-  "EffectiveTelegramConfig",
+export class EffectiveSlackConfig extends Schema.Class<EffectiveSlackConfig>(
+  "EffectiveSlackConfig",
 )({
-  token: ResolvedSecret,
+  botToken: ResolvedSecret,
+  appToken: ResolvedSecret,
   access: ChatAccessConfig,
 }) {}
