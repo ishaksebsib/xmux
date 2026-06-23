@@ -183,6 +183,7 @@ function renderContentEvent(input: {
     }
 
     if (input.event.kind === "reasoning") {
+      if (!input.state.config.showReasoning) return "";
       input.state.reasoningText.set(
         key,
         `${input.state.reasoningText.get(key) ?? ""}${input.event.delta}`,
@@ -205,6 +206,7 @@ function renderContentEvent(input: {
   }
 
   if (input.event.kind === "reasoning") {
+    if (!input.state.config.showReasoning) return "";
     if (input.state.completedReasoningParts.has(key)) return "";
     input.state.completedReasoningParts.add(key);
     input.state.reasoningText.set(key, input.event.text);

@@ -44,6 +44,7 @@ export interface NormalizedModelConfig {
 
 export interface PromptResponseConfig {
   readonly showToolOutput?: boolean;
+  readonly showReasoning?: boolean;
   readonly maxToolTextOutputChars?: number;
   readonly maxToolJsonOutputChars?: number;
   readonly maxReasoningChars?: number;
@@ -54,6 +55,7 @@ export interface PromptResponseConfig {
 
 export interface NormalizedPromptResponseConfig {
   readonly showToolOutput: boolean;
+  readonly showReasoning: boolean;
   readonly maxToolTextOutputChars: number;
   readonly maxToolJsonOutputChars: number;
   readonly maxReasoningChars: number;
@@ -147,6 +149,7 @@ export const DEFAULT_PROMPT_ATTACHMENTS_CONFIG: Readonly<NormalizedPromptAttachm
 export const DEFAULT_PROMPT_RESPONSE_CONFIG: Readonly<NormalizedPromptResponseConfig> =
   Object.freeze({
     showToolOutput: true,
+    showReasoning: true,
     maxToolTextOutputChars: 280,
     maxToolJsonOutputChars: 400,
     maxReasoningChars: 320,
@@ -328,6 +331,11 @@ function parsePromptResponseConfig(
       "prompt.response.showToolOutput",
       DEFAULT_PROMPT_RESPONSE_CONFIG.showToolOutput,
     );
+    const showReasoning = yield* parseBoolean(
+      parsed?.showReasoning,
+      "prompt.response.showReasoning",
+      DEFAULT_PROMPT_RESPONSE_CONFIG.showReasoning,
+    );
     const maxToolTextOutputChars = yield* parsePositiveInteger(
       parsed?.maxToolTextOutputChars,
       "prompt.response.maxToolTextOutputChars",
@@ -361,6 +369,7 @@ function parsePromptResponseConfig(
     return Result.ok(
       Object.freeze({
         showToolOutput,
+        showReasoning,
         maxToolTextOutputChars,
         maxToolJsonOutputChars,
         maxReasoningChars,

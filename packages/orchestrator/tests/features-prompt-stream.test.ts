@@ -34,6 +34,27 @@ describe("prompt stream renderer", () => {
     expect(text).toBe("> **Reasoning**\n>\n> thinking");
   });
 
+  test("can hide reasoning while keeping assistant text", async () => {
+    const text = await collectRendered(
+      [
+        {
+          type: "content",
+          phase: "completed",
+          kind: "reasoning",
+          ref,
+          partId: "r1",
+          text: "private thinking",
+        },
+        { type: "content", phase: "delta", kind: "text", ref, delta: "public answer" },
+      ],
+      promptResponseConfig({ showReasoning: false }),
+    );
+
+    expect(text).toBe("public answer");
+    expect(text).not.toContain("private thinking");
+    expect(text).not.toContain("Reasoning");
+  });
+
   test("renders compact tool calls with useful output", async () => {
     const text = await collectRendered([
       { type: "tool", phase: "input_started", ref, callId: "call-1", name: "shell" },

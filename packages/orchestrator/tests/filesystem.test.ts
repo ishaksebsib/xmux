@@ -21,6 +21,7 @@ describe("workspace filesystem", () => {
     expect(config.model).toEqual({ maxModelsPerProvider: 10 });
     expect(config.prompt.response).toEqual({
       showToolOutput: true,
+      showReasoning: true,
       maxToolTextOutputChars: 280,
       maxToolJsonOutputChars: 400,
       maxReasoningChars: 320,
@@ -61,6 +62,7 @@ describe("workspace filesystem", () => {
       prompt: {
         response: {
           showToolOutput: false,
+          showReasoning: false,
           maxToolTextOutputChars: 10,
           maxToolJsonOutputChars: 11,
           maxReasoningChars: 12,
@@ -73,6 +75,7 @@ describe("workspace filesystem", () => {
 
     expect(config.prompt.response).toEqual({
       showToolOutput: false,
+      showReasoning: false,
       maxToolTextOutputChars: 10,
       maxToolJsonOutputChars: 11,
       maxReasoningChars: 12,
