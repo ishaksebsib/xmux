@@ -10,6 +10,7 @@ import {
   MIGRATIONS_TABLE,
   ORCHESTRATOR_SESSION_TABLE,
   ORCHESTRATOR_STORE_MIGRATION,
+  THREAD_BINDING_SESSION_INDEX,
   THREAD_BINDING_TABLE,
   THREAD_WORKSPACE_TABLE,
 } from "./schema";
@@ -77,7 +78,7 @@ const orchestratorStoreMigration: Effect.Effect<void, unknown, SqlClient.SqlClie
     `.withoutTransform;
 
     yield* sql`
-      CREATE INDEX IF NOT EXISTS thread_binding_session_idx
+      CREATE INDEX IF NOT EXISTS ${sql(THREAD_BINDING_SESSION_INDEX)}
         ON ${sql(THREAD_BINDING_TABLE)} (harness_id, session_id)
     `.withoutTransform;
 

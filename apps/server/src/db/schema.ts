@@ -13,6 +13,9 @@ export const THREAD_BINDING_TABLE = "thread_binding";
 /** Per-chat-thread workspace state table. */
 export const THREAD_WORKSPACE_TABLE = "thread_workspace";
 
+/** Lookup index for all chat-thread bindings owned by one orchestrator session. */
+export const THREAD_BINDING_SESSION_INDEX = "thread_binding_session_idx";
+
 export const DATABASE_FOUNDATION_MIGRATION = "0001_database_foundation";
 export const ORCHESTRATOR_STORE_MIGRATION = "0002_orchestrator_store";
 export const DATABASE_NAMESPACE_KEY = "schema_namespace";

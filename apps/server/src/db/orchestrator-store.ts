@@ -11,7 +11,7 @@ import {
   type ThreadBinding,
   type ThreadWorkspace,
 } from "@xmux/orchestrator";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Cause, Context, Effect, Layer, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import {
   decodeSessionRows,
@@ -94,6 +94,9 @@ const sessionKey = (ref: SessionRecord["ref"]): string => `${ref.harnessId}:${re
 
 const nullableString = (value: string | undefined): string | null => value ?? null;
 
+const effectCauseError = (cause: Cause.Cause<unknown>): Error =>
+  new Error(Cause.pretty(cause), { cause });
+
 const storeOperationError = (input: {
   readonly operation: StoreOperation;
   readonly resource: StoreResource;
@@ -120,7 +123,7 @@ const runStoreEffect = async <A>(input: {
                 storeOperationError({
                   operation: input.operation,
                   resource: input.resource,
-                  cause,
+                  cause: effectCauseError(cause),
                 }),
               ),
             onSuccess: (value) => Result.ok<A, StoreOperationError>(value),
@@ -277,11 +280,23 @@ export const makeSqliteOrchestratorStore: Effect.Effect<Store, never, SqlClient.
       });
 
     const deleteSession = (ref: SessionRecord["ref"]): Effect.Effect<void, unknown> =>
-      sql`
-        DELETE FROM ${sql(ORCHESTRATOR_SESSION_TABLE)}
-        WHERE harness_id = ${ref.harnessId}
-          AND session_id = ${ref.sessionId}
-      `.withoutTransform.pipe(Effect.asVoid);
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            yield* sql`
+            DELETE FROM ${sql(THREAD_BINDING_TABLE)}
+            WHERE harness_id = ${ref.harnessId}
+              AND session_id = ${ref.sessionId}
+          `.withoutTransform;
+
+            yield* sql`
+            DELETE FROM ${sql(ORCHESTRATOR_SESSION_TABLE)}
+            WHERE harness_id = ${ref.harnessId}
+              AND session_id = ${ref.sessionId}
+          `.withoutTransform;
+          }),
+        )
+        .pipe(Effect.asVoid);
 
     const upsertThreadBinding = (binding: ThreadBinding): Effect.Effect<void, unknown> =>
       sql`
@@ -304,6 +319,19 @@ export const makeSqliteOrchestratorStore: Effect.Effect<Store, never, SqlClient.
           session_id = excluded.session_id,
           created_at = excluded.created_at
       `.withoutTransform.pipe(Effect.asVoid);
+
+    const bindThreadBinding = (binding: ThreadBinding): Effect.Effect<boolean, unknown> =>
+      sql.withTransaction(
+        Effect.gen(function* () {
+          const targetSession = yield* getSession(binding.sessionRef);
+          if (targetSession === null) {
+            return false;
+          }
+
+          yield* upsertThreadBinding(binding);
+          return true;
+        }),
+      );
 
     const getThreadBinding = (
       thread: ChatThreadRef,
@@ -452,11 +480,22 @@ export const makeSqliteOrchestratorStore: Effect.Effect<Store, never, SqlClient.
 
       threadBindings: {
         async bind(binding) {
-          return runStoreEffect({
+          const result = await runStoreEffect({
             operation: "create",
             resource: THREAD_BINDING_RESOURCE,
-            effect: upsertThreadBinding(binding),
+            effect: bindThreadBinding(binding),
           });
+
+          return Result.andThen(result, (bound) =>
+            bound
+              ? Result.ok<void, StoreNotFoundError>(undefined)
+              : Result.err<void, StoreNotFoundError>(
+                  new StoreNotFoundError({
+                    resource: SESSION_RESOURCE,
+                    id: sessionKey(binding.sessionRef),
+                  }),
+                ),
+          );
         },
 
         async get(thread) {

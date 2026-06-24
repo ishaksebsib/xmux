@@ -14,6 +14,7 @@ import {
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { makeTestPaths } from "./support/paths";
+import { registerStoreContractTests } from "../../../packages/orchestrator/tests/support/store-contract";
 import { makeDatabaseSqlLayer } from "../src/db/layer";
 import { runDatabaseMigrations } from "../src/db/migrations";
 import { makeSqliteOrchestratorStore } from "../src/db/orchestrator-store";
@@ -115,6 +116,19 @@ const bindFor = (
   thread: input.thread ?? session.origin,
   sessionRef: input.sessionRef ?? session.ref,
   createdAt: input.createdAt ?? now,
+});
+
+registerStoreContractTests({
+  name: "makeSqliteOrchestratorStore",
+  withStore: (use) =>
+    Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const paths = yield* makePreparedPaths;
+          return yield* withStore(paths, (store) => Effect.promise(() => use(store)));
+        }),
+      ),
+    ),
 });
 
 it.effect("sessions create/get/update/delete mirror in-memory behavior", () =>
@@ -266,7 +280,7 @@ it.effect("thread binding deleteBySession removes only bindings for that session
   }),
 );
 
-it.effect("deleting a session cascades thread bindings through SQLite foreign keys", () =>
+it.effect("deleting a session removes thread bindings", () =>
   Effect.gen(function* () {
     const paths = yield* makePreparedPaths;
     const otherThread = { chatId: "telegram", threadId: "thread-2" };
@@ -276,6 +290,32 @@ it.effect("deleting a session cascades thread bindings through SQLite foreign ke
         yield* Effect.promise(() => store.sessions.create(session));
         yield* Effect.promise(() => store.threadBindings.bind(bindFor()));
         yield* Effect.promise(() => store.threadBindings.bind(bindFor({ thread: otherThread })));
+
+        const deleted = yield* Effect.promise(() => store.sessions.delete(session.ref));
+        const first = yield* Effect.promise(() => store.threadBindings.get(session.origin));
+        const second = yield* Effect.promise(() => store.threadBindings.get(otherThread));
+
+        assert.isTrue(deleted.isOk());
+        assert.isNull(first.unwrap("expected binding lookup to succeed"));
+        assert.isNull(second.unwrap("expected binding lookup to succeed"));
+      }),
+    );
+  }),
+);
+
+it.effect("session delete does not rely on SQLite foreign-key cascade", () =>
+  Effect.gen(function* () {
+    const paths = yield* makePreparedPaths;
+    const otherThread = { chatId: "telegram", threadId: "thread-2" };
+
+    yield* withStore(paths, (store) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => store.sessions.create(session));
+        yield* Effect.promise(() => store.threadBindings.bind(bindFor()));
+        yield* Effect.promise(() => store.threadBindings.bind(bindFor({ thread: otherThread })));
+
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql.unsafe("PRAGMA foreign_keys = OFF").withoutTransform;
 
         const deleted = yield* Effect.promise(() => store.sessions.delete(session.ref));
         const first = yield* Effect.promise(() => store.threadBindings.get(session.origin));
@@ -368,7 +408,7 @@ it.effect("store data survives closing and reopening the database", () =>
   }),
 );
 
-it.effect("binding to a missing session maps the foreign-key failure to StoreOperationError", () =>
+it.effect("binding to a missing session maps to StoreNotFoundError", () =>
   Effect.gen(function* () {
     const paths = yield* makePreparedPaths;
 
@@ -377,7 +417,7 @@ it.effect("binding to a missing session maps the foreign-key failure to StoreOpe
         const result = yield* Effect.promise(() => store.threadBindings.bind(bindFor()));
 
         assert.isTrue(result.isErr());
-        assert.isTrue(result.isErr() && StoreOperationError.is(result.error));
+        assert.isTrue(result.isErr() && StoreNotFoundError.is(result.error));
       }),
     );
   }),

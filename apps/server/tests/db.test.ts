@@ -25,6 +25,7 @@ import {
   DB_METADATA_TABLE,
   MIGRATIONS_TABLE,
   ORCHESTRATOR_SESSION_TABLE,
+  THREAD_BINDING_SESSION_INDEX,
   THREAD_BINDING_TABLE,
   THREAD_WORKSPACE_TABLE,
 } from "../src/db/schema";
@@ -74,6 +75,36 @@ const withInvalidDirectoryDbPath = (paths: ServerRuntimePaths): ServerRuntimePat
 type TableNameRow = { readonly name: string };
 type MigrationLedgerRow = { readonly migration_id: number; readonly name: string };
 type MetadataRow = { readonly key: string; readonly value: string };
+type OrchestratorStoreTable =
+  | typeof ORCHESTRATOR_SESSION_TABLE
+  | typeof THREAD_BINDING_TABLE
+  | typeof THREAD_WORKSPACE_TABLE;
+type TableInfoRow = {
+  readonly cid: number;
+  readonly name: string;
+  readonly type: string;
+  readonly notnull: number;
+  readonly dflt_value: string | null;
+  readonly pk: number;
+};
+type ForeignKeyListRow = {
+  readonly id: number;
+  readonly seq: number;
+  readonly table: string;
+  readonly from: string;
+  readonly to: string;
+  readonly on_update: string;
+  readonly on_delete: string;
+  readonly match: string;
+};
+type IndexListRow = {
+  readonly seq: number;
+  readonly name: string;
+  readonly unique: number;
+  readonly origin: string;
+  readonly partial: number;
+};
+type IndexInfoRow = { readonly seqno: number; readonly cid: number; readonly name: string };
 
 const readTableNames = (paths: ServerRuntimePaths): Effect.Effect<ReadonlyArray<string>, unknown> =>
   Effect.scoped(
@@ -107,6 +138,51 @@ const readMetadataRows = (
       return yield* sql<MetadataRow>`
         SELECT key, value FROM ${sql(DB_METADATA_TABLE)} ORDER BY key
       `.withoutTransform;
+    }).pipe(Effect.provide(makeDatabaseSqlLayer(paths))),
+  );
+
+const readTableInfo = (
+  paths: ServerRuntimePaths,
+  table: OrchestratorStoreTable,
+): Effect.Effect<ReadonlyArray<TableInfoRow>, unknown> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql.unsafe<TableInfoRow>(`PRAGMA table_info(${table})`).withoutTransform;
+    }).pipe(Effect.provide(makeDatabaseSqlLayer(paths))),
+  );
+
+const readThreadBindingForeignKeys = (
+  paths: ServerRuntimePaths,
+): Effect.Effect<ReadonlyArray<ForeignKeyListRow>, unknown> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql.unsafe<ForeignKeyListRow>(
+        `PRAGMA foreign_key_list(${THREAD_BINDING_TABLE})`,
+      ).withoutTransform;
+    }).pipe(Effect.provide(makeDatabaseSqlLayer(paths))),
+  );
+
+const readThreadBindingIndexes = (
+  paths: ServerRuntimePaths,
+): Effect.Effect<ReadonlyArray<IndexListRow>, unknown> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql.unsafe<IndexListRow>(`PRAGMA index_list(${THREAD_BINDING_TABLE})`)
+        .withoutTransform;
+    }).pipe(Effect.provide(makeDatabaseSqlLayer(paths))),
+  );
+
+const readThreadBindingSessionIndexInfo = (
+  paths: ServerRuntimePaths,
+): Effect.Effect<ReadonlyArray<IndexInfoRow>, unknown> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql.unsafe<IndexInfoRow>(`PRAGMA index_info(${THREAD_BINDING_SESSION_INDEX})`)
+        .withoutTransform;
     }).pipe(Effect.provide(makeDatabaseSqlLayer(paths))),
   );
 
@@ -173,6 +249,95 @@ it.effect("initializes a file database with ledger, metadata, and orchestrator s
     assert.deepEqual(metadataRows, [
       { key: DATABASE_NAMESPACE_KEY, value: DATABASE_NAMESPACE_VALUE },
     ]);
+  }),
+);
+
+it.effect("orchestrator store migration creates expected keys, constraints, and indexes", () =>
+  Effect.gen(function* () {
+    const paths = yield* makePreparedPaths;
+    yield* runDbStartup(paths);
+
+    const sessionColumns = yield* readTableInfo(paths, ORCHESTRATOR_SESSION_TABLE);
+    assert.deepEqual(
+      sessionColumns.map((row) => ({ name: row.name, notnull: row.notnull, pk: row.pk })),
+      [
+        { name: "harness_id", notnull: 1, pk: 1 },
+        { name: "session_id", notnull: 1, pk: 2 },
+        { name: "origin_chat_id", notnull: 1, pk: 0 },
+        { name: "origin_thread_id", notnull: 1, pk: 0 },
+        { name: "requester_user_id", notnull: 1, pk: 0 },
+        { name: "requester_display_name", notnull: 0, pk: 0 },
+        { name: "cwd", notnull: 1, pk: 0 },
+        { name: "title", notnull: 0, pk: 0 },
+        { name: "created_at", notnull: 1, pk: 0 },
+        { name: "updated_at", notnull: 1, pk: 0 },
+      ],
+    );
+
+    const bindingColumns = yield* readTableInfo(paths, THREAD_BINDING_TABLE);
+    assert.deepEqual(
+      bindingColumns.map((row) => ({ name: row.name, notnull: row.notnull, pk: row.pk })),
+      [
+        { name: "chat_id", notnull: 1, pk: 1 },
+        { name: "thread_id", notnull: 1, pk: 2 },
+        { name: "harness_id", notnull: 1, pk: 0 },
+        { name: "session_id", notnull: 1, pk: 0 },
+        { name: "created_at", notnull: 1, pk: 0 },
+      ],
+    );
+
+    const workspaceColumns = yield* readTableInfo(paths, THREAD_WORKSPACE_TABLE);
+    assert.deepEqual(
+      workspaceColumns.map((row) => ({ name: row.name, notnull: row.notnull, pk: row.pk })),
+      [
+        { name: "chat_id", notnull: 1, pk: 1 },
+        { name: "thread_id", notnull: 1, pk: 2 },
+        { name: "cwd", notnull: 1, pk: 0 },
+        { name: "created_at", notnull: 1, pk: 0 },
+        { name: "updated_at", notnull: 1, pk: 0 },
+      ],
+    );
+
+    const foreignKeys = [...(yield* readThreadBindingForeignKeys(paths))].sort(
+      (left, right) => left.seq - right.seq,
+    );
+    assert.deepEqual(
+      foreignKeys.map((row) => ({
+        id: row.id,
+        seq: row.seq,
+        table: row.table,
+        from: row.from,
+        to: row.to,
+        onDelete: row.on_delete,
+      })),
+      [
+        {
+          id: 0,
+          seq: 0,
+          table: ORCHESTRATOR_SESSION_TABLE,
+          from: "harness_id",
+          to: "harness_id",
+          onDelete: "CASCADE",
+        },
+        {
+          id: 0,
+          seq: 1,
+          table: ORCHESTRATOR_SESSION_TABLE,
+          from: "session_id",
+          to: "session_id",
+          onDelete: "CASCADE",
+        },
+      ],
+    );
+
+    const indexes = yield* readThreadBindingIndexes(paths);
+    const sessionIndex = indexes.find((row) => row.name === THREAD_BINDING_SESSION_INDEX);
+    assert.isDefined(sessionIndex);
+    assert.strictEqual(sessionIndex?.unique, 0);
+    assert.deepEqual(
+      (yield* readThreadBindingSessionIndexInfo(paths)).map((row) => row.name),
+      ["harness_id", "session_id"],
+    );
   }),
 );
 
