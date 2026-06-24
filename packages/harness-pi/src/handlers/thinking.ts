@@ -1,9 +1,11 @@
+import { HarnessSessionNotFoundError } from "@xmux/harness-core";
 import type {
   HarnessAdapterGetThinkingInput,
   HarnessAdapterSetThinkingInput,
   HarnessSelectedThinking,
   HarnessThinkingLevel,
   HarnessThinkingTarget,
+  HarnessSessionOperation,
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { PiModelSelectionError, PiSessionNotFoundError, PiSessionRequestError } from "../errors";
@@ -14,6 +16,11 @@ import { toPiThinkingLevel } from "./models";
 type PiThinkingHandlerError =
   | PiModelSelectionError
   | PiSessionNotFoundError
+  | PiSessionRequestError;
+
+type PiPublicThinkingHandlerError =
+  | PiModelSelectionError
+  | HarnessSessionNotFoundError
   | PiSessionRequestError;
 
 export function toHarnessThinkingLevel(
@@ -92,14 +99,18 @@ export function getEffectiveThinking(args: {
 export async function getThinking(
   runtime: PiRuntime,
   input: HarnessAdapterGetThinkingInput<"pi", PiCreateOptions>,
-): Promise<ResultType<HarnessSelectedThinking<"pi">, PiSessionNotFoundError>> {
-  return getEffectiveThinking({ runtime, target: input.target });
+): Promise<ResultType<HarnessSelectedThinking<"pi">, PiPublicThinkingHandlerError>> {
+  return mapPiThinkingSessionError({
+    result: getEffectiveThinking({ runtime, target: input.target }),
+    target: input.target,
+    operation: "getThinking",
+  });
 }
 
 export async function setThinking(
   runtime: PiRuntime,
   input: HarnessAdapterSetThinkingInput<"pi", PiCreateOptions>,
-): Promise<ResultType<HarnessSelectedThinking<"pi">, PiThinkingHandlerError>> {
+): Promise<ResultType<HarnessSelectedThinking<"pi">, PiPublicThinkingHandlerError>> {
   const update = input.update;
 
   if (update.type === "clear") {
@@ -114,10 +125,14 @@ export async function setThinking(
     }
 
     runtime.defaultThinking = undefined;
-    return getEffectiveThinking({ runtime, target: input.target });
+    return mapPiThinkingSessionError({
+      result: getEffectiveThinking({ runtime, target: input.target }),
+      target: input.target,
+      operation: "setThinking",
+    });
   }
 
-  return Result.gen(async function* () {
+  const selected = await Result.gen(async function* () {
     const level = yield* toPiThinkingLevel({ level: update.level });
 
     if (input.target.type === "harness") {
@@ -144,4 +159,34 @@ export async function setThinking(
       }),
     );
   });
+
+  return mapPiThinkingSessionError({
+    result: selected,
+    target: input.target,
+    operation: "setThinking",
+  });
+}
+
+function mapPiThinkingSessionError<TValue>(input: {
+  readonly result: ResultType<TValue, PiThinkingHandlerError>;
+  readonly target: HarnessThinkingTarget<"pi">;
+  readonly operation: HarnessSessionOperation;
+}): ResultType<TValue, PiPublicThinkingHandlerError> {
+  if (input.result.isOk()) return Result.ok(input.result.value);
+
+  if (PiSessionNotFoundError.is(input.result.error)) {
+    return input.target.type === "session"
+      ? Result.err(
+          new HarnessSessionNotFoundError({
+            ref: input.target.ref,
+            operation: input.operation,
+            cause: input.result.error,
+          }),
+        )
+      : Result.err(
+          new PiSessionRequestError({ operation: input.operation, cause: input.result.error }),
+        );
+  }
+
+  return Result.err(input.result.error);
 }

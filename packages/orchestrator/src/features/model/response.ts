@@ -10,6 +10,7 @@ import { modelActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
+  formatSessionDeletedUpstreamMessage,
   inlineCode,
   markdown,
   markdownText,
@@ -20,7 +21,11 @@ import {
   ModelSelectorInvalidError,
   ModelSelectorNotFoundError,
 } from "./errors";
-import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
+import {
+  NoActiveSessionError,
+  SessionDeletedUpstreamError,
+  SessionRecordMissingError,
+} from "../errors";
 import {
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
@@ -101,6 +106,13 @@ export function formatModelFailure(
   if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route model command**", "", markdownText(error.message)].join("\n"),
+    });
+  }
+
+  if (SessionDeletedUpstreamError.is(error)) {
+    return formatSessionDeletedUpstreamMessage({
+      harnessId: error.ref.harnessId,
+      sessionId: error.ref.sessionId,
     });
   }
 

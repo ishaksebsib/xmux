@@ -26,15 +26,20 @@ import {
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
 } from "../thinking/errors";
-import { getActiveSessionForThread, type ActiveSessionError } from "../session";
+import {
+  getActiveSessionForThread,
+  runSessionBoundHarnessOperation,
+  type ActiveSessionError,
+  type SessionBoundHarnessOperationError,
+} from "../session";
 
 export type ModelCommandError =
   | ActiveSessionError
   | ListModelsError
-  | GetModelError
-  | GetThinkingError
-  | SetModelError
-  | SetThinkingError
+  | SessionBoundHarnessOperationError<GetModelError>
+  | SessionBoundHarnessOperationError<GetThinkingError>
+  | SessionBoundHarnessOperationError<SetModelError>
+  | SessionBoundHarnessOperationError<SetThinkingError>
   | ResolveModelSelectorError
   | ModelActionPayloadInvalidError
   | ThinkingLevelUnsupportedError
@@ -290,18 +295,30 @@ export async function modelActionSetThinkingCommand<
     const selected = yield* Result.await(setSessionModel({ ctx: input.ctx, session, model }));
 
     yield* Result.await(
-      input.ctx.app.harness.setThinking({
-        target: { type: "session", ref: session.ref },
-        update: { type: "set", level: input.level },
-        signal: input.ctx.signal,
-      } as SetThinkingInput<TAdapters>),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: session.ref,
+        operation: "setThinking",
+        run: () =>
+          input.ctx.app.harness.setThinking({
+            target: { type: "session", ref: session.ref },
+            update: { type: "set", level: input.level },
+            signal: input.ctx.signal,
+          } as SetThinkingInput<TAdapters>),
+      }),
     );
 
     const current = yield* Result.await(
-      input.ctx.app.harness.getModel({
-        target: { type: "session", ref: session.ref },
-        signal: input.ctx.signal,
-      } as GetModelInput<TAdapters>),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: session.ref,
+        operation: "getModel",
+        run: () =>
+          input.ctx.app.harness.getModel({
+            target: { type: "session", ref: session.ref },
+            signal: input.ctx.signal,
+          } as GetModelInput<TAdapters>),
+      }),
     );
     const thinkingState = yield* Result.await(
       getThinkingStateForModel({ ctx: input.ctx, session, model }),
@@ -351,13 +368,21 @@ function getCurrentModelState<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
   readonly models: readonly HarnessModelInfo[];
-}): Promise<Result<CurrentModelState, GetModelError | GetThinkingError>> {
+}): Promise<
+  Result<CurrentModelState, SessionBoundHarnessOperationError<GetModelError | GetThinkingError>>
+> {
   return Result.gen(async function* () {
     const current = yield* Result.await(
-      input.ctx.app.harness.getModel({
-        target: { type: "session", ref: input.session.ref },
-        signal: input.ctx.signal,
-      } as GetModelInput<TAdapters>),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: input.session.ref,
+        operation: "getModel",
+        run: () =>
+          input.ctx.app.harness.getModel({
+            target: { type: "session", ref: input.session.ref },
+            signal: input.ctx.signal,
+          } as GetModelInput<TAdapters>),
+      }),
     );
     const currentModel = current as HarnessSelectedModel;
     const modelInfo = findModelInfo({
@@ -386,7 +411,7 @@ async function getThinkingStateForModel<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
   readonly model?: HarnessModelInfo;
-}): Promise<Result<ModelThinkingState, GetThinkingError>> {
+}): Promise<Result<ModelThinkingState, SessionBoundHarnessOperationError<GetThinkingError>>> {
   const thinking = await getSessionThinking(input);
 
   return Result.map(thinking, (thinking) => ({
@@ -405,16 +430,24 @@ function setSessionModel<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
   readonly model: HarnessModelInfo;
-}): Promise<Result<HarnessSelectedModel, SetModelError | SetThinkingError>> {
+}): Promise<
+  Result<HarnessSelectedModel, SessionBoundHarnessOperationError<SetModelError | SetThinkingError>>
+> {
   return Result.gen(async function* () {
     yield* Result.await(disableThinkingForUnsupportedModel(input));
 
     const selected = yield* Result.await(
-      input.ctx.app.harness.setModel({
-        target: { type: "session", ref: input.session.ref },
-        update: { type: "set", model: input.model.ref },
-        signal: input.ctx.signal,
-      } as SetModelInput<TAdapters>),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: input.session.ref,
+        operation: "setModel",
+        run: () =>
+          input.ctx.app.harness.setModel({
+            target: { type: "session", ref: input.session.ref },
+            update: { type: "set", model: input.model.ref },
+            signal: input.ctx.signal,
+          } as SetModelInput<TAdapters>),
+      }),
     );
 
     return Result.ok(selected as HarnessSelectedModel);
@@ -428,16 +461,22 @@ async function disableThinkingForUnsupportedModel<
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
   readonly model: HarnessModelInfo;
-}): Promise<Result<void, SetThinkingError>> {
+}): Promise<Result<void, SessionBoundHarnessOperationError<SetThinkingError>>> {
   if (!isThinkingUnsupportedForModel(input.model.capabilities?.thinking?.supportedLevels)) {
     return Result.ok();
   }
 
-  const updated = (await input.ctx.app.harness.setThinking({
-    target: { type: "session", ref: input.session.ref },
-    update: { type: "set", level: "off" },
-    signal: input.ctx.signal,
-  } as SetThinkingInput<TAdapters>)) as Result<HarnessSelectedThinking, SetThinkingError>;
+  const updated = (await runSessionBoundHarnessOperation({
+    ctx: input.ctx,
+    ref: input.session.ref,
+    operation: "setThinking",
+    run: () =>
+      input.ctx.app.harness.setThinking({
+        target: { type: "session", ref: input.session.ref },
+        update: { type: "set", level: "off" },
+        signal: input.ctx.signal,
+      } as SetThinkingInput<TAdapters>),
+  })) as Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<SetThinkingError>>;
 
   return Result.map(recoverUnsupportedSetThinking(updated), () => undefined);
 }
@@ -448,24 +487,32 @@ async function getSessionThinking<
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
-}): Promise<Result<HarnessSelectedThinking, GetThinkingError>> {
+}): Promise<Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<GetThinkingError>>> {
   const target = { type: "session" as const, ref: input.session.ref };
 
-  const thinking = (await input.ctx.app.harness.getThinking({
-    target,
-    signal: input.ctx.signal,
-  } as GetThinkingInput<TAdapters>)) as Result<HarnessSelectedThinking, GetThinkingError>;
+  const thinking = (await runSessionBoundHarnessOperation({
+    ctx: input.ctx,
+    ref: input.session.ref,
+    operation: "getThinking",
+    run: () =>
+      input.ctx.app.harness.getThinking({
+        target,
+        signal: input.ctx.signal,
+      } as GetThinkingInput<TAdapters>),
+  })) as Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<GetThinkingError>>;
 
   return recoverUnsupportedThinking(thinking, target);
 }
 
 function recoverUnsupportedThinking(
-  result: Result<HarnessSelectedThinking, GetThinkingError>,
+  result: Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<GetThinkingError>>,
   target: HarnessSelectedThinking["target"],
-): Result<HarnessSelectedThinking, GetThinkingError> {
+): Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<GetThinkingError>> {
   return Result.match(result, {
     ok: (value) => Result.ok(value),
-    err: (error): Result<HarnessSelectedThinking, GetThinkingError> => {
+    err: (
+      error,
+    ): Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<GetThinkingError>> => {
       if (HarnessAdapterThinkingUnsupportedError.is(error)) {
         return Result.ok({ target, source: "unset" });
       }
@@ -475,11 +522,19 @@ function recoverUnsupportedThinking(
 }
 
 function recoverUnsupportedSetThinking(
-  result: Result<HarnessSelectedThinking, SetThinkingError>,
-): Result<HarnessSelectedThinking | undefined, SetThinkingError> {
+  result: Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<SetThinkingError>>,
+): Result<
+  HarnessSelectedThinking | undefined,
+  SessionBoundHarnessOperationError<SetThinkingError>
+> {
   return Result.match(result, {
     ok: (value) => Result.ok(value),
-    err: (error): Result<HarnessSelectedThinking | undefined, SetThinkingError> => {
+    err: (
+      error,
+    ): Result<
+      HarnessSelectedThinking | undefined,
+      SessionBoundHarnessOperationError<SetThinkingError>
+    > => {
       if (HarnessAdapterThinkingUnsupportedError.is(error)) return Result.ok(undefined);
       return Result.err(error);
     },

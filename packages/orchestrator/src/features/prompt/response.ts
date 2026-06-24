@@ -1,6 +1,15 @@
 import type { ChatTextInput } from "@xmux/chat-core";
-import { formatNoActiveSessionMessage, markdown, markdownText } from "../../components";
-import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
+import {
+  formatNoActiveSessionMessage,
+  formatSessionDeletedUpstreamMessage,
+  markdown,
+  markdownText,
+} from "../../components";
+import {
+  NoActiveSessionError,
+  SessionDeletedUpstreamError,
+  SessionRecordMissingError,
+} from "../errors";
 import {
   PromptAlreadyRunningError,
   PromptAttachmentReadError,
@@ -31,6 +40,13 @@ export function formatPromptFailure(error: PromptSessionForThreadError): ChatTex
   if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route prompt**", "", markdownText(error.message)].join("\n"),
+    });
+  }
+
+  if (SessionDeletedUpstreamError.is(error)) {
+    return formatSessionDeletedUpstreamMessage({
+      harnessId: error.ref.harnessId,
+      sessionId: error.ref.sessionId,
     });
   }
 

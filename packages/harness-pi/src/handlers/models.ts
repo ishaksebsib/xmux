@@ -1,4 +1,5 @@
 import { AuthStorage, ModelRegistry, type AgentSession } from "@earendil-works/pi-coding-agent";
+import { HarnessSessionNotFoundError } from "@xmux/harness-core";
 import type {
   HarnessAdapterGetModelInput,
   HarnessAdapterListModelsInput,
@@ -7,6 +8,7 @@ import type {
   HarnessModelRef,
   HarnessModelTarget,
   HarnessSelectedModel,
+  HarnessSessionOperation,
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import path from "node:path";
@@ -26,6 +28,12 @@ type PiModelHandlerError =
   | PiModelRequestError
   | PiModelSelectionError
   | PiSessionNotFoundError
+  | PiSessionRequestError;
+
+type PiPublicModelHandlerError =
+  | PiModelRequestError
+  | PiModelSelectionError
+  | HarnessSessionNotFoundError
   | PiSessionRequestError;
 
 const orderedPiThinkingLevels = ["off", "minimal", "low", "medium", "high", "xhigh"] as const;
@@ -252,14 +260,18 @@ export async function listModels(
 export async function getModel(
   runtime: PiRuntime,
   input: HarnessAdapterGetModelInput<"pi", PiCreateOptions>,
-): Promise<ResultType<HarnessSelectedModel<"pi">, PiSessionNotFoundError>> {
-  return getEffectiveModel({ runtime, target: input.target });
+): Promise<ResultType<HarnessSelectedModel<"pi">, PiPublicModelHandlerError>> {
+  return mapPiModelSessionError({
+    result: getEffectiveModel({ runtime, target: input.target }),
+    target: input.target,
+    operation: "getModel",
+  });
 }
 
 export async function setModel(
   runtime: PiRuntime,
   input: HarnessAdapterSetModelInput<"pi", PiCreateOptions>,
-): Promise<ResultType<HarnessSelectedModel<"pi">, PiModelHandlerError>> {
+): Promise<ResultType<HarnessSelectedModel<"pi">, PiPublicModelHandlerError>> {
   const update = input.update;
 
   if (update.type === "clear") {
@@ -273,12 +285,16 @@ export async function setModel(
     }
 
     runtime.defaultModel = undefined;
-    return getEffectiveModel({ runtime, target: input.target });
+    return mapPiModelSessionError({
+      result: getEffectiveModel({ runtime, target: input.target }),
+      target: input.target,
+      operation: "setModel",
+    });
   }
 
   const options = mergePiCreateOptions(runtime.config, input.adapterOptions);
 
-  return Result.gen(async function* () {
+  const selected = await Result.gen(async function* () {
     const registry = yield* input.target.type === "session"
       ? getLiveSessionModelRegistry(runtime, input.target.ref.sessionId)
       : createPiModelRegistry({ operation: "setModel", agentDir: options.agentDir });
@@ -312,6 +328,36 @@ export async function setModel(
       }),
     );
   });
+
+  return mapPiModelSessionError({
+    result: selected,
+    target: input.target,
+    operation: "setModel",
+  });
+}
+
+function mapPiModelSessionError<TValue>(input: {
+  readonly result: ResultType<TValue, PiModelHandlerError>;
+  readonly target: HarnessModelTarget<"pi">;
+  readonly operation: HarnessSessionOperation;
+}): ResultType<TValue, PiPublicModelHandlerError> {
+  if (input.result.isOk()) return Result.ok(input.result.value);
+
+  if (PiSessionNotFoundError.is(input.result.error)) {
+    return input.target.type === "session"
+      ? Result.err(
+          new HarnessSessionNotFoundError({
+            ref: input.target.ref,
+            operation: input.operation,
+            cause: input.result.error,
+          }),
+        )
+      : Result.err(
+          new PiModelRequestError({ operation: input.operation, cause: input.result.error }),
+        );
+  }
+
+  return Result.err(input.result.error);
 }
 
 function getLiveSessionModelRegistry(

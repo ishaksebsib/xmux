@@ -23,13 +23,15 @@ import {
 } from "../shared/session-selection";
 import { getCurrentWorkspaceCwd, type GetCurrentWorkspaceCwdError } from "../workspace";
 import { CommandHarnessNotConfiguredError } from "../errors";
+import { runSessionBoundHarnessOperation } from "../session";
+import type { SessionBoundHarnessOperationError } from "../session";
 import { requireConfiguredHarnessId } from "../utils";
 
 export type DeleteCommandError =
   | StoreError
   | GetCurrentWorkspaceCwdError
   | ListSessionsError
-  | DeleteSessionError
+  | SessionBoundHarnessOperationError<DeleteSessionError>
   | SelectSessionByShortIdError
   | SessionCommandIncompleteTargetError
   | CommandHarnessNotConfiguredError;
@@ -224,12 +226,18 @@ async function deleteSessionEverywhere<
 }): Promise<Result<DeleteSessionOutput, DeleteCommandError>> {
   return Result.gen(async function* () {
     yield* Result.await(
-      input.ctx.app.harness.deleteSession(
-        createHarnessDeleteInput({
-          ref: input.session.ref,
-          signal: input.ctx.signal,
-        }) as DeleteSessionInput<TAdapters>,
-      ),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: input.session.ref,
+        operation: "deleteSession",
+        run: () =>
+          input.ctx.app.harness.deleteSession(
+            createHarnessDeleteInput({
+              ref: input.session.ref,
+              signal: input.ctx.signal,
+            }) as DeleteSessionInput<TAdapters>,
+          ),
+      }),
     );
 
     yield* Result.await(
@@ -277,7 +285,6 @@ async function cleanupDeletedSession<
 }): Promise<Result<void, StoreError>> {
   return Result.gen(async function* () {
     yield* Result.await(input.ctx.app.store.sessions.delete(input.ref));
-    yield* Result.await(input.ctx.app.store.threadBindings.deleteBySession(input.ref));
 
     return Result.ok();
   });

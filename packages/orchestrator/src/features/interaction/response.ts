@@ -4,6 +4,7 @@ import { interactionActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
+  formatSessionDeletedUpstreamMessage,
   inlineCode,
   markdown,
   markdownText,
@@ -15,6 +16,7 @@ import {
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
 } from "../prompt";
+import { SessionDeletedUpstreamError } from "../errors";
 import type { ActionMessage } from "../utils";
 import type {
   RespondToCurrentInteractionError,
@@ -116,6 +118,13 @@ export function formatInteractionFailure(error: RespondToCurrentInteractionError
       text: ["**Failed to respond to permission request**", "", markdownText(error.message)].join(
         "\n",
       ),
+    });
+  }
+
+  if (SessionDeletedUpstreamError.is(error)) {
+    return formatSessionDeletedUpstreamMessage({
+      harnessId: error.ref.harnessId,
+      sessionId: error.ref.sessionId,
     });
   }
 

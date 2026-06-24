@@ -2,9 +2,11 @@ import type { ChatTextInput } from "@xmux/chat-core";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
+  formatSessionDeletedUpstreamMessage,
   markdown,
   markdownText,
 } from "../../components";
+import { SessionDeletedUpstreamError } from "../errors";
 import type { CancelActivePromptError, CancelActivePromptOutput } from "./service";
 
 export function formatCancelOutput(output: CancelActivePromptOutput): ChatTextInput {
@@ -22,6 +24,13 @@ export function formatCancelOutput(output: CancelActivePromptOutput): ChatTextIn
 }
 
 export function formatCancelFailure(error: CancelActivePromptError): ChatTextInput {
+  if (SessionDeletedUpstreamError.is(error)) {
+    return formatSessionDeletedUpstreamMessage({
+      harnessId: error.ref.harnessId,
+      sessionId: error.ref.sessionId,
+    });
+  }
+
   return markdown({
     text: ["**Failed to cancel generation**", "", markdownText(error.message)].join("\n"),
   });

@@ -38,7 +38,11 @@ export type HarnessSessionOperation =
   | "prompt"
   | "deleteSession"
   | "abort"
-  | "respondInteraction";
+  | "respondInteraction"
+  | "getModel"
+  | "setModel"
+  | "getThinking"
+  | "setThinking";
 
 export class HarnessSessionNotFoundError extends TaggedError("HarnessSessionNotFoundError")<{
   readonly ref: SessionRef;
@@ -351,24 +355,28 @@ export type GetModelError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
   | HarnessAdapterModelUnsupportedError
+  | HarnessSessionNotFoundError
   | HarnessAdapterGetModelError;
 
 export type SetModelError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
   | HarnessAdapterModelUnsupportedError
+  | HarnessSessionNotFoundError
   | HarnessAdapterSetModelError;
 
 export type GetThinkingError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
   | HarnessAdapterThinkingUnsupportedError
+  | HarnessSessionNotFoundError
   | HarnessAdapterGetThinkingError;
 
 export type SetThinkingError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
   | HarnessAdapterThinkingUnsupportedError
+  | HarnessSessionNotFoundError
   | HarnessAdapterSetThinkingError;
 
 export type GetSessionError =

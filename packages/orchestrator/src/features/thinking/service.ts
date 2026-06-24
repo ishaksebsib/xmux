@@ -27,14 +27,19 @@ import {
   ThinkingModelUnsetError,
 } from "./errors";
 import { parseThinkingSelector } from "./selector";
-import { getActiveSessionForThread, type ActiveSessionError } from "../session";
+import {
+  getActiveSessionForThread,
+  runSessionBoundHarnessOperation,
+  type ActiveSessionError,
+  type SessionBoundHarnessOperationError,
+} from "../session";
 
 export type ThinkingCommandError =
   | ActiveSessionError
-  | GetModelError
-  | GetThinkingError
+  | SessionBoundHarnessOperationError<GetModelError>
+  | SessionBoundHarnessOperationError<GetThinkingError>
   | ListModelsError
-  | SetThinkingError
+  | SessionBoundHarnessOperationError<SetThinkingError>
   | ThinkingLevelInvalidError
   | ThinkingLevelUnsupportedError
   | ThinkingModelThinkingUnsupportedError
@@ -112,11 +117,18 @@ export async function thinkingSessionCommand<
     }
 
     const selected = yield* Result.await(
-      input.ctx.app.harness.setThinking({
-        target: { type: "session", ref: session.ref },
-        update: parsed.type === "clear" ? { type: "clear" } : { type: "set", level: parsed.level },
-        signal: input.ctx.signal,
-      } as SetThinkingInput<TAdapters>),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: session.ref,
+        operation: "setThinking",
+        run: () =>
+          input.ctx.app.harness.setThinking({
+            target: { type: "session", ref: session.ref },
+            update:
+              parsed.type === "clear" ? { type: "clear" } : { type: "set", level: parsed.level },
+            signal: input.ctx.signal,
+          } as SetThinkingInput<TAdapters>),
+      }),
     );
 
     const selectedThinking = selected as HarnessSelectedThinking;
@@ -139,13 +151,19 @@ async function getSessionThinking<
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
-}): Promise<Result<HarnessSelectedThinking, GetThinkingError>> {
+}): Promise<Result<HarnessSelectedThinking, SessionBoundHarnessOperationError<GetThinkingError>>> {
   return Result.gen(async function* () {
     const current = yield* Result.await(
-      input.ctx.app.harness.getThinking({
-        target: { type: "session", ref: input.session.ref },
-        signal: input.ctx.signal,
-      } as GetThinkingInput<TAdapters>),
+      runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: input.session.ref,
+        operation: "getThinking",
+        run: () =>
+          input.ctx.app.harness.getThinking({
+            target: { type: "session", ref: input.session.ref },
+            signal: input.ctx.signal,
+          } as GetThinkingInput<TAdapters>),
+      }),
     );
 
     return Result.ok(current as HarnessSelectedThinking);
@@ -158,13 +176,27 @@ async function getSessionModel<
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
   readonly session: SessionRecord;
-}): Promise<Result<HarnessModelRef | undefined, GetModelError | ThinkingModelUnsetError>> {
+}): Promise<
+  Result<
+    HarnessModelRef | undefined,
+    SessionBoundHarnessOperationError<GetModelError> | ThinkingModelUnsetError
+  >
+> {
   return Result.gen(async function* () {
     const selected = yield* recoverUnsupportedModelManagement(
-      (await input.ctx.app.harness.getModel({
-        target: { type: "session", ref: input.session.ref },
-        signal: input.ctx.signal,
-      } as GetModelInput<TAdapters>)) as Result<HarnessSelectedModel | undefined, GetModelError>,
+      (await runSessionBoundHarnessOperation({
+        ctx: input.ctx,
+        ref: input.session.ref,
+        operation: "getModel",
+        run: () =>
+          input.ctx.app.harness.getModel({
+            target: { type: "session", ref: input.session.ref },
+            signal: input.ctx.signal,
+          } as GetModelInput<TAdapters>),
+      })) as Result<
+        HarnessSelectedModel | undefined,
+        SessionBoundHarnessOperationError<GetModelError>
+      >,
     );
 
     if (selected === undefined) return Result.ok(undefined);
@@ -217,11 +249,19 @@ async function enrichThinkingWithModelCapabilities<
 }
 
 function recoverUnsupportedModelManagement(
-  result: Result<HarnessSelectedModel | undefined, GetModelError>,
-): Result<HarnessSelectedModel | undefined, GetModelError> {
+  result: Result<
+    HarnessSelectedModel | undefined,
+    SessionBoundHarnessOperationError<GetModelError>
+  >,
+): Result<HarnessSelectedModel | undefined, SessionBoundHarnessOperationError<GetModelError>> {
   return Result.match(result, {
     ok: (value) => Result.ok(value),
-    err: (error): Result<HarnessSelectedModel | undefined, GetModelError> => {
+    err: (
+      error,
+    ): Result<
+      HarnessSelectedModel | undefined,
+      SessionBoundHarnessOperationError<GetModelError>
+    > => {
       if (HarnessAdapterModelUnsupportedError.is(error)) return Result.ok(undefined);
       return Result.err(error);
     },

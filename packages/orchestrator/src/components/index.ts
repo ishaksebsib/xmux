@@ -1,5 +1,10 @@
 export { bulletList, inlineCode, markdown, markdownText } from "./markdown";
-export { formatNoActiveSessionMessage, type NoActiveSessionMessageInput } from "./session";
+export {
+  formatNoActiveSessionMessage,
+  formatSessionDeletedUpstreamMessage,
+  type NoActiveSessionMessageInput,
+  type SessionDeletedUpstreamMessageInput,
+} from "./session";
 export {
   promptInteraction,
   promptReasoning,

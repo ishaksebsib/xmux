@@ -1,7 +1,11 @@
 import { Result } from "better-result";
 import { describe, expect, test, vi } from "vitest";
 import { defineChatAdapter, type ChatAttachment } from "@xmux/chat-core";
-import { defineHarnessAdapter, type HarnessPromptEvent } from "@xmux/harness-core";
+import {
+  HarnessSessionNotFoundError,
+  defineHarnessAdapter,
+  type HarnessPromptEvent,
+} from "@xmux/harness-core";
 import { createHandlerContext, createXmux } from "../src";
 import {
   handlePromptMessage,
@@ -97,6 +101,60 @@ describe("prompt messages", () => {
         "expected related binding lookup to succeed",
       ),
     ).toBeNull();
+
+    await xmux.shutdown();
+  });
+
+  test("cleans local routing when the active session was deleted upstream before prompting", async () => {
+    const relatedThread = { chatId: "telegram", threadId: "conversation-2" } as const;
+    const { emitMessage, replies, xmux } = await initializeFallbackXmux({
+      promptError: new HarnessSessionNotFoundError({
+        ref: sessionRef,
+        operation: "prompt",
+      }),
+    });
+    await bindSession({ xmux });
+    const now = new Date().toISOString();
+    await xmux.ctx.store.threadBindings.bind(
+      createThreadBinding({ thread: relatedThread, sessionRef, now }),
+    );
+
+    emitMessage(messageEvent({ text: "hello" }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("**Session deleted upstream**");
+    expect(replies[0]).toContain("xmux detached this chat and cleared local routing");
+    expect((await xmux.ctx.store.sessions.get(sessionRef)).unwrap("session lookup")).toBeNull();
+    expect((await xmux.ctx.store.threadBindings.get(thread)).unwrap("binding lookup")).toBeNull();
+    expect(
+      (await xmux.ctx.store.threadBindings.get(relatedThread)).unwrap("related binding lookup"),
+    ).toBeNull();
+
+    await xmux.shutdown();
+  });
+
+  test("cleans local routing when a prompt stream reports the session was deleted upstream", async () => {
+    const { emitMessage, replies, xmux } = await initializeStreamingXmux({
+      events: [
+        {
+          type: "run",
+          phase: "failed",
+          ref: sessionRef,
+          reason: "error",
+          error: new HarnessSessionNotFoundError({ ref: sessionRef, operation: "prompt" }),
+        },
+      ],
+    });
+    await bindSession({ xmux });
+
+    emitMessage(messageEvent({ text: "hello" }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("**Session deleted upstream**");
+    expect((await xmux.ctx.store.sessions.get(sessionRef)).unwrap("session lookup")).toBeNull();
+    expect((await xmux.ctx.store.threadBindings.get(thread)).unwrap("binding lookup")).toBeNull();
 
     await xmux.shutdown();
   });
@@ -585,6 +643,7 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
 
 async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
   const streams: string[] = [];
+  const replies: string[] = [];
   const promptInputs: unknown[] = [];
   let emitMessage: ((event: unknown) => void) | undefined;
 
@@ -622,6 +681,7 @@ async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
               return Result.ok();
             },
             async reply(message) {
+              replies.push(message.text);
               return Result.ok(sentMessage({ text: message.text, format: message.format }));
             },
             async streamReply(message) {
@@ -644,7 +704,13 @@ async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
   expect((await xmux.initialize()).isOk()).toBe(true);
   expect(emitMessage).toBeDefined();
 
-  return { streams, promptInputs, emitMessage: emitMessage as (event: unknown) => void, xmux };
+  return {
+    streams,
+    replies,
+    promptInputs,
+    emitMessage: emitMessage as (event: unknown) => void,
+    xmux,
+  };
 }
 
 function createHarnesses(input: {

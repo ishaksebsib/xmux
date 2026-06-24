@@ -4,11 +4,12 @@ import { deleteHarnessActionId, deleteSessionActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatHarnessNotConfigured,
+  formatSessionDeletedUpstreamMessage,
   inlineCode,
   markdown,
   markdownText,
 } from "../../components";
-import { CommandHarnessNotConfiguredError } from "../errors";
+import { CommandHarnessNotConfiguredError, SessionDeletedUpstreamError } from "../errors";
 import { formatActionButtonRows } from "../button-layout";
 import {
   formatHarnessChoice,
@@ -112,6 +113,13 @@ export function formatDeleteFailure(error: DeleteCommandError): ChatTextInput {
 
   if (CommandHarnessNotConfiguredError.is(error)) {
     return formatHarnessNotConfigured(error);
+  }
+
+  if (SessionDeletedUpstreamError.is(error)) {
+    return formatSessionDeletedUpstreamMessage({
+      harnessId: error.ref.harnessId,
+      sessionId: error.ref.sessionId,
+    });
   }
 
   return markdown({

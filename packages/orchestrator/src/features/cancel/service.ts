@@ -1,12 +1,18 @@
 import type { ChatAdapterDefinitions } from "@xmux/chat-core";
-import type { AbortInput, HarnessAdapterDefinitions } from "@xmux/harness-core";
+import type { AbortError, AbortInput, HarnessAdapterDefinitions } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
+import {
+  NoActiveSessionError,
+  SessionDeletedUpstreamCleanupError,
+  SessionDeletedUpstreamError,
+  SessionRecordMissingError,
+} from "../errors";
 import { PromptRunCancellationError } from "../prompt";
-import { getActiveSessionForThread } from "../session";
+import { getActiveSessionForThread, runSessionBoundHarnessOperation } from "../session";
+import type { SessionBoundHarnessOperationError } from "../session";
 
 export interface CancelActivePromptForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -24,7 +30,7 @@ export type CancelActivePromptOutput =
 export type CancelActivePromptError =
   | StoreError
   | SessionRecordMissingError
-  | PromptRunCancellationError;
+  | SessionBoundHarnessOperationError<PromptRunCancellationError>;
 
 /** Cancels the active prompt generation for the session bound to a chat thread. */
 export async function cancelActivePromptForThread<
@@ -59,12 +65,25 @@ export async function cancelActivePromptForThread<
   }
 
   try {
-    const aborted = await input.ctx.app.harness.abort({
+    const aborted = await runSessionBoundHarnessOperation<void, AbortError, TAdapters, TChats>({
+      ctx: input.ctx,
       ref: session.value.ref,
-      signal: input.ctx.signal,
-    } as AbortInput<TAdapters>);
+      operation: "abort",
+      run: () =>
+        input.ctx.app.harness.abort({
+          ref: session.value.ref,
+          signal: input.ctx.signal,
+        } as AbortInput<TAdapters>),
+    });
 
     if (aborted.isErr()) {
+      if (
+        SessionDeletedUpstreamError.is(aborted.error) ||
+        SessionDeletedUpstreamCleanupError.is(aborted.error)
+      ) {
+        return Result.err(aborted.error);
+      }
+
       return Result.err(
         new PromptRunCancellationError({ sessionRef: session.value.ref, cause: aborted.error }),
       );

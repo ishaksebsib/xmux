@@ -8,6 +8,7 @@ import type {
   ChatTextStreamContent,
 } from "@xmux/chat-core";
 import type { ChatAdapterDefinitions, ChatSendActionInput } from "@xmux/chat-core";
+import { HarnessSessionNotFoundError } from "@xmux/harness-core";
 import type { HarnessAdapterDefinitions, HarnessPromptEvent } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { Actions } from "../../actions";
@@ -15,6 +16,7 @@ import type { NormalizedPromptResponseConfig } from "../../config";
 import type { HandlerContext } from "../../ctx";
 import type { SessionRecord } from "../../store";
 import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
+import { markSessionDeletedUpstream } from "../session";
 import { formatInteractionActionMessage } from "../interaction/response";
 import { PromptResponseError } from "./errors";
 import { formatPromptFailure } from "./response";
@@ -151,6 +153,27 @@ async function streamPromptReplyInMessages<
         continue;
       }
 
+      const upstreamDeleted = getPromptSessionNotFoundError(event);
+      if (upstreamDeleted !== undefined) {
+        const completed = await completeActiveStream();
+        if (completed.isErr()) return completed;
+
+        const cleanup = await markSessionDeletedUpstream({
+          ctx: input.ctx,
+          ref: input.session.ref,
+          operation: "prompt",
+          cause: upstreamDeleted,
+        });
+
+        const message = formatPromptFailure(cleanup.isOk() ? cleanup.value : cleanup.error);
+
+        return replyToChatEvent({
+          event: input.event,
+          message,
+          onError: (cause) => new PromptResponseError({ cause }),
+        });
+      }
+
       appendToStream(renderer.render(event));
     }
 
@@ -164,6 +187,14 @@ async function streamPromptReplyInMessages<
   } finally {
     activeStream?.chunks.complete();
   }
+}
+
+function getPromptSessionNotFoundError(
+  event: HarnessPromptEvent,
+): HarnessSessionNotFoundError | undefined {
+  if (event.type !== "run" || event.phase !== "failed") return undefined;
+
+  return HarnessSessionNotFoundError.is(event.error) ? event.error : undefined;
 }
 
 async function sendInteractionPrompt<

@@ -12,7 +12,12 @@ import type {
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { getActiveSessionForThread, type ActiveSessionError } from "../session";
+import {
+  getActiveSessionForThread,
+  runSessionBoundHarnessOperation,
+  type ActiveSessionError,
+  type SessionBoundHarnessOperationError,
+} from "../session";
 import { materializePromptAttachments } from "./attachments";
 import { PromptAlreadyRunningError, type PromptAttachmentError } from "./errors";
 import type { ActivePromptRun } from "./run-registry";
@@ -21,7 +26,7 @@ export type PromptSessionForThreadError =
   | ActiveSessionError
   | PromptAlreadyRunningError
   | PromptAttachmentError
-  | PromptError;
+  | SessionBoundHarnessOperationError<PromptError>;
 
 export interface PromptSessionForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -76,9 +81,12 @@ export async function promptSessionForThread<
       content: materialized.content,
       signal,
     });
-    const promptedResult = await input.ctx.app.harness.prompt(
-      promptInput as PromptInput<TAdapters>,
-    );
+    const promptedResult = await runSessionBoundHarnessOperation({
+      ctx: input.ctx,
+      ref: session.ref,
+      operation: "prompt",
+      run: () => input.ctx.app.harness.prompt(promptInput as PromptInput<TAdapters>),
+    });
 
     if (promptedResult.isErr()) {
       await materialized.cleanup();

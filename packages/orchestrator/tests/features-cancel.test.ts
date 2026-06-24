@@ -1,7 +1,11 @@
 import { Result } from "better-result";
 import { describe, expect, test } from "vitest";
 import { defineChatAdapter } from "@xmux/chat-core";
-import { defineHarnessAdapter, type HarnessPromptEvent } from "@xmux/harness-core";
+import {
+  HarnessSessionNotFoundError,
+  defineHarnessAdapter,
+  type HarnessPromptEvent,
+} from "@xmux/harness-core";
 import { createHandlerContext, createXmux } from "../src";
 import { promptSessionForThread } from "../src/features/prompt";
 import { createSessionRecord, createThreadBinding } from "../src/store";
@@ -99,6 +103,33 @@ describe("/cancel command", () => {
     expect(xmux.ctx.services.promptRuns.get(sessionRef)).toBeDefined();
 
     second.unwrap("second prompt").release();
+    await xmux.shutdown();
+  });
+
+  test("cleans local routing when abort reports the session was deleted upstream", async () => {
+    const relatedThread = { chatId: "telegram", threadId: "conversation-2" } as const;
+    const { emitCommand, replies, xmux } = await initializeXmux({
+      abortError: new HarnessSessionNotFoundError({ ref: sessionRef, operation: "abort" }),
+    });
+    await bindSession({ xmux });
+    const now = new Date().toISOString();
+    await xmux.ctx.store.threadBindings.bind(
+      createThreadBinding({ thread: relatedThread, sessionRef, now }),
+    );
+    await startPrompt(xmux, "please work");
+
+    emitCommand(cancelCommandEvent());
+
+    await eventually(() => replies.length === 1);
+
+    expect(replies[0]).toContain("**Session deleted upstream**");
+    expect(xmux.ctx.services.promptRuns.get(sessionRef)).toBeUndefined();
+    expect((await xmux.ctx.store.sessions.get(sessionRef)).unwrap("session lookup")).toBeNull();
+    expect((await xmux.ctx.store.threadBindings.get(thread)).unwrap("binding lookup")).toBeNull();
+    expect(
+      (await xmux.ctx.store.threadBindings.get(relatedThread)).unwrap("related binding lookup"),
+    ).toBeNull();
+
     await xmux.shutdown();
   });
 

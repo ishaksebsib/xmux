@@ -8,6 +8,7 @@ import { thinkingActionId } from "../../actions";
 import {
   formatCommandHelp,
   formatNoActiveSessionMessage,
+  formatSessionDeletedUpstreamMessage,
   inlineCode,
   markdown,
   markdownText,
@@ -18,7 +19,11 @@ import {
   ThinkingModelThinkingUnsupportedError,
   ThinkingModelUnsetError,
 } from "./errors";
-import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
+import {
+  NoActiveSessionError,
+  SessionDeletedUpstreamError,
+  SessionRecordMissingError,
+} from "../errors";
 import { formatActionButtonRows } from "../button-layout";
 import { normalizeTextInput, type ActionMessage } from "../utils";
 import { formatModelSelector } from "../model/selector";
@@ -70,6 +75,13 @@ export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInpu
   if (SessionRecordMissingError.is(error)) {
     return markdown({
       text: ["**Failed to route thinking command**", "", markdownText(error.message)].join("\n"),
+    });
+  }
+
+  if (SessionDeletedUpstreamError.is(error)) {
+    return formatSessionDeletedUpstreamMessage({
+      harnessId: error.ref.harnessId,
+      sessionId: error.ref.sessionId,
     });
   }
 

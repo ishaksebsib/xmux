@@ -14,6 +14,7 @@ import type { HarnessRuntimeGetter } from "../utils";
 import {
   adapterOptionsFromInput,
   invokeAdapter,
+  mapSessionAdapterError,
   requireCapability,
   targetHarnessId,
 } from "../utils";
@@ -54,7 +55,14 @@ export async function handleSetThinking<
                 adapterOptions: adapterOptionsFromInput<TAdapters, typeof harnessId>(args.input),
                 signal: args.input.signal,
               }),
-            mapError: (cause) => new HarnessAdapterSetThinkingError({ harnessId, cause }),
+            mapError: (cause) =>
+              args.input.target.type === "session"
+                ? mapSessionAdapterError(
+                    cause,
+                    (unhandledCause) =>
+                      new HarnessAdapterSetThinkingError({ harnessId, cause: unhandledCause }),
+                  )
+                : new HarnessAdapterSetThinkingError({ harnessId, cause }),
           }),
         );
 

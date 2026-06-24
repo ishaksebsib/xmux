@@ -3,6 +3,7 @@ import type {
   AdapterOptionsFor,
   HarnessAdapterDefinitions,
   HarnessInteractionResponse,
+  RespondInteractionError,
   RespondInteractionInput,
   RespondInteractionInputFor,
   SessionRef,
@@ -11,13 +12,19 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
+import {
+  NoActiveSessionError,
+  SessionDeletedUpstreamCleanupError,
+  SessionDeletedUpstreamError,
+  SessionRecordMissingError,
+} from "../errors";
 import {
   PromptInteractionAlreadyRespondingError,
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
 } from "../prompt";
-import { getActiveSessionForThread } from "../session";
+import { getActiveSessionForThread, runSessionBoundHarnessOperation } from "../session";
+import type { SessionBoundHarnessOperationError } from "../session";
 import type { ActivePromptRun, PendingPromptInteraction } from "../prompt";
 
 export type InteractionCommandAction =
@@ -50,7 +57,7 @@ export type RespondToCurrentInteractionError =
   | SessionRecordMissingError
   | PromptInteractionUnsupportedError
   | PromptInteractionAlreadyRespondingError
-  | PromptInteractionResponseError;
+  | SessionBoundHarnessOperationError<PromptInteractionResponseError>;
 
 export interface RespondToCurrentInteractionForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -114,12 +121,31 @@ export async function respondToCurrentInteractionForThread<
       signal: input.ctx.signal,
     });
 
-    const respondedResult = await input.ctx.app.harness.respondInteraction(
-      respondInput as RespondInteractionInput<TAdapters>,
-    );
+    const respondedResult = await runSessionBoundHarnessOperation<
+      void,
+      RespondInteractionError,
+      TAdapters,
+      TChats
+    >({
+      ctx: input.ctx,
+      ref: session.value.ref,
+      operation: "respondInteraction",
+      run: () =>
+        input.ctx.app.harness.respondInteraction(
+          respondInput as RespondInteractionInput<TAdapters>,
+        ),
+    });
 
     if (respondedResult.isErr()) {
       run.markInteractionPending(selected.interaction.requestId);
+
+      if (
+        SessionDeletedUpstreamError.is(respondedResult.error) ||
+        SessionDeletedUpstreamCleanupError.is(respondedResult.error)
+      ) {
+        return Result.err(respondedResult.error);
+      }
+
       return Result.err(
         new PromptInteractionResponseError({
           sessionRef: session.value.ref,
