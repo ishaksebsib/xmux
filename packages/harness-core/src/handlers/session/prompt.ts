@@ -9,6 +9,7 @@ import {
   adapterOptionsFromInput,
   createWorkingDirectoryPath,
   invokeAdapter,
+  mapSessionAdapterError,
   normalizePromptContent,
 } from "../utils";
 
@@ -46,7 +47,14 @@ export async function handlePrompt<
                 signal: args.input.signal,
               }),
             mapError: (cause) =>
-              new HarnessAdapterPromptError({ harnessId: args.input.ref.harnessId, cause }),
+              mapSessionAdapterError(
+                cause,
+                (unhandledCause) =>
+                  new HarnessAdapterPromptError({
+                    harnessId: args.input.ref.harnessId,
+                    cause: unhandledCause,
+                  }),
+              ),
           }),
         );
 

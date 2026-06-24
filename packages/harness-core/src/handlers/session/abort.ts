@@ -4,7 +4,7 @@ import type { HarnessLogScope } from "../../logger";
 import { logHarnessOperation } from "../../logger-utils";
 import type { AbortInput, HarnessAdapterDefinitions } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, invokeAdapter } from "../utils";
+import { adapterOptionsFromInput, invokeAdapter, mapSessionAdapterError } from "../utils";
 
 export async function handleAbort<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -35,7 +35,14 @@ export async function handleAbort<
                 signal: args.input.signal,
               }),
             mapError: (cause) =>
-              new HarnessAdapterAbortError({ harnessId: args.input.ref.harnessId, cause }),
+              mapSessionAdapterError(
+                cause,
+                (unhandledCause) =>
+                  new HarnessAdapterAbortError({
+                    harnessId: args.input.ref.harnessId,
+                    cause: unhandledCause,
+                  }),
+              ),
           }),
         );
 

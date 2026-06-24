@@ -1,4 +1,5 @@
 import { TaggedError } from "better-result";
+import type { SessionRef } from "./contracts";
 
 function describeCause(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
@@ -27,6 +28,32 @@ export class InvalidWorkingDirectoryError extends TaggedError("InvalidWorkingDir
       cwd: args.cwd,
       cause: args.cause,
       message: args.reason ?? `Working directory is invalid: ${args.cwd}`,
+    });
+  }
+}
+
+export type HarnessSessionOperation =
+  | "resumeSession"
+  | "getSession"
+  | "prompt"
+  | "deleteSession"
+  | "abort"
+  | "respondInteraction";
+
+export class HarnessSessionNotFoundError extends TaggedError("HarnessSessionNotFoundError")<{
+  readonly ref: SessionRef;
+  readonly operation: HarnessSessionOperation;
+  readonly message: string;
+  readonly cause?: unknown;
+}>() {
+  constructor(args: {
+    readonly ref: SessionRef;
+    readonly operation: HarnessSessionOperation;
+    readonly cause?: unknown;
+  }) {
+    super({
+      ...args,
+      message: `Session not found for ${args.operation}: ${args.ref.harnessId}:${args.ref.sessionId}`,
     });
   }
 }
@@ -306,6 +333,7 @@ export type ResumeSessionError =
   | UnknownHarnessError
   | InvalidWorkingDirectoryError
   | HarnessAdapterOpenError
+  | HarnessSessionNotFoundError
   | HarnessAdapterResumeSessionError;
 
 export type ListSessionsError =
@@ -346,24 +374,32 @@ export type SetThinkingError =
 export type GetSessionError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
+  | HarnessSessionNotFoundError
   | HarnessAdapterGetSessionError;
 
 export type PromptError =
   | UnknownHarnessError
   | InvalidWorkingDirectoryError
   | HarnessAdapterOpenError
+  | HarnessSessionNotFoundError
   | HarnessAdapterPromptError;
 
 export type DeleteSessionError =
   | UnknownHarnessError
   | HarnessAdapterOpenError
+  | HarnessSessionNotFoundError
   | HarnessAdapterDeleteSessionError;
 
-export type AbortError = UnknownHarnessError | HarnessAdapterOpenError | HarnessAdapterAbortError;
+export type AbortError =
+  | UnknownHarnessError
+  | HarnessAdapterOpenError
+  | HarnessSessionNotFoundError
+  | HarnessAdapterAbortError;
 
 export type RespondInteractionError =
   | UnknownHarnessError
   | InvalidWorkingDirectoryError
   | HarnessAdapterOpenError
+  | HarnessSessionNotFoundError
   | HarnessAdapterInteractionUnsupportedError
   | HarnessAdapterRespondInteractionError;

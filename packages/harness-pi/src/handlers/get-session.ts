@@ -4,23 +4,25 @@ import type { PiRuntime } from "../runtime";
 import type { PiCreateOptions, PiSessionInfo } from "../types";
 import {
   mapLiveSession,
+  mapPiSessionHandlerError,
   mapPiSessionInfo,
   resolvePiSession,
-  type PiSessionHandlerError,
+  type PiPublicSessionHandlerError,
 } from "./utils";
 
 export async function getSession(
   runtime: PiRuntime,
   input: HarnessAdapterGetSessionInput<"pi", PiCreateOptions>,
-): Promise<ResultType<HarnessAdapterSessionInfo<PiSessionInfo>, PiSessionHandlerError>> {
+): Promise<ResultType<HarnessAdapterSessionInfo<PiSessionInfo>, PiPublicSessionHandlerError>> {
   return Result.gen(async function* () {
-    const resolved = yield* Result.await(
-      resolvePiSession({
+    const resolved = yield* Result.mapError(
+      await resolvePiSession({
         runtime,
         operation: "getSession",
         sessionId: input.ref.sessionId,
         adapterOptions: input.adapterOptions,
       }),
+      (error) => mapPiSessionHandlerError({ error, ref: input.ref, operation: "getSession" }),
     );
     if (resolved.handle) return Result.ok(mapLiveSession(resolved.handle));
     if (resolved.info) return Result.ok(mapPiSessionInfo(resolved.info));

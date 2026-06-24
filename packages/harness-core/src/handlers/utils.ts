@@ -4,6 +4,7 @@ import { Result, type Result as ResultType } from "better-result";
 import {
   HarnessAdapterCreateSessionError,
   HarnessAdapterOpenError,
+  HarnessSessionNotFoundError,
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
 } from "../errors";
@@ -71,6 +72,13 @@ export async function invokeAdapter<TValue, TError>(args: {
   });
 
   return Result.andThen(outer, (adapterResult) => Result.mapError(adapterResult, args.mapError));
+}
+
+export function mapSessionAdapterError<TError>(
+  cause: unknown,
+  fallback: (cause: unknown) => TError,
+): HarnessSessionNotFoundError | TError {
+  return HarnessSessionNotFoundError.is(cause) ? cause : fallback(cause);
 }
 
 export function requireCapability<TMethod, TError>(

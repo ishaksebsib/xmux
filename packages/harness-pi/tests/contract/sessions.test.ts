@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { createHarness } from "@xmux/harness-core";
+import { HarnessSessionNotFoundError, createHarness } from "@xmux/harness-core";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { createPiAdapter } from "../../src";
 
@@ -158,7 +158,8 @@ describe("Pi session contract", () => {
 
       expect(result.isErr()).toBe(true);
       if (result.isErr()) {
-        expect(result.error.message).toContain("Failed to get session");
+        expect(result.error).toBeInstanceOf(HarnessSessionNotFoundError);
+        expect(result.error.message).toContain("Session not found for getSession");
         expect(JSON.stringify(result.error)).toContain("Pi session not found");
       }
     } finally {

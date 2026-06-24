@@ -1,21 +1,22 @@
 import { unlink } from "node:fs/promises";
 import type { HarnessAdapterDeleteSessionInput } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
-import { PiSessionRequestError } from "../errors";
+import { PiSessionRequestError, PiSessionResponseError } from "../errors";
 import type { PiRuntime } from "../runtime";
 import type { PiCreateOptions } from "../types";
 import {
   fileExists,
+  mapPiSessionHandlerError,
   resolvePiSession,
   validateSessionJsonlPath,
-  type PiSessionHandlerError,
+  type PiPublicSessionHandlerError,
   type ResolvedPiSession,
 } from "./utils";
 
 function deleteResolvedPiSession(args: {
   readonly runtime: PiRuntime;
   readonly resolved: ResolvedPiSession;
-}): Promise<ResultType<void, PiSessionHandlerError>> {
+}): Promise<ResultType<void, PiSessionRequestError | PiSessionResponseError>> {
   return Result.gen(async function* () {
     const live = args.runtime.sessions.get(args.resolved.sessionId);
     if (live) {
@@ -50,15 +51,18 @@ function deleteResolvedPiSession(args: {
 export async function deleteSession(
   runtime: PiRuntime,
   input: HarnessAdapterDeleteSessionInput<"pi", PiCreateOptions>,
-): Promise<ResultType<void, PiSessionHandlerError>> {
+): Promise<
+  ResultType<void, PiPublicSessionHandlerError | PiSessionRequestError | PiSessionResponseError>
+> {
   return Result.gen(async function* () {
-    const resolved = yield* Result.await(
-      resolvePiSession({
+    const resolved = yield* Result.mapError(
+      await resolvePiSession({
         runtime,
         operation: "deleteSession",
         sessionId: input.ref.sessionId,
         adapterOptions: input.adapterOptions,
       }),
+      (error) => mapPiSessionHandlerError({ error, ref: input.ref, operation: "deleteSession" }),
     );
     yield* Result.await(deleteResolvedPiSession({ runtime, resolved }));
     return Result.ok();

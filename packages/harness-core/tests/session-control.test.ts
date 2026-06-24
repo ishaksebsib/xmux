@@ -7,6 +7,7 @@ import {
   HarnessAdapterListSessionsError,
   HarnessAdapterPromptError,
   HarnessAdapterResumeSessionError,
+  HarnessSessionNotFoundError,
   InvalidWorkingDirectoryError,
   UnknownHarnessError,
   createHarness,
@@ -260,6 +261,49 @@ describe("session-control", () => {
     if (got.isErr()) expect(got.error).toBeInstanceOf(HarnessAdapterGetSessionError);
     if (deleted.isErr()) expect(deleted.error).toBeInstanceOf(HarnessAdapterDeleteSessionError);
     if (aborted.isErr()) expect(aborted.error).toBeInstanceOf(HarnessAdapterAbortError);
+  });
+
+  test("preserves adapter-emitted session-not-found contract errors", async () => {
+    const handles = { opens: [], closes: [] };
+    const ref = { harnessId: "pi" as const, sessionId: "missing-session" };
+    const missing = new HarnessSessionNotFoundError({ ref, operation: "getSession" });
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "pi-1", adapterData: { sessionFile: "created" } }),
+          operations: {
+            resumeSession: async () =>
+              Result.err(new HarnessSessionNotFoundError({ ref, operation: "resumeSession" })),
+            getSession: async () => Result.err(missing),
+            deleteSession: async () =>
+              Result.err(new HarnessSessionNotFoundError({ ref, operation: "deleteSession" })),
+            abort: async () =>
+              Result.err(new HarnessSessionNotFoundError({ ref, operation: "abort" })),
+          },
+        }),
+      },
+    });
+
+    const resumed = await harness.resumeSession({
+      harnessId: "pi",
+      sessionId: ref.sessionId,
+      adapterOptions: { sessionMode: "memory" },
+    });
+    const got = await harness.getSession({ ref, adapterOptions: { sessionMode: "memory" } });
+    const deleted = await harness.deleteSession({ ref, adapterOptions: { sessionMode: "memory" } });
+    const aborted = await harness.abort({ ref, adapterOptions: { sessionMode: "memory" } });
+
+    expect(resumed.isErr()).toBe(true);
+    expect(got.isErr()).toBe(true);
+    expect(deleted.isErr()).toBe(true);
+    expect(aborted.isErr()).toBe(true);
+    if (resumed.isErr()) expect(resumed.error).toBeInstanceOf(HarnessSessionNotFoundError);
+    if (got.isErr()) expect(got.error).toBe(missing);
+    if (deleted.isErr()) expect(deleted.error).toBeInstanceOf(HarnessSessionNotFoundError);
+    if (aborted.isErr()) expect(aborted.error).toBeInstanceOf(HarnessSessionNotFoundError);
   });
 
   test("wraps invalid adapter-returned cwd", async () => {

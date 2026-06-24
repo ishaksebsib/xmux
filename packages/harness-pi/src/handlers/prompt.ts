@@ -18,7 +18,13 @@ import type { PiCreateOptions } from "../types";
 import { resolvePiModel, toPiThinkingLevel } from "./models";
 import { toHarnessThinkingLevel } from "./thinking";
 import { resumeSession } from "./resume-session";
-import { resolvePiSession, toModelRef, type PiSessionHandlerError } from "./utils";
+import {
+  mapPiSessionHandlerError,
+  resolvePiSession,
+  toModelRef,
+  type PiPublicSessionHandlerError,
+  type PiSessionHandlerError,
+} from "./utils";
 import {
   createPiPromptEventState,
   mapPiSessionEvent,
@@ -31,6 +37,7 @@ type PiPromptHandlerError =
   | PiPromptContentError
   | PiModelRequestError
   | PiModelSelectionError
+  | PiPublicSessionHandlerError
   | PiSessionHandlerError
   | PiSessionRequestError
   | PiSessionResponseError;
@@ -156,18 +163,23 @@ async function ensureLiveSession(args: {
 }): Promise<
   ResultType<
     PiSessionHandle,
-    PiSessionHandlerError | PiSessionResponseError | PiModelRequestError | PiModelSelectionError
+    | PiPublicSessionHandlerError
+    | PiSessionHandlerError
+    | PiSessionResponseError
+    | PiModelRequestError
+    | PiModelSelectionError
   >
 > {
   return Result.gen(async function* () {
-    const resolved = yield* Result.await(
-      resolvePiSession({
+    const resolved = yield* Result.mapError(
+      await resolvePiSession({
         runtime: args.runtime,
         operation: "prompt",
         sessionId: args.input.ref.sessionId,
         cwd: args.input.cwd,
         adapterOptions: args.input.adapterOptions,
       }),
+      (error) => mapPiSessionHandlerError({ error, ref: args.input.ref, operation: "prompt" }),
     );
 
     if (resolved.handle) return Result.ok(resolved.handle);

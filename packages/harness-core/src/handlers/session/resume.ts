@@ -13,6 +13,7 @@ import {
   createHarnessSessionInfo,
   createWorkingDirectoryPath,
   invokeAdapter,
+  mapSessionAdapterError,
 } from "../utils";
 
 export async function handleResumeSession<
@@ -46,7 +47,14 @@ export async function handleResumeSession<
                 signal: args.input.signal,
               }),
             mapError: (cause) =>
-              new HarnessAdapterResumeSessionError({ harnessId: args.input.harnessId, cause }),
+              mapSessionAdapterError(
+                cause,
+                (unhandledCause) =>
+                  new HarnessAdapterResumeSessionError({
+                    harnessId: args.input.harnessId,
+                    cause: unhandledCause,
+                  }),
+              ),
           }),
         );
 

@@ -1,10 +1,19 @@
-import type { HarnessAdapterGetSessionInput, HarnessAdapterSessionInfo } from "@xmux/harness-core";
+import type {
+  HarnessAdapterGetSessionInput,
+  HarnessAdapterSessionInfo,
+  HarnessSessionNotFoundError,
+} from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionRequestError, OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeRuntime } from "../runtime";
 import type { OpenCodeCreateOptions, OpenCodeSessionInfo } from "../types";
 import { getEffectiveSessionModel } from "./models";
-import { toAdapterSession, toResponseResult, toSessionResponseError } from "./utils";
+import {
+  mapOpenCodeSessionError,
+  toAdapterSession,
+  toResponseResult,
+  toSessionResponseError,
+} from "./utils";
 
 export async function getSession(
   runtime: OpenCodeRuntime,
@@ -12,7 +21,7 @@ export async function getSession(
 ): Promise<
   ResultType<
     HarnessAdapterSessionInfo<OpenCodeSessionInfo>,
-    OpenCodeSessionRequestError | OpenCodeSessionResponseError
+    OpenCodeSessionRequestError | OpenCodeSessionResponseError | HarnessSessionNotFoundError
   >
 > {
   return Result.gen(async function* () {
@@ -30,12 +39,15 @@ export async function getSession(
       }),
     );
 
-    const session = yield* toResponseResult({
-      response,
-      toError: toSessionResponseError,
-      failureReason: "OpenCode session get failed",
-      missingReason: "OpenCode session get returned no session data",
-    });
+    const session = yield* Result.mapError(
+      toResponseResult({
+        response,
+        toError: toSessionResponseError,
+        failureReason: "OpenCode session get failed",
+        missingReason: "OpenCode session get returned no session data",
+      }),
+      (error) => mapOpenCodeSessionError({ error, ref: input.ref, operation: "getSession" }),
+    );
 
     return Result.ok(
       toAdapterSession({

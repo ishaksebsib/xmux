@@ -159,12 +159,13 @@ describe("Pi logging contract", () => {
           operation: "getSession",
           result: "error",
           error: expect.objectContaining({
-            message: expect.stringContaining("Pi session not found"),
+            message: expect.stringContaining("Session not found for getSession"),
           }),
         }),
       );
 
       const serializedLogs = JSON.stringify(logger.debug.mock.calls);
+      expect(serializedLogs).toContain("Pi session not found");
       expect(serializedLogs).not.toContain("do not log prompt text");
     } finally {
       await opened.close();

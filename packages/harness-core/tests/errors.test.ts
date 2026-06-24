@@ -4,6 +4,7 @@ import {
   HarnessAdapterOpenError,
   HarnessAdapterPromptError,
   HarnessCloseError,
+  HarnessSessionNotFoundError,
   UnknownHarnessError,
 } from "../src";
 
@@ -26,6 +27,20 @@ describe("harness-core errors", () => {
     expect(error.harnessId).toBe("pi");
     expect(error.operation).toBe("setModel");
     expect(error.message).toContain("setModel");
+  });
+
+  test("session-not-found errors expose ref, operation, and cause", () => {
+    const cause = new Error("native missing");
+    const error = new HarnessSessionNotFoundError({
+      ref: { harnessId: "pi", sessionId: "session-1" },
+      operation: "resumeSession",
+      cause,
+    });
+
+    expect(error.ref).toEqual({ harnessId: "pi", sessionId: "session-1" });
+    expect(error.operation).toBe("resumeSession");
+    expect(error.cause).toBe(cause);
+    expect(error.message).toContain("pi:session-1");
   });
 
   test("operation-specific wrapper errors preserve causes", () => {

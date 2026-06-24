@@ -2,6 +2,7 @@ import { createAgentSession, SessionManager } from "@earendil-works/pi-coding-ag
 import type {
   HarnessAdapterResumeSessionInput,
   HarnessAdapterSessionInfo,
+  SessionRef,
 } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { mergePiCreateOptions } from "../config";
@@ -23,12 +24,18 @@ import {
 import {
   createPiSessionHandle,
   mapLiveSession,
+  mapPiSessionHandlerError,
   resolvePiSession,
+  type PiPublicSessionHandlerError,
   type PiSessionHandlerError,
   type ResolvedPiSession,
 } from "./utils";
 
-type PiResumeSessionError = PiSessionHandlerError | PiModelRequestError | PiModelSelectionError;
+type PiResumeSessionError =
+  | PiPublicSessionHandlerError
+  | PiSessionHandlerError
+  | PiModelRequestError
+  | PiModelSelectionError;
 
 function openResolvedPiSession(args: {
   readonly runtime: PiRuntime;
@@ -119,14 +126,16 @@ export async function resumeSession(
   input: HarnessAdapterResumeSessionInput<PiCreateOptions>,
 ): Promise<ResultType<HarnessAdapterSessionInfo<PiSessionInfo>, PiResumeSessionError>> {
   return Result.gen(async function* () {
-    const resolved = yield* Result.await(
-      resolvePiSession({
+    const ref: SessionRef<"pi"> = { harnessId: "pi", sessionId: input.sessionId };
+    const resolved = yield* Result.mapError(
+      await resolvePiSession({
         runtime,
         operation: "resumeSession",
         sessionId: input.sessionId,
         cwd: input.cwd,
         adapterOptions: input.adapterOptions,
       }),
+      (error) => mapPiSessionHandlerError({ error, ref, operation: "resumeSession" }),
     );
     const handle = yield* Result.await(
       openResolvedPiSession({ runtime, resolved, adapterOptions: input.adapterOptions }),

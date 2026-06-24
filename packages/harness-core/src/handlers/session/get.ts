@@ -8,7 +8,12 @@ import type {
   HarnessAdapterDefinitions,
 } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, createHarnessSessionInfo, invokeAdapter } from "../utils";
+import {
+  adapterOptionsFromInput,
+  createHarnessSessionInfo,
+  invokeAdapter,
+  mapSessionAdapterError,
+} from "../utils";
 
 export async function handleGetSession<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -39,7 +44,14 @@ export async function handleGetSession<
                 signal: args.input.signal,
               }),
             mapError: (cause) =>
-              new HarnessAdapterGetSessionError({ harnessId: args.input.ref.harnessId, cause }),
+              mapSessionAdapterError(
+                cause,
+                (unhandledCause) =>
+                  new HarnessAdapterGetSessionError({
+                    harnessId: args.input.ref.harnessId,
+                    cause: unhandledCause,
+                  }),
+              ),
           }),
         );
 

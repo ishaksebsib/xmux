@@ -25,7 +25,7 @@ import type { OpenCodePromptEvent, OpenCodePromptPart, SelectedOpenCodeModel } f
 import type { OpenCodeCreateOptions } from "../types";
 import { normalizeOpenCodeModelRef } from "../handlers/models";
 import { applyThinkingToModel, getEffectiveThinking } from "../handlers/thinking";
-import { describeResponseError } from "../handlers/utils";
+import { describeResponseError, mapOpenCodeSessionError } from "../handlers/utils";
 
 function sumUsage(usage: HarnessTokenUsage | undefined): number | undefined {
   if (usage?.total !== undefined) return usage.total;
@@ -173,11 +173,19 @@ async function enrichCompletedRunEvent(args: {
   }
 }
 
-function createResponseError(args: { readonly status: number; readonly error: unknown }) {
-  return new OpenCodeSessionResponseError({
-    status: args.status,
-    detail: describeResponseError(args.error),
-    reason: "OpenCode session prompt failed",
+function createResponseError(args: {
+  readonly input: HarnessAdapterPromptInput<"opencode", OpenCodeCreateOptions>;
+  readonly status: number;
+  readonly error: unknown;
+}) {
+  return mapOpenCodeSessionError({
+    error: new OpenCodeSessionResponseError({
+      status: args.status,
+      detail: describeResponseError(args.error),
+      reason: "OpenCode session prompt failed",
+    }),
+    ref: args.input.ref,
+    operation: "prompt",
   });
 }
 
@@ -269,7 +277,11 @@ function createPromptEventStream(args: {
 
       const status = prompted.value.response?.status ?? 0;
       if (prompted.value.error) {
-        const error = createResponseError({ status, error: prompted.value.error });
+        const error = createResponseError({
+          input: args.input,
+          status,
+          error: prompted.value.error,
+        });
         streamAbort.abort(error);
         yield {
           type: "run",

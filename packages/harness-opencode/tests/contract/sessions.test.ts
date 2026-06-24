@@ -2,6 +2,7 @@ import {
   HarnessAdapterCreateSessionError,
   HarnessAdapterDeleteSessionError,
   HarnessAdapterListSessionsError,
+  HarnessSessionNotFoundError,
   createHarness,
 } from "@xmux/harness-core";
 import { describe, expect, test } from "vitest";
@@ -93,6 +94,29 @@ describe("OpenCode session contract", () => {
       expect(listed.unwrap("listed")).toEqual([
         expect.objectContaining({ ref: { harnessId: "opencode", sessionId: "session-1" } }),
       ]);
+    } finally {
+      await harness.close();
+      await fakeOpenCode.close();
+    }
+  });
+
+  test("maps OpenCode missing sessions to the harness session-not-found contract error", async () => {
+    const fakeOpenCode = await startFakeOpenCodeServer();
+    const harness = createOpenCodeHarness(fakeOpenCode.url);
+
+    try {
+      const resumed = await harness.resumeSession({
+        harnessId: "opencode",
+        sessionId: "missing",
+      });
+      const found = await harness.getSession({
+        ref: { harnessId: "opencode", sessionId: "missing" },
+      });
+
+      expect(resumed.isErr()).toBe(true);
+      expect(found.isErr()).toBe(true);
+      if (resumed.isErr()) expect(resumed.error).toBeInstanceOf(HarnessSessionNotFoundError);
+      if (found.isErr()) expect(found.error).toBeInstanceOf(HarnessSessionNotFoundError);
     } finally {
       await harness.close();
       await fakeOpenCode.close();

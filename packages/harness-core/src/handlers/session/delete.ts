@@ -4,7 +4,7 @@ import type { HarnessLogScope } from "../../logger";
 import { logHarnessOperation } from "../../logger-utils";
 import type { DeleteSessionInput, HarnessAdapterDefinitions } from "../../types";
 import type { HarnessRuntimeGetter } from "../utils";
-import { adapterOptionsFromInput, invokeAdapter } from "../utils";
+import { adapterOptionsFromInput, invokeAdapter, mapSessionAdapterError } from "../utils";
 
 export async function handleDeleteSession<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -35,7 +35,14 @@ export async function handleDeleteSession<
                 signal: args.input.signal,
               }),
             mapError: (cause) =>
-              new HarnessAdapterDeleteSessionError({ harnessId: args.input.ref.harnessId, cause }),
+              mapSessionAdapterError(
+                cause,
+                (unhandledCause) =>
+                  new HarnessAdapterDeleteSessionError({
+                    harnessId: args.input.ref.harnessId,
+                    cause: unhandledCause,
+                  }),
+              ),
           }),
         );
 

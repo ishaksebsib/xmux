@@ -5,7 +5,13 @@ import {
   type AgentSession,
   type SessionInfo,
 } from "@earendil-works/pi-coding-agent";
-import type { HarnessAdapterSessionInfo, HarnessModelRef } from "@xmux/harness-core";
+import {
+  HarnessSessionNotFoundError,
+  type HarnessAdapterSessionInfo,
+  type HarnessModelRef,
+  type HarnessSessionOperation,
+  type SessionRef,
+} from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { mergePiCreateOptions } from "../config";
 import {
@@ -23,6 +29,12 @@ export type PiSessionHandlerError =
   | PiSessionNotFoundError
   | PiSessionAmbiguousError;
 
+export type PiPublicSessionHandlerError =
+  | PiSessionRequestError
+  | PiSessionResponseError
+  | HarnessSessionNotFoundError
+  | PiSessionAmbiguousError;
+
 export type ResolvedPiSession = {
   readonly sessionId: string;
   readonly cwd?: string;
@@ -34,6 +46,20 @@ export type ResolvedPiSession = {
 
 function normalizeComparablePath(value: string): string {
   return path.resolve(value);
+}
+
+export function mapPiSessionHandlerError(args: {
+  readonly error: PiSessionHandlerError;
+  readonly ref: SessionRef<"pi">;
+  readonly operation: HarnessSessionOperation;
+}): PiPublicSessionHandlerError {
+  return PiSessionNotFoundError.is(args.error)
+    ? new HarnessSessionNotFoundError({
+        ref: args.ref,
+        operation: args.operation,
+        cause: args.error,
+      })
+    : args.error;
 }
 
 export function toModelRef(model: AgentSession["model"]): HarnessModelRef | undefined {

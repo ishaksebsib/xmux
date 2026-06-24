@@ -1,5 +1,11 @@
 import type { Session } from "@opencode-ai/sdk/v2";
-import type { HarnessAdapterSessionInfo, HarnessModelRef } from "@xmux/harness-core";
+import {
+  HarnessSessionNotFoundError,
+  type HarnessAdapterSessionInfo,
+  type HarnessModelRef,
+  type HarnessSessionOperation,
+  type SessionRef,
+} from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import { OpenCodeSessionResponseError } from "../errors";
 import type { OpenCodeSessionInfo } from "../types";
@@ -46,6 +52,20 @@ export function toResponseResult<TData, TError>(args: {
   }
 
   return Result.ok(args.response.data);
+}
+
+export function mapOpenCodeSessionError<TError>(args: {
+  readonly error: TError;
+  readonly ref: SessionRef<"opencode">;
+  readonly operation: HarnessSessionOperation;
+}): TError | HarnessSessionNotFoundError {
+  return OpenCodeSessionResponseError.is(args.error) && args.error.status === 404
+    ? new HarnessSessionNotFoundError({
+        ref: args.ref,
+        operation: args.operation,
+        cause: args.error,
+      })
+    : args.error;
 }
 
 export function toSessionInfo(session: Session): OpenCodeSessionInfo {

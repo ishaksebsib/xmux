@@ -15,6 +15,7 @@ import {
   adapterOptionsFromInput,
   createWorkingDirectoryPath,
   invokeAdapter,
+  mapSessionAdapterError,
   requireCapability,
 } from "../utils";
 
@@ -60,10 +61,14 @@ export async function handleRespondInteraction<
                 signal: args.input.signal,
               }),
             mapError: (cause) =>
-              new HarnessAdapterRespondInteractionError({
-                harnessId: args.input.ref.harnessId,
+              mapSessionAdapterError(
                 cause,
-              }),
+                (unhandledCause) =>
+                  new HarnessAdapterRespondInteractionError({
+                    harnessId: args.input.ref.harnessId,
+                    cause: unhandledCause,
+                  }),
+              ),
           }),
         );
 
