@@ -531,35 +531,38 @@ describe("prompt messages", () => {
       finishFirst = resolve;
     });
     let promptCount = 0;
-    const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux({
-      onPrompt: () => {
-        promptCount += 1;
-        return promptCount === 1
-          ? controlledEvents({ text: "first", waitFor: firstCanFinish })
-          : toAsync([
-              { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "second" },
-              completedEvent(),
-            ]);
-      },
-    });
+    const { actionMessages, emitMessage, promptInputs, replies, xmux } =
+      await initializeFallbackXmux({
+        onPrompt: () => {
+          promptCount += 1;
+          return promptCount === 1
+            ? controlledEvents({ text: "first", waitFor: firstCanFinish })
+            : toAsync([
+                { type: "content", phase: "delta", kind: "text", ref: sessionRef, delta: "second" },
+                completedEvent(),
+              ]);
+        },
+      });
     await bindSession({ xmux });
 
     emitMessage(messageEvent({ text: "one", messageId: "m1" }));
     await eventually(() => promptInputs.length === 1);
 
     emitMessage(messageEvent({ text: "two", messageId: "m2" }));
-    await eventually(() => replies.length === 1);
+    await eventually(() => actionMessages.length === 1);
 
-    expect(replies[0]).toBe(
-      "**Session is busy**\n\nWait for the current response to finish, then send another message.",
-    );
+    expect(actionMessages[0]?.text).toContain("**Already running**");
+    expect(actionMessages[0]?.buttons).toEqual([
+      [expect.objectContaining({ actionId: "q", value: "add" })],
+      [expect.objectContaining({ actionId: "q", value: "interrupt" })],
+    ]);
     expect(promptInputs).toHaveLength(1);
 
     finishFirst();
-    await eventually(() => replies.length === 2);
+    await eventually(() => replies.length === 1);
 
     emitMessage(messageEvent({ text: "three", messageId: "m3" }));
-    await eventually(() => promptInputs.length === 2 && replies.length === 3);
+    await eventually(() => promptInputs.length === 2 && replies.length === 2);
 
     expect(replies).toContain("first");
     expect(replies).toContain("second");

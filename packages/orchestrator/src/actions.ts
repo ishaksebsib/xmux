@@ -8,6 +8,7 @@ export const deleteSessionActionId = "d" as const;
 export const resumeHarnessActionId = "rh" as const;
 export const resumeSessionActionId = "r" as const;
 export const interactionActionId = "i" as const;
+export const queueActionId = "q" as const;
 export const sttActionId = "stt" as const;
 
 function actionWithoutPayload() {
@@ -67,6 +68,13 @@ export const actions = defineChatActions({
       allow: actionValue<string>(),
       always: actionValue<string>(),
       reject: actionValue<string>(),
+    },
+  }),
+  [queueActionId]: defineChatAction({
+    values: {
+      add: actionValue<string>(),
+      interrupt: actionValue<string>(),
+      remove: actionValue<string>(),
     },
   }),
   [sttActionId]: defineChatAction({

@@ -18,7 +18,7 @@ import type { SessionRecord } from "../../store";
 import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
 import { markSessionDeletedUpstream } from "../session";
 import { formatInteractionActionMessage } from "../interaction/response";
-import { PromptResponseError } from "./errors";
+import { PromptAlreadyRunningError, PromptResponseError } from "./errors";
 import { formatPromptFailure } from "./response";
 import { promptSessionForThread } from "./service";
 import { createPromptEventRenderer, splitPromptStreamDelta } from "./stream";
@@ -59,6 +59,18 @@ export async function handlePromptMessage<
   });
 
   if (prompted.isErr()) {
+    if (PromptAlreadyRunningError.is(prompted.error)) {
+      const offered = await input.ctx.app.services.promptEvents.emit({
+        type: "prompt.busy",
+        ctx: input.ctx,
+        event: input.event,
+        thread: threadFromChatEvent(input.event),
+        error: prompted.error,
+      });
+
+      if (offered.isOk()) return Result.ok();
+    }
+
     return replyToChatEvent({
       event: input.event,
       message: formatPromptFailure(prompted.error),
@@ -78,6 +90,15 @@ export async function handlePromptMessage<
     prompted.value.cancel(streamed.error);
     prompted.value.release();
   }
+
+  await input.ctx.app.services.promptEvents.emit({
+    type: "prompt.settled",
+    ctx: input.ctx,
+    event: input.event,
+    thread: threadFromChatEvent(input.event),
+    session: prompted.value.session,
+    requestId: input.ctx.requestId,
+  });
 
   return streamed;
 }

@@ -49,6 +49,16 @@ export const commands = defineChatCommands({
   cancel: defineChatCommand({
     description: "Cancel the active harness generation for this chat thread",
   }),
+  queue: defineChatCommand({
+    description: "List or manage prompts waiting for the active session",
+    options: {
+      action: stringOption({
+        description: "Queue action: list, add, or remove",
+        choices: ["list", "add", "remove"] as const,
+      }),
+      value: stringOption({ description: "Prompt text for add, or position for remove" }),
+    },
+  }),
   id: defineChatCommand({
     description: "Show your chat user id",
   }),

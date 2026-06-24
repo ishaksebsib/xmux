@@ -12,7 +12,9 @@ import { XmuxCloseError, XmuxInitializeError, type XmuxConfigurationError } from
 import { parseXmuxConfig, type Config } from "./config";
 import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
+import { createPromptEventBus } from "./features/prompt/events";
 import { createPromptRunRegistry } from "./features/prompt/run-registry";
+import { createPromptQueueRegistry } from "./features/queue/registry";
 import { createSttRunRegistry } from "./features/stt/run-registry";
 import type { XmuxLogMetadata } from "./logger";
 import { xmuxLogEvents, type XmuxLogger } from "./logger";
@@ -108,7 +110,12 @@ export function createXmuxResult<
       createRequestId: randomUUID,
       now: () => new Date(),
       shutdownSignal: shutdownController.signal,
+      promptEvents: createPromptEventBus(),
       promptRuns: createPromptRunRegistry(),
+      promptQueue: createPromptQueueRegistry({
+        maxItems: config.queue.maxItems,
+        offerTtlMs: config.queue.offerTtlMs,
+      }),
       sttRuns: createSttRunRegistry(),
     }),
   });

@@ -11,6 +11,7 @@ import { registerInteractionRoute } from "./features/interaction";
 import { registerModelRoute } from "./features/model";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
+import { registerQueueRoute } from "./features/queue";
 import { registerResumeRoute } from "./features/resume";
 import { registerSttRoute } from "./features/stt";
 import { registerThinkingRoute } from "./features/thinking";
@@ -33,6 +34,7 @@ export function registerRoutes<
     registerModelRoute(ctx, middleware),
     registerThinkingRoute(ctx, middleware),
     registerCancelRoute(ctx, middleware),
+    registerQueueRoute(ctx, middleware),
     registerIdRoute(ctx, middleware),
     registerInteractionRoute(ctx, middleware),
     registerSttRoute(ctx, middleware),

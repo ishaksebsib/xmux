@@ -81,6 +81,16 @@ export interface PromptConfig {
   readonly attachments?: PromptAttachmentsConfig;
 }
 
+export interface QueueConfig {
+  readonly maxItems?: number;
+  readonly offerTtlMs?: number;
+}
+
+export interface NormalizedQueueConfig {
+  readonly maxItems: number;
+  readonly offerTtlMs: number;
+}
+
 export interface SttConfig {
   readonly enabled?: boolean;
   readonly provider?: "openai-compatible";
@@ -114,6 +124,7 @@ export interface Config {
   readonly resume?: ResumeConfig;
   readonly model?: ModelConfig;
   readonly prompt?: PromptConfig;
+  readonly queue?: QueueConfig;
   readonly stt?: SttConfig;
 }
 
@@ -124,6 +135,7 @@ export interface NormalizedConfig {
   readonly resume: NormalizedResumeConfig;
   readonly model: NormalizedModelConfig;
   readonly prompt: NormalizedPromptConfig;
+  readonly queue: NormalizedQueueConfig;
   readonly stt: NormalizedSttConfig;
 }
 
@@ -131,6 +143,8 @@ const DEFAULT_MAX_LIST_ENTRIES = 100;
 const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
 const DEFAULT_MAX_MODELS_PER_PROVIDER = 10;
 const DEFAULT_PROMPT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_QUEUE_MAX_ITEMS = 10;
+const DEFAULT_QUEUE_OFFER_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_STT_MAX_BYTES = 25 * 1024 * 1024;
 const PROMPT_ATTACHMENT_KINDS = Object.freeze([
   "image",
@@ -392,6 +406,26 @@ function parsePromptConfig(
   });
 }
 
+function parseQueueConfig(
+  config: QueueConfig | undefined,
+): ResultType<NormalizedQueueConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "queue");
+    const maxItems = yield* parsePositiveInteger(
+      parsed?.maxItems,
+      "queue.maxItems",
+      DEFAULT_QUEUE_MAX_ITEMS,
+    );
+    const offerTtlMs = yield* parsePositiveInteger(
+      parsed?.offerTtlMs,
+      "queue.offerTtlMs",
+      DEFAULT_QUEUE_OFFER_TTL_MS,
+    );
+
+    return Result.ok(Object.freeze({ maxItems, offerTtlMs }));
+  });
+}
+
 function parseOptionalString(
   input: unknown,
   path: string,
@@ -476,6 +510,7 @@ export function parseXmuxConfig(
     const resume = yield* parseResumeConfig(config.resume);
     const model = yield* parseModelConfig(config.model);
     const prompt = yield* parsePromptConfig(config.prompt);
+    const queue = yield* parseQueueConfig(config.queue);
     const stt = yield* parseSttConfig(config.stt);
 
     return Result.ok(
@@ -486,6 +521,7 @@ export function parseXmuxConfig(
         resume,
         model,
         prompt,
+        queue,
         stt,
       }),
     );

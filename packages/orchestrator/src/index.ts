@@ -56,6 +56,8 @@ export type {
   PromptAttachmentsConfig,
   PromptConfig,
   PromptResponseConfig,
+  QueueConfig,
+  NormalizedQueueConfig,
   ResumeConfig,
   SttConfig,
   NormalizedSttConfig,

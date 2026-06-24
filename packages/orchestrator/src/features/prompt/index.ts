@@ -22,6 +22,15 @@ export {
   type PromptAttachmentError,
 } from "./errors";
 export {
+  createPromptEventBus,
+  type PromptBusyEvent,
+  type PromptEvent,
+  type PromptEventBus,
+  type PromptEventHandler,
+  type PromptEventType,
+  type PromptSettledEvent,
+} from "./events";
+export {
   createPromptRunRegistry,
   type ActivePromptRun,
   type PendingPromptInteraction,
