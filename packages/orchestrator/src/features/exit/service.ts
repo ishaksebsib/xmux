@@ -39,6 +39,7 @@ export async function exitActiveSessionForThread<
 
     const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
     yield* Result.await(input.ctx.app.store.threadBindings.delete(input.thread));
+    input.ctx.app.services.promptQueue.clearThread(input.thread);
 
     return Result.ok({
       status: "exited" as const,

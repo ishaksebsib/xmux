@@ -6,7 +6,9 @@ import type { NormalizedConfig } from "./config";
 import type { FileSystemHost } from "./filesystem";
 import type { Store } from "./store";
 import type { XmuxLogScope } from "./logger";
+import type { PromptEventBus } from "./features/prompt/events";
 import type { PromptRunRegistry } from "./features/prompt/run-registry";
+import type { PromptQueueRegistry } from "./features/queue/registry";
 import type { SttRunRegistry } from "./features/stt/run-registry";
 
 /**
@@ -89,7 +91,9 @@ export interface Services {
   readonly createRequestId: () => string;
   readonly now: () => Date;
   readonly shutdownSignal: AbortSignal;
+  readonly promptEvents: PromptEventBus;
   readonly promptRuns: PromptRunRegistry;
+  readonly promptQueue: PromptQueueRegistry;
   readonly sttRuns: SttRunRegistry;
 }
 

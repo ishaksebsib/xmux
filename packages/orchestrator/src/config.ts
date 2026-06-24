@@ -3,6 +3,10 @@ import type { ChatAttachmentKind } from "@xmux/chat-core";
 import { parseSpeechToTextClientConfig, type SpeechToTextClientConfig } from "@xmux/stt";
 import { Result, type Result as ResultType } from "better-result";
 import { XmuxConfigurationError } from "./errors";
+import {
+  DEFAULT_PROMPT_QUEUE_MAX_ITEMS,
+  DEFAULT_PROMPT_QUEUE_OFFER_TTL_MS,
+} from "./features/queue/defaults";
 
 /**
  * Delivery mode for harnesses responses.
@@ -81,6 +85,16 @@ export interface PromptConfig {
   readonly attachments?: PromptAttachmentsConfig;
 }
 
+export interface QueueConfig {
+  readonly maxItems?: number;
+  readonly offerTtlMs?: number;
+}
+
+export interface NormalizedQueueConfig {
+  readonly maxItems: number;
+  readonly offerTtlMs: number;
+}
+
 export interface SttConfig {
   readonly enabled?: boolean;
   readonly provider?: "openai-compatible";
@@ -114,6 +128,7 @@ export interface Config {
   readonly resume?: ResumeConfig;
   readonly model?: ModelConfig;
   readonly prompt?: PromptConfig;
+  readonly queue?: QueueConfig;
   readonly stt?: SttConfig;
 }
 
@@ -124,6 +139,7 @@ export interface NormalizedConfig {
   readonly resume: NormalizedResumeConfig;
   readonly model: NormalizedModelConfig;
   readonly prompt: NormalizedPromptConfig;
+  readonly queue: NormalizedQueueConfig;
   readonly stt: NormalizedSttConfig;
 }
 
@@ -392,6 +408,26 @@ function parsePromptConfig(
   });
 }
 
+function parseQueueConfig(
+  config: QueueConfig | undefined,
+): ResultType<NormalizedQueueConfig, XmuxConfigurationError> {
+  return Result.gen(function* () {
+    const parsed = yield* parseOptionalObject(config, "queue");
+    const maxItems = yield* parsePositiveInteger(
+      parsed?.maxItems,
+      "queue.maxItems",
+      DEFAULT_PROMPT_QUEUE_MAX_ITEMS,
+    );
+    const offerTtlMs = yield* parsePositiveInteger(
+      parsed?.offerTtlMs,
+      "queue.offerTtlMs",
+      DEFAULT_PROMPT_QUEUE_OFFER_TTL_MS,
+    );
+
+    return Result.ok(Object.freeze({ maxItems, offerTtlMs }));
+  });
+}
+
 function parseOptionalString(
   input: unknown,
   path: string,
@@ -476,6 +512,7 @@ export function parseXmuxConfig(
     const resume = yield* parseResumeConfig(config.resume);
     const model = yield* parseModelConfig(config.model);
     const prompt = yield* parsePromptConfig(config.prompt);
+    const queue = yield* parseQueueConfig(config.queue);
     const stt = yield* parseSttConfig(config.stt);
 
     return Result.ok(
@@ -486,6 +523,7 @@ export function parseXmuxConfig(
         resume,
         model,
         prompt,
+        queue,
         stt,
       }),
     );
