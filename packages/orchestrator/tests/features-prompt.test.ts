@@ -15,6 +15,7 @@ import {
 } from "../src/features/prompt";
 import type { PromptAttachmentsConfig } from "../src";
 import { createSessionRecord, createThreadBinding, type Store } from "../src/store";
+import { createStoreWithDanglingBindings } from "./support/dangling-store";
 
 const fallbackCapabilities = {
   messages: {
@@ -76,14 +77,15 @@ describe("prompt messages", () => {
     await xmux.shutdown();
   });
 
-  test("replies when a thread binding points at a missing session record", async () => {
-    const { emitMessage, replies, xmux } = await initializeFallbackXmux();
+  test("replies when a legacy dangling binding points at a missing session record", async () => {
     const relatedThread = { chatId: "telegram", threadId: "conversation-2" } as const;
     const now = new Date().toISOString();
-    await xmux.ctx.store.threadBindings.bind(createThreadBinding({ thread, sessionRef, now }));
-    await xmux.ctx.store.threadBindings.bind(
-      createThreadBinding({ thread: relatedThread, sessionRef, now }),
-    );
+    const { emitMessage, replies, xmux } = await initializeFallbackXmux({
+      store: createStoreWithDanglingBindings([
+        createThreadBinding({ thread, sessionRef, now }),
+        createThreadBinding({ thread: relatedThread, sessionRef, now }),
+      ]),
+    });
 
     emitMessage(messageEvent({ text: "hello" }));
 
@@ -571,6 +573,7 @@ interface InitializeXmuxInput {
   readonly promptAttachments?: PromptAttachmentsConfig;
   readonly promptError?: unknown;
   readonly onPrompt?: () => AsyncIterable<PiPromptEvent>;
+  readonly store?: Store;
 }
 
 async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
@@ -627,6 +630,7 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
       deliveryMode: "requester_only",
       prompt: { attachments: input.promptAttachments },
     },
+    store: input.store,
   });
 
   expect((await xmux.initialize()).isOk()).toBe(true);
@@ -699,6 +703,7 @@ async function initializeStreamingXmux(input: InitializeXmuxInput = {}) {
       deliveryMode: "requester_only",
       prompt: { attachments: input.promptAttachments },
     },
+    store: input.store,
   });
 
   expect((await xmux.initialize()).isOk()).toBe(true);

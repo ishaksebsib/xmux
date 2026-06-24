@@ -58,6 +58,11 @@ export function createInMemoryStore(): Store {
 
     threadBindings: {
       async bind(binding) {
+        const targetSessionKey = sessionKey(binding.sessionRef);
+        if (!sessions.has(targetSessionKey)) {
+          return Result.err(new StoreNotFoundError({ resource: "session", id: targetSessionKey }));
+        }
+
         threadBindings.set(threadKey(binding.thread), cloneBinding(binding));
         return Result.ok();
       },

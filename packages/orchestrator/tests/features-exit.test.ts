@@ -3,7 +3,8 @@ import { describe, expect, test } from "vitest";
 import { defineChatAdapter } from "@xmux/chat-core";
 import { defineHarnessAdapter } from "@xmux/harness-core";
 import { createXmux } from "../src";
-import { createSessionRecord, createThreadBinding } from "../src/store";
+import { createSessionRecord, createThreadBinding, type Store } from "../src/store";
+import { createStoreWithDanglingBindings } from "./support/dangling-store";
 
 const capabilities = {
   messages: {
@@ -63,10 +64,11 @@ describe("/exit command", () => {
     await xmux.shutdown();
   });
 
-  test("clears a stale binding when the session record is missing", async () => {
-    const { emitCommand, replies, xmux } = await initializeXmux();
+  test("clears a legacy dangling binding when the session record is missing", async () => {
     const now = new Date().toISOString();
-    await xmux.ctx.store.threadBindings.bind(createThreadBinding({ thread, sessionRef, now }));
+    const { emitCommand, replies, xmux } = await initializeXmux({
+      store: createStoreWithDanglingBindings([createThreadBinding({ thread, sessionRef, now })]),
+    });
 
     emitCommand(exitCommandEvent());
 
@@ -83,7 +85,11 @@ describe("/exit command", () => {
   });
 });
 
-async function initializeXmux() {
+interface InitializeXmuxInput {
+  readonly store?: Store;
+}
+
+async function initializeXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
   const harnessCalls: string[] = [];
   let emitCommand: ((event: unknown) => void) | undefined;
@@ -172,6 +178,7 @@ async function initializeXmux() {
       defaultWorkingDirectory: process.cwd(),
       deliveryMode: "requester_only",
     },
+    store: input.store,
   });
 
   expect((await xmux.initialize()).isOk()).toBe(true);

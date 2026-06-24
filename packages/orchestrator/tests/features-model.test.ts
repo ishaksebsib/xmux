@@ -10,7 +10,8 @@ import {
   type HarnessThinkingTarget,
 } from "@xmux/harness-core";
 import { createXmux } from "../src";
-import { createSessionRecord, createThreadBinding } from "../src/store";
+import { createSessionRecord, createThreadBinding, type Store } from "../src/store";
+import { createStoreWithDanglingBindings } from "./support/dangling-store";
 
 const capabilities = {
   messages: {
@@ -59,11 +60,12 @@ describe("/model command", () => {
     await xmux.shutdown();
   });
 
-  test("cleans up a thread binding that points at a missing session record", async () => {
-    const { emitCommand, replies, listInputs, xmux } = await initializeXmux();
-    await xmux.ctx.store.threadBindings.bind(
-      createThreadBinding({ thread, sessionRef, now: new Date().toISOString() }),
-    );
+  test("cleans up a legacy dangling binding that points at a missing session record", async () => {
+    const { emitCommand, replies, listInputs, xmux } = await initializeXmux({
+      store: createStoreWithDanglingBindings([
+        createThreadBinding({ thread, sessionRef, now: new Date().toISOString() }),
+      ]),
+    });
 
     emitCommand(commandEvent({ selector: undefined }));
 
@@ -471,6 +473,7 @@ interface InitializeXmuxInput {
   readonly supportModels?: boolean;
   readonly initialModel?: HarnessModelRef;
   readonly initialThinkingLevel?: HarnessThinkingLevel;
+  readonly store?: Store;
 }
 
 async function initializeXmux(input: InitializeXmuxInput = {}) {
@@ -658,6 +661,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
         ? {}
         : { model: { maxModelsPerProvider: input.maxModelsPerProvider } }),
     },
+    store: input.store,
   });
 
   expect((await xmux.initialize()).isOk()).toBe(true);

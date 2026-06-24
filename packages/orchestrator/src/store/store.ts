@@ -40,7 +40,8 @@ export interface SessionStore {
 
 /** Persistence operations for chat-thread to harness-session routing. */
 export interface ThreadBindingStore {
-  bind(binding: ThreadBinding): Promise<Result<void, StoreOperationError>>;
+  /** Binds a chat thread to an existing session; dangling bindings are rejected. */
+  bind(binding: ThreadBinding): Promise<Result<void, StoreNotFoundError | StoreOperationError>>;
   get(thread: ChatThreadRef): Promise<Result<ThreadBinding | null, StoreOperationError>>;
   delete(thread: ChatThreadRef): Promise<Result<void, StoreOperationError>>;
   deleteBySession(ref: SessionRef): Promise<Result<void, StoreOperationError>>;

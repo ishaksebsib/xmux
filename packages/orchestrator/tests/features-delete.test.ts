@@ -28,6 +28,20 @@ describe("/delete command", () => {
     const unrelatedThread = { chatId: "telegram", threadId: "conversation-3" } as const;
     const unrelatedRef = { harnessId: "opencode", sessionId: "abc222" } as const;
     const now = new Date().toISOString();
+    expect(
+      (
+        await xmux.ctx.store.sessions.create(
+          createSessionRecord({
+            ref: unrelatedRef,
+            origin: unrelatedThread,
+            requester: { userId: "user-1" },
+            cwd: process.cwd(),
+            title: "Other task",
+            now,
+          }),
+        )
+      ).isOk(),
+    ).toBe(true);
     await xmux.ctx.store.threadBindings.bind(
       createThreadBinding({ thread: relatedThread, sessionRef: activeRef, now }),
     );
