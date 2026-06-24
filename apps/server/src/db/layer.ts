@@ -13,8 +13,7 @@ export interface DatabaseStartupResult {
 /** libSQL local file URL. RuntimePaths already guarantees an absolute DB path. */
 export const libsqlFileUrlFromPath = (path: string): string => `file:${path}`;
 
-/** Effect SQL/libSQL layer for the server-owned local SQLite database. */
-export const makeDatabaseSqlLayer = (paths: ServerRuntimePaths) =>
+const makeRawDatabaseSqlLayer = (paths: ServerRuntimePaths) =>
   LibsqlClient.layer({
     url: libsqlFileUrlFromPath(paths.dbPath),
     concurrency: 1,
@@ -23,6 +22,12 @@ export const makeDatabaseSqlLayer = (paths: ServerRuntimePaths) =>
       "db.path": paths.dbPath,
     },
   });
+
+/** Effect SQL/libSQL layer for the server-owned local SQLite database. */
+export const makeDatabaseSqlLayer = (paths: ServerRuntimePaths) => {
+  const sqlLayer = makeRawDatabaseSqlLayer(paths);
+  return Layer.provideMerge(Layer.effectDiscard(applyDatabasePragmas(paths.dbPath)), sqlLayer);
+};
 
 const openDatabaseContext = Effect.fn("server.db.open")(function* (paths: ServerRuntimePaths) {
   const scope = yield* Effect.scope;
@@ -41,12 +46,11 @@ const openDatabaseContext = Effect.fn("server.db.open")(function* (paths: Server
   );
 });
 
-/** Open the DB, apply PRAGMAs, and run startup migrations in the current scope. */
+/** Open the DB with per-connection PRAGMAs and run startup migrations in the current scope. */
 export const initializeDatabase = Effect.fn("server.db.initialize")(function* () {
   const paths = yield* RuntimePaths;
   const sqlContext = yield* openDatabaseContext(paths);
 
-  yield* applyDatabasePragmas(paths.dbPath).pipe(Effect.provide(sqlContext));
   const appliedMigrations = yield* runDatabaseMigrations(paths.dbPath).pipe(
     Effect.provide(sqlContext),
   );
