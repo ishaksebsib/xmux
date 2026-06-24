@@ -23,7 +23,6 @@ const session = {
   },
   cwd: "/repo",
   title: "Fix bug",
-  deliveryMode: "requester_only",
   createdAt: "2026-05-08T10:00:00.000Z",
   updatedAt: "2026-05-08T10:00:00.000Z",
 } satisfies SessionRecord<"opencode", "telegram">;

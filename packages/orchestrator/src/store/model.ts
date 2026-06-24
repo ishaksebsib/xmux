@@ -1,5 +1,4 @@
 import type { SessionRef } from "@xmux/harness-core";
-import type { DeliveryMode } from "../config";
 
 /**
  * Durable session metadata.
@@ -16,7 +15,6 @@ export interface SessionRecord<
   readonly requester: ActorRef;
   readonly cwd: string;
   readonly title?: string;
-  readonly deliveryMode: DeliveryMode;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -24,7 +22,6 @@ export interface SessionRecord<
 /** Fields callers may change after a session has been created. */
 export interface SessionRecordPatch {
   readonly title?: string;
-  readonly deliveryMode?: DeliveryMode;
   readonly updatedAt: string;
 }
 
@@ -55,7 +52,6 @@ export interface CreateSessionRecordInput {
   readonly origin: ChatThreadRef;
   readonly requester: ActorRef;
   readonly cwd: string;
-  readonly deliveryMode: SessionRecord["deliveryMode"];
   readonly title?: string;
   readonly now: string;
 }
@@ -67,7 +63,6 @@ export function createSessionRecord(input: CreateSessionRecordInput): SessionRec
     requester: input.requester,
     cwd: input.cwd,
     ...(input.title === undefined ? {} : { title: input.title }),
-    deliveryMode: input.deliveryMode,
     createdAt: input.now,
     updatedAt: input.now,
   };

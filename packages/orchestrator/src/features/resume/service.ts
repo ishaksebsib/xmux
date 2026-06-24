@@ -219,7 +219,6 @@ async function upsertResumedSessionRecord<
       return Result.ok(
         yield* Result.await(
           input.ctx.app.store.sessions.update(input.session.ref, {
-            deliveryMode: input.ctx.app.config.deliveryMode,
             updatedAt: now,
             ...(input.session.title === undefined ? {} : { title: input.session.title }),
           }),
@@ -235,7 +234,6 @@ async function upsertResumedSessionRecord<
             origin: input.thread,
             requester: input.ctx.actor ?? UNKNOWN_ACTOR,
             cwd: input.cwd,
-            deliveryMode: input.ctx.app.config.deliveryMode,
             title: input.session.title,
             now,
           }),

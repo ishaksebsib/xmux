@@ -38,7 +38,9 @@ const executePragma = (input: {
     yield* sql.unsafe(input.statement).withoutTransform.pipe(
       Effect.asVoid,
       Effect.mapError((cause) => mapStartupFailure(input.path, input.statement, cause)),
-      Effect.catchDefect((cause) => Effect.fail(mapStartupFailure(input.path, input.statement, cause))),
+      Effect.catchDefect((cause) =>
+        Effect.fail(mapStartupFailure(input.path, input.statement, cause)),
+      ),
     );
   });
 
@@ -53,7 +55,9 @@ const readPragma = <A extends object>(input: {
     const sql = yield* SqlClient.SqlClient;
     return yield* sql.unsafe<A>(input.statement).withoutTransform.pipe(
       Effect.mapError((cause) => mapStartupFailure(input.path, input.statement, cause)),
-      Effect.catchDefect((cause) => Effect.fail(mapStartupFailure(input.path, input.statement, cause))),
+      Effect.catchDefect((cause) =>
+        Effect.fail(mapStartupFailure(input.path, input.statement, cause)),
+      ),
     );
   });
 

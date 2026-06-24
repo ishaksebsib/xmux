@@ -512,7 +512,6 @@ async function bindSession(input: {
     origin: thread,
     requester: { userId: "user-1" },
     cwd: process.cwd(),
-    deliveryMode: "requester_only",
     now,
   });
 

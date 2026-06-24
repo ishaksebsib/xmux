@@ -135,7 +135,6 @@ describe("/new command", () => {
       requester: { userId: "user-1", displayName: "Ishak" },
       cwd: process.cwd(),
       title: "Fix bug",
-      deliveryMode: "requester_only",
     });
 
     const binding = await xmux.ctx.store.threadBindings.get({

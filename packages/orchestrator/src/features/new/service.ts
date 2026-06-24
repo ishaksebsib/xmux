@@ -126,7 +126,6 @@ export async function createSessionForThread<
       origin: input.thread,
       requester: input.ctx.actor ?? UNKNOWN_ACTOR,
       cwd: created.cwd,
-      deliveryMode: input.ctx.app.config.deliveryMode,
       ref: created.ref,
       title: created.title,
       now,

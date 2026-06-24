@@ -530,7 +530,6 @@ async function bindSession(input: {
       origin: thread,
       requester: { userId: "user-1", displayName: "Ishak" },
       cwd: process.cwd(),
-      deliveryMode: "requester_only",
       title: "Fix bug",
       now,
     }),
