@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect";
 import { ServerConfig } from "./config/service";
+import { initializeDatabase } from "./db/layer";
 import type { ServerError } from "./errors";
 import { withFileLogger } from "./logging/file-logger";
 import { LogReader } from "./logging/log-reader";
@@ -53,6 +54,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
         { startupLockPath: paths.startupLockPath },
         Effect.gen(function* () {
           yield* assertNoActiveServer(paths);
+          yield* initializeDatabase();
           yield* transport.bind();
           yield* acquireManifestOwnership({
             paths,

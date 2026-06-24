@@ -1,6 +1,9 @@
 import { Schema } from "effect";
 import { ProcessId, SessionId } from "./contracts/primitives";
+import { DatabaseMigrationError, DatabaseStartupError } from "./db/errors";
 import { StatusTransitionError } from "./server-runtime/state";
+
+export { DatabaseMigrationError, DatabaseStartupError } from "./db/errors";
 
 /** Active-server checks prevent duplicate local runtimes for the same scope. */
 export class ActiveServerError extends Schema.TaggedErrorClass<ActiveServerError>()(
@@ -135,6 +138,8 @@ export const ServerError = Schema.Union([
   BootConfigError,
   ServerStartupError,
   ServerShutdownError,
+  DatabaseStartupError,
+  DatabaseMigrationError,
   RuntimePathError,
   ManifestError,
   StartupLockError,

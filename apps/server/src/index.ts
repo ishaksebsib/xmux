@@ -7,6 +7,8 @@ export {
   ConfigSecretError,
   ConfigValidationError,
   ControlServerError,
+  DatabaseMigrationError,
+  DatabaseStartupError,
   LogFileError,
   ManifestError,
   RuntimePathError,
