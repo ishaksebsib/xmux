@@ -101,7 +101,6 @@ export async function deleteSessionCommand<
       yield* Result.await(
         deleteSessionEverywhere({
           ctx: input.ctx,
-          thread: input.thread,
           session: {
             ref: { harnessId: target.harnessId, sessionId: selected.sessionId },
             shortId: input.shortId ?? selected.shortId,
@@ -160,7 +159,6 @@ async function deleteActiveSessionOrList<
         yield* Result.await(
           deleteSessionEverywhere({
             ctx: input.ctx,
-            thread: input.thread,
             session: {
               ref: active.ref,
               shortId: active.ref.sessionId,
@@ -222,7 +220,6 @@ async function deleteSessionEverywhere<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly thread: ChatThreadRef;
   readonly session: DeletedSessionSummary;
 }): Promise<Result<DeleteSessionOutput, DeleteCommandError>> {
   return Result.gen(async function* () {
@@ -238,7 +235,6 @@ async function deleteSessionEverywhere<
     yield* Result.await(
       cleanupDeletedSession({
         ctx: input.ctx,
-        thread: input.thread,
         ref: input.session.ref,
       }),
     );
@@ -264,7 +260,7 @@ async function getBoundSessionRecord<
     const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
 
     if (!session) {
-      yield* Result.await(input.ctx.app.store.threadBindings.delete(input.thread));
+      yield* Result.await(input.ctx.app.store.threadBindings.deleteBySession(binding.sessionRef));
       return Result.ok(null);
     }
 
@@ -277,26 +273,14 @@ async function cleanupDeletedSession<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(input: {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly thread: ChatThreadRef;
   readonly ref: SessionRef;
 }): Promise<Result<void, StoreError>> {
   return Result.gen(async function* () {
     yield* Result.await(input.ctx.app.store.sessions.delete(input.ref));
-
-    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
-
-    if (binding && sameSessionRef(binding.sessionRef, input.ref)) {
-      return Result.ok(
-        yield* Result.await(input.ctx.app.store.threadBindings.delete(input.thread)),
-      );
-    }
+    yield* Result.await(input.ctx.app.store.threadBindings.deleteBySession(input.ref));
 
     return Result.ok();
   });
-}
-
-function sameSessionRef(left: SessionRef, right: SessionRef): boolean {
-  return left.harnessId === right.harnessId && left.sessionId === right.sessionId;
 }
 
 function createHarnessDeleteInput(input: {

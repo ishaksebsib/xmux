@@ -34,6 +34,7 @@ export interface SessionStore {
     ref: SessionRef,
     patch: SessionRecordPatch,
   ): Promise<Result<SessionRecord, StoreNotFoundError | StoreOperationError>>;
+  /** Deletes session metadata and all chat-thread bindings that point at it. */
   delete(ref: SessionRef): Promise<Result<void, StoreOperationError>>;
 }
 
@@ -42,6 +43,7 @@ export interface ThreadBindingStore {
   bind(binding: ThreadBinding): Promise<Result<void, StoreOperationError>>;
   get(thread: ChatThreadRef): Promise<Result<ThreadBinding | null, StoreOperationError>>;
   delete(thread: ChatThreadRef): Promise<Result<void, StoreOperationError>>;
+  deleteBySession(ref: SessionRef): Promise<Result<void, StoreOperationError>>;
 }
 
 /** Persistence operations for chat-thread workspace state. */

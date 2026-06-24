@@ -32,7 +32,7 @@ export async function getActiveSessionForThread<
     const session = yield* Result.await(ctx.app.store.sessions.get(binding.sessionRef));
 
     if (!session) {
-      yield* Result.await(ctx.app.store.threadBindings.delete(thread));
+      yield* Result.await(ctx.app.store.threadBindings.deleteBySession(binding.sessionRef));
       return Result.err(new SessionRecordMissingError({ sessionRef: binding.sessionRef }));
     }
 

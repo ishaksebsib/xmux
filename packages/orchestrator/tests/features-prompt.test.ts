@@ -74,8 +74,11 @@ describe("prompt messages", () => {
 
   test("replies when a thread binding points at a missing session record", async () => {
     const { emitMessage, replies, xmux } = await initializeFallbackXmux();
+    const relatedThread = { chatId: "telegram", threadId: "conversation-2" } as const;
+    const now = new Date().toISOString();
+    await xmux.ctx.store.threadBindings.bind(createThreadBinding({ thread, sessionRef, now }));
     await xmux.ctx.store.threadBindings.bind(
-      createThreadBinding({ thread, sessionRef, now: new Date().toISOString() }),
+      createThreadBinding({ thread: relatedThread, sessionRef, now }),
     );
 
     emitMessage(messageEvent({ text: "hello" }));
@@ -87,6 +90,11 @@ describe("prompt messages", () => {
     expect(
       (await xmux.ctx.store.threadBindings.get(thread)).unwrap(
         "expected binding lookup to succeed",
+      ),
+    ).toBeNull();
+    expect(
+      (await xmux.ctx.store.threadBindings.get(relatedThread)).unwrap(
+        "expected related binding lookup to succeed",
       ),
     ).toBeNull();
 

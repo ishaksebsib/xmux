@@ -81,6 +81,73 @@ describe("createInMemoryStore", () => {
     expect(deleted.unwrap("expected binding lookup to succeed")).toBeNull();
   });
 
+  test("deletes all bindings for a session", async () => {
+    const store = createInMemoryStore();
+    const otherThread = { chatId: "telegram", threadId: "thread-2" } as const;
+    const unrelatedThread = { chatId: "telegram", threadId: "thread-3" } as const;
+    const unrelatedRef = { harnessId: "opencode", sessionId: "session-2" } as const;
+    const now = "2026-05-08T10:00:00.000Z";
+
+    await store.threadBindings.bind({
+      thread: session.origin,
+      sessionRef: session.ref,
+      createdAt: now,
+    });
+    await store.threadBindings.bind({
+      thread: otherThread,
+      sessionRef: session.ref,
+      createdAt: now,
+    });
+    await store.threadBindings.bind({
+      thread: unrelatedThread,
+      sessionRef: unrelatedRef,
+      createdAt: now,
+    });
+
+    const deleted = await store.threadBindings.deleteBySession(session.ref);
+
+    expect(deleted.isOk()).toBe(true);
+    expect(
+      (await store.threadBindings.get(session.origin)).unwrap("expected binding lookup to succeed"),
+    ).toBeNull();
+    expect(
+      (await store.threadBindings.get(otherThread)).unwrap("expected binding lookup to succeed"),
+    ).toBeNull();
+    expect(
+      (await store.threadBindings.get(unrelatedThread)).unwrap(
+        "expected binding lookup to succeed",
+      ),
+    ).toMatchObject({ sessionRef: unrelatedRef });
+  });
+
+  test("deleting a session also deletes all of its thread bindings", async () => {
+    const store = createInMemoryStore();
+    const otherThread = { chatId: "telegram", threadId: "thread-2" } as const;
+    const now = "2026-05-08T10:00:00.000Z";
+
+    await store.sessions.create(session);
+    await store.threadBindings.bind({
+      thread: session.origin,
+      sessionRef: session.ref,
+      createdAt: now,
+    });
+    await store.threadBindings.bind({
+      thread: otherThread,
+      sessionRef: session.ref,
+      createdAt: now,
+    });
+
+    const deleted = await store.sessions.delete(session.ref);
+
+    expect(deleted.isOk()).toBe(true);
+    expect(
+      (await store.threadBindings.get(session.origin)).unwrap("expected binding lookup to succeed"),
+    ).toBeNull();
+    expect(
+      (await store.threadBindings.get(otherThread)).unwrap("expected binding lookup to succeed"),
+    ).toBeNull();
+  });
+
   test("sets, updates, deletes, and clones thread workspaces", async () => {
     const store = createInMemoryStore();
     const workspace = {

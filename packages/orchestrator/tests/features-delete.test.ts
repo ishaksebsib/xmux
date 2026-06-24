@@ -24,6 +24,16 @@ describe("/delete command", () => {
   test("deletes the active session and clears xmux routing state", async () => {
     const { emitCommand, replies, deleteInputs, xmux } = await initializeXmux();
     await bindActiveSession({ xmux });
+    const relatedThread = { chatId: "telegram", threadId: "conversation-2" } as const;
+    const unrelatedThread = { chatId: "telegram", threadId: "conversation-3" } as const;
+    const unrelatedRef = { harnessId: "opencode", sessionId: "abc222" } as const;
+    const now = new Date().toISOString();
+    await xmux.ctx.store.threadBindings.bind(
+      createThreadBinding({ thread: relatedThread, sessionRef: activeRef, now }),
+    );
+    await xmux.ctx.store.threadBindings.bind(
+      createThreadBinding({ thread: unrelatedThread, sessionRef: unrelatedRef, now }),
+    );
 
     emitCommand(commandEvent({ options: { harnessId: undefined, shortId: undefined } }));
 
@@ -39,6 +49,14 @@ describe("/delete command", () => {
 
     const binding = await xmux.ctx.store.threadBindings.get(thread);
     expect(binding.unwrap("expected binding lookup to succeed")).toBeNull();
+
+    const relatedBinding = await xmux.ctx.store.threadBindings.get(relatedThread);
+    expect(relatedBinding.unwrap("expected related binding lookup to succeed")).toBeNull();
+
+    const unrelatedBinding = await xmux.ctx.store.threadBindings.get(unrelatedThread);
+    expect(unrelatedBinding.unwrap("expected unrelated binding lookup to succeed")).toMatchObject({
+      sessionRef: unrelatedRef,
+    });
 
     await xmux.shutdown();
   });

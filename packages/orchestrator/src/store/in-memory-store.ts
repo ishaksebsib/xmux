@@ -51,6 +51,7 @@ export function createInMemoryStore(): Store {
 
       async delete(ref) {
         sessions.delete(sessionKey(ref));
+        deleteBindingsForSession(threadBindings, ref);
         return Result.ok();
       },
     },
@@ -68,6 +69,11 @@ export function createInMemoryStore(): Store {
 
       async delete(thread) {
         threadBindings.delete(threadKey(thread));
+        return Result.ok();
+      },
+
+      async deleteBySession(ref) {
+        deleteBindingsForSession(threadBindings, ref);
         return Result.ok();
       },
     },
@@ -98,6 +104,18 @@ function sessionKey(ref: SessionRef): string {
 
 function threadKey(thread: ChatThreadRef): string {
   return `${thread.chatId}:${thread.threadId}`;
+}
+
+function deleteBindingsForSession(bindings: Map<string, ThreadBinding>, ref: SessionRef): void {
+  for (const [key, binding] of bindings) {
+    if (sameSessionRef(binding.sessionRef, ref)) {
+      bindings.delete(key);
+    }
+  }
+}
+
+function sameSessionRef(left: SessionRef, right: SessionRef): boolean {
+  return left.harnessId === right.harnessId && left.sessionId === right.sessionId;
 }
 
 function cloneSession(record: SessionRecord): SessionRecord {
