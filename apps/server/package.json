@@ -52,6 +52,7 @@
   "dependencies": {
     "@effect/platform-node": "beta",
     "@effect/sql-libsql": "beta",
+    "@xmux/orchestrator": "workspace:*",
     "effect": "beta",
     "jsonc-parser": "^3.3.1"
   },

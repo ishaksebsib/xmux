@@ -24,6 +24,9 @@ import {
   DATABASE_NAMESPACE_VALUE,
   DB_METADATA_TABLE,
   MIGRATIONS_TABLE,
+  ORCHESTRATOR_SESSION_TABLE,
+  THREAD_BINDING_TABLE,
+  THREAD_WORKSPACE_TABLE,
 } from "../src/db/schema";
 import { LogReader } from "../src/logging/log-reader";
 import { nodeHostRuntimeLayer } from "../src/platform/node";
@@ -137,27 +140,33 @@ const makeServerLayer = (paths: ServerRuntimePaths, transport: TestControlTransp
   );
 };
 
-it.effect("initializes a file database with ledger and generic metadata only", () =>
+it.effect("initializes a file database with ledger, metadata, and orchestrator store tables", () =>
   Effect.gen(function* () {
     const paths = yield* makePreparedPaths;
     const result = yield* runDbStartup(paths);
 
     assert.deepEqual(result.appliedMigrations.map(formatAppliedMigrationId), [
       "0001_database_foundation",
+      "0002_orchestrator_store",
     ]);
     assert.isTrue(yield* exists(paths.dbPath));
 
     const tableNames = yield* readTableNames(paths);
-    assert.isTrue(tableNames.includes(MIGRATIONS_TABLE));
-    assert.isTrue(tableNames.includes(DB_METADATA_TABLE));
-    assert.isFalse(tableNames.includes("orchestrator_session"));
-    assert.isFalse(tableNames.includes("thread_binding"));
-    assert.isFalse(tableNames.includes("thread_workspace"));
+    assert.deepEqual(
+      tableNames,
+      [
+        ORCHESTRATOR_SESSION_TABLE,
+        THREAD_BINDING_TABLE,
+        THREAD_WORKSPACE_TABLE,
+        DB_METADATA_TABLE,
+        MIGRATIONS_TABLE,
+      ].sort(),
+    );
 
     const ledger = yield* readMigrationLedger(paths);
     assert.deepEqual(
       ledger.map((row) => formatAppliedMigrationId([row.migration_id, row.name])),
-      ["0001_database_foundation"],
+      ["0001_database_foundation", "0002_orchestrator_store"],
     );
 
     const metadataRows = yield* readMetadataRows(paths);
@@ -174,9 +183,9 @@ it.effect("database startup is idempotent", () =>
     const first = yield* runDbStartup(paths);
     const second = yield* runDbStartup(paths);
 
-    assert.strictEqual(first.appliedMigrations.length, 1);
+    assert.strictEqual(first.appliedMigrations.length, 2);
     assert.strictEqual(second.appliedMigrations.length, 0);
-    assert.strictEqual((yield* readMigrationLedger(paths)).length, 1);
+    assert.strictEqual((yield* readMigrationLedger(paths)).length, 2);
     assert.strictEqual((yield* readMetadataRows(paths)).length, 1);
   }),
 );
@@ -221,6 +230,9 @@ it.effect("server startup migrates the database before publishing readiness", ()
           const tableNames = yield* readTableNames(paths).pipe(Effect.orDie);
           assert.isTrue(tableNames.includes(MIGRATIONS_TABLE));
           assert.isTrue(tableNames.includes(DB_METADATA_TABLE));
+          assert.isTrue(tableNames.includes(ORCHESTRATOR_SESSION_TABLE));
+          assert.isTrue(tableNames.includes(THREAD_BINDING_TABLE));
+          assert.isTrue(tableNames.includes(THREAD_WORKSPACE_TABLE));
         }),
     };
 
