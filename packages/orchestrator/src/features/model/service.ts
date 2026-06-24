@@ -19,19 +19,17 @@ import type {
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
-import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import type { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import { ModelActionPayloadInvalidError } from "./errors";
 import { resolveModelSelector, type ResolveModelSelectorError } from "./selector";
 import {
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
 } from "../thinking/errors";
-import { getActiveSessionForThread } from "../session";
+import { getActiveSessionForThread, type ActiveSessionError } from "../session";
 
 export type ModelCommandError =
-  | StoreError
+  | ActiveSessionError
   | ListModelsError
   | GetModelError
   | GetThinkingError
@@ -40,9 +38,7 @@ export type ModelCommandError =
   | ResolveModelSelectorError
   | ModelActionPayloadInvalidError
   | ThinkingLevelUnsupportedError
-  | ThinkingModelThinkingUnsupportedError
-  | NoActiveSessionError
-  | SessionRecordMissingError;
+  | ThinkingModelThinkingUnsupportedError;
 
 export type ModelCommandOutput = ModelShownOutput | ModelUpdatedOutput;
 

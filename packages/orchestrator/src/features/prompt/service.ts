@@ -11,17 +11,14 @@ import type {
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
-import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
+import { getActiveSessionForThread, type ActiveSessionError } from "../session";
 import { materializePromptAttachments } from "./attachments";
 import { PromptAlreadyRunningError, type PromptAttachmentError } from "./errors";
 import type { ActivePromptRun } from "./run-registry";
 
 export type PromptSessionForThreadError =
-  | StoreError
-  | NoActiveSessionError
-  | SessionRecordMissingError
+  | ActiveSessionError
   | PromptAlreadyRunningError
   | PromptAttachmentError
   | PromptError;
@@ -51,9 +48,7 @@ export async function promptSessionForThread<
   input: PromptSessionForThreadInput<TAdapters, TChats>,
 ): Promise<Result<PromptSessionForThreadOutput, PromptSessionForThreadError>> {
   return Result.gen(async function* () {
-    const session = yield* Result.await(
-      getPromptSessionForThread({ ctx: input.ctx, thread: input.thread }),
-    );
+    const session = yield* Result.await(getActiveSessionForThread(input.ctx, input.thread));
 
     const run = yield* input.ctx.app.services.promptRuns.tryStart({
       sessionRef: session.ref,
@@ -106,38 +101,6 @@ export async function promptSessionForThread<
         run.release();
       },
     });
-  });
-}
-
-export interface GetPromptSessionForThreadInput<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
-> {
-  readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly thread: ChatThreadRef;
-}
-
-/** Returns the open session currently attached to a chat thread. */
-export async function getPromptSessionForThread<
-  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
-  TChats extends ChatAdapterDefinitions<TChats>,
->(
-  input: GetPromptSessionForThreadInput<TAdapters, TChats>,
-): Promise<Result<SessionRecord, StoreError | NoActiveSessionError | SessionRecordMissingError>> {
-  return Result.gen(async function* () {
-    const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
-
-    if (!binding) {
-      return Result.err(new NoActiveSessionError({ thread: input.thread }));
-    }
-
-    const session = yield* Result.await(input.ctx.app.store.sessions.get(binding.sessionRef));
-
-    if (!session) {
-      return Result.err(new SessionRecordMissingError({ sessionRef: binding.sessionRef }));
-    }
-
-    return Result.ok(session);
   });
 }
 

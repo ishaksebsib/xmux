@@ -48,9 +48,6 @@ export class SessionRecordMissingError extends TaggedError("SessionRecordMissing
   }
 }
 
-/** Failure resolving the active session bound to a chat thread. */
-export type ActiveSessionError = NoActiveSessionError | SessionRecordMissingError;
-
 /** Returned when a command targets a harness that is not configured. */
 export class CommandHarnessNotConfiguredError extends TaggedError(
   "CommandHarnessNotConfiguredError",

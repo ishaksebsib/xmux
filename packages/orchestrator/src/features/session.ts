@@ -13,6 +13,7 @@ export type ActiveSessionError = StoreError | NoActiveSessionError | SessionReco
  *
  * Returns `NoActiveSessionError` when the thread has no binding, and
  * `SessionRecordMissingError` when the binding points at a missing record.
+ * Stale bindings to missing session records are deleted before returning.
  */
 export async function getActiveSessionForThread<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -31,6 +32,7 @@ export async function getActiveSessionForThread<
     const session = yield* Result.await(ctx.app.store.sessions.get(binding.sessionRef));
 
     if (!session) {
+      yield* Result.await(ctx.app.store.threadBindings.delete(thread));
       return Result.err(new SessionRecordMissingError({ sessionRef: binding.sessionRef }));
     }
 

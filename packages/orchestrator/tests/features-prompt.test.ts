@@ -84,6 +84,11 @@ describe("prompt messages", () => {
 
     expect(replies[0]).toContain("**Failed to route prompt**");
     expect(replies[0]).toContain("Session record not found");
+    expect(
+      (await xmux.ctx.store.threadBindings.get(thread)).unwrap(
+        "expected binding lookup to succeed",
+      ),
+    ).toBeNull();
 
     await xmux.shutdown();
   });

@@ -59,6 +59,28 @@ describe("/model command", () => {
     await xmux.shutdown();
   });
 
+  test("cleans up a thread binding that points at a missing session record", async () => {
+    const { emitCommand, replies, listInputs, xmux } = await initializeXmux();
+    await xmux.ctx.store.threadBindings.bind(
+      createThreadBinding({ thread, sessionRef, now: new Date().toISOString() }),
+    );
+
+    emitCommand(commandEvent({ selector: undefined }));
+
+    await eventually(() => replies.length === 1);
+
+    expect(listInputs).toHaveLength(0);
+    expect(replies[0]).toContain("**Failed to route model command**");
+    expect(replies[0]).toContain("Session record not found");
+    expect(
+      (await xmux.ctx.store.threadBindings.get(thread)).unwrap(
+        "expected binding lookup to succeed",
+      ),
+    ).toBeNull();
+
+    await xmux.shutdown();
+  });
+
   test("shows provider buttons, lists provider models, and updates selected model", async () => {
     const {
       emitCommand,

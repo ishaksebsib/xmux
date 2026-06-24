@@ -5,7 +5,8 @@ import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
 import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
-import { getPromptSessionForThread, PromptRunCancellationError } from "../prompt";
+import { PromptRunCancellationError } from "../prompt";
+import { getActiveSessionForThread } from "../session";
 
 export interface CancelActivePromptForThreadInput<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
@@ -32,7 +33,7 @@ export async function cancelActivePromptForThread<
 >(
   input: CancelActivePromptForThreadInput<TAdapters, TChats>,
 ): Promise<Result<CancelActivePromptOutput, CancelActivePromptError>> {
-  const session = await getPromptSessionForThread({ ctx: input.ctx, thread: input.thread });
+  const session = await getActiveSessionForThread(input.ctx, input.thread);
 
   if (session.isErr()) {
     if (NoActiveSessionError.is(session.error)) {

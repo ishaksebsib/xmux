@@ -13,11 +13,11 @@ import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
 import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import {
-  getPromptSessionForThread,
   PromptInteractionAlreadyRespondingError,
   PromptInteractionResponseError,
   PromptInteractionUnsupportedError,
 } from "../prompt";
+import { getActiveSessionForThread } from "../session";
 import type { ActivePromptRun, PendingPromptInteraction } from "../prompt";
 
 export type InteractionCommandAction =
@@ -70,7 +70,7 @@ export async function respondToCurrentInteractionForThread<
 >(
   input: RespondToCurrentInteractionForThreadInput<TAdapters, TChats>,
 ): Promise<Result<RespondToCurrentInteractionOutput, RespondToCurrentInteractionError>> {
-  const session = await getPromptSessionForThread({ ctx: input.ctx, thread: input.thread });
+  const session = await getActiveSessionForThread(input.ctx, input.thread);
 
   if (session.isErr()) {
     if (NoActiveSessionError.is(session.error)) {
