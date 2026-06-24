@@ -21,8 +21,12 @@ test:
 
 alias i := integration
 # Run the integration tests
-integration:
-	pnpm turbo run test:integration
+integration workers="":
+	if [ -n "{{workers}}" ]; then \
+		pnpm turbo run test:integration -- --maxWorkers={{workers}}; \
+	else \
+		pnpm turbo run test:integration; \
+	fi
 
 alias b := build
 # Build the project
