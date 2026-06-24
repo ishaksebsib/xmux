@@ -1,3 +1,5 @@
+export { Result } from "better-result";
+
 export {
   XmuxCloseError,
   XmuxConfigurationError,
