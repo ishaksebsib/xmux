@@ -7,7 +7,12 @@ import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
 import { handleQueueAction, handleQueueCommand, type HandleQueueActionInput } from "./handler";
 import { formatQueueCommandUsage } from "./response";
-import { drainQueuedPromptAfterPromptSettled, offerPromptQueueChoice } from "./service";
+import {
+  drainQueuedPromptAfterPromptSettled,
+  markQueuedPromptStarted,
+  offerPromptQueueChoice,
+  releaseQueuedPromptAfterPromptRejected,
+} from "./service";
 
 /** Registers chat routes and prompt lifecycle hooks owned by the queue feature. */
 export function registerQueueRoute<
@@ -21,7 +26,7 @@ export function registerQueueRoute<
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
       "queue",
-      { readonly action?: "list" | "add" | "remove"; readonly value?: string }
+      { readonly action?: unknown; readonly value?: unknown }
     >;
     return dispatch(ctx, middleware, {
       event,
@@ -41,6 +46,14 @@ export function registerQueueRoute<
   });
 
   const unsubscribeBusy = ctx.services.promptEvents.on("prompt.busy", offerPromptQueueChoice);
+  const unsubscribeStarted = ctx.services.promptEvents.on(
+    "prompt.started",
+    markQueuedPromptStarted,
+  );
+  const unsubscribeRejected = ctx.services.promptEvents.on(
+    "prompt.rejected",
+    releaseQueuedPromptAfterPromptRejected,
+  );
   const unsubscribeSettled = ctx.services.promptEvents.on(
     "prompt.settled",
     drainQueuedPromptAfterPromptSettled,
@@ -55,6 +68,8 @@ export function registerQueueRoute<
     unsubscribeCommand();
     unsubscribeAction();
     unsubscribeBusy();
+    unsubscribeStarted();
+    unsubscribeRejected();
     unsubscribeSettled();
     unsubscribeInvalid();
   };

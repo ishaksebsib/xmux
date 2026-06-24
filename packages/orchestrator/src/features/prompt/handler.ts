@@ -15,6 +15,8 @@ import type { Actions } from "../../actions";
 import type { NormalizedPromptResponseConfig } from "../../config";
 import type { HandlerContext } from "../../ctx";
 import type { SessionRecord } from "../../store";
+import { xmuxLogEvents } from "../../logger";
+import { serializeXmuxLogError } from "../../logger-utils";
 import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
 import { markSessionDeletedUpstream } from "../session";
 import { formatInteractionActionMessage } from "../interaction/response";
@@ -68,8 +70,20 @@ export async function handlePromptMessage<
         error: prompted.error,
       });
 
-      if (offered.isOk()) return Result.ok();
+      if (offered.isOk() && offered.value.handledCount > 0) return Result.ok();
+      if (offered.isErr()) logPromptEventDispatchFailure(input.ctx, "prompt.busy", offered.error);
     }
+
+    const rejected = await input.ctx.app.services.promptEvents.emit({
+      type: "prompt.rejected",
+      ctx: input.ctx,
+      event: input.event,
+      thread: threadFromChatEvent(input.event),
+      error: prompted.error,
+      requestId: input.ctx.requestId,
+    });
+    if (rejected.isErr())
+      logPromptEventDispatchFailure(input.ctx, "prompt.rejected", rejected.error);
 
     return replyToChatEvent({
       event: input.event,
@@ -77,6 +91,16 @@ export async function handlePromptMessage<
       onError: (cause) => new PromptResponseError({ cause }),
     });
   }
+
+  const started = await input.ctx.app.services.promptEvents.emit({
+    type: "prompt.started",
+    ctx: input.ctx,
+    event: input.event,
+    thread: threadFromChatEvent(input.event),
+    session: prompted.value.session,
+    requestId: input.ctx.requestId,
+  });
+  if (started.isErr()) logPromptEventDispatchFailure(input.ctx, "prompt.started", started.error);
 
   const streamed = await streamPromptReplyInMessages({
     ctx: input.ctx,
@@ -91,7 +115,7 @@ export async function handlePromptMessage<
     prompted.value.release();
   }
 
-  await input.ctx.app.services.promptEvents.emit({
+  const settled = await input.ctx.app.services.promptEvents.emit({
     type: "prompt.settled",
     ctx: input.ctx,
     event: input.event,
@@ -99,8 +123,22 @@ export async function handlePromptMessage<
     session: prompted.value.session,
     requestId: input.ctx.requestId,
   });
+  if (settled.isErr()) logPromptEventDispatchFailure(input.ctx, "prompt.settled", settled.error);
 
   return streamed;
+}
+
+function logPromptEventDispatchFailure<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(ctx: HandlerContext<TAdapters, TChats>, eventType: string, error: unknown): void {
+  ctx.logger.warn(xmuxLogEvents.backgroundFailure, {
+    operation: "prompt",
+    result: "error",
+    reason: "prompt_event_dispatch_failed",
+    eventType,
+    error: serializeXmuxLogError(error),
+  });
 }
 
 interface StreamPromptReplyInput<

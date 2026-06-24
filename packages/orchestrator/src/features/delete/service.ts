@@ -284,6 +284,7 @@ async function cleanupDeletedSession<
   readonly ref: SessionRef;
 }): Promise<Result<void, StoreError>> {
   return Result.gen(async function* () {
+    input.ctx.app.services.promptQueue.clearSession(input.ref);
     yield* Result.await(input.ctx.app.store.sessions.delete(input.ref));
 
     return Result.ok();

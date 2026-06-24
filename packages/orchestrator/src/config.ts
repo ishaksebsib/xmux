@@ -3,6 +3,10 @@ import type { ChatAttachmentKind } from "@xmux/chat-core";
 import { parseSpeechToTextClientConfig, type SpeechToTextClientConfig } from "@xmux/stt";
 import { Result, type Result as ResultType } from "better-result";
 import { XmuxConfigurationError } from "./errors";
+import {
+  DEFAULT_PROMPT_QUEUE_MAX_ITEMS,
+  DEFAULT_PROMPT_QUEUE_OFFER_TTL_MS,
+} from "./features/queue/defaults";
 
 /**
  * Delivery mode for harnesses responses.
@@ -143,8 +147,6 @@ const DEFAULT_MAX_LIST_ENTRIES = 100;
 const DEFAULT_MAX_RESUME_SESSIONS_PER_HARNESS = 5;
 const DEFAULT_MAX_MODELS_PER_PROVIDER = 10;
 const DEFAULT_PROMPT_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-const DEFAULT_QUEUE_MAX_ITEMS = 10;
-const DEFAULT_QUEUE_OFFER_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_STT_MAX_BYTES = 25 * 1024 * 1024;
 const PROMPT_ATTACHMENT_KINDS = Object.freeze([
   "image",
@@ -414,12 +416,12 @@ function parseQueueConfig(
     const maxItems = yield* parsePositiveInteger(
       parsed?.maxItems,
       "queue.maxItems",
-      DEFAULT_QUEUE_MAX_ITEMS,
+      DEFAULT_PROMPT_QUEUE_MAX_ITEMS,
     );
     const offerTtlMs = yield* parsePositiveInteger(
       parsed?.offerTtlMs,
       "queue.offerTtlMs",
-      DEFAULT_QUEUE_OFFER_TTL_MS,
+      DEFAULT_PROMPT_QUEUE_OFFER_TTL_MS,
     );
 
     return Result.ok(Object.freeze({ maxItems, offerTtlMs }));

@@ -6,6 +6,7 @@ import { formatActionButtonRows } from "../button-layout";
 import type { ActionMessage } from "../utils";
 import {
   PromptQueueActorMismatchError,
+  PromptQueueDrainStateConflictError,
   PromptQueueFullError,
   PromptQueueInvalidCommandError,
   PromptQueueItemNotFoundError,
@@ -14,7 +15,7 @@ import {
   PromptQueueOfferStateConflictError,
 } from "./errors";
 import type { PromptQueueOffer, PromptQueuePosition, QueuedPrompt } from "./registry";
-import type { AddPromptToQueueError, QueueCommandError, QueueCommandOutput } from "./service";
+import type { QueueCommandError, QueueCommandOutput } from "./service";
 
 const PROMPT_PREVIEW_MAX_CHARS = 180;
 const QUEUE_LIST_PREVIEW_MAX_CHARS = 110;
@@ -136,6 +137,12 @@ export function formatQueueCommandFailure(error: QueueCommandError): ChatTextInp
     return markdown({ text: "**Not found**\n\nNo queued prompt at that position." });
   }
 
+  if (PromptQueueActorMismatchError.is(error)) {
+    return markdown({
+      text: "**Not allowed**\n\nOnly the original sender can change this prompt.",
+    });
+  }
+
   if (PromptQueueMissingActorError.is(error)) {
     return markdown({ text: "**Cannot queue prompt**\n\nOnly user messages can be queued." });
   }
@@ -147,10 +154,6 @@ export function formatQueueCommandFailure(error: QueueCommandError): ChatTextInp
   return markdown({
     text: ["**Queue request failed**", "", markdownText(error.message)].join("\n"),
   });
-}
-
-export function formatQueueAddFailure(error: AddPromptToQueueError): ChatTextInput {
-  return formatQueueCommandFailure(error);
 }
 
 export function formatQueueCommandUsage(): ChatTextInput {
@@ -200,6 +203,10 @@ function queueActionUnavailableText(error: unknown): string {
 
   if (PromptQueueFullError.is(error)) {
     return `**Queue full**\n\nLimit: ${error.maxItems} prompts.`;
+  }
+
+  if (PromptQueueDrainStateConflictError.is(error)) {
+    return "**Queue busy**\n\nTry again in a moment.";
   }
 
   if (PromptQueueOfferStateConflictError.is(error)) {

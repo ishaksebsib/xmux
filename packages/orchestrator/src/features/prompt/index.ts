@@ -23,12 +23,16 @@ export {
 } from "./errors";
 export {
   createPromptEventBus,
+  PromptEventDispatchError,
   type PromptBusyEvent,
   type PromptEvent,
   type PromptEventBus,
+  type PromptEventDispatchOutput,
   type PromptEventHandler,
   type PromptEventType,
+  type PromptRejectedEvent,
   type PromptSettledEvent,
+  type PromptStartedEvent,
 } from "./events";
 export {
   createPromptRunRegistry,

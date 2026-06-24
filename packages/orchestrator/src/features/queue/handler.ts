@@ -10,6 +10,8 @@ import {
   drainNextQueuedPrompt,
   interruptAndSendPromptOffer,
   isQueueOfferRequester,
+  parseQueueActionValue,
+  parseQueueOfferId,
   runQueueCommand,
   type QueueCommandOptions,
 } from "./service";
@@ -51,13 +53,23 @@ export async function handleQueueCommand<
 ): Promise<ResultType<void, CommandResponseError>> {
   const result = await runQueueCommand({ ctx: input.ctx, event: input.event });
 
-  return replyWithResult({
+  const replied = await replyWithResult({
     event: input.event,
     command: "queue",
     result,
     ok: formatQueueCommandOutput,
     err: formatQueueCommandFailure,
   });
+  if (replied.isErr()) return replied;
+
+  if (result.isOk() && result.value.status === "added") {
+    return Result.mapError(
+      await drainNextQueuedPrompt({ ctx: input.ctx, sessionRef: result.value.item.sessionRef }),
+      (cause) => new CommandResponseError({ command: "queue", cause }),
+    );
+  }
+
+  return Result.ok();
 }
 
 export async function handleQueueAction<
@@ -72,7 +84,16 @@ export async function handleQueueAction<
   });
   if (acknowledged.isErr()) return acknowledged;
 
-  switch (input.event.value) {
+  const action = parseQueueActionValue(input.event.value);
+  if (action.isErr()) {
+    return updateActionMessage({
+      command: "queue",
+      event: input.event,
+      message: formatQueueActionUnavailableAction(action.error),
+    });
+  }
+
+  switch (action.value) {
     case "add":
       return addOfferToQueue(input);
     case "remove":
@@ -80,8 +101,6 @@ export async function handleQueueAction<
     case "interrupt":
       return interruptOfferAndSend(input);
   }
-
-  return Result.ok();
 }
 
 async function addOfferToQueue<
@@ -90,7 +109,10 @@ async function addOfferToQueue<
 >(
   input: HandleQueueActionInput<TAdapters, TChats>,
 ): Promise<ResultType<void, CommandResponseError>> {
-  const offer = input.ctx.app.services.promptQueue.getOffer(input.event.payload);
+  const offerId = parseQueueOfferId(input.event.payload);
+  if (offerId.isErr()) return updateQueueActionUnavailable(input, offerId.error);
+
+  const offer = input.ctx.app.services.promptQueue.getOffer(offerId.value);
   if (
     offer !== undefined &&
     !isQueueOfferRequester({
@@ -98,17 +120,14 @@ async function addOfferToQueue<
       requesterUserId: offer.item.requester?.userId,
     })
   ) {
-    return updateActionMessage({
-      command: "queue",
-      event: input.event,
-      message: formatQueueActionUnavailableAction(
-        new PromptQueueActorMismatchError({ offerId: input.event.payload }),
-      ),
-    });
+    return updateQueueActionUnavailable(
+      input,
+      new PromptQueueActorMismatchError({ offerId: offerId.value }),
+    );
   }
 
   const enqueued = input.ctx.app.services.promptQueue.enqueueOffer(
-    input.event.payload,
+    offerId.value,
     input.ctx.app.services.now().toISOString(),
   );
 
@@ -119,12 +138,12 @@ async function addOfferToQueue<
       ? formatQueueAddedAction(enqueued.value)
       : formatQueueActionUnavailableAction(enqueued.error),
   });
+  if (updated.isErr() || enqueued.isErr()) return updated;
 
-  if (updated.isOk() && enqueued.isOk()) {
-    await drainNextQueuedPrompt({ ctx: input.ctx, sessionRef: enqueued.value.item.sessionRef });
-  }
-
-  return updated;
+  return Result.mapError(
+    await drainNextQueuedPrompt({ ctx: input.ctx, sessionRef: enqueued.value.item.sessionRef }),
+    (cause) => new CommandResponseError({ command: "queue", cause }),
+  );
 }
 
 async function removeOfferFromQueue<
@@ -133,7 +152,10 @@ async function removeOfferFromQueue<
 >(
   input: HandleQueueActionInput<TAdapters, TChats>,
 ): Promise<ResultType<void, CommandResponseError>> {
-  const offer = input.ctx.app.services.promptQueue.getOffer(input.event.payload);
+  const offerId = parseQueueOfferId(input.event.payload);
+  if (offerId.isErr()) return updateQueueActionUnavailable(input, offerId.error);
+
+  const offer = input.ctx.app.services.promptQueue.getOffer(offerId.value);
   if (
     offer !== undefined &&
     !isQueueOfferRequester({
@@ -141,17 +163,14 @@ async function removeOfferFromQueue<
       requesterUserId: offer.item.requester?.userId,
     })
   ) {
-    return updateActionMessage({
-      command: "queue",
-      event: input.event,
-      message: formatQueueActionUnavailableAction(
-        new PromptQueueActorMismatchError({ offerId: input.event.payload }),
-      ),
-    });
+    return updateQueueActionUnavailable(
+      input,
+      new PromptQueueActorMismatchError({ offerId: offerId.value }),
+    );
   }
 
   const removed = input.ctx.app.services.promptQueue.removeQueuedOffer(
-    input.event.payload,
+    offerId.value,
     input.ctx.app.services.now().toISOString(),
   );
 
@@ -170,7 +189,10 @@ async function interruptOfferAndSend<
 >(
   input: HandleQueueActionInput<TAdapters, TChats>,
 ): Promise<ResultType<void, CommandResponseError>> {
-  const offer = input.ctx.app.services.promptQueue.getOffer(input.event.payload);
+  const offerId = parseQueueOfferId(input.event.payload);
+  if (offerId.isErr()) return updateQueueActionUnavailable(input, offerId.error);
+
+  const offer = input.ctx.app.services.promptQueue.getOffer(offerId.value);
   if (
     offer !== undefined &&
     !isQueueOfferRequester({
@@ -178,16 +200,13 @@ async function interruptOfferAndSend<
       requesterUserId: offer.item.requester?.userId,
     })
   ) {
-    return updateActionMessage({
-      command: "queue",
-      event: input.event,
-      message: formatQueueActionUnavailableAction(
-        new PromptQueueActorMismatchError({ offerId: input.event.payload }),
-      ),
-    });
+    return updateQueueActionUnavailable(
+      input,
+      new PromptQueueActorMismatchError({ offerId: offerId.value }),
+    );
   }
 
-  const sent = await interruptAndSendPromptOffer({ ctx: input.ctx, offerId: input.event.payload });
+  const sent = await interruptAndSendPromptOffer({ ctx: input.ctx, offerId: offerId.value });
 
   return updateActionMessage({
     command: "queue",
@@ -195,5 +214,19 @@ async function interruptOfferAndSend<
     message: sent.isOk()
       ? formatQueueInterruptedAction()
       : formatQueueActionUnavailableAction(sent.error),
+  });
+}
+
+function updateQueueActionUnavailable<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: HandleQueueActionInput<TAdapters, TChats>,
+  error: unknown,
+): Promise<ResultType<void, CommandResponseError>> {
+  return updateActionMessage({
+    command: "queue",
+    event: input.event,
+    message: formatQueueActionUnavailableAction(error),
   });
 }

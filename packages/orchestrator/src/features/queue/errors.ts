@@ -1,5 +1,6 @@
 import type { SessionRef } from "@xmux/harness-core";
 import { TaggedError } from "better-result";
+import type { QueueItemId } from "./primitives";
 
 function describeCause(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
@@ -76,6 +77,26 @@ export class PromptQueueOfferStateConflictError extends TaggedError(
   }
 }
 
+export class PromptQueueDrainStateConflictError extends TaggedError(
+  "PromptQueueDrainStateConflictError",
+)<{
+  readonly sessionRef: SessionRef;
+  readonly itemId?: QueueItemId;
+  readonly state: string;
+  readonly message: string;
+}>() {
+  constructor(args: {
+    readonly sessionRef: SessionRef;
+    readonly itemId?: QueueItemId;
+    readonly state: string;
+  }) {
+    super({
+      ...args,
+      message: `Queue drain state conflict for session ${formatSessionRef(args.sessionRef)}: ${args.state}`,
+    });
+  }
+}
+
 export class PromptQueueActorMismatchError extends TaggedError("PromptQueueActorMismatchError")<{
   readonly offerId: string;
   readonly message: string;
@@ -123,14 +144,11 @@ export class PromptQueueInjectError extends TaggedError("PromptQueueInjectError"
 }
 
 export class PromptQueueResponseError extends TaggedError("PromptQueueResponseError")<{
-  readonly operation: "offer" | "update" | "command";
+  readonly operation: "offer";
   readonly cause: unknown;
   readonly message: string;
 }>() {
-  constructor(args: {
-    readonly operation: "offer" | "update" | "command";
-    readonly cause: unknown;
-  }) {
+  constructor(args: { readonly operation: "offer"; readonly cause: unknown }) {
     super({
       ...args,
       message: `Failed to send queue ${args.operation} response: ${describeCause(args.cause)}`,

@@ -136,6 +136,7 @@ export async function cleanupStaleUpstreamSession<
       activePrompt.value.release();
     }
 
+    input.ctx.app.services.promptQueue.clearSession(input.ref);
     yield* Result.await(input.ctx.app.store.sessions.delete(input.ref));
 
     return Result.ok();

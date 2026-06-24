@@ -35,7 +35,7 @@ describe("prompt queue", () => {
       finishFirst = resolve;
     });
     let promptCount = 0;
-    const { actionMessages, ctx, emitMessage, promptInputs, replies, updates, xmux } =
+    const { actionMessages, ctx, emitMessage, promptInputs, replies, replyTargets, updates, xmux } =
       await initializeXmux({
         onPrompt: () => {
           promptCount += 1;
@@ -70,6 +70,7 @@ describe("prompt queue", () => {
     await eventually(() => promptInputs.length === 2 && replies.length === 2);
     expect(promptInputs[1]).toMatchObject({ content: [{ type: "text", text: "two" }] });
     expect(replies).toEqual(["first", "second"]);
+    expect(replyTargets).toEqual(["m1", "m2"]);
 
     const staleRemove = await handleQueueAction({
       ctx,
@@ -81,8 +82,8 @@ describe("prompt queue", () => {
     await xmux.shutdown();
   });
 
-  test("/queue lists, adds, and removes prompts for the active session", async () => {
-    const { ctx, replies, xmux } = await initializeXmux();
+  test("/queue add drains immediately when the session is idle", async () => {
+    const { ctx, promptInputs, replies, xmux } = await initializeXmux();
     await bindSession(xmux.ctx.store);
 
     const added = await handleQueueCommand({
@@ -92,20 +93,24 @@ describe("prompt queue", () => {
     expect(added.isOk()).toBe(true);
     expect(replies.at(-1)).toContain("**Queued** · 1/1");
 
+    await eventually(() => promptInputs.length === 1);
+    expect(promptInputs[0]).toMatchObject({
+      content: [{ type: "text", text: "queued from command" }],
+    });
+
     const listed = await handleQueueCommand({
       ctx,
       event: queueCommandEvent({ action: "list", replies }),
     });
     expect(listed.isOk()).toBe(true);
-    expect(replies.at(-1)).toContain("**Prompt queue** · 1");
-    expect(replies.at(-1)).toContain("1/1 — `queued from command`");
+    expect(replies.at(-1)).toContain("**Queue empty**");
 
     const removed = await handleQueueCommand({
       ctx,
       event: queueCommandEvent({ action: "remove", value: "1", replies }),
     });
     expect(removed.isOk()).toBe(true);
-    expect(replies.at(-1)).toContain("**Removed**");
+    expect(replies.at(-1)).toContain("**Not found**");
 
     await xmux.shutdown();
   });
@@ -171,6 +176,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
   const actionMessages: { readonly text: string; readonly buttons: unknown }[] = [];
   const promptInputs: unknown[] = [];
   const replies: string[] = [];
+  const replyTargets: (string | undefined)[] = [];
   const updates: { readonly text: string }[] = [];
   let emitMessage: ((event: unknown) => void) | undefined;
 
@@ -233,6 +239,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
             },
             async reply(message) {
               replies.push(message.text);
+              replyTargets.push(message.message?.messageId);
               return Result.ok(sentMessage(message.text));
             },
             close: async () => {},
@@ -259,6 +266,7 @@ async function initializeXmux(input: InitializeXmuxInput = {}) {
     emitMessage: emitMessage as (event: unknown) => void,
     promptInputs,
     replies,
+    replyTargets,
     updates,
     xmux,
   };
