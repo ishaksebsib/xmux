@@ -20,7 +20,7 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import { isSameModel } from "../utils";
 import {
   ThinkingLevelInvalidError,
@@ -42,8 +42,7 @@ export type ThinkingCommandError =
   | ThinkingModelThinkingUnsupportedError
   | ThinkingModelUnsetError
   | NoActiveSessionError
-  | SessionRecordMissingError
-  | SessionClosedError;
+  | SessionRecordMissingError;
 
 export type ThinkingCommandOutput =
   | ThinkingShownOutput

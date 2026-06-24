@@ -248,7 +248,6 @@ describe("/resume command", () => {
       ref: { harnessId: "opencode", sessionId: "abc222" },
       cwd: process.cwd(),
       title: "Refactor auth",
-      status: "open",
     });
 
     await xmux.shutdown();

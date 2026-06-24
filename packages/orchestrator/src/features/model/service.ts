@@ -21,11 +21,7 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import type {
-  NoActiveSessionError,
-  SessionClosedError,
-  SessionRecordMissingError,
-} from "../errors";
+import type { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import { ModelActionPayloadInvalidError } from "./errors";
 import { resolveModelSelector, type ResolveModelSelectorError } from "./selector";
 import {
@@ -46,8 +42,7 @@ export type ModelCommandError =
   | ThinkingLevelUnsupportedError
   | ThinkingModelThinkingUnsupportedError
   | NoActiveSessionError
-  | SessionRecordMissingError
-  | SessionClosedError;
+  | SessionRecordMissingError;
 
 export type ModelCommandOutput = ModelShownOutput | ModelUpdatedOutput;
 

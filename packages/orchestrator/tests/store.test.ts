@@ -24,7 +24,6 @@ const session = {
   cwd: "/repo",
   title: "Fix bug",
   deliveryMode: "requester_only",
-  status: "open",
   createdAt: "2026-05-08T10:00:00.000Z",
   updatedAt: "2026-05-08T10:00:00.000Z",
 } satisfies SessionRecord<"opencode", "telegram">;
@@ -36,16 +35,15 @@ describe("createInMemoryStore", () => {
     const created = await store.sessions.create(session);
     const fetched = await store.sessions.get(session.ref);
     const updated = await store.sessions.update(session.ref, {
-      status: "closed",
+      title: "Fix bug quickly",
       updatedAt: "2026-05-08T10:05:00.000Z",
-      closedAt: "2026-05-08T10:05:00.000Z",
     });
 
     expect(created.isOk()).toBe(true);
     expect(fetched.unwrap("expected session to exist")).toEqual(session);
     expect(updated.unwrap("expected session update to succeed")).toMatchObject({
-      status: "closed",
-      closedAt: "2026-05-08T10:05:00.000Z",
+      title: "Fix bug quickly",
+      updatedAt: "2026-05-08T10:05:00.000Z",
     });
   });
 
@@ -56,7 +54,7 @@ describe("createInMemoryStore", () => {
     const duplicate = await store.sessions.create(session);
     const missing = await store.sessions.update(
       { harnessId: "opencode", sessionId: "missing" },
-      { status: "closed", updatedAt: "2026-05-08T10:05:00.000Z" },
+      { updatedAt: "2026-05-08T10:05:00.000Z" },
     );
 
     expect(duplicate.isErr()).toBe(true);

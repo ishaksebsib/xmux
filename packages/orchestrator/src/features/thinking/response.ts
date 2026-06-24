@@ -18,7 +18,7 @@ import {
   ThinkingModelThinkingUnsupportedError,
   ThinkingModelUnsetError,
 } from "./errors";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import { formatActionButtonRows } from "../button-layout";
 import { normalizeTextInput, type ActionMessage } from "../utils";
 import { formatModelSelector } from "../model/selector";
@@ -64,16 +64,6 @@ export function formatThinkingFailure(error: ThinkingCommandError): ChatTextInpu
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before changing thinking level.",
       nextStep: "continue.",
-    });
-  }
-
-  if (SessionClosedError.is(error)) {
-    return markdown({
-      text: [
-        "**Session is closed**",
-        "",
-        `Start a new session with ${inlineCode("/new <harnessId>")}.`,
-      ].join("\n"),
     });
   }
 

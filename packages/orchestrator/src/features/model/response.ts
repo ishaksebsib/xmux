@@ -20,7 +20,7 @@ import {
   ModelSelectorInvalidError,
   ModelSelectorNotFoundError,
 } from "./errors";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import {
   ThinkingLevelUnsupportedError,
   ThinkingModelThinkingUnsupportedError,
@@ -95,16 +95,6 @@ export function formatModelFailure(
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before changing models.",
       nextStep: "continue.",
-    });
-  }
-
-  if (SessionClosedError.is(error)) {
-    return markdown({
-      text: [
-        "**Session is closed**",
-        "",
-        `Start a new session with ${inlineCode("/new <harnessId>")}.`,
-      ].join("\n"),
     });
   }
 

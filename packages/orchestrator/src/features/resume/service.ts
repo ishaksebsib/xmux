@@ -219,10 +219,8 @@ async function upsertResumedSessionRecord<
       return Result.ok(
         yield* Result.await(
           input.ctx.app.store.sessions.update(input.session.ref, {
-            status: "open",
             deliveryMode: input.ctx.app.config.deliveryMode,
             updatedAt: now,
-            closedAt: undefined,
             ...(input.session.title === undefined ? {} : { title: input.session.title }),
           }),
         ),

@@ -11,7 +11,7 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import {
   getPromptSessionForThread,
   PromptInteractionAlreadyRespondingError,
@@ -48,7 +48,6 @@ export type RespondToCurrentInteractionOutput =
 export type RespondToCurrentInteractionError =
   | StoreError
   | SessionRecordMissingError
-  | SessionClosedError
   | PromptInteractionUnsupportedError
   | PromptInteractionAlreadyRespondingError
   | PromptInteractionResponseError;

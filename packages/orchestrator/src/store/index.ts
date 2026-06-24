@@ -17,7 +17,6 @@ export {
   type CreateThreadWorkspaceInput,
   type SessionRecord,
   type SessionRecordPatch,
-  type SessionStatus,
   type ThreadBinding,
   type ThreadWorkspace,
 } from "./model";

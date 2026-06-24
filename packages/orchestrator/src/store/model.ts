@@ -17,19 +17,15 @@ export interface SessionRecord<
   readonly cwd: string;
   readonly title?: string;
   readonly deliveryMode: DeliveryMode;
-  readonly status: SessionStatus;
   readonly createdAt: string;
   readonly updatedAt: string;
-  readonly closedAt?: string;
 }
 
 /** Fields callers may change after a session has been created. */
 export interface SessionRecordPatch {
   readonly title?: string;
   readonly deliveryMode?: DeliveryMode;
-  readonly status?: SessionStatus;
   readonly updatedAt: string;
-  readonly closedAt?: string;
 }
 
 /** Associates a chat thread with the active harness session serving it. */
@@ -54,9 +50,6 @@ export interface ActorRef {
   readonly displayName?: string;
 }
 
-/** Lifecycle state of a managed harness session. */
-export type SessionStatus = "open" | "closed";
-
 export interface CreateSessionRecordInput {
   readonly ref: SessionRecord["ref"];
   readonly origin: ChatThreadRef;
@@ -75,7 +68,6 @@ export function createSessionRecord(input: CreateSessionRecordInput): SessionRec
     cwd: input.cwd,
     ...(input.title === undefined ? {} : { title: input.title }),
     deliveryMode: input.deliveryMode,
-    status: "open",
     createdAt: input.now,
     updatedAt: input.now,
   };

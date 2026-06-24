@@ -48,21 +48,8 @@ export class SessionRecordMissingError extends TaggedError("SessionRecordMissing
   }
 }
 
-/** Returned when a thread binding points at a closed session. */
-export class SessionClosedError extends TaggedError("SessionClosedError")<{
-  readonly sessionRef: SessionRef;
-  readonly message: string;
-}>() {
-  constructor(args: { readonly sessionRef: SessionRef }) {
-    super({ ...args, message: `Session is closed: ${formatSessionRef(args.sessionRef)}` });
-  }
-}
-
 /** Failure resolving the active session bound to a chat thread. */
-export type ActiveSessionError =
-  | NoActiveSessionError
-  | SessionRecordMissingError
-  | SessionClosedError;
+export type ActiveSessionError = NoActiveSessionError | SessionRecordMissingError;
 
 /** Returned when a command targets a harness that is not configured. */
 export class CommandHarnessNotConfiguredError extends TaggedError(

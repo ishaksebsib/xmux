@@ -64,7 +64,6 @@ export type {
   ChatThreadRef,
   SessionRecord,
   SessionRecordPatch,
-  SessionStatus,
   ThreadBinding,
   ThreadWorkspace,
 } from "./store";

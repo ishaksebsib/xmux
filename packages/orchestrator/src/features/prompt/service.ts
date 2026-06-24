@@ -13,7 +13,7 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import { materializePromptAttachments } from "./attachments";
 import { PromptAlreadyRunningError, type PromptAttachmentError } from "./errors";
 import type { ActivePromptRun } from "./run-registry";
@@ -22,7 +22,6 @@ export type PromptSessionForThreadError =
   | StoreError
   | NoActiveSessionError
   | SessionRecordMissingError
-  | SessionClosedError
   | PromptAlreadyRunningError
   | PromptAttachmentError
   | PromptError;
@@ -124,12 +123,7 @@ export async function getPromptSessionForThread<
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   input: GetPromptSessionForThreadInput<TAdapters, TChats>,
-): Promise<
-  Result<
-    SessionRecord,
-    StoreError | NoActiveSessionError | SessionRecordMissingError | SessionClosedError
-  >
-> {
+): Promise<Result<SessionRecord, StoreError | NoActiveSessionError | SessionRecordMissingError>> {
   return Result.gen(async function* () {
     const binding = yield* Result.await(input.ctx.app.store.threadBindings.get(input.thread));
 
@@ -141,10 +135,6 @@ export async function getPromptSessionForThread<
 
     if (!session) {
       return Result.err(new SessionRecordMissingError({ sessionRef: binding.sessionRef }));
-    }
-
-    if (session.status !== "open") {
-      return Result.err(new SessionClosedError({ sessionRef: session.ref }));
     }
 
     return Result.ok(session);

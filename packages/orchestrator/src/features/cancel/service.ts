@@ -4,7 +4,7 @@ import { Result } from "better-result";
 import type { HandlerContext } from "../../ctx";
 import type { StoreError } from "../../errors";
 import type { ChatThreadRef, SessionRecord } from "../../store";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import { getPromptSessionForThread, PromptRunCancellationError } from "../prompt";
 
 export interface CancelActivePromptForThreadInput<
@@ -23,7 +23,6 @@ export type CancelActivePromptOutput =
 export type CancelActivePromptError =
   | StoreError
   | SessionRecordMissingError
-  | SessionClosedError
   | PromptRunCancellationError;
 
 /** Cancels the active prompt generation for the session bound to a chat thread. */

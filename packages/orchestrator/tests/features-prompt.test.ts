@@ -88,22 +88,6 @@ describe("prompt messages", () => {
     await xmux.shutdown();
   });
 
-  test("replies when the bound session is closed and does not call the harness", async () => {
-    const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux();
-    await bindSession({ xmux, status: "closed" });
-
-    emitMessage(messageEvent({ text: "hello" }));
-
-    await eventually(() => replies.length === 1);
-
-    expect(promptInputs).toHaveLength(0);
-    expect(replies[0]).toBe(
-      "**Session is closed**\n\nStart a new session with `/new <harnessId>`.",
-    );
-
-    await xmux.shutdown();
-  });
-
   test("prompts the active session with text content and falls back to a collected reply", async () => {
     const { emitMessage, promptInputs, replies, xmux } = await initializeFallbackXmux({
       events: [
@@ -685,23 +669,16 @@ function createHarnesses(input: {
   };
 }
 
-async function bindSession(input: {
-  readonly xmux: { readonly ctx: { readonly store: Store } };
-  readonly status?: "open" | "closed";
-}) {
+async function bindSession(input: { readonly xmux: { readonly ctx: { readonly store: Store } } }) {
   const now = new Date().toISOString();
-  const record = {
-    ...createSessionRecord({
-      ref: sessionRef,
-      origin: thread,
-      requester: { userId: "user-1" },
-      cwd: process.cwd(),
-      deliveryMode: "requester_only",
-      now,
-    }),
-    status: input.status ?? "open",
-    ...(input.status === "closed" ? { closedAt: now } : {}),
-  };
+  const record = createSessionRecord({
+    ref: sessionRef,
+    origin: thread,
+    requester: { userId: "user-1" },
+    cwd: process.cwd(),
+    deliveryMode: "requester_only",
+    now,
+  });
 
   expect((await input.xmux.ctx.store.sessions.create(record)).isOk()).toBe(true);
   expect(

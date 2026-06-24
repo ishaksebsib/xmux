@@ -43,7 +43,6 @@ describe("/exit command", () => {
     expect(session.unwrap("expected session lookup to succeed")).toMatchObject({
       ref: sessionRef,
       title: "Fix bug",
-      status: "open",
     });
 
     await xmux.shutdown();

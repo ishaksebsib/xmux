@@ -136,7 +136,6 @@ describe("/new command", () => {
       cwd: process.cwd(),
       title: "Fix bug",
       deliveryMode: "requester_only",
-      status: "open",
     });
 
     const binding = await xmux.ctx.store.threadBindings.get({
@@ -324,7 +323,6 @@ describe("/new command", () => {
       origin: { chatId: "telegram", threadId: "conversation-1" },
       requester: { userId: "user-1", displayName: "Ishak" },
       cwd: process.cwd(),
-      status: "open",
     });
 
     const binding = await harness.xmux.ctx.store.threadBindings.get({

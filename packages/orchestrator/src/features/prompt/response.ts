@@ -1,6 +1,6 @@
 import type { ChatTextInput } from "@xmux/chat-core";
-import { formatNoActiveSessionMessage, inlineCode, markdown, markdownText } from "../../components";
-import { NoActiveSessionError, SessionClosedError, SessionRecordMissingError } from "../errors";
+import { formatNoActiveSessionMessage, markdown, markdownText } from "../../components";
+import { NoActiveSessionError, SessionRecordMissingError } from "../errors";
 import {
   PromptAlreadyRunningError,
   PromptAttachmentReadError,
@@ -15,16 +15,6 @@ export function formatPromptFailure(error: PromptSessionForThreadError): ChatTex
     return formatNoActiveSessionMessage({
       description: "Create or resume a session before sending a prompt.",
       nextStep: "continue conversation.",
-    });
-  }
-
-  if (SessionClosedError.is(error)) {
-    return markdown({
-      text: [
-        "**Session is closed**",
-        "",
-        `Start a new session with ${inlineCode("/new <harnessId>")}.`,
-      ].join("\n"),
     });
   }
 

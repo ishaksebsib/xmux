@@ -280,22 +280,6 @@ describe("/thinking command", () => {
 
     await xmux.shutdown();
   });
-
-  test("reports closed active sessions", async () => {
-    const { emitCommand, replies, getInputs, xmux } = await initializeXmux();
-    await bindSession({ xmux, status: "closed" });
-
-    emitCommand(commandEvent({ level: undefined }));
-
-    await eventually(() => replies.length === 1);
-
-    expect(getInputs).toHaveLength(0);
-    expect(replies[0]).toBe(
-      "**Session is closed**\n\nStart a new session with `/new <harnessId>`.",
-    );
-
-    await xmux.shutdown();
-  });
 });
 
 interface InitializeXmuxInput {
@@ -538,7 +522,6 @@ function createModelInfo(input: {
 
 async function bindSession(input: {
   readonly xmux: Awaited<ReturnType<typeof initializeXmux>>["xmux"];
-  readonly status?: "open" | "closed";
 }) {
   const now = new Date().toISOString();
   const created = await input.xmux.ctx.store.sessions.create(
@@ -553,15 +536,6 @@ async function bindSession(input: {
     }),
   );
   expect(created.isOk()).toBe(true);
-
-  if (input.status === "closed") {
-    const updated = await input.xmux.ctx.store.sessions.update(sessionRef, {
-      status: "closed",
-      updatedAt: now,
-      closedAt: now,
-    });
-    expect(updated.isOk()).toBe(true);
-  }
 
   const bound = await input.xmux.ctx.store.threadBindings.bind(
     createThreadBinding({ thread, sessionRef, now }),
