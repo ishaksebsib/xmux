@@ -1,4 +1,4 @@
-import { Duration, Effect, FileSystem, Logger, Path, References, Scope } from "effect";
+import { Duration, Effect, FileSystem, Logger, Path, References, Scope, Semaphore } from "effect";
 import { LogEntry, type LogLevel } from "../contracts/logging";
 import {
   isoTimestampFromString,
@@ -161,17 +161,18 @@ const mapLogFileError = (
     cause,
   });
 
-const ensureLogFile = (
+const ensureLogFileWithServices = (
+  host: HostRuntimeService,
+  fs: FileSystem.FileSystem,
   path: string,
-): Effect.Effect<void, LogFileError, FileSystem.FileSystem | HostRuntime> =>
+  operation: "setup" | "write",
+): Effect.Effect<void, LogFileError> =>
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const host = yield* HostRuntime;
     yield* fs
       .writeFileString(path, "", { flag: "a", mode: 0o600 })
       .pipe(
         Effect.mapError((cause) =>
-          mapLogFileError("setup", path, `Failed to set up log file: ${path}`, cause),
+          mapLogFileError(operation, path, `Failed to ensure log file exists: ${path}`, cause),
         ),
       );
     if (host.platform === "win32") return;
@@ -179,9 +180,18 @@ const ensureLogFile = (
       .chmod(path, 0o600)
       .pipe(
         Effect.mapError((cause) =>
-          mapLogFileError("setup", path, `Failed to secure log file: ${path}`, cause),
+          mapLogFileError(operation, path, `Failed to secure log file: ${path}`, cause),
         ),
       );
+  });
+
+const ensureLogFile = (
+  path: string,
+): Effect.Effect<void, LogFileError, FileSystem.FileSystem | HostRuntime> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const host = yield* HostRuntime;
+    yield* ensureLogFileWithServices(host, fs, path, "setup");
   });
 
 const fileSize = (fs: FileSystem.FileSystem, path: string): Effect.Effect<number, LogFileError> =>
@@ -257,6 +267,7 @@ const rotateIfNeeded = (
   });
 
 const appendLogLine = (
+  host: HostRuntimeService,
   fs: FileSystem.FileSystem,
   path: string,
   line: string,
@@ -264,6 +275,7 @@ const appendLogLine = (
 ): Effect.Effect<void, LogFileError> => {
   const data = `${line}\n`;
   return rotateIfNeeded(fs, path, byteLength(data), rotation).pipe(
+    Effect.andThen(ensureLogFileWithServices(host, fs, path, "write")),
     Effect.andThen(
       fs
         .writeFileString(path, data, { flag: "a", mode: 0o600 })
@@ -284,9 +296,18 @@ const appendLogLines = (
   rotation: NormalizedLogRotationOptions,
 ): Effect.Effect<void> => {
   if (lines.length === 0) return Effect.void;
-  return Effect.forEach(lines, (line) => appendLogLine(fs, path, line, rotation), {
-    discard: true,
-  }).pipe(
+
+  const ensureActiveFile = ensureLogFileWithServices(host, fs, path, "write");
+  const appendBatch = Effect.forEach(
+    lines,
+    (line) => appendLogLine(host, fs, path, line, rotation),
+    { discard: true },
+  ).pipe(
+    Effect.catch((error) => ensureActiveFile.pipe(Effect.andThen(Effect.fail(error)))),
+    Effect.andThen(ensureActiveFile),
+  );
+
+  return appendBatch.pipe(
     Effect.catch((error) =>
       host.emitWarning(`xmux failed to write log file ${path}: ${String(error)}`),
     ),
@@ -296,6 +317,7 @@ const appendLogLines = (
 const writeBatch = (
   host: HostRuntimeService,
   fs: FileSystem.FileSystem,
+  writeLock: Semaphore.Semaphore,
   paths: ServerLogFilePaths,
   rotation: NormalizedLogRotationOptions,
   entries: readonly EncodedLogEntry[],
@@ -303,9 +325,11 @@ const writeBatch = (
   const mainLines = entries.map((entry) => entry.line);
   const errorLines = entries.filter((entry) => entry.level === "error").map((entry) => entry.line);
 
-  return appendLogLines(host, fs, paths.mainLogPath, mainLines, rotation).pipe(
+  const writeAllStreams = appendLogLines(host, fs, paths.mainLogPath, mainLines, rotation).pipe(
     Effect.andThen(appendLogLines(host, fs, paths.errorLogPath, errorLines, rotation)),
   );
+
+  return writeLock.withPermits(1)(Effect.uninterruptible(writeAllStreams));
 };
 
 /** Create a scoped Effect logger that writes redacted JSONL to server log files. */
@@ -320,10 +344,11 @@ export const makeFileLogger = Effect.fn("server.makeFileLogger")(function* (
 
   yield* ensureLogFile(paths.mainLogPath);
   yield* ensureLogFile(paths.errorLogPath);
+  const writeLock = yield* Semaphore.make(1);
 
   return yield* Logger.batched(encodeLogEntry, {
     window: LOG_BATCH_WINDOW,
-    flush: (entries) => writeBatch(host, fs, paths, rotation, entries),
+    flush: (entries) => writeBatch(host, fs, writeLock, paths, rotation, entries),
   });
 });
 

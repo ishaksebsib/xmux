@@ -93,10 +93,13 @@ describeIntegration("server file logging integration", () => {
         ({ paths, shutdown }) =>
           Effect.gen(function* () {
             yield* waitUntil({
-              label: "rotated server log file",
+              label: "active and rotated server log files",
               probe: Effect.promise(() => readdir(paths.logDir)).pipe(
                 Effect.map((files) =>
-                  files.includes(`${SERVER_LOG_FILE_NAME}.1`) ? files : undefined,
+                  files.includes(SERVER_LOG_FILE_NAME) &&
+                  files.includes(`${SERVER_LOG_FILE_NAME}.1`)
+                    ? files
+                    : undefined,
                 ),
               ),
             });

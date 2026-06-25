@@ -354,6 +354,43 @@ describe("structured file logging", () => {
       ),
     );
 
+    it.effect("keeps the active file after tiny-limit rotation", () =>
+      withTempLogDir(({ logDir, paths }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* Effect.scoped(
+            withFileLogger(
+              {
+                logDir,
+                maxBytes: logByteCountFromNumber(1),
+                maxFiles: logRotationFileCountFromNumber(2),
+              },
+              Effect.gen(function* () {
+                yield* Effect.logInfo("tiny-rotation-0");
+                yield* Effect.logInfo("tiny-rotation-1");
+              }),
+            ),
+          );
+
+          assert.isTrue(yield* fs.exists(paths.mainLogPath));
+          assert.isTrue(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 1)));
+          assert.isFalse(yield* fs.exists(rotatedLogPath(paths.mainLogPath, 2)));
+
+          const activeLog = yield* fs.readFileString(paths.mainLogPath);
+          const rotatedLog = yield* fs.readFileString(rotatedLogPath(paths.mainLogPath, 1));
+          const entries = `${rotatedLog}${activeLog}`
+            .split("\n")
+            .filter((line) => line.trim().length > 0)
+            .map(decodeJsonLine);
+
+          assert.lengthOf(entries, 2);
+          assert.strictEqual(entries[0]?.message, "tiny-rotation-0");
+          assert.strictEqual(entries[1]?.message, "tiny-rotation-1");
+        }),
+      ),
+    );
+
     it.effect("tails latest schema-valid entries from bounded log files", () =>
       withTempLogDir(({ paths, logDir }) =>
         Effect.gen(function* () {
