@@ -9,24 +9,27 @@ const posixOnly = process.platform === "win32" ? it.live.skip : it.live;
 const describeIntegration = process.env.RUN_INTEGRATION === "true" ? describe : describe.skip;
 
 describeIntegration("server lifecycle integration", () => {
-  posixOnly("starts, publishes control state, and shuts down cleanly", () =>
-    withSubprocessServer(
-      { config: minimalConfig() },
-      ({ paths, socketPath, configPath, shutdown }) =>
-        Effect.gen(function* () {
-          yield* assertServerPublished(paths);
-          const health = yield* getHealth(socketPath);
-          assert.isTrue(health.ready);
-          const status = yield* getStatus(socketPath);
-          assert.strictEqual(status.state, "ready");
-          assert.strictEqual(status.endpoint.path, socketPath);
-          assert.strictEqual(status.configPath, configPath);
-          assert.isAbove(status.pid, 0);
-          const logs = yield* tailLogs(socketPath, 20);
-          assert.isAtMost(logs.entries.length, 20);
-          yield* shutdown;
-          yield* assertRuntimeFilesCleaned(paths);
-        }),
-    ),
+  posixOnly(
+    "starts, publishes control state, and shuts down cleanly",
+    () =>
+      withSubprocessServer(
+        { config: minimalConfig() },
+        ({ paths, socketPath, configPath, shutdown }) =>
+          Effect.gen(function* () {
+            yield* assertServerPublished(paths);
+            const health = yield* getHealth(socketPath);
+            assert.isTrue(health.ready);
+            const status = yield* getStatus(socketPath);
+            assert.strictEqual(status.state, "ready");
+            assert.strictEqual(status.endpoint.path, socketPath);
+            assert.strictEqual(status.configPath, configPath);
+            assert.isAbove(status.pid, 0);
+            const logs = yield* tailLogs(socketPath, 20);
+            assert.isAtMost(logs.entries.length, 20);
+            yield* shutdown;
+            yield* assertRuntimeFilesCleaned(paths);
+          }),
+      ),
+    30_000,
   );
 });

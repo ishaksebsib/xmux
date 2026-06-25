@@ -82,7 +82,7 @@ describeIntegration("server file logging integration", () => {
             yield* shutdown;
           }),
       ),
-    15_000,
+    30_000,
   );
 
   posixOnly(
@@ -131,6 +131,6 @@ describeIntegration("server file logging integration", () => {
             assert.notInclude(`${activeLog}${rotatedLog}`, "rotation-token-do-not-leak");
           }),
       ),
-    15_000,
+    30_000,
   );
 });

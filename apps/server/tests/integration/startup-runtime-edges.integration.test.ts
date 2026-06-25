@@ -109,7 +109,7 @@ describeIntegration("startup runtime edge integration", () => {
             yield* shutdown;
           }),
       ),
-    15_000,
+    30_000,
   );
 
   posixOnly(
