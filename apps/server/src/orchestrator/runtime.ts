@@ -13,6 +13,7 @@ import { OrchestratorStore } from "../db/orchestrator-store";
 import { decideOrchestratorActivation } from "./activation";
 import { mapEffectiveConfigToXmuxConfig } from "./config-map";
 import { OrchestratorFactory, type OrchestratorRuntime } from "./factory";
+import { makeOrchestratorLogger } from "./logger";
 import {
   OrchestratorConfigurationError,
   OrchestratorShutdownError,
@@ -122,10 +123,16 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
   const factory = yield* OrchestratorFactory;
   const store = yield* OrchestratorStore;
   const xmuxConfig = mapEffectiveConfigToXmuxConfig(config);
+  const logger = yield* makeOrchestratorLogger();
 
   yield* Effect.acquireRelease(
     Effect.gen(function* () {
-      const runtime = yield* factory.create({ effectiveConfig: config, config: xmuxConfig, store });
+      const runtime = yield* factory.create({
+        effectiveConfig: config,
+        config: xmuxConfig,
+        store,
+        logger,
+      });
       yield* initializeOrchestratorRuntime(runtime).pipe(
         Effect.tapError(() => shutdownOrchestratorRuntime(runtime)),
       );

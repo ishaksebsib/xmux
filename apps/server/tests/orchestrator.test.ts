@@ -5,6 +5,7 @@ import {
   Result,
   XmuxInitializeError,
   createInMemoryStore,
+  dummyXmuxLogger,
   type Store,
   type ThreadWorkspace,
   type XmuxCloseError,
@@ -229,6 +230,7 @@ describe("orchestrator activation and config", () => {
             effectiveConfig: effective,
             config: mapEffectiveConfigToXmuxConfig(effective),
             store: createInMemoryStore(),
+            logger: dummyXmuxLogger,
           });
 
           assert.strictEqual(typeof runtime.initialize, "function");
@@ -274,8 +276,9 @@ describe("orchestrator server lifecycle", () => {
       let initializeCalls = 0;
       let shutdownCalls = 0;
       const factoryLayer = makeTestOrchestratorFactoryLayer({
-        create: () =>
+        create: (input) =>
           Effect.sync(() => {
+            assert.strictEqual(typeof input.logger.info, "function");
             createCalls += 1;
             return okRuntime({
               initialize: () => {

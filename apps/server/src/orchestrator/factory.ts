@@ -4,6 +4,7 @@ import type {
   Store,
   XmuxCloseError,
   XmuxInitializeError,
+  XmuxLogger,
 } from "@xmux/orchestrator";
 import { Context, Effect } from "effect";
 import type { EffectiveServerConfig } from "../config/effective";
@@ -18,6 +19,7 @@ export interface CreateOrchestratorRuntimeInput {
   readonly effectiveConfig: EffectiveServerConfig;
   readonly config: Config;
   readonly store: Store;
+  readonly logger: XmuxLogger;
 }
 
 export class OrchestratorFactory extends Context.Service<

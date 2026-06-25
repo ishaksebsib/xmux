@@ -130,6 +130,7 @@ export const nodeOrchestratorFactoryLayer = Layer.succeed(OrchestratorFactory)({
       chats,
       config: input.config,
       store: input.store,
+      logger: input.logger,
     });
   }),
 });

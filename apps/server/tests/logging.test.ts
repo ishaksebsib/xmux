@@ -14,6 +14,7 @@ import {
 } from "../src/logging/file-logger";
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
+import { makeOrchestratorLogger } from "../src/orchestrator/logger";
 import type { HostRuntime } from "../src/platform/host";
 import { nodeHostRuntimeLayer } from "../src/platform/node";
 
@@ -82,6 +83,65 @@ describe("structured file logging", () => {
       ),
     );
 
+    it.effect("bridges orchestrator package logs through file logger", () =>
+      withTempLogDir(({ logDir, paths }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* Effect.scoped(
+            withFileLogger(
+              { logDir, logLevel: "debug" },
+              Effect.gen(function* () {
+                const logger = yield* makeOrchestratorLogger();
+                logger.info(
+                  "xmux.orchestrator.test",
+                  {
+                    component: "@xmux/orchestrator",
+                    requestId: "req-1",
+                    token: "raw-token",
+                  },
+                  "do-not-log-optional",
+                );
+                logger.error("xmux.orchestrator.failure", {
+                  component: "@xmux/orchestrator",
+                  authorization: "Bearer raw-auth",
+                });
+              }),
+            ),
+          );
+
+          const mainLog = yield* fs.readFileString(paths.mainLogPath);
+          const errorLog = yield* fs.readFileString(paths.errorLogPath);
+          assert.include(mainLog, "xmux.orchestrator.test");
+          assert.include(errorLog, "xmux.orchestrator.failure");
+          assert.notInclude(mainLog, "raw-token");
+          assert.notInclude(mainLog, "raw-auth");
+          assert.notInclude(mainLog, "do-not-log-optional");
+          assert.notInclude(errorLog, "raw-auth");
+
+          const entries = mainLog
+            .split("\n")
+            .filter((line) => line.trim().length > 0)
+            .map(decodeJsonLine);
+          const infoEntry = entries.find((entry) => entry.message === "xmux.orchestrator.test");
+          if (infoEntry === undefined) assert.fail("Expected bridged info log entry");
+          assert.strictEqual(infoEntry.annotations?.component, "@xmux/orchestrator");
+          assert.strictEqual(infoEntry.annotations?.requestId, "req-1");
+          assert.strictEqual(infoEntry.annotations?.token, "[redacted]");
+
+          const errorEntries = errorLog
+            .split("\n")
+            .filter((line) => line.trim().length > 0)
+            .map(decodeJsonLine);
+          const errorEntry = errorEntries.find(
+            (entry) => entry.message === "xmux.orchestrator.failure",
+          );
+          if (errorEntry === undefined) assert.fail("Expected bridged error log entry");
+          assert.strictEqual(errorEntry.level, "error");
+        }),
+      ),
+    );
+
     it.effect("respects configured minimum log level", () =>
       withTempLogDir(({ logDir, paths }) =>
         Effect.gen(function* () {
@@ -104,6 +164,50 @@ describe("structured file logging", () => {
           assert.include(mainLog, "kept error");
         }),
       ),
+    );
+
+    it.effect("applies minimum log level to bridged package logs", () =>
+      Effect.gen(function* () {
+        yield* withTempLogDir(({ logDir, paths }) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+
+            yield* Effect.scoped(
+              withFileLogger(
+                { logDir, logLevel: "info" },
+                Effect.gen(function* () {
+                  const logger = yield* makeOrchestratorLogger();
+                  logger.debug("xmux.orchestrator.filtered-debug");
+                  logger.info("xmux.orchestrator.kept-info");
+                }),
+              ),
+            );
+
+            const mainLog = yield* fs.readFileString(paths.mainLogPath);
+            assert.notInclude(mainLog, "xmux.orchestrator.filtered-debug");
+            assert.include(mainLog, "xmux.orchestrator.kept-info");
+          }),
+        );
+
+        yield* withTempLogDir(({ logDir, paths }) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+
+            yield* Effect.scoped(
+              withFileLogger(
+                { logDir, logLevel: "debug" },
+                Effect.gen(function* () {
+                  const logger = yield* makeOrchestratorLogger();
+                  logger.debug("xmux.orchestrator.kept-debug");
+                }),
+              ),
+            );
+
+            const mainLog = yield* fs.readFileString(paths.mainLogPath);
+            assert.include(mainLog, "xmux.orchestrator.kept-debug");
+          }),
+        );
+      }),
     );
 
     it.effect("rotates logs by size and tails across rotated files", () =>
