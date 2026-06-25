@@ -14,6 +14,18 @@ const describeIntegration = process.env.RUN_INTEGRATION === "true" ? describe : 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
 const decodeLogEntry = Schema.decodeUnknownOption(LogEntry);
 
+const tryDecodeJsonLines = (text: string): ReadonlyArray<LogEntry> | undefined => {
+  const entries: LogEntry[] = [];
+  for (const line of text.split("\n").filter((line) => line.trim().length > 0)) {
+    const json = decodeUnknownJsonOption(line);
+    if (json._tag === "None") return undefined;
+    const entry = decodeLogEntry(json.value);
+    if (entry._tag === "None") return undefined;
+    entries.push(entry.value);
+  }
+  return entries;
+};
+
 const decodeJsonLines = (text: string): ReadonlyArray<LogEntry> =>
   text
     .split("\n")
@@ -28,6 +40,29 @@ const decodeJsonLines = (text: string): ReadonlyArray<LogEntry> =>
 
 const isServerStartedMessage = (message: LogEntry["message"]): boolean =>
   Array.isArray(message) ? message.includes("server started") : message === "server started";
+
+interface LogFileSnapshot {
+  readonly text: string;
+  readonly entries: ReadonlyArray<LogEntry>;
+}
+
+const waitForDiskLogEntry = (input: {
+  readonly path: string;
+  readonly label: string;
+  readonly predicate: (entry: LogEntry) => boolean;
+}): Effect.Effect<LogFileSnapshot> =>
+  waitUntil({
+    label: input.label,
+    timeoutMs: 5_000,
+    probe: Effect.promise(() => readFile(input.path, "utf8")).pipe(
+      Effect.map((text) => {
+        const entries = tryDecodeJsonLines(text);
+        return entries !== undefined && entries.some(input.predicate)
+          ? { text, entries }
+          : undefined;
+      }),
+    ),
+  });
 
 const rotatingLogConfig = (token: string): string => `{
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
@@ -64,17 +99,32 @@ describeIntegration("server file logging integration", () => {
             assert.strictEqual(mainStat.mode & 0o777, 0o600);
             assert.strictEqual(errorStat.mode & 0o777, 0o600);
 
-            const mainLog = yield* Effect.promise(() => readFile(mainLogPath, "utf8"));
+            const diskSnapshot = yield* waitForDiskLogEntry({
+              path: mainLogPath,
+              label: "server started log entry on disk",
+              predicate: (entry) => isServerStartedMessage(entry.message),
+            });
             const errorLog = yield* Effect.promise(() => readFile(errorLogPath, "utf8"));
-            assert.notInclude(mainLog, "inline-telegram-token-do-not-leak");
+            assert.notInclude(diskSnapshot.text, "inline-telegram-token-do-not-leak");
             assert.notInclude(errorLog, "inline-telegram-token-do-not-leak");
 
-            const diskEntries = decodeJsonLines(mainLog);
-            assert.isAtLeast(diskEntries.length, 1);
-            assert.isTrue(diskEntries.some((entry) => entry.level === "info"));
-            assert.isTrue(diskEntries.some((entry) => isServerStartedMessage(entry.message)));
+            assert.isAtLeast(diskSnapshot.entries.length, 1);
+            assert.isTrue(diskSnapshot.entries.some((entry) => entry.level === "info"));
+            assert.isTrue(
+              diskSnapshot.entries.some((entry) => isServerStartedMessage(entry.message)),
+            );
 
-            const apiLogs = yield* tailLogs(socketPath, 20);
+            const apiLogs = yield* waitUntil({
+              label: "server started log entry via API",
+              timeoutMs: 5_000,
+              probe: tailLogs(socketPath, 20).pipe(
+                Effect.map((logs) =>
+                  logs.entries.some((entry) => isServerStartedMessage(entry.message))
+                    ? logs
+                    : undefined,
+                ),
+              ),
+            });
             assert.isAtLeast(apiLogs.entries.length, 1);
             assert.notInclude(JSON.stringify(apiLogs), "inline-telegram-token-do-not-leak");
             assert.isTrue(apiLogs.entries.some((entry) => isServerStartedMessage(entry.message)));
