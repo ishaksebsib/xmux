@@ -1,4 +1,4 @@
-name: CI
+name: Integration
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: integration-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -23,8 +23,8 @@ defaults:
     shell: bash
 
 jobs:
-  ci:
-    name: CI (${{ matrix.name }})
+  integration-core:
+    name: Integration core (${{ matrix.name }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -33,10 +33,8 @@ jobs:
         include:
           - name: linux
             runner: ubuntu-24.04
-            run_quality: true
           - name: macos
             runner: macos-14
-            run_quality: false
 
     steps:
       - name: Checkout
@@ -58,29 +56,20 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-integration-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-
+            turbo-${{ runner.os }}-integration-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-
             turbo-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
-        if: matrix.run_quality
-        run: pnpm fmt:check
-
-      - name: Lint
-        if: matrix.run_quality
-        run: pnpm lint
-
-      - name: Typecheck
-        if: matrix.run_quality
-        run: pnpm turbo run typecheck --output-logs=errors-only --log-order=grouped
-
-      - name: Build
-        if: matrix.run_quality
-        run: pnpm turbo run build --output-logs=errors-only --log-order=grouped
-
-      - name: Unit tests
-        run: pnpm turbo run test --output-logs=errors-only --log-order=grouped
+      - name: Integration tests
+        run: |
+          pnpm turbo run test:integration \
+            --filter=@xmux/server \
+            --filter=@xmux/harness-pi \
+            --output-logs=errors-only \
+            --log-order=grouped \
+            -- \
+            --maxWorkers=1
