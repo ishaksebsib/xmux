@@ -21,6 +21,12 @@ type ParseManifestResult =
   | { readonly _tag: "Valid"; readonly manifest: ServerManifest }
   | { readonly _tag: "Invalid"; readonly reason: "invalid_json" | "invalid_manifest" };
 
+/** Public defensive manifest read result for local discovery callers. */
+export type ServerManifestReadResult =
+  | { readonly _tag: "NoManifest" }
+  | { readonly _tag: "InvalidManifest"; readonly reason: "invalid_json" | "invalid_manifest" }
+  | { readonly _tag: "ValidManifest"; readonly manifest: ServerManifest };
+
 /** Manifest ownership tracks only the file this process is allowed to remove. */
 export interface ManifestOwnership {
   readonly path: ManifestPath;
@@ -88,9 +94,9 @@ export const createServerManifest = (input: CreateManifestInput): ServerManifest
   });
 
 /** Read manifests defensively because the file is only discovery metadata. */
-export const readServerManifest = (
+export const readServerManifestResult = (
   manifestPath: ManifestPath | string,
-): Effect.Effect<ServerManifest | null, ManifestError, FileSystem.FileSystem> =>
+): Effect.Effect<ServerManifestReadResult, ManifestError, FileSystem.FileSystem> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const raw = yield* fs.readFileString(manifestPath).pipe(
@@ -107,14 +113,25 @@ export const readServerManifest = (
             ),
       ),
     );
-    if (raw === null) return null;
+    if (raw === null) return { _tag: "NoManifest" };
     const parsed = parseServerManifestResult(raw);
-    if (parsed._tag === "Valid") return parsed.manifest;
+    if (parsed._tag === "Valid") {
+      return { _tag: "ValidManifest", manifest: parsed.manifest };
+    }
     yield* Effect.logWarning("ignoring invalid server manifest", {
       manifestPath,
       reason: parsed.reason,
     });
-    return null;
+    return { _tag: "InvalidManifest", reason: parsed.reason };
+  });
+
+/** Read manifests defensively because the file is only discovery metadata. */
+export const readServerManifest = (
+  manifestPath: ManifestPath | string,
+): Effect.Effect<ServerManifest | null, ManifestError, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const result = yield* readServerManifestResult(manifestPath);
+    return result._tag === "ValidManifest" ? result.manifest : null;
   });
 
 /** Write owner-only manifests so local discovery metadata does not leak paths. */

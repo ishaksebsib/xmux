@@ -5,4 +5,5 @@ export * from "./secrets";
 export * from "./http/control-transport";
 export * from "./http/probe";
 export * from "./http/client";
+export * from "./discovery";
 export * from "./orchestrator/factory";
