@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Result } from "better-result";
 import { describe, expect, test } from "vitest";
 import { normalizeConfig, parseXmuxConfig } from "../src/config";
 import {
@@ -8,6 +9,7 @@ import {
   FileSystemPathNotFoundError,
   InvalidDirectoryError,
   resolveDirectory,
+  type FileSystemHost,
 } from "../src/filesystem";
 
 describe("workspace filesystem", () => {
@@ -120,6 +122,30 @@ describe("workspace filesystem", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+
+  test("preserves resolved path spelling instead of canonicalizing through realpath", async () => {
+    const statPaths: string[] = [];
+    const fs: FileSystemHost = {
+      resolvePath: () => "/visible/tmp/project",
+      async realpath() {
+        throw new Error("resolveDirectory must not canonicalize workspace paths");
+      },
+      async stat(input) {
+        statPaths.push(input.path);
+        return Result.ok({ type: "directory" });
+      },
+      async readdir() {
+        return Result.ok([]);
+      },
+    };
+
+    const resolved = await resolveDirectory({ fs, baseCwd: "/visible/tmp", inputPath: "project" });
+
+    expect(resolved.unwrap("expected directory resolution to succeed")).toBe(
+      "/visible/tmp/project",
+    );
+    expect(statPaths).toEqual(["/visible/tmp/project"]);
   });
 
   test("returns typed errors for missing and non-directory targets", async () => {
