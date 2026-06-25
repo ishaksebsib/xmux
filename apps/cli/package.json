@@ -1,0 +1,55 @@
+{
+  "name": "@xmux/cli",
+  "version": "0.0.0",
+  "private": true,
+  "homepage": "https://github.com/ishaksebsib/xmux",
+  "license": "MIT",
+  "author": "Ishak Sebsib",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ishaksebsib/xmux.git"
+  },
+  "bin": {
+    "xmux": "./dist/bin/xmux.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest run",
+    "typecheck": "tsgo --noEmit",
+    "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
+  },
+  "dependencies": {
+    "@effect/platform-node": "beta",
+    "effect": "beta"
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.86.2",
+    "@types/node": "^25.5.0",
+    "@typescript/native-preview": "7.0.0-dev.20260328.1",
+    "@xmux/ts-config": "workspace:*",
+    "tsdown": "^0.21.7",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

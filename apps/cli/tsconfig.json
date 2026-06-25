@@ -1,0 +1,44 @@
+{
+  "$schema": "./node_modules/@effect/language-service/schema.json",
+  "extends": "@xmux/ts-config",
+  "compilerOptions": {
+    "outDir": "dist",
+    "types": ["node"],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnostics": true,
+        "refactors": true,
+        "quickinfo": true,
+        "completions": true,
+        "includeSuggestionsInTsc": false,
+        "ignoreEffectWarningsInTscExitCode": true,
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "missingEffectContext": "error",
+          "missingEffectError": "error",
+          "missingLayerContext": "error",
+          "missingReturnYieldStar": "error",
+          "missingStarInYieldEffectGen": "error",
+          "effectFnImplicitAny": "error",
+          "effectInFailure": "error",
+          "effectInVoidSuccess": "error",
+          "globalErrorInEffectCatch": "error",
+          "globalErrorInEffectFailure": "error",
+          "overriddenSchemaConstructor": "error",
+          "returnEffectInGen": "error",
+          "unsafeEffectTypeAssertion": "error",
+          "lazyPromiseInEffectSync": "warning",
+          "layerMergeAllWithDependencies": "warning",
+          "multipleEffectProvide": "warning",
+          "runEffectInsideEffect": "warning",
+          "tryCatchInEffectGen": "warning",
+          "effectFnOpportunity": "suggestion"
+        }
+      }
+    ]
+  },
+  "include": ["src/**/*.ts", "bin/**/*.ts", "tests/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
