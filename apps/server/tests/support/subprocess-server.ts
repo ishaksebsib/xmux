@@ -11,9 +11,13 @@ import { HostRuntime } from "../../src/platform/host";
 import { requestShutdown } from "./client";
 import { writeConfig } from "./config";
 import { makeSandbox } from "./sandbox";
-import { waitForHealthReady, waitForMissingPath } from "./wait";
+import { exists, waitForHealthReady } from "./wait";
 
 const tail = (lines: ReadonlyArray<string>) => lines.slice(-80).join("");
+const SHUTDOWN_REQUEST_TIMEOUT_MS = 2_000;
+const SHUTDOWN_EXIT_TIMEOUT_MS = 3_000;
+const SHUTDOWN_CLEANUP_TIMEOUT_MS = 2_000;
+const SHUTDOWN_POLL_INTERVAL_MS = 20;
 
 class SubprocessServerError extends Schema.TaggedErrorClass<SubprocessServerError>()(
   "SubprocessServerError",
@@ -27,11 +31,31 @@ const isExited = (child: ChildProcess): boolean =>
   child.exitCode !== null || child.signalCode !== null;
 
 const waitForExit = (child: ChildProcess): Effect.Effect<void> =>
-  Effect.promise(() =>
-    isExited(child)
-      ? Promise.resolve()
-      : new Promise<void>((resolveExit) => child.once("exit", () => resolveExit())),
-  );
+  Effect.promise(() => {
+    if (isExited(child)) return Promise.resolve();
+    return new Promise<void>((resolveExit) => {
+      const onExit = () => resolveExit();
+      child.once("exit", onExit);
+      if (isExited(child)) {
+        child.off("exit", onExit);
+        resolveExit();
+      }
+    });
+  });
+
+const childState = (child: ChildProcess): string =>
+  `exitCode=${child.exitCode ?? "null"} signalCode=${child.signalCode ?? "null"} killed=${String(child.killed)}`;
+
+const waitForMissingPathWithin = (path: string, timeoutMs: number): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() <= deadline) {
+      const present = yield* exists(path);
+      if (!present) return true;
+      yield* Effect.sleep(Duration.millis(SHUTDOWN_POLL_INTERVAL_MS));
+    }
+    return false;
+  });
 
 const terminateProcess = (child: ChildProcess): Effect.Effect<void> =>
   Effect.gen(function* () {
@@ -143,10 +167,48 @@ export const withSubprocessServer = <A>(
         ),
       ),
     );
-    const shutdown = requestShutdown(paths.controlEndpoint.path).pipe(
-      Effect.andThen(waitForExit(child)),
-      Effect.andThen(waitForMissingPath(paths.manifestPath)),
-    );
+    let shutdownComplete = false;
+    const shutdown = Effect.gen(function* () {
+      if (shutdownComplete) return;
+
+      if (!isExited(child)) {
+        const requested = yield* Effect.timeoutOption(
+          requestShutdown(paths.controlEndpoint.path),
+          Duration.millis(SHUTDOWN_REQUEST_TIMEOUT_MS),
+        );
+        if (requested._tag === "None") {
+          yield* terminateProcess(child);
+          return yield* Effect.fail(
+            `Shutdown request timed out after ${SHUTDOWN_REQUEST_TIMEOUT_MS}ms; ${childState(child)}`,
+          );
+        }
+      }
+
+      if (!isExited(child)) {
+        const exited = yield* Effect.timeoutOption(
+          waitForExit(child),
+          Duration.millis(SHUTDOWN_EXIT_TIMEOUT_MS),
+        );
+        if (exited._tag === "None" && !isExited(child)) {
+          yield* terminateProcess(child);
+          return yield* Effect.fail(
+            `Subprocess did not exit within ${SHUTDOWN_EXIT_TIMEOUT_MS}ms after shutdown; ${childState(child)}`,
+          );
+        }
+      }
+
+      const cleaned = yield* waitForMissingPathWithin(
+        paths.manifestPath,
+        SHUTDOWN_CLEANUP_TIMEOUT_MS,
+      );
+      if (!cleaned) {
+        return yield* Effect.fail(
+          `Manifest remained after subprocess shutdown for ${SHUTDOWN_CLEANUP_TIMEOUT_MS}ms; ${childState(child)}`,
+        );
+      }
+
+      shutdownComplete = true;
+    }).pipe(Effect.mapError(diagnostics));
     yield* Effect.addFinalizer(() => shutdown.pipe(Effect.ignore));
     return yield* use({
       root: sandbox.root,
