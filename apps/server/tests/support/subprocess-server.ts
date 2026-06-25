@@ -14,6 +14,7 @@ import { makeSandbox } from "./sandbox";
 import { exists, waitForHealthReady } from "./wait";
 
 const tail = (lines: ReadonlyArray<string>) => lines.slice(-80).join("");
+const SUBPROCESS_START_TIMEOUT_MS = 15_000;
 const SHUTDOWN_REQUEST_TIMEOUT_MS = 2_000;
 const SHUTDOWN_EXIT_TIMEOUT_MS = 3_000;
 const SHUTDOWN_CLEANUP_TIMEOUT_MS = 2_000;
@@ -155,8 +156,10 @@ export const withSubprocessServer = <A>(
         message: `${String(error)}\nstdout:\n${tail(stdout)}\nstderr:\n${tail(stderr)}\nmanifest=${paths.manifestPath}\nsocket=${paths.controlEndpoint.path}\nlock=${paths.startupLockPath}`,
         cause: error,
       });
-    yield* Effect.race(
-      waitForHealthReady(paths.controlEndpoint.path).pipe(Effect.mapError(diagnostics)),
+    yield* Effect.raceFirst(
+      waitForHealthReady(paths.controlEndpoint.path, {
+        timeoutMs: SUBPROCESS_START_TIMEOUT_MS,
+      }).pipe(Effect.mapError(diagnostics)),
       waitForExit(child).pipe(
         Effect.flatMap(() =>
           Effect.fail(

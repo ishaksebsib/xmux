@@ -1,9 +1,10 @@
 import { NodeHttpClient, Undici } from "@effect/platform-node";
-import { Effect, Schema, Scope } from "effect";
+import { Duration, Effect, Exit, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { serverApi } from "../../../api/api";
 
 const defaultXmuxClientBaseUrl = "http://xmux.local";
+const CLIENT_GRACEFUL_CLOSE_TIMEOUT_MS = 1_000;
 
 export interface CreateXmuxClientOptions {
   readonly socketPath: string;
@@ -19,6 +20,26 @@ export class XmuxClientCreateError extends Schema.TaggedErrorClass<XmuxClientCre
     cause: Schema.optionalKey(Schema.Defect()),
   },
 ) {}
+
+const destroyDispatcher = (dispatcher: Undici.Dispatcher): Effect.Effect<void> =>
+  Effect.promise(() => dispatcher.destroy()).pipe(Effect.ignore);
+
+const releaseDispatcher = (
+  dispatcher: Undici.Dispatcher,
+  exit: Exit.Exit<unknown, unknown>,
+): Effect.Effect<void> => {
+  if (Exit.hasInterrupts(exit)) return destroyDispatcher(dispatcher);
+
+  return Effect.timeoutOption(
+    Effect.promise(() => dispatcher.close()),
+    Duration.millis(CLIENT_GRACEFUL_CLOSE_TIMEOUT_MS),
+  ).pipe(
+    Effect.flatMap((closed) =>
+      closed._tag === "Some" ? Effect.void : destroyDispatcher(dispatcher),
+    ),
+    Effect.catch(() => destroyDispatcher(dispatcher)),
+  );
+};
 
 export const createXmuxClient: (
   options: CreateXmuxClientOptions,
@@ -41,7 +62,7 @@ export const createXmuxClient: (
           cause,
         }),
     }),
-    (dispatcher) => Effect.promise(() => dispatcher.close()).pipe(Effect.ignore),
+    releaseDispatcher,
   );
 
   const httpClient = yield* NodeHttpClient.makeUndici.pipe(

@@ -55,8 +55,13 @@ export const waitForMissingPath = (path: string): Effect.Effect<void> =>
     probe: exists(path).pipe(Effect.map((ok) => (!ok ? true : undefined))),
   }).pipe(Effect.asVoid);
 
-export const waitForHealthReady = (socketPath: string) =>
+export const waitForHealthReady = (
+  socketPath: string,
+  options?: { readonly timeoutMs?: number; readonly intervalMs?: number },
+) =>
   waitUntil({
     label: `ready health on ${socketPath}`,
+    timeoutMs: options?.timeoutMs,
+    intervalMs: options?.intervalMs,
     probe: getHealth(socketPath).pipe(Effect.map((health) => (health.ready ? health : undefined))),
   });
