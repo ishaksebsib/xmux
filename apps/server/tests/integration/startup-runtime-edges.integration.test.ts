@@ -4,7 +4,7 @@ import { Effect, Fiber } from "effect";
 import { serverMain } from "../../src/server";
 import { assertRuntimeFilesCleaned, assertServerPublished } from "../support/assertions";
 import { tailLogs, requestRawUnixHttp } from "../support/client";
-import { minimalConfig, missingEnvSecretConfig } from "../support/config";
+import { minimalConfig, sttEnvSecretConfig } from "../support/config";
 import { makeInProcessServerLayer, withInProcessServer } from "../support/in-process-server";
 import { makeSandbox } from "../support/sandbox";
 import { withSubprocessServer } from "../support/subprocess-server";
@@ -86,7 +86,7 @@ describeIntegration("startup runtime edge integration", () => {
     () =>
       withSubprocessServer(
         {
-          config: missingEnvSecretConfig("XMUX_REAL_SECRET"),
+          config: sttEnvSecretConfig("XMUX_REAL_SECRET"),
           env: { XMUX_REAL_SECRET: "env-token-do-not-leak" },
         },
         ({ socketPath, output, shutdown }) =>

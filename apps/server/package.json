@@ -52,6 +52,13 @@
   "dependencies": {
     "@effect/platform-node": "beta",
     "@effect/sql-libsql": "beta",
+    "@xmux/chat-adapter-discord": "workspace:*",
+    "@xmux/chat-adapter-slack": "workspace:*",
+    "@xmux/chat-adapter-telegram": "workspace:*",
+    "@xmux/chat-core": "workspace:*",
+    "@xmux/harness-core": "workspace:*",
+    "@xmux/harness-opencode": "workspace:*",
+    "@xmux/harness-pi": "workspace:*",
     "@xmux/orchestrator": "workspace:*",
     "effect": "beta",
     "jsonc-parser": "^3.3.1"

@@ -21,6 +21,23 @@ export const validTelegramConfig = (token: string): string => `{
       "token": { "value": "${token}" },
       "access": { "type": "anyone" }
     }
+  },
+  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+}`;
+
+export const sttInlineSecretConfig = (token: string): string => `{
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
+  "stt": {
+    "apiKey": { "value": "${token}" },
+    "model": "gpt-4o-mini-transcribe"
+  }
+}`;
+
+export const sttEnvSecretConfig = (envName: string): string => `{
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
+  "stt": {
+    "apiKey": { "env": "${envName}" },
+    "model": "gpt-4o-mini-transcribe"
   }
 }`;
 

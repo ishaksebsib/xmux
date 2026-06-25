@@ -6,6 +6,7 @@ import * as LibsqlMigrator from "@effect/sql-libsql/LibsqlMigrator";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer, Ref } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { testOrchestratorFactoryLayer } from "./support/orchestrator";
 import { makeSecretResolverLayer } from "./support/secrets";
 import { makeTestPaths } from "./support/paths";
 import { ServerConfig } from "../src/config/service";
@@ -196,6 +197,7 @@ const makeServerLayer = (paths: ServerRuntimePaths, transport: TestControlTransp
     NodeFileSystem.layer,
     NodePath.layer,
     secretLayer,
+    testOrchestratorFactoryLayer,
     serverProbeUnreachableLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({

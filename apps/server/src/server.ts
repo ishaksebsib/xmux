@@ -1,9 +1,10 @@
 import { Effect, Layer } from "effect";
 import { ServerConfig } from "./config/service";
-import { initializeDatabase } from "./db/layer";
+import { withInitializedDatabaseRuntime } from "./db/layer";
 import type { ServerError } from "./errors";
 import { withFileLogger } from "./logging/file-logger";
 import { LogReader } from "./logging/log-reader";
+import { startOrchestrator } from "./orchestrator/runtime";
 import { assertNoActiveServer } from "./server-control/active-server";
 import { acquireManifestOwnership } from "./server-control/manifest";
 import { ensureRuntimeDirectories } from "./server-control/paths";
@@ -54,13 +55,17 @@ export const serverMain = Effect.fn("server.main")(function* () {
         { startupLockPath: paths.startupLockPath },
         Effect.gen(function* () {
           yield* assertNoActiveServer(paths);
-          yield* initializeDatabase();
-          yield* transport.bind();
-          yield* acquireManifestOwnership({
-            paths,
-            startedAt: identity.startedAt,
-            sessionId: identity.sessionId,
-          });
+          yield* withInitializedDatabaseRuntime(() =>
+            Effect.gen(function* () {
+              yield* transport.bind();
+              yield* acquireManifestOwnership({
+                paths,
+                startedAt: identity.startedAt,
+                sessionId: identity.sessionId,
+              });
+              yield* startOrchestrator(effectiveConfig);
+            }),
+          );
         }),
       );
 

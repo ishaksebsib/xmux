@@ -2,7 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { assertRuntimeFilesCleaned, assertServerPublished } from "../support/assertions";
 import { getHealth, getStatus, tailLogs } from "../support/client";
-import { validTelegramConfig } from "../support/config";
+import { minimalConfig } from "../support/config";
 import { withSubprocessServer } from "../support/subprocess-server";
 
 const posixOnly = process.platform === "win32" ? it.live.skip : it.live;
@@ -11,7 +11,7 @@ const describeIntegration = process.env.RUN_INTEGRATION === "true" ? describe : 
 describeIntegration("server lifecycle integration", () => {
   posixOnly("starts, publishes control state, and shuts down cleanly", () =>
     withSubprocessServer(
-      { config: validTelegramConfig("inline-telegram-token-do-not-leak") },
+      { config: minimalConfig() },
       ({ paths, socketPath, configPath, shutdown }) =>
         Effect.gen(function* () {
           yield* assertServerPublished(paths);

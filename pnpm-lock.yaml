@@ -69,6 +69,27 @@ importers:
       '@effect/sql-libsql':
         specifier: beta
         version: 4.0.0-beta.88(effect@4.0.0-beta.88)
+      '@xmux/chat-adapter-discord':
+        specifier: workspace:*
+        version: link:../../packages/chat-adapter-discord
+      '@xmux/chat-adapter-slack':
+        specifier: workspace:*
+        version: link:../../packages/chat-adapter-slack
+      '@xmux/chat-adapter-telegram':
+        specifier: workspace:*
+        version: link:../../packages/chat-adapter-telegram
+      '@xmux/chat-core':
+        specifier: workspace:*
+        version: link:../../packages/chat-core
+      '@xmux/harness-core':
+        specifier: workspace:*
+        version: link:../../packages/harness-core
+      '@xmux/harness-opencode':
+        specifier: workspace:*
+        version: link:../../packages/harness-opencode
+      '@xmux/harness-pi':
+        specifier: workspace:*
+        version: link:../../packages/harness-pi
       '@xmux/orchestrator':
         specifier: workspace:*
         version: link:../../packages/orchestrator

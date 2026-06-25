@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer } from "effect";
+import { testOrchestratorFactoryLayer } from "./support/orchestrator";
 import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfig } from "../src/config/service";
 import { LogReader } from "../src/logging/log-reader";
@@ -74,6 +75,7 @@ const makeTestLayer = (paths: ServerRuntimePaths) => {
     NodeFileSystem.layer,
     NodePath.layer,
     secretLayer,
+    testOrchestratorFactoryLayer,
     serverProbeUnreachableLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({

@@ -1,9 +1,19 @@
 import { Schema } from "effect";
 import { ProcessId, SessionId } from "./contracts/primitives";
 import { DatabaseMigrationError, DatabaseStartupError } from "./db/errors";
+import {
+  OrchestratorConfigurationError,
+  OrchestratorShutdownError,
+  OrchestratorStartupError,
+} from "./orchestrator/errors";
 import { StatusTransitionError } from "./server-runtime/state";
 
 export { DatabaseMigrationError, DatabaseStartupError } from "./db/errors";
+export {
+  OrchestratorConfigurationError,
+  OrchestratorShutdownError,
+  OrchestratorStartupError,
+} from "./orchestrator/errors";
 
 /** Active-server checks prevent duplicate local runtimes for the same scope. */
 export class ActiveServerError extends Schema.TaggedErrorClass<ActiveServerError>()(
@@ -140,6 +150,9 @@ export const ServerError = Schema.Union([
   ServerShutdownError,
   DatabaseStartupError,
   DatabaseMigrationError,
+  OrchestratorConfigurationError,
+  OrchestratorStartupError,
+  OrchestratorShutdownError,
   RuntimePathError,
   ManifestError,
   StartupLockError,

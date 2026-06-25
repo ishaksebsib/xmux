@@ -5,7 +5,7 @@ import { Effect, Schema } from "effect";
 import { LogEntry } from "../../src/contracts/logging";
 import { SERVER_ERROR_LOG_FILE_NAME, SERVER_LOG_FILE_NAME } from "../../src/logging/file-logger";
 import { tailLogs } from "../support/client";
-import { validTelegramConfig } from "../support/config";
+import { sttInlineSecretConfig } from "../support/config";
 import { withSubprocessServer } from "../support/subprocess-server";
 import { waitUntil } from "../support/wait";
 
@@ -37,11 +37,9 @@ const rotatingLogConfig = (token: string): string => `{
       "rotation": { "maxBytes": 1, "maxFiles": 2 }
     }
   },
-  "chats": {
-    "telegram": {
-      "token": { "value": "${token}" },
-      "access": { "type": "anyone" }
-    }
+  "stt": {
+    "apiKey": { "value": "${token}" },
+    "model": "gpt-4o-mini-transcribe"
   }
 }`;
 
@@ -50,7 +48,7 @@ describeIntegration("server file logging integration", () => {
     "writes real schema-valid redacted JSONL files and exposes the same log stream via API",
     () =>
       withSubprocessServer(
-        { config: validTelegramConfig("inline-telegram-token-do-not-leak") },
+        { config: sttInlineSecretConfig("inline-telegram-token-do-not-leak") },
         ({ paths, socketPath, shutdown }) =>
           Effect.gen(function* () {
             const mainLogPath = join(paths.logDir, SERVER_LOG_FILE_NAME);

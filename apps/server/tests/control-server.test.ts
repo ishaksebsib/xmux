@@ -7,6 +7,7 @@ import { Duration, Effect, Fiber, Layer } from "effect";
 import { StatusResponse } from "../src/api/groups/status/schemas";
 import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
 import { status as statusRoute } from "../src/api/groups/status/handlers";
+import { testOrchestratorFactoryLayer } from "./support/orchestrator";
 import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfig } from "../src/config/service";
 import { LogReader } from "../src/logging/log-reader";
@@ -110,6 +111,7 @@ const makeServerTestLayer = (paths: ServerRuntimePaths) => {
     NodeFileSystem.layer,
     NodePath.layer,
     secretLayer,
+    testOrchestratorFactoryLayer,
     nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
@@ -204,7 +206,8 @@ describe("control server", () => {
       "token": { "value": "inline-telegram-token" },
       "access": { "type": "anyone" }
     }
-  }
+  },
+  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
 }`,
         ),
       );

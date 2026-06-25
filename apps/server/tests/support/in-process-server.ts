@@ -21,6 +21,7 @@ import { ShutdownCoordinator } from "../../src/server-runtime/shutdown-coordinat
 import { StatusRegistry } from "../../src/server-runtime/state";
 import { serverMain } from "../../src/server";
 import { requestShutdown } from "./client";
+import { testOrchestratorFactoryLayer } from "./orchestrator";
 import { makeSandbox } from "./sandbox";
 import { waitForHealthReady } from "./wait";
 
@@ -44,6 +45,7 @@ export const makeInProcessServerLayer = (input: {
     NodeFileSystem.layer,
     NodePath.layer,
     secretLayer,
+    testOrchestratorFactoryLayer,
     nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(input.paths),
     Layer.succeed(ServerIdentity)({
