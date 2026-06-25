@@ -14,6 +14,7 @@ import { decideOrchestratorActivation } from "./activation";
 import { mapEffectiveConfigToXmuxConfig } from "./config-map";
 import { OrchestratorFactory, type OrchestratorRuntime } from "./factory";
 import { makeOrchestratorLogger } from "./logger";
+import { makeServerOrchestratorMiddleware } from "./middleware";
 import {
   OrchestratorConfigurationError,
   OrchestratorShutdownError,
@@ -124,6 +125,7 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
   const store = yield* OrchestratorStore;
   const xmuxConfig = mapEffectiveConfigToXmuxConfig(config);
   const logger = yield* makeOrchestratorLogger();
+  const middleware = makeServerOrchestratorMiddleware(config);
 
   yield* Effect.acquireRelease(
     Effect.gen(function* () {
@@ -132,6 +134,7 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
         config: xmuxConfig,
         store,
         logger,
+        middleware,
       });
       yield* initializeOrchestratorRuntime(runtime).pipe(
         Effect.tapError(() => shutdownOrchestratorRuntime(runtime)),

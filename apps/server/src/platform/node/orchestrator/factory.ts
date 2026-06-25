@@ -131,6 +131,7 @@ export const nodeOrchestratorFactoryLayer = Layer.succeed(OrchestratorFactory)({
       config: input.config,
       store: input.store,
       logger: input.logger,
+      middleware: input.middleware,
     });
   }),
 });

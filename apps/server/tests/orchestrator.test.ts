@@ -29,6 +29,7 @@ import { decideOrchestratorActivation } from "../src/orchestrator/activation";
 import { mapEffectiveConfigToXmuxConfig } from "../src/orchestrator/config-map";
 import { OrchestratorConfigurationError } from "../src/orchestrator/errors";
 import { OrchestratorFactory, type OrchestratorRuntime } from "../src/orchestrator/factory";
+import { makeServerOrchestratorMiddleware } from "../src/orchestrator/middleware";
 import { nodeOrchestratorFactoryLayer, nodeHostRuntimeLayer } from "../src/platform/node";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
 import { RuntimePaths } from "../src/server-control/paths";
@@ -231,6 +232,7 @@ describe("orchestrator activation and config", () => {
             config: mapEffectiveConfigToXmuxConfig(effective),
             store: createInMemoryStore(),
             logger: dummyXmuxLogger,
+            middleware: makeServerOrchestratorMiddleware(effective),
           });
 
           assert.strictEqual(typeof runtime.initialize, "function");
@@ -279,6 +281,7 @@ describe("orchestrator server lifecycle", () => {
         create: (input) =>
           Effect.sync(() => {
             assert.strictEqual(typeof input.logger.info, "function");
+            assert.ok(input.middleware.length >= 2);
             createCalls += 1;
             return okRuntime({
               initialize: () => {

@@ -9,6 +9,7 @@ import type {
 import { Context, Effect } from "effect";
 import type { EffectiveServerConfig } from "../config/effective";
 import type { OrchestratorConfigurationError } from "./errors";
+import type { ServerXmuxMiddleware } from "./middleware";
 
 export interface OrchestratorRuntime {
   initialize(): Promise<Result<void, XmuxInitializeError>>;
@@ -20,6 +21,7 @@ export interface CreateOrchestratorRuntimeInput {
   readonly config: Config;
   readonly store: Store;
   readonly logger: XmuxLogger;
+  readonly middleware: readonly ServerXmuxMiddleware[];
 }
 
 export class OrchestratorFactory extends Context.Service<
