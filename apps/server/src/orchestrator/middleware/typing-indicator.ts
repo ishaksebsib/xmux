@@ -1,27 +1,62 @@
 import type { ChatTypingIndicatorHandle } from "@xmux/chat-core";
-import { Result, xmuxLogEvents } from "@xmux/orchestrator";
+import { xmuxLogEvents, type Result as ResultType, type XmuxLogScope } from "@xmux/orchestrator";
 import type { ServerXmuxMiddleware } from "./types";
 
 const DEFAULT_TYPING_INDICATOR_DELAY_MS = 1_000;
 
-interface TypingIndicatorCapableEvent {
-  readonly typingIndicator: (options: {
+export interface TypingIndicatorMiddlewareEvent {
+  readonly chatId: string;
+  readonly conversation: { readonly conversationId: string };
+  readonly typingIndicator?: (options: {
     readonly mode: "managed";
     readonly fallback: "ignore";
-  }) => Promise<Result<ChatTypingIndicatorHandle, unknown>>;
+  }) => Promise<ResultType<ChatTypingIndicatorHandle, unknown>>;
 }
 
-const hasTypingIndicator = (event: object): event is TypingIndicatorCapableEvent =>
-  "typingIndicator" in event && typeof event.typingIndicator === "function";
+export interface TypingIndicatorMiddlewareContext {
+  readonly handler: { readonly logger: Pick<XmuxLogScope, "debug"> };
+  readonly event: TypingIndicatorMiddlewareEvent;
+  readonly route: { readonly name: string; readonly eventType: string };
+}
 
-export const createTypingIndicatorMiddleware =
-  (delayMs = DEFAULT_TYPING_INDICATOR_DELAY_MS): ServerXmuxMiddleware =>
-  async (ctx, next) => {
-    if (!hasTypingIndicator(ctx.event)) {
+export type TypingIndicatorMiddlewareNext = () => Promise<ResultType<void, unknown>>;
+
+const stopTyping = (handle: ChatTypingIndicatorHandle): void => {
+  try {
+    handle.stop();
+  } catch {
+    // Best-effort cleanup: typing indicator failures must not fail route execution.
+  }
+};
+
+const logTypingFailure = (
+  ctx: TypingIndicatorMiddlewareContext,
+  reason: "typing_indicator_start_failed" | "typing_indicator_start_rejected",
+): void => {
+  ctx.handler.logger.debug(xmuxLogEvents.backgroundFailure, {
+    chatId: ctx.event.chatId,
+    routeName: ctx.route.name,
+    eventType: ctx.route.eventType,
+    conversationId: ctx.event.conversation.conversationId,
+    reason,
+  });
+};
+
+export const createTypingIndicatorMiddleware = (
+  delayMs = DEFAULT_TYPING_INDICATOR_DELAY_MS,
+): ServerXmuxMiddleware => createTypingIndicatorMiddlewareHandler(delayMs);
+
+export const createTypingIndicatorMiddlewareHandler =
+  (delayMs = DEFAULT_TYPING_INDICATOR_DELAY_MS) =>
+  async (
+    ctx: TypingIndicatorMiddlewareContext,
+    next: TypingIndicatorMiddlewareNext,
+  ): Promise<ResultType<void, unknown>> => {
+    const typingIndicator = ctx.event.typingIndicator;
+    if (typingIndicator === undefined) {
       return await next();
     }
 
-    const typingIndicator = ctx.event.typingIndicator;
     let finished = false;
     let handle: ChatTypingIndicatorHandle | undefined;
     let startCompleted: Promise<void> | undefined;
@@ -29,34 +64,23 @@ export const createTypingIndicatorMiddleware =
     const timer = setTimeout(() => {
       if (finished) return;
 
-      startCompleted = typingIndicator({ mode: "managed", fallback: "ignore" })
+      startCompleted = Promise.resolve()
+        .then(() => typingIndicator({ mode: "managed", fallback: "ignore" }))
         .then((result) => {
           if (result.isErr()) {
-            ctx.handler.logger.debug(xmuxLogEvents.backgroundFailure, {
-              chatId: ctx.event.chatId,
-              routeName: ctx.route.name,
-              eventType: ctx.route.eventType,
-              conversationId: ctx.event.conversation.conversationId,
-              reason: "typing_indicator_start_failed",
-            });
+            logTypingFailure(ctx, "typing_indicator_start_failed");
             return;
           }
 
           if (finished) {
-            result.value.stop();
+            stopTyping(result.value);
             return;
           }
 
           handle = result.value;
         })
         .catch(() => {
-          ctx.handler.logger.debug(xmuxLogEvents.backgroundFailure, {
-            chatId: ctx.event.chatId,
-            routeName: ctx.route.name,
-            eventType: ctx.route.eventType,
-            conversationId: ctx.event.conversation.conversationId,
-            reason: "typing_indicator_start_rejected",
-          });
+          logTypingFailure(ctx, "typing_indicator_start_rejected");
         });
     }, delayMs);
 
@@ -66,6 +90,6 @@ export const createTypingIndicatorMiddleware =
       finished = true;
       clearTimeout(timer);
       await startCompleted;
-      handle?.stop();
+      if (handle !== undefined) stopTyping(handle);
     }
   };

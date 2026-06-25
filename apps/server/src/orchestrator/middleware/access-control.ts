@@ -1,19 +1,39 @@
-import { Result, xmuxLogEvents } from "@xmux/orchestrator";
+import {
+  Result,
+  xmuxLogEvents,
+  type Result as ResultType,
+  type XmuxLogScope,
+} from "@xmux/orchestrator";
 import type { ChatAccessConfig } from "../../contracts/config";
-import type { EffectiveChatsConfig } from "../../config/effective";
 import type { ServerXmuxMiddleware } from "./types";
 
 const ACCESS_DENIED_REPLY = "Sorry, you are not allowed to use this bot.";
 
-interface ReplyCapableEvent {
-  readonly reply: (message: string) => Promise<unknown>;
+export interface ChatAccessPolicies {
+  readonly telegram?: { readonly access: ChatAccessConfig };
+  readonly discord?: { readonly access: ChatAccessConfig };
+  readonly slack?: { readonly access: ChatAccessConfig };
 }
 
-const hasReply = (event: object): event is ReplyCapableEvent =>
-  "reply" in event && typeof event.reply === "function";
+export interface AccessControlEvent {
+  readonly chatId: string;
+  readonly conversation: { readonly conversationId: string };
+  readonly reply?: (message: string) => Promise<unknown>;
+}
+
+export interface AccessControlMiddlewareContext {
+  readonly handler: {
+    readonly actor?: { readonly userId: string };
+    readonly logger: Pick<XmuxLogScope, "warn">;
+  };
+  readonly event: AccessControlEvent;
+  readonly route: { readonly name: string; readonly eventType: string };
+}
+
+export type AccessControlMiddlewareNext = () => Promise<ResultType<void, unknown>>;
 
 export const accessForChat = (
-  chats: EffectiveChatsConfig,
+  chats: ChatAccessPolicies,
   chatId: string,
 ): ChatAccessConfig | undefined => {
   switch (chatId) {
@@ -28,9 +48,15 @@ export const accessForChat = (
   }
 };
 
-export const createAccessControlMiddleware =
-  (chats: EffectiveChatsConfig): ServerXmuxMiddleware =>
-  async (ctx, next) => {
+export const createAccessControlMiddleware = (chats: ChatAccessPolicies): ServerXmuxMiddleware =>
+  createAccessControlMiddlewareHandler(chats);
+
+export const createAccessControlMiddlewareHandler =
+  (chats: ChatAccessPolicies) =>
+  async (
+    ctx: AccessControlMiddlewareContext,
+    next: AccessControlMiddlewareNext,
+  ): Promise<ResultType<void, unknown>> => {
     const access = accessForChat(chats, ctx.event.chatId);
     const actorUserId = ctx.handler.actor?.userId;
 
@@ -68,8 +94,8 @@ export const createAccessControlMiddleware =
     }
   };
 
-const replyDenied = async (event: object): Promise<void> => {
-  if (!hasReply(event)) return;
+const replyDenied = async (event: AccessControlEvent): Promise<void> => {
+  if (typeof event.reply !== "function") return;
 
   try {
     await event.reply(ACCESS_DENIED_REPLY);
