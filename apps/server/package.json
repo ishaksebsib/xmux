@@ -42,8 +42,6 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "openapi": "pnpm -s build >/dev/null && node --input-type=module -e \"import('./dist/index.mjs').then((m) => process.stdout.write(m.serverOpenApiJson()))\"",
-    "generate:openapi": "pnpm -s build >/dev/null && node --input-type=module -e \"Promise.all([import('./dist/index.mjs'), import('node:fs')]).then(([m, fs]) => fs.writeFileSync('openapi.json', m.serverOpenApiJson()))\"",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
     "test:integration": "pnpm -s build && RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
     "typecheck": "tsgo --noEmit",
