@@ -1,5 +1,8 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { assert, describe, layer } from "@effect/vitest";
+import { defineChatAdapter } from "@xmux/chat-core";
+import { defineHarnessAdapter } from "@xmux/harness-core";
+import { Result, createInMemoryStore } from "@xmux/orchestrator";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import {
   isoTimestampFromString,
@@ -15,6 +18,7 @@ import {
 import { readServerLogTail } from "../src/logging/log-reader";
 import { redactUnknown } from "../src/logging/redaction";
 import { makeOrchestratorLogger } from "../src/orchestrator/logger";
+import { createXmuxRuntime } from "../src/orchestrator/runtime";
 import type { HostRuntime } from "../src/platform/host";
 import { nodeHostRuntimeLayer } from "../src/platform/node";
 
@@ -45,6 +49,71 @@ const decodeJsonLine = (line: string): LogEntry => {
   if (decoded._tag === "None") assert.fail("Expected schema-valid log line");
   return decoded.value;
 };
+
+const testChatAdapter = defineChatAdapter<"test-chat">({
+  id: "test-chat",
+  capabilities: {
+    messages: {
+      send: true,
+      reply: true,
+      edit: false,
+      delete: false,
+      typing: false,
+      markdown: false,
+      attachments: { receive: false, send: false, download: false },
+    },
+  },
+  async open() {
+    return Result.ok({
+      id: "test-chat",
+      async start() {
+        return Result.ok();
+      },
+      async sendMessage(input) {
+        return Result.ok({
+          chatId: "test-chat",
+          conversationId: input.conversationId,
+          messageId: "test-message",
+          text: input.text,
+          format: input.format,
+          adapterData: {},
+        });
+      },
+      async sendAction(input) {
+        return Result.ok({
+          chatId: "test-chat",
+          conversationId: input.conversationId,
+          messageId: "test-action",
+          text: input.text,
+          format: input.format,
+          adapterData: {},
+        });
+      },
+      async respondToAction() {
+        return Result.ok();
+      },
+      async close() {},
+    });
+  },
+});
+
+const testHarnessAdapter = defineHarnessAdapter<"test-harness">({
+  id: "test-harness",
+  async open() {
+    const unsupported = async () => Result.err(new Error("not used by logging test"));
+    return Result.ok({
+      id: "test-harness",
+      createSession: unsupported,
+      resumeSession: unsupported,
+      listSessions: unsupported,
+      getSession: unsupported,
+      prompt: unsupported,
+      deleteSession: unsupported,
+      abort: unsupported,
+      close: async () => {},
+    });
+  },
+});
 
 describe("structured file logging", () => {
   layer(nodeFsPathLayer)((it) => {
@@ -138,6 +207,42 @@ describe("structured file logging", () => {
           );
           if (errorEntry === undefined) assert.fail("Expected bridged error log entry");
           assert.strictEqual(errorEntry.level, "error");
+        }),
+      ),
+    );
+
+    it.effect("writes real orchestrator runtime lifecycle logs through the bridge", () =>
+      withTempLogDir(({ logDir, paths }) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+
+          yield* Effect.scoped(
+            withFileLogger(
+              { logDir, logLevel: "debug" },
+              Effect.gen(function* () {
+                const logger = yield* makeOrchestratorLogger();
+                const runtime = yield* createXmuxRuntime({
+                  harnesses: { "test-harness": testHarnessAdapter },
+                  chats: { "test-chat": testChatAdapter },
+                  config: {
+                    defaultWorkingDirectory: process.cwd(),
+                    deliveryMode: "requester_only",
+                  },
+                  store: createInMemoryStore(),
+                  logger,
+                });
+
+                const initialized = yield* Effect.promise(() => runtime.initialize());
+                if (initialized.isErr()) assert.fail(initialized.error.message);
+
+                const closed = yield* Effect.promise(() => runtime.shutdown());
+                if (closed.isErr()) assert.fail(closed.error.message);
+              }),
+            ),
+          );
+
+          const mainLog = yield* fs.readFileString(paths.mainLogPath);
+          assert.include(mainLog, "xmux.orchestrator.initialize.success");
         }),
       ),
     );

@@ -21,8 +21,8 @@ const toSafeLogMessage = (message: unknown): string => {
 const extractAnnotations = (
   optionalParams: readonly unknown[],
 ): Record<string, unknown> | undefined => {
-  const metadata = optionalParams.find(isPlainRecord);
-  if (metadata === undefined) return undefined;
+  const [metadata] = optionalParams;
+  if (!isPlainRecord(metadata)) return undefined;
 
   try {
     const redacted = redactRecord(metadata);
