@@ -70,6 +70,4 @@ jobs:
             --filter=@xmux/server \
             --filter=@xmux/harness-pi \
             --output-logs=errors-only \
-            --log-order=grouped \
-            -- \
-            --maxWorkers=1
+            --log-order=grouped
