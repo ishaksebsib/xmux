@@ -1,9 +1,10 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
-import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect } from "effect";
 import { Command } from "effect/unstable/cli";
 import packageJson from "../package.json" with { type: "json" };
 import { rootCommand } from "./commands/root";
+import { cliRuntimeLayer } from "./layer";
+import { renderCliFailure } from "./output/errors";
 
 export { rootCommand } from "./commands/root";
 
@@ -14,5 +15,10 @@ export const cliProgram = Command.run(rootCommand, {
 });
 
 export const runCli = (): void => {
-  cliProgram.pipe(Effect.provide(NodeServices.layer), Effect.scoped, NodeRuntime.runMain);
+  cliProgram.pipe(
+    Effect.provide(cliRuntimeLayer),
+    Effect.scoped,
+    Effect.catchCause((cause) => Effect.sync(() => renderCliFailure(cause))),
+    NodeRuntime.runMain({ disableErrorReporting: true }),
+  );
 };
