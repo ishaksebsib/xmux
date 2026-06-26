@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema } from "effect";
 import { API_VERSION, SERVER_MANIFEST_VERSION } from "../contracts/constants";
 import { SERVER_PACKAGE_VERSION } from "./constants";
 import { ServerControlEndpoint } from "../contracts/control";
@@ -12,6 +12,7 @@ import {
 } from "../contracts/primitives";
 import { ManifestError } from "../errors";
 import { HostRuntime } from "../platform/host";
+import { parseJsonPayloadResult } from "./json-payload";
 import type { ServerRuntimePaths } from "./paths";
 
 const decodeUnknownJsonOption = Schema.decodeUnknownOption(Schema.UnknownFromJsonString);
@@ -52,11 +53,15 @@ export interface AcquireManifestOwnershipInput {
 }
 
 const parseServerManifestResult = (raw: string): ParseManifestResult => {
-  const json = decodeUnknownJsonOption(raw);
-  if (Option.isNone(json)) return { _tag: "Invalid", reason: "invalid_json" };
-  const decoded = decodeManifest(json.value);
-  if (Option.isNone(decoded)) return { _tag: "Invalid", reason: "invalid_manifest" };
-  return { _tag: "Valid", manifest: decoded.value };
+  const parsed = parseJsonPayloadResult({
+    raw,
+    decodeJson: decodeUnknownJsonOption,
+    decodePayload: decodeManifest,
+    invalidPayloadReason: "invalid_manifest",
+  });
+  return parsed._tag === "Valid"
+    ? { _tag: "Valid", manifest: parsed.value }
+    : { _tag: "Invalid", reason: parsed.reason };
 };
 
 /** Invalid manifests return null so discovery never crashes the CLI. */

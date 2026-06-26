@@ -30,6 +30,7 @@ import {
 import { RuntimePathError } from "../errors";
 import { ServerOptions, type ParsedServerOptions } from "../options";
 import { HostRuntime } from "../platform/host";
+import { expandHome } from "../platform/path";
 
 export { resolvedPathFromString };
 
@@ -54,12 +55,6 @@ export interface ServerRuntimePaths {
   readonly controlEndpoint: ServerControlEndpoint;
   readonly scopeId: ScopeId;
 }
-
-const expandHome = (pathService: Path.Path, home: string, input: string): string => {
-  if (input === "~") return home;
-  if (input.startsWith("~/")) return pathService.join(home, input.slice(2));
-  return input;
-};
 
 const parseWith = <A>(
   decode: (u: unknown) => Effect.Effect<A, Schema.SchemaError>,

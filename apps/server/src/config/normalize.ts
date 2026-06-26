@@ -6,6 +6,7 @@ import {
   type OpenCodeFileConfig,
   OpenCodeEmbeddedRuntimeConfig,
   type PiFileConfig,
+  type SecretRef,
   type ServerFileServerConfig,
   ServerFileConfig,
   ServerLogRotationConfig,
@@ -38,6 +39,7 @@ import {
 import { ConfigValidationError, type ConfigError } from "../errors";
 import { DEFAULT_MAX_LOG_FILE_BYTES, DEFAULT_MAX_LOG_FILES } from "../logging/file-logger";
 import { HostRuntime } from "../platform/host";
+import { expandHome } from "../platform/path";
 import {
   EffectiveChatsConfig,
   EffectiveDiscordConfig,
@@ -71,12 +73,6 @@ const DEFAULT_ATTACHMENT_KINDS: readonly ChatAttachmentKindConfig[] = [
   "archive",
   "other",
 ];
-
-const expandHome = (pathService: Path.Path, homeDir: string, input: string): string => {
-  if (input === "~") return homeDir;
-  if (input.startsWith("~/")) return pathService.join(homeDir, input.slice(2));
-  return input;
-};
 
 const resolveConfigRelativePath = (
   pathService: Path.Path,
@@ -197,14 +193,29 @@ const normalizeXmux = (input: {
 const requireAccessMessage = (path: string): string =>
   `${path} is missing. Set it to { "type": "allow-list", "users": [...] } or { "type": "anyone" }.`;
 
+const requireResolvedSecret = Effect.fn("server.normalize.requireResolvedSecret")(
+  function* (input: {
+    readonly ref: SecretRef | undefined;
+    readonly configPath: ConfigPath;
+    readonly message: string;
+  }) {
+    const ref = yield* requireConfigField({
+      value: input.ref,
+      configPath: input.configPath,
+      message: input.message,
+    });
+    return yield* resolveSecretRef({ configPath: input.configPath, ref });
+  },
+);
+
 const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* (input: {
   readonly configPath: ConfigPath;
   readonly config: TelegramFileConfig | undefined;
 }) {
   if (input.config === undefined) return undefined;
 
-  const tokenRef = yield* requireConfigField({
-    value: input.config.token,
+  const token = yield* requireResolvedSecret({
+    ref: input.config.token,
     configPath: input.configPath,
     message: "Telegram chat is configured but chats.telegram.token is missing.",
   });
@@ -213,7 +224,6 @@ const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* 
     configPath: input.configPath,
     message: requireAccessMessage("chats.telegram.access"),
   });
-  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: tokenRef });
 
   return EffectiveTelegramConfig.make({ token, access });
 });
@@ -224,8 +234,8 @@ const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (i
 }) {
   if (input.config === undefined) return undefined;
 
-  const tokenRef = yield* requireConfigField({
-    value: input.config.token,
+  const token = yield* requireResolvedSecret({
+    ref: input.config.token,
     configPath: input.configPath,
     message: "Discord chat is configured but chats.discord.token is missing.",
   });
@@ -244,7 +254,6 @@ const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (i
     configPath: input.configPath,
     message: requireAccessMessage("chats.discord.access"),
   });
-  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: tokenRef });
 
   return EffectiveDiscordConfig.make({ token, applicationId, guildId, access });
 });
@@ -255,13 +264,13 @@ const normalizeSlack = Effect.fn("server.normalizeSlackConfig")(function* (input
 }) {
   if (input.config === undefined) return undefined;
 
-  const botTokenRef = yield* requireConfigField({
-    value: input.config.botToken,
+  const botToken = yield* requireResolvedSecret({
+    ref: input.config.botToken,
     configPath: input.configPath,
     message: "Slack chat is configured but chats.slack.botToken is missing.",
   });
-  const appTokenRef = yield* requireConfigField({
-    value: input.config.appToken,
+  const appToken = yield* requireResolvedSecret({
+    ref: input.config.appToken,
     configPath: input.configPath,
     message: "Slack chat is configured but chats.slack.appToken is missing.",
   });
@@ -270,8 +279,6 @@ const normalizeSlack = Effect.fn("server.normalizeSlackConfig")(function* (input
     configPath: input.configPath,
     message: requireAccessMessage("chats.slack.access"),
   });
-  const botToken = yield* resolveSecretRef({ configPath: input.configPath, ref: botTokenRef });
-  const appToken = yield* resolveSecretRef({ configPath: input.configPath, ref: appTokenRef });
 
   return EffectiveSlackConfig.make({ botToken, appToken, access });
 });

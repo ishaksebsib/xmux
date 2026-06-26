@@ -1,6 +1,7 @@
-import { Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Path, Schema } from "effect";
 import { StartupLockError } from "../errors";
 import { HostRuntime } from "../platform/host";
+import { parseJsonPayloadResult } from "./json-payload";
 
 class StartupLockPayload extends Schema.Class<StartupLockPayload>("StartupLockPayload")({
   pid: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0)),
@@ -27,11 +28,15 @@ export interface AcquireStartupLockOptions {
 }
 
 const parseStartupLockPayloadResult = (raw: string): ParseStartupLockResult => {
-  const json = decodeUnknownJsonOption(raw);
-  if (Option.isNone(json)) return { _tag: "Invalid", reason: "invalid_json" };
-  const decoded = decodeStartupLockPayload(json.value);
-  if (Option.isNone(decoded)) return { _tag: "Invalid", reason: "invalid_lock" };
-  return { _tag: "Valid", payload: decoded.value };
+  const parsed = parseJsonPayloadResult({
+    raw,
+    decodeJson: decodeUnknownJsonOption,
+    decodePayload: decodeStartupLockPayload,
+    invalidPayloadReason: "invalid_lock",
+  });
+  return parsed._tag === "Valid"
+    ? { _tag: "Valid", payload: parsed.value }
+    : { _tag: "Invalid", reason: parsed.reason };
 };
 
 const readStartupLockPayload = (
