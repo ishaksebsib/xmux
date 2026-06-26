@@ -19,7 +19,7 @@ export function formatSessionRef(ref: SessionRefLike): string {
 }
 
 export function sessionKey(ref: SessionRefLike): string {
-  return JSON.stringify([ref.harnessId, ref.sessionId]);
+  return `${ref.harnessId}:${ref.sessionId}`;
 }
 
 export function sameSessionRef(left: SessionRefLike, right: SessionRefLike): boolean {
