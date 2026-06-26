@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { Effect, Option, Scope } from "effect";
 import { ControlDiscovery } from "../../src/control/discovery";
 import type { CliResolvedServerPaths } from "../../src/domain/discovery";
+import type { JsonValue } from "../../src/output/format";
 import { parseServerTarget } from "../../src/domain/input";
 import { writeText } from "./sandbox";
 
@@ -135,6 +136,40 @@ export const bindStatusServer = (
           endpoint: { kind: "unix-socket", path: paths.socketPath },
         }),
       );
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end();
+  });
+
+export type TestServerLogLevel = "trace" | "debug" | "info" | "warn" | "error";
+
+export interface TestServerLogEntry {
+  readonly timestamp: string;
+  readonly level: TestServerLogLevel;
+  readonly message: JsonValue;
+  readonly annotations?: Readonly<Record<string, JsonValue>>;
+  readonly spans?: Readonly<Record<string, number>>;
+  readonly cause?: string;
+}
+
+export const bindLogsServer = (
+  paths: CliResolvedServerPaths,
+  entries: ReadonlyArray<TestServerLogEntry>,
+  onLogsRequest?: (url: string) => void,
+): Effect.Effect<Server, Error, Scope.Scope> =>
+  bindUnixHttpServer(paths.socketPath, (request, response) => {
+    if (request.url === "/healthz") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
+      return;
+    }
+
+    if (request.url?.startsWith("/v1/logs") === true) {
+      onLogsRequest?.(request.url);
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ version: 1, entries }));
       return;
     }
 
