@@ -61,7 +61,10 @@ export const writeServerManifest = (
   );
 
 const closeServer = (server: Server, socketPath: string): Effect.Effect<void> =>
-  Effect.promise(() => new Promise<void>((resolve) => server.close(() => resolve()))).pipe(
+  (server.listening
+    ? Effect.promise(() => new Promise<void>((resolve) => server.close(() => resolve())))
+    : Effect.void
+  ).pipe(
     Effect.flatMap(() => Effect.promise(() => rm(socketPath, { force: true }))),
     Effect.ignore,
   );
@@ -109,6 +112,57 @@ export const bindHealthServer = (socketPath: string): Effect.Effect<Server, Erro
     response.setHeader("content-type", "application/json");
     response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
   });
+
+export const bindShutdownServer = (
+  paths: CliResolvedServerPaths,
+  onShutdown?: () => void,
+): Effect.Effect<Server, Error, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.callback<Server, Error>((resume) => {
+      const server = createServer((request, response) => {
+        if (request.url === "/healthz") {
+          response.setHeader("content-type", "application/json");
+          response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
+          return;
+        }
+
+        if (request.url === "/v1/shutdown" && request.method === "POST") {
+          onShutdown?.();
+          response.statusCode = 202;
+          response.setHeader("content-type", "application/json");
+          response.end(JSON.stringify({ accepted: true, alreadyStopping: false }), () => {
+            void closeServer(server, paths.socketPath).pipe(Effect.runPromise);
+          });
+          return;
+        }
+
+        response.statusCode = 404;
+        response.end();
+      });
+
+      const onError = (cause: Error): void => {
+        server.off("listening", onListening);
+        resume(Effect.fail(cause));
+      };
+      const onListening = (): void => {
+        server.off("error", onError);
+        resume(Effect.succeed(server));
+      };
+
+      server.once("error", onError);
+      server.once("listening", onListening);
+      void mkdir(dirname(paths.socketPath), { recursive: true }).then(
+        () => server.listen(paths.socketPath),
+        (cause: Error) => onError(cause),
+      );
+
+      return Effect.sync(() => {
+        server.off("error", onError);
+        server.off("listening", onListening);
+      });
+    }),
+    (server) => closeServer(server, paths.socketPath),
+  );
 
 export const bindStatusServer = (
   paths: CliResolvedServerPaths,

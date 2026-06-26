@@ -36,6 +36,9 @@ export class CliServerUnreachable extends Schema.TaggedErrorClass<CliServerUnrea
 export const CliWaitOperation = Schema.Literals(["start", "stop", "restart"]);
 export type CliWaitOperation = typeof CliWaitOperation.Type;
 
+export const CliLifecycleBlockReason = Schema.Literals(["invalid-manifest", "wrong-scope"]);
+export type CliLifecycleBlockReason = typeof CliLifecycleBlockReason.Type;
+
 export class CliWaitTimeout extends Schema.TaggedErrorClass<CliWaitTimeout>()("CliWaitTimeout", {
   message: Schema.String,
   operation: CliWaitOperation,
@@ -48,6 +51,18 @@ export class CliSpawnError extends Schema.TaggedErrorClass<CliSpawnError>()("Cli
   command: OptionalSafeText,
   cause: OptionalCause,
 }) {}
+
+export class CliLifecycleBlocked extends Schema.TaggedErrorClass<CliLifecycleBlocked>()(
+  "CliLifecycleBlocked",
+  {
+    message: Schema.String,
+    operation: CliWaitOperation,
+    reason: CliLifecycleBlockReason,
+    configPath: OptionalSafeText,
+    manifestPath: OptionalSafeText,
+    socketPath: OptionalSafeText,
+  },
+) {}
 
 export class CliInvalidInput extends Schema.TaggedErrorClass<CliInvalidInput>()("CliInvalidInput", {
   message: Schema.String,
@@ -80,6 +95,7 @@ export const CliError = Schema.Union([
   CliServerUnreachable,
   CliWaitTimeout,
   CliSpawnError,
+  CliLifecycleBlocked,
   CliInvalidInput,
   CliControlRequestError,
   CliServerRunFailed,

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { CliSpawnError } from "../domain/errors";
 import type { CliConfigPath } from "../domain/input";
 
@@ -44,6 +44,18 @@ export const buildServerRunArgs = (configPath: CliConfigPath | undefined): Reado
     ? ["server", "run", "--foreground"]
     : ["server", "run", "--foreground", "--config", configPath];
 
+const detachedSpawnSpec = (input: {
+  readonly command: string;
+  readonly args: ReadonlyArray<string>;
+  readonly env: Record<string, string | undefined>;
+}): CliSpawnSpec => ({
+  command: input.command,
+  args: input.args,
+  env: input.env,
+  detached: true,
+  stdio: "ignore",
+});
+
 export const buildServerRunSpawnSpec = Effect.fn("cli.spawn.buildServerRunSpawnSpec")(
   function* (input: {
     readonly process: CurrentCliProcess;
@@ -54,21 +66,17 @@ export const buildServerRunSpawnSpec = Effect.fn("cli.spawn.buildServerRunSpawnS
 
     switch (entrypoint._tag) {
       case "BuiltExecutable":
-        return {
+        return detachedSpawnSpec({
           command: input.process.executablePath,
           args: serverArgs,
           env: input.process.env,
-          detached: true,
-          stdio: "ignore",
-        };
+        });
       case "NodeScript":
-        return {
+        return detachedSpawnSpec({
           command: input.process.executablePath,
           args: [entrypoint.scriptPath, ...serverArgs],
           env: input.process.env,
-          detached: true,
-          stdio: "ignore",
-        };
+        });
       case "UnsupportedSource":
         return yield* new CliSpawnError({
           message: "Cannot auto-start xmux server from a TypeScript CLI entrypoint.",
@@ -114,3 +122,30 @@ export const spawnDetached = (spec: CliSpawnSpec): Effect.Effect<void, CliSpawnE
         cause,
       }),
   });
+
+export interface ProcessSpawnerService {
+  readonly buildServerRunSpawnSpec: (input: {
+    readonly configPath: CliConfigPath | undefined;
+  }) => Effect.Effect<CliSpawnSpec, CliSpawnError>;
+  readonly spawnDetached: (spec: CliSpawnSpec) => Effect.Effect<void, CliSpawnError>;
+}
+
+const makeProcessSpawner = (): ProcessSpawnerService => ({
+  buildServerRunSpawnSpec: Effect.fn("cli.spawn.service.buildServerRunSpawnSpec")(
+    function* (input) {
+      const processInfo = yield* Effect.sync(currentCliProcess);
+      const spec: CliSpawnSpec = yield* buildServerRunSpawnSpec({
+        process: processInfo,
+        configPath: input.configPath,
+      });
+      return spec;
+    },
+  ),
+  spawnDetached,
+});
+
+export class ProcessSpawner extends Context.Service<ProcessSpawner, ProcessSpawnerService>()(
+  "@xmux/cli/ProcessSpawner",
+) {
+  static readonly layer = Layer.succeed(ProcessSpawner, makeProcessSpawner());
+}
