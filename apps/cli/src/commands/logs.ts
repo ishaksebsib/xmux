@@ -3,6 +3,7 @@ import { Command, Flag } from "effect/unstable/cli";
 import { ControlClient, type CliLogsResponse } from "../control/client";
 import { ControlDiscovery } from "../control/discovery";
 import { CliInvalidInput } from "../domain/errors";
+import { mapConfigPathError } from "./input";
 import { parseServerTarget, parseTailCount, type CliTailCount } from "../domain/input";
 import { logsReport, type CliLogsReport } from "../domain/logs";
 import { renderLogs } from "../output/logs";
@@ -18,13 +19,6 @@ const tailFlag = Flag.integer("tail").pipe(
   Flag.optional,
   Flag.withDescription("Number of recent server log entries to print."),
 );
-
-const mapConfigPathError = (cause: Schema.SchemaError): CliInvalidInput =>
-  new CliInvalidInput({
-    message: "Invalid --config path.",
-    field: "config",
-    cause,
-  });
 
 const mapTailError = (cause: Schema.SchemaError): CliInvalidInput =>
   new CliInvalidInput({

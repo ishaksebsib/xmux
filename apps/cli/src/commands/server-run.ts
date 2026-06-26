@@ -1,8 +1,9 @@
 import { runXmuxServer } from "@xmux/server/platform/node";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
-import { CliInvalidInput, CliServerRunFailed } from "../domain/errors";
+import { CliInvalidInput, CliServerRunFailed, safeErrorReason } from "../domain/errors";
 import { parseConfigPathOption, type CliConfigPath } from "../domain/input";
+import { mapConfigPathError } from "./input";
 import { configPathFlag } from "./options";
 
 const foregroundFlag = Flag.boolean("foreground").pipe(
@@ -17,13 +18,6 @@ interface ServerRunInput {
 const toServerOptions = (configPath: CliConfigPath | undefined) =>
   configPath === undefined ? {} : { configPath };
 
-const mapConfigPathError = (cause: Schema.SchemaError): CliInvalidInput =>
-  new CliInvalidInput({
-    message: "Invalid --config path.",
-    field: "config",
-    cause,
-  });
-
 const safeErrorMessage = (cause: unknown): string => {
   if (typeof cause === "object" && cause !== null && "message" in cause) {
     const message = cause.message;
@@ -32,18 +26,10 @@ const safeErrorMessage = (cause: unknown): string => {
   return "xmux server failed.";
 };
 
-const errorReason = (cause: unknown): string | undefined => {
-  if (typeof cause === "object" && cause !== null && "_tag" in cause) {
-    const tag = cause._tag;
-    return typeof tag === "string" ? tag : undefined;
-  }
-  return undefined;
-};
-
 const mapServerRunError = (cause: unknown): CliServerRunFailed =>
   new CliServerRunFailed({
     message: safeErrorMessage(cause),
-    reason: errorReason(cause),
+    reason: safeErrorReason(cause),
     cause,
   });
 

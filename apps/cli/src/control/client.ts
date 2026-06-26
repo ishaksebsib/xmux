@@ -90,6 +90,22 @@ const mapControlRequestError =
           cause,
         });
 
+const withXmuxClient = <A>(input: {
+  readonly server: CliRunningServer;
+  readonly operation: CliControlOperation;
+  readonly request: (client: XmuxClient) => Effect.Effect<A, unknown>;
+}): Effect.Effect<A, CliServerUnreachable | CliControlRequestError> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const client = yield* createXmuxClient({ socketPath: input.server.socketPath }).pipe(
+        Effect.mapError(mapClientCreateError(input.server, input.operation)),
+      );
+      return yield* input
+        .request(client)
+        .pipe(Effect.mapError(mapControlRequestError(input.server, input.operation)));
+    }),
+  );
+
 export interface ControlClientService {
   readonly health: (
     server: CliRunningServer,
@@ -111,58 +127,38 @@ export class ControlClient extends Context.Service<ControlClient, ControlClientS
 ) {
   static readonly layer = Layer.succeed(ControlClient, {
     health: Effect.fn("cli.client.health")(function* (server: CliRunningServer) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const client = yield* createXmuxClient({ socketPath: server.socketPath }).pipe(
-            Effect.mapError(mapClientCreateError(server, "health")),
-          );
-          return yield* client.system
-            .health()
-            .pipe(Effect.mapError(mapControlRequestError(server, "health")));
-        }),
-      );
+      return yield* withXmuxClient({
+        server,
+        operation: "health",
+        request: (client) => client.system.health(),
+      });
     }),
 
     status: Effect.fn("cli.client.status")(function* (server: CliRunningServer) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const client = yield* createXmuxClient({ socketPath: server.socketPath }).pipe(
-            Effect.mapError(mapClientCreateError(server, "status")),
-          );
-          return yield* client.status
-            .status()
-            .pipe(Effect.mapError(mapControlRequestError(server, "status")));
-        }),
-      );
+      return yield* withXmuxClient({
+        server,
+        operation: "status",
+        request: (client) => client.status.status(),
+      });
     }),
 
     logs: Effect.fn("cli.client.logs")(function* (
       server: CliRunningServer,
       tail: CliTailCount | undefined,
     ) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const client = yield* createXmuxClient({ socketPath: server.socketPath }).pipe(
-            Effect.mapError(mapClientCreateError(server, "logs")),
-          );
-          return yield* client.logs
-            .tail({ query: { tail } })
-            .pipe(Effect.mapError(mapControlRequestError(server, "logs")));
-        }),
-      );
+      return yield* withXmuxClient({
+        server,
+        operation: "logs",
+        request: (client) => client.logs.tail({ query: { tail } }),
+      });
     }),
 
     shutdown: Effect.fn("cli.client.shutdown")(function* (server: CliRunningServer) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const client = yield* createXmuxClient({ socketPath: server.socketPath }).pipe(
-            Effect.mapError(mapClientCreateError(server, "shutdown")),
-          );
-          return yield* client.lifecycle
-            .shutdown()
-            .pipe(Effect.mapError(mapControlRequestError(server, "shutdown")));
-        }),
-      );
+      return yield* withXmuxClient({
+        server,
+        operation: "shutdown",
+        request: (client) => client.lifecycle.shutdown(),
+      });
     }),
   });
 }

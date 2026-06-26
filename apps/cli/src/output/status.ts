@@ -1,6 +1,6 @@
 import type { JsonValue } from "./format";
 import { formatJson, formatKeyValueLines } from "./format";
-import type { CliResolvedServerPaths } from "../domain/discovery";
+import { inactiveServerStateFromDiscovery, type CliResolvedServerPaths } from "../domain/discovery";
 import type { CliStatusReport } from "../domain/status";
 
 const statusLabel = (report: CliStatusReport): string => {
@@ -19,16 +19,8 @@ const statusLabel = (report: CliStatusReport): string => {
 };
 
 const inactiveReason = (report: Exclude<CliStatusReport, { readonly _tag: "Running" }>): string => {
-  switch (report._tag) {
-    case "Stopped":
-      return "no-manifest";
-    case "InvalidManifest":
-      return report.reason ?? "invalid-manifest";
-    case "WrongScope":
-      return "wrong-scope";
-    case "StaleManifestCleaned":
-      return "stale-manifest-removed";
-  }
+  const inactive = inactiveServerStateFromDiscovery(report);
+  return inactive.manifestReason ?? inactive.reason;
 };
 
 const formatUptime = (uptimeMs: number): string => {

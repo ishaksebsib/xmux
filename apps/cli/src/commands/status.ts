@@ -1,8 +1,8 @@
-import { Console, Effect, Option, References, Schema } from "effect";
+import { Console, Effect, Option, References } from "effect";
 import { Command } from "effect/unstable/cli";
 import { ControlClient, type CliStatusResponse } from "../control/client";
 import { ControlDiscovery } from "../control/discovery";
-import { CliInvalidInput } from "../domain/errors";
+import { mapConfigPathError } from "./input";
 import { parseServerTarget } from "../domain/input";
 import {
   CliServerStatusEndpoint,
@@ -18,13 +18,6 @@ interface StatusInput {
   readonly configPath: Option.Option<string>;
   readonly json: boolean;
 }
-
-const mapConfigPathError = (cause: Schema.SchemaError): CliInvalidInput =>
-  new CliInvalidInput({
-    message: "Invalid --config path.",
-    field: "config",
-    cause,
-  });
 
 const statusPayloadFromResponse = (status: CliStatusResponse): CliServerStatusPayload =>
   new CliServerStatusPayload({

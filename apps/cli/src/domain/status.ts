@@ -1,5 +1,13 @@
 import { Schema } from "effect";
-import { CliResolvedServerPaths, CliRunningServer, type CliServerDiscovery } from "./discovery";
+import {
+  CliInvalidManifest,
+  CliResolvedServerPaths,
+  CliRunningServer,
+  CliStaleManifestCleanedServer,
+  CliStoppedServer,
+  CliWrongScopeServer,
+  type CliServerDiscovery,
+} from "./discovery";
 
 export class CliServerStatusEndpoint extends Schema.Class<CliServerStatusEndpoint>(
   "CliServerStatusEndpoint",
@@ -36,70 +44,18 @@ export class CliRunningStatusReport extends Schema.Class<CliRunningStatusReport>
   server: CliServerStatusPayload,
 }) {}
 
-export class CliStoppedStatusReport extends Schema.Class<CliStoppedStatusReport>(
-  "CliStoppedStatusReport",
-)({
-  _tag: Schema.Literal("Stopped"),
-  paths: CliResolvedServerPaths,
-}) {}
-
-export class CliInvalidManifestStatusReport extends Schema.Class<CliInvalidManifestStatusReport>(
-  "CliInvalidManifestStatusReport",
-)({
-  _tag: Schema.Literal("InvalidManifest"),
-  paths: CliResolvedServerPaths,
-  reason: Schema.optionalKey(Schema.String),
-}) {}
-
-export class CliWrongScopeStatusReport extends Schema.Class<CliWrongScopeStatusReport>(
-  "CliWrongScopeStatusReport",
-)({
-  _tag: Schema.Literal("WrongScope"),
-  paths: CliResolvedServerPaths,
-}) {}
-
-export class CliStaleManifestCleanedStatusReport extends Schema.Class<CliStaleManifestCleanedStatusReport>(
-  "CliStaleManifestCleanedStatusReport",
-)({
-  _tag: Schema.Literal("StaleManifestCleaned"),
-  paths: CliResolvedServerPaths,
-}) {}
-
 export const CliStatusReport = Schema.Union([
   CliRunningStatusReport,
-  CliStoppedStatusReport,
-  CliInvalidManifestStatusReport,
-  CliWrongScopeStatusReport,
-  CliStaleManifestCleanedStatusReport,
+  CliStoppedServer,
+  CliInvalidManifest,
+  CliWrongScopeServer,
+  CliStaleManifestCleanedServer,
 ]);
 export type CliStatusReport = typeof CliStatusReport.Type;
 
 export const statusReportFromInactiveDiscovery = (
   discovery: Exclude<CliServerDiscovery, CliRunningServer>,
-): Exclude<CliStatusReport, CliRunningStatusReport> => {
-  switch (discovery._tag) {
-    case "Stopped":
-      return new CliStoppedStatusReport({ _tag: "Stopped", paths: discovery.paths });
-    case "InvalidManifest":
-      return discovery.reason === undefined
-        ? new CliInvalidManifestStatusReport({
-            _tag: "InvalidManifest",
-            paths: discovery.paths,
-          })
-        : new CliInvalidManifestStatusReport({
-            _tag: "InvalidManifest",
-            paths: discovery.paths,
-            reason: discovery.reason,
-          });
-    case "WrongScope":
-      return new CliWrongScopeStatusReport({ _tag: "WrongScope", paths: discovery.paths });
-    case "StaleManifestCleaned":
-      return new CliStaleManifestCleanedStatusReport({
-        _tag: "StaleManifestCleaned",
-        paths: discovery.paths,
-      });
-  }
-};
+): Exclude<CliStatusReport, CliRunningStatusReport> => discovery;
 
 export const runningStatusReport = (
   discovery: CliRunningServer,

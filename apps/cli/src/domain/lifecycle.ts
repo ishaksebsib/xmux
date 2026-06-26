@@ -1,33 +1,33 @@
-import type { CliResolvedServerPaths, CliRunningServer, CliServerDiscovery } from "./discovery";
+import {
+  inactiveServerStateFromDiscovery,
+  type CliInactiveServerReason,
+  type CliInactiveServerState,
+  type CliInvalidManifest,
+  type CliRunningServer,
+  type CliServerDiscovery,
+  type CliWrongScopeServer,
+} from "./discovery";
+import { CliLifecycleBlocked, type CliWaitOperation } from "./errors";
 
-export type CliInactiveLifecycleReason =
-  | "no-manifest"
-  | "invalid-manifest"
-  | "wrong-scope"
-  | "stale-manifest-removed";
-
-export interface CliInactiveLifecycleState {
-  readonly reason: CliInactiveLifecycleReason;
-  readonly paths: CliResolvedServerPaths;
-  readonly manifestReason?: string;
-}
+export type CliInactiveLifecycleReason = CliInactiveServerReason;
+export type CliInactiveLifecycleState = CliInactiveServerState;
 
 export type CliStopReport =
   | {
       readonly _tag: "AlreadyStopped";
-      readonly inactive: CliInactiveLifecycleState & { readonly reason: "no-manifest" };
+      readonly inactive: CliInactiveLifecycleState;
     }
   | {
       readonly _tag: "InvalidManifest";
-      readonly inactive: CliInactiveLifecycleState & { readonly reason: "invalid-manifest" };
+      readonly inactive: CliInactiveLifecycleState;
     }
   | {
       readonly _tag: "WrongScope";
-      readonly inactive: CliInactiveLifecycleState & { readonly reason: "wrong-scope" };
+      readonly inactive: CliInactiveLifecycleState;
     }
   | {
       readonly _tag: "StaleManifestCleaned";
-      readonly inactive: CliInactiveLifecycleState & { readonly reason: "stale-manifest-removed" };
+      readonly inactive: CliInactiveLifecycleState;
     }
   | {
       readonly _tag: "Stopped";
@@ -69,24 +69,7 @@ export type CliRestartReport =
 
 export const inactiveLifecycleState = (
   discovery: Exclude<CliServerDiscovery, CliRunningServer>,
-): CliInactiveLifecycleState => {
-  switch (discovery._tag) {
-    case "Stopped":
-      return { reason: "no-manifest", paths: discovery.paths };
-    case "InvalidManifest":
-      return discovery.reason === undefined
-        ? { reason: "invalid-manifest", paths: discovery.paths }
-        : {
-            reason: "invalid-manifest",
-            paths: discovery.paths,
-            manifestReason: discovery.reason,
-          };
-    case "WrongScope":
-      return { reason: "wrong-scope", paths: discovery.paths };
-    case "StaleManifestCleaned":
-      return { reason: "stale-manifest-removed", paths: discovery.paths };
-  }
-};
+): CliInactiveLifecycleState => inactiveServerStateFromDiscovery(discovery);
 
 export const stopReportFromInactiveDiscovery = (
   discovery: Exclude<CliServerDiscovery, CliRunningServer>,
@@ -95,31 +78,44 @@ export const stopReportFromInactiveDiscovery = (
     case "Stopped":
       return {
         _tag: "AlreadyStopped",
-        inactive: { reason: "no-manifest", paths: discovery.paths },
+        inactive: inactiveServerStateFromDiscovery(discovery),
       };
     case "InvalidManifest":
       return {
         _tag: "InvalidManifest",
-        inactive:
-          discovery.reason === undefined
-            ? { reason: "invalid-manifest", paths: discovery.paths }
-            : {
-                reason: "invalid-manifest",
-                paths: discovery.paths,
-                manifestReason: discovery.reason,
-              },
+        inactive: inactiveServerStateFromDiscovery(discovery),
       };
     case "WrongScope":
       return {
         _tag: "WrongScope",
-        inactive: { reason: "wrong-scope", paths: discovery.paths },
+        inactive: inactiveServerStateFromDiscovery(discovery),
       };
     case "StaleManifestCleaned":
       return {
         _tag: "StaleManifestCleaned",
-        inactive: { reason: "stale-manifest-removed", paths: discovery.paths },
+        inactive: inactiveServerStateFromDiscovery(discovery),
       };
   }
+};
+
+export const lifecycleBlockedError = (input: {
+  readonly operation: Extract<CliWaitOperation, "start" | "restart">;
+  readonly discovery: CliInvalidManifest | CliWrongScopeServer;
+}): CliLifecycleBlocked => {
+  const reason = input.discovery._tag === "InvalidManifest" ? "invalid-manifest" : "wrong-scope";
+  const message =
+    input.discovery._tag === "InvalidManifest"
+      ? `Cannot ${input.operation} xmux server because the server manifest is invalid.`
+      : `Cannot ${input.operation} xmux server because the server manifest belongs to another scope.`;
+
+  return new CliLifecycleBlocked({
+    message,
+    operation: input.operation,
+    reason,
+    configPath: input.discovery.paths.configPath,
+    manifestPath: input.discovery.paths.manifestPath,
+    socketPath: input.discovery.paths.socketPath,
+  });
 };
 
 export const stoppedReport = (

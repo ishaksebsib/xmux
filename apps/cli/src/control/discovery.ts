@@ -17,9 +17,9 @@ import {
   CliValidManifest,
   CliWrongScopeServer,
   type CliServerDiscovery,
-  type CliInactiveServerReason,
+  inactiveServerStateFromDiscovery,
 } from "../domain/discovery";
-import { CliDiscoveryError, CliServerNotRunning } from "../domain/errors";
+import { CliDiscoveryError, CliServerNotRunning, safeErrorReason } from "../domain/errors";
 import type { CliServerTarget } from "../domain/input";
 
 interface CliRunOptions {
@@ -35,18 +35,10 @@ type ServerManifest = Extract<
 const toRunOptions = (target: CliServerTarget): CliRunOptions =>
   target.configPath === undefined ? {} : { configPath: target.configPath };
 
-const errorReason = (cause: unknown): string | undefined => {
-  if (typeof cause === "object" && cause !== null && "_tag" in cause) {
-    const tag = cause._tag;
-    return typeof tag === "string" ? tag : undefined;
-  }
-  return undefined;
-};
-
 const mapDiscoveryError =
   (message: string) =>
   (cause: unknown): CliDiscoveryError =>
-    new CliDiscoveryError({ message, reason: errorReason(cause), cause });
+    new CliDiscoveryError({ message, reason: safeErrorReason(cause), cause });
 
 export const toCliPaths = (paths: XmuxServerPaths): CliResolvedServerPaths =>
   new CliResolvedServerPaths({
@@ -76,21 +68,6 @@ const toCliManifest = (manifest: ServerManifest): CliServerManifest =>
     ownerVersion: manifest.owner.version,
     ownerExecutablePath: manifest.owner.executablePath,
   });
-
-const inactiveReasonFromDiscovery = (
-  discovery: Exclude<CliServerDiscovery, CliRunningServer>,
-): CliInactiveServerReason => {
-  switch (discovery._tag) {
-    case "Stopped":
-      return "no-manifest";
-    case "InvalidManifest":
-      return "invalid-manifest";
-    case "WrongScope":
-      return "wrong-scope";
-    case "StaleManifestCleaned":
-      return "stale-manifest-removed";
-  }
-};
 
 export interface ControlDiscoveryService {
   readonly resolvePaths: (
@@ -175,11 +152,12 @@ const makeControlDiscovery = (): ControlDiscoveryService => {
     const discovery = yield* discover(target);
     if (discovery._tag === "Running") return discovery;
 
+    const inactive = inactiveServerStateFromDiscovery(discovery);
     return yield* new CliServerNotRunning({
       message: "xmux server is not running.",
-      reason: inactiveReasonFromDiscovery(discovery),
-      manifestPath: discovery.paths.manifestPath,
-      socketPath: discovery.paths.socketPath,
+      reason: inactive.reason,
+      manifestPath: inactive.paths.manifestPath,
+      socketPath: inactive.paths.socketPath,
     });
   });
 

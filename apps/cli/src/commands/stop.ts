@@ -1,8 +1,8 @@
-import { Console, Effect, Option, References, Schema } from "effect";
+import { Console, Effect, Option, References } from "effect";
 import { Command } from "effect/unstable/cli";
 import { ControlClient } from "../control/client";
 import { ControlDiscovery } from "../control/discovery";
-import { CliInvalidInput } from "../domain/errors";
+import { mapConfigPathError } from "./input";
 import { parseServerTarget } from "../domain/input";
 import {
   stopReportFromInactiveDiscovery,
@@ -16,13 +16,6 @@ import { configPathFlag } from "./options";
 interface StopInput {
   readonly configPath: Option.Option<string>;
 }
-
-const mapConfigPathError = (cause: Schema.SchemaError): CliInvalidInput =>
-  new CliInvalidInput({
-    message: "Invalid --config path.",
-    field: "config",
-    cause,
-  });
 
 export const getStopReport = Effect.fn("cli.stop.report")(function* (input: StopInput) {
   const target = yield* parseServerTarget(input.configPath).pipe(

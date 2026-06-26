@@ -4,6 +4,14 @@ import { CliControlOperation } from "./input";
 const OptionalSafeText = Schema.optionalKey(Schema.String);
 const OptionalCause = Schema.optionalKey(Schema.Defect());
 
+export const safeErrorReason = (cause: unknown): string | undefined => {
+  if (typeof cause === "object" && cause !== null && "_tag" in cause) {
+    const tag = cause._tag;
+    return typeof tag === "string" ? tag : undefined;
+  }
+  return undefined;
+};
+
 export class CliDiscoveryError extends Schema.TaggedErrorClass<CliDiscoveryError>()(
   "CliDiscoveryError",
   {

@@ -96,3 +96,30 @@ export const CliServerDiscovery = Schema.Union([
   CliStaleManifestCleanedServer,
 ]);
 export type CliServerDiscovery = typeof CliServerDiscovery.Type;
+
+export interface CliInactiveServerState {
+  readonly reason: CliInactiveServerReason;
+  readonly paths: CliResolvedServerPaths;
+  readonly manifestReason?: string;
+}
+
+export const inactiveServerStateFromDiscovery = (
+  discovery: Exclude<CliServerDiscovery, CliRunningServer>,
+): CliInactiveServerState => {
+  switch (discovery._tag) {
+    case "Stopped":
+      return { reason: "no-manifest", paths: discovery.paths };
+    case "InvalidManifest":
+      return discovery.reason === undefined
+        ? { reason: "invalid-manifest", paths: discovery.paths }
+        : {
+            reason: "invalid-manifest",
+            paths: discovery.paths,
+            manifestReason: discovery.reason,
+          };
+    case "WrongScope":
+      return { reason: "wrong-scope", paths: discovery.paths };
+    case "StaleManifestCleaned":
+      return { reason: "stale-manifest-removed", paths: discovery.paths };
+  }
+};
