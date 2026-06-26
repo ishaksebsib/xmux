@@ -3,6 +3,7 @@ import type { ChatAttachment, ChatAttachmentContent, ChatAttachmentKind } from "
 import type { DiscordBotClient } from "../client";
 import { DiscordAttachmentReadError, type DiscordAdapterError } from "../errors";
 import type { DiscordAdapterData } from "../types";
+import { isRecord } from "../utils";
 
 export interface DiscordAttachmentLike {
   readonly id?: string;
@@ -273,8 +274,4 @@ function isArchiveFilename(filename: string | undefined): boolean {
     filename?.endsWith(".tar.gz") === true ||
     filename?.endsWith(".tgz") === true
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

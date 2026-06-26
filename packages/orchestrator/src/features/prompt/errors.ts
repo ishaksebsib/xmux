@@ -1,14 +1,7 @@
 import { TaggedError } from "better-result";
+import { describeCause, formatSessionRef } from "../../utils";
 import type { ChatAttachmentKind } from "@xmux/chat-core";
 import type { SessionRef } from "@xmux/harness-core";
-
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
-function formatSessionRef(ref: SessionRef): string {
-  return `${ref.harnessId}:${ref.sessionId}`;
-}
 
 /** Returned when a prompt is already running for a session. */
 export class PromptAlreadyRunningError extends TaggedError("PromptAlreadyRunningError")<{

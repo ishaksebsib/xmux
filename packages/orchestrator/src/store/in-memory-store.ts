@@ -3,6 +3,7 @@ import type { SessionRef } from "@xmux/harness-core";
 import type { ChatThreadRef, SessionRecord, ThreadBinding, ThreadWorkspace } from "./model";
 import { type Store } from "./store";
 import { StoreConflictError, StoreNotFoundError } from "../errors";
+import { sameSessionRef, sessionKey } from "../utils";
 
 /** Creates an in-memory store. */
 export function createInMemoryStore(): Store {
@@ -103,10 +104,6 @@ export function createInMemoryStore(): Store {
   };
 }
 
-function sessionKey(ref: SessionRef): string {
-  return `${ref.harnessId}:${ref.sessionId}`;
-}
-
 function threadKey(thread: ChatThreadRef): string {
   return `${thread.chatId}:${thread.threadId}`;
 }
@@ -117,10 +114,6 @@ function deleteBindingsForSession(bindings: Map<string, ThreadBinding>, ref: Ses
       bindings.delete(key);
     }
   }
-}
-
-function sameSessionRef(left: SessionRef, right: SessionRef): boolean {
-  return left.harnessId === right.harnessId && left.sessionId === right.sessionId;
 }
 
 function cloneSession(record: SessionRecord): SessionRecord {

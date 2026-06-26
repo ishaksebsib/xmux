@@ -1,11 +1,7 @@
 import { TaggedError } from "better-result";
 import type { HarnessSessionNotFoundError, SessionRef } from "@xmux/harness-core";
 import type { ChatThreadRef } from "../store";
-import { describeCause } from "../utils";
-
-function formatSessionRef(ref: SessionRef): string {
-  return `${ref.harnessId}:${ref.sessionId}`;
-}
+import { describeCause, formatSessionRef } from "../utils";
 
 export type UpstreamSessionCleanupOperation =
   | "resumeSession"

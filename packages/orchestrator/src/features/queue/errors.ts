@@ -1,14 +1,7 @@
 import type { SessionRef } from "@xmux/harness-core";
+import { describeCause, formatSessionRef } from "../../utils";
 import { TaggedError } from "better-result";
 import type { QueueItemId } from "./primitives";
-
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
-
-function formatSessionRef(ref: SessionRef): string {
-  return `${ref.harnessId}:${ref.sessionId}`;
-}
 
 export class PromptQueueFullError extends TaggedError("PromptQueueFullError")<{
   readonly sessionRef: SessionRef;

@@ -5,10 +5,10 @@ import {
   encodeTelegramStreamedMessage,
   encodeTelegramStreamReplyMessage,
   parseTelegramPrivateChatId,
-  type TelegramPlainStreamMessageRequest,
 } from "../conversions/streaming";
 import { TelegramStreamReplyError } from "../errors";
 import { streamTelegramRich } from "./rich-stream";
+import { capturePlainStreamedText } from "./utils";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
 
 export async function streamReply<TChatId extends string>(args: {
@@ -42,6 +42,7 @@ export async function streamReply<TChatId extends string>(args: {
               bot: args.bot,
               request,
               signal: args.input.signal,
+              createError: (cause) => new TelegramStreamReplyError({ cause }),
             }),
           );
 
@@ -59,53 +60,4 @@ export async function streamReply<TChatId extends string>(args: {
 
     return Result.ok(sent);
   });
-}
-
-function capturePlainStreamedText(args: {
-  readonly bot: TelegramBotClient;
-  readonly request: TelegramPlainStreamMessageRequest;
-  readonly signal?: AbortSignal;
-}): Promise<
-  Result<
-    {
-      readonly text: string;
-      readonly telegramMessages: Awaited<ReturnType<TelegramBotClient["streamMessage"]>>;
-    },
-    TelegramStreamReplyError
-  >
-> {
-  return Result.gen(async function* () {
-    let text = "";
-    const telegramMessages = yield* Result.await(
-      Result.tryPromise({
-        try: async () =>
-          args.bot.streamMessage({
-            chatId: args.request.chatId,
-            draftIdOffset: args.request.draftIdOffset,
-            stream: captureStreamText(args.request.stream, (nextText) => {
-              text = nextText;
-            }),
-            draftOptions: args.request.draftOptions,
-            messageOptions: args.request.messageOptions,
-            signal: args.signal,
-          }),
-        catch: (cause) => new TelegramStreamReplyError({ cause }),
-      }),
-    );
-
-    return Result.ok({ text, telegramMessages });
-  });
-}
-
-async function* captureStreamText(
-  stream: AsyncIterable<string>,
-  onText: (text: string) => void,
-): AsyncIterable<string> {
-  let text = "";
-
-  for await (const delta of stream) {
-    text += delta;
-    onText(text);
-    yield delta;
-  }
 }

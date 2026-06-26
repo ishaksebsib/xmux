@@ -19,6 +19,7 @@ import {
 import type { RESTPostAPIApplicationCommandsJSONBody } from "discord-api-types/v10";
 import type { DiscordApplicationId, DiscordBotToken } from "./config";
 import type { DiscordAdapterMode, DiscordClientOptions } from "./types";
+import { isRecord } from "./utils";
 
 export type DiscordMessageHandler = (message: Message) => void | Promise<void>;
 export type DiscordInteractionHandler = (interaction: Interaction) => void | Promise<void>;
@@ -355,8 +356,4 @@ function encodeSentMessage(message: Message): DiscordSentMessage {
     guildId: message.guildId ?? undefined,
     raw: message,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

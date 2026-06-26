@@ -26,6 +26,7 @@ import {
 import type { DiscordActionEnvelope, DiscordActionStore, DiscordAdapterOptions } from "../types";
 import { encodeDiscordMessagePayload, encodeDiscordText } from "./outbound";
 import { createDiscordActionStoreKey } from "../stores/action-store";
+import { isRecord } from "../utils";
 
 const customIdPrefix = "xmux:a:";
 const actionStorePrefix = "xmux:k:";
@@ -633,8 +634,4 @@ function invalidDiscordActionEnvelope(): Result<DiscordActionEnvelope, DiscordIn
       reason: "Discord button custom_id did not decode to an action envelope",
     }),
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

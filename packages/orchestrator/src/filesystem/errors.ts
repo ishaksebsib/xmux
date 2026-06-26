@@ -1,10 +1,7 @@
 import { TaggedError } from "better-result";
+import { describeCause } from "../utils";
 
 export type FileSystemOperation = "realpath" | "stat" | "readdir";
-
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
 
 /** Returned when a filesystem path does not exist. */
 export class FileSystemPathNotFoundError extends TaggedError("FileSystemPathNotFoundError")<{

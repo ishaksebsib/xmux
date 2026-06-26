@@ -10,6 +10,7 @@ import type { SessionRef } from "@xmux/harness-core";
 import { Result, type Result as ResultType } from "better-result";
 import type { Actor } from "../../ctx";
 import type { ChatThreadRef } from "../../store";
+import { sameSessionRef, sessionKey } from "../../utils";
 import { DEFAULT_PROMPT_QUEUE_MAX_ITEMS, DEFAULT_PROMPT_QUEUE_OFFER_TTL_MS } from "./defaults";
 import {
   PromptQueueDrainStateConflictError,
@@ -720,14 +721,6 @@ function expiresAt(isoDate: string, ttlMs: PositiveTtlMs): IsoTimestamp {
   const time = Date.parse(isoDate);
   if (!Number.isFinite(time)) return makeIsoTimestamp(new Date(Date.now() + ttlMs).toISOString());
   return makeIsoTimestamp(new Date(time + ttlMs).toISOString());
-}
-
-function sessionKey(ref: SessionRef): string {
-  return JSON.stringify([ref.harnessId, ref.sessionId]);
-}
-
-function sameSessionRef(left: SessionRef, right: SessionRef): boolean {
-  return left.harnessId === right.harnessId && left.sessionId === right.sessionId;
 }
 
 function sameThreadRef(left: ChatThreadRef, right: ChatThreadRef): boolean {

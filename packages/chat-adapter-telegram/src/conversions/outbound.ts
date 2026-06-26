@@ -8,6 +8,7 @@ import type {
 import type { TelegramBotClient, TelegramSentTextMessage } from "../client";
 import { TelegramReplyError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
+import { parseTelegramMessageId as parseRawTelegramMessageId } from "../utils";
 import { encodeTelegramFormattedText, encodeTelegramFormatOptions } from "./formatting";
 
 declare const telegramMessageIdBrand: unique symbol;
@@ -163,12 +164,12 @@ function encodeTelegramReplyParameters(messageId: TelegramMessageId): TelegramAd
 }
 
 function parseTelegramMessageId(messageId: string): Result<TelegramMessageId, TelegramReplyError> {
-  const parsed = Number(messageId);
-  return Number.isInteger(parsed) && parsed > 0
-    ? Result.ok(parsed as TelegramMessageId)
-    : Result.err(
+  const parsed = parseRawTelegramMessageId(messageId);
+  return parsed === undefined
+    ? Result.err(
         new TelegramReplyError({
           reason: `Telegram message id must be a positive integer: ${messageId}`,
         }),
-      );
+      )
+    : Result.ok(parsed as TelegramMessageId);
 }

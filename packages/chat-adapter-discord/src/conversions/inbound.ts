@@ -3,6 +3,7 @@ import type { DiscordBotClient } from "../client";
 import type { DiscordAdapterError } from "../errors";
 import type { DiscordAdapterData } from "../types";
 import { decodeDiscordAttachments } from "./attachments";
+import { isRecord } from "../utils";
 
 export type DiscordInboundDecodeResult<TEvent> =
   | { readonly status: "event"; readonly event: TEvent }
@@ -127,8 +128,4 @@ function isDiscordMessageLike(
     typeof value.channelId === "string" &&
     value.channelId.length > 0
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

@@ -2,6 +2,7 @@ import type { AssistantMessage, Event as OpenCodeEvent } from "@opencode-ai/sdk/
 import { Result } from "better-result";
 import type { HarnessRunReason, HarnessTokenUsage, HarnessToolOutput } from "@xmux/harness-core";
 import type { TokenUsageInput } from "./types";
+import { isRecord } from "../utils";
 
 export function getEventSessionId(event: OpenCodeEvent): string | undefined {
   const properties = event.properties as {
@@ -10,10 +11,6 @@ export function getEventSessionId(event: OpenCodeEvent): string | undefined {
   };
 
   return properties.sessionID ?? properties.info?.sessionID;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 export function normalizeOpenCodeStreamEvent(value: unknown): OpenCodeEvent | undefined {

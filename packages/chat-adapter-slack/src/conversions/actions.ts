@@ -38,6 +38,7 @@ import type {
 } from "../types";
 import { unescapeSlackText, type SlackFormattedText } from "./formatting";
 import { encodeSlackMessagePayload, encodeSlackText, slackMarkdownTextLimit } from "./outbound";
+import { isRecord, recordAt, stringAt } from "../utils";
 
 const slackActionValuePrefix = "xmux:a:";
 const slackActionStorePrefix = "xmux:k:";
@@ -935,21 +936,4 @@ function createSlackActionActor(args: {
       raw: args.body,
     },
   };
-}
-
-function recordAt(value: unknown, key: string): Record<string, unknown> | undefined {
-  if (!isRecord(value)) {
-    return undefined;
-  }
-
-  const child = value[key];
-  return isRecord(child) ? child : undefined;
-}
-
-function stringAt(value: unknown, key: string): string | undefined {
-  return isRecord(value) && typeof value[key] === "string" ? value[key] : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

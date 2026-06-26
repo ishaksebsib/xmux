@@ -9,6 +9,7 @@ import type {
 import type { TelegramBotClient, TelegramStreamedMessage } from "../client";
 import { TelegramStreamReplyError } from "../errors";
 import type { TelegramAdapterData, TelegramAdapterOptions } from "../types";
+import { parseTelegramMessageId } from "../utils";
 import { encodeTelegramFormatOptions } from "./formatting";
 
 type TelegramPlainStreamArgs = Parameters<TelegramBotClient["streamMessage"]>[0];
@@ -335,11 +336,6 @@ function withTelegramReplyParameters(
 
 function getLastTelegramStreamedMessage(messages: TelegramStreamedMessage) {
   return Array.isArray(messages) ? messages.at(-1) : messages;
-}
-
-function parseTelegramMessageId(messageId: string): number | undefined {
-  const parsed = Number(messageId);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function createTelegramDraftId(): number {

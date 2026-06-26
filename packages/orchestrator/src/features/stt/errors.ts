@@ -1,10 +1,7 @@
 import { TaggedError } from "better-result";
+import { describeCause } from "../../utils";
 import type { ChatAttachmentKind } from "@xmux/chat-core";
 import type { SpeechToTextClientError, SpeechToTextCreateClientError } from "@xmux/stt";
-
-function describeCause(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause);
-}
 
 export class SttUnsupportedAudioMessageError extends TaggedError(
   "SttUnsupportedAudioMessageError",

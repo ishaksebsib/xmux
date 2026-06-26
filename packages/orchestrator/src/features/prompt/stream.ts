@@ -17,6 +17,7 @@ import {
   promptUsage,
   type PromptToolOutputComponentInput,
 } from "../../components";
+import { describeUnknown } from "../../utils";
 import { formatModelSelector } from "../model/selector";
 
 interface PromptRenderState {
@@ -478,17 +479,5 @@ function toToolOutputComponent(output: HarnessToolOutput): PromptToolOutputCompo
       return { type: "json", value: output.value };
     case "image":
       return { type: "image", mimeType: output.mimeType, dataLength: output.data.length };
-  }
-}
-
-function describeUnknown(value: unknown): string {
-  if (value === undefined) return "";
-  if (value instanceof Error) return value.message;
-  if (typeof value === "string") return value;
-
-  try {
-    return JSON.stringify(value, null, 2) ?? String(value);
-  } catch {
-    return String(value);
   }
 }

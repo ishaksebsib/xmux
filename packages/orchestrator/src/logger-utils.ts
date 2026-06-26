@@ -9,6 +9,7 @@ import {
   type XmuxLogMetadata,
   type XmuxLogScope,
 } from "./logger";
+import { isRecord } from "./utils";
 
 /** Request-scoped log context propagated to orchestrator, chat, harness, and adapter logs. */
 export type XmuxLogContext = Pick<
@@ -294,10 +295,6 @@ function readStringProperty(value: object, key: string): string | undefined {
   if (!Object.hasOwn(value, key)) return undefined;
   const property = (value as Record<string, unknown>)[key];
   return typeof property === "string" && property.length > 0 ? property : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

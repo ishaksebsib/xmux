@@ -27,6 +27,7 @@ import { DiscordInboundDecodeError, type DiscordAdapterError } from "../errors";
 import { discordLogEvents, type DiscordLogScope } from "../logger";
 import type { DiscordInteractionRegistry } from "../stores/interaction-registry";
 import type { DiscordActionStore, DiscordAdapterData, DiscordAdapterMode } from "../types";
+import { isRecord } from "../utils";
 
 export function registerInboundHandlers<
   TCommands extends ChatCommandRegistry,
@@ -464,8 +465,4 @@ function encodeInteractionSentMessage(args: {
     guildId: typeof message.guildId === "string" ? message.guildId : args.fallbackGuildId,
     raw: args.message,
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

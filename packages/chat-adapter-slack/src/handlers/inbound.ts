@@ -41,6 +41,7 @@ import type {
   SlackMentionCommandOptions,
 } from "../types";
 import type { SlackAdapterError } from "../errors";
+import { nonEmpty } from "../utils";
 
 export function registerInboundHandlers<
   TChatId extends string,
@@ -564,11 +565,6 @@ function logRetryIgnored(args: {
     retryNum: args.event.retryNum,
     retryReason: args.event.retryReason,
   });
-}
-
-function nonEmpty(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }
 
 function ackImmediately<TChatId extends string, TCommands extends ChatCommandRegistry>(args: {

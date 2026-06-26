@@ -1,5 +1,6 @@
 import type { ChatReactionAddedEvent, ChatReactionRemovedEvent } from "@xmux/chat-core";
 import { decodeDiscordActor, type DiscordUserLike } from "./inbound";
+import { isRecord } from "../utils";
 
 export type DiscordReactionDecodeResult<TChatId extends string> =
   | {
@@ -96,8 +97,4 @@ function isDiscordUserLike(
   value: unknown,
 ): value is Required<Pick<DiscordUserLike, "id">> & DiscordUserLike {
   return isRecord(value) && typeof value.id === "string" && value.id.length > 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

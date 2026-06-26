@@ -1,5 +1,6 @@
 import { Result } from "better-result";
 import type { HarnessPromptEvent, SessionRef } from "@xmux/harness-core";
+import { sameSessionRef, sessionKey } from "../../utils";
 import { PromptAlreadyRunningError, PromptNoActiveRunError } from "./errors";
 
 export type PromptRunState =
@@ -147,7 +148,7 @@ class PromptRun implements ActivePromptRun {
   }
 
   recordEvent(event: HarnessPromptEvent): void {
-    if (!isSameSessionRef(event.ref, this.sessionRef)) return;
+    if (!sameSessionRef(event.ref, this.sessionRef)) return;
 
     if (event.type === "run") {
       this.recordRunEvent(event);
@@ -249,12 +250,4 @@ class PromptRun implements ActivePromptRun {
     });
     this.nextInteractionOrdinal += 1;
   }
-}
-
-function isSameSessionRef(left: SessionRef, right: SessionRef): boolean {
-  return left.harnessId === right.harnessId && left.sessionId === right.sessionId;
-}
-
-function sessionKey(ref: SessionRef): string {
-  return `${ref.harnessId}:${ref.sessionId}`;
 }

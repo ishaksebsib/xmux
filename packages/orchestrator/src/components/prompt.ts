@@ -1,6 +1,7 @@
 import type { HarnessContextUsage } from "@xmux/harness-core";
 import { bulletList, inlineCode, markdownText } from "./markdown";
 import type { NormalizedPromptResponseConfig } from "../config";
+import { describeUnknown, stringifyUnknown } from "../utils";
 
 export type PromptToolStatus = "pending" | "running" | "completed" | "failed";
 
@@ -479,20 +480,6 @@ function compactValue(value: unknown, config: NormalizedPromptResponseConfig): s
   if (Array.isArray(value)) return `[${value.length} items]`;
   if (typeof value === "object") return "{…}";
   return String(value);
-}
-
-function stringifyUnknown(value: unknown): string {
-  if (typeof value === "string") return value;
-
-  try {
-    return JSON.stringify(value, null, 2) ?? String(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function describeUnknown(value: unknown): string {
-  return value instanceof Error ? value.message : stringifyUnknown(value);
 }
 
 function truncate(value: string, maxLength: number): string {

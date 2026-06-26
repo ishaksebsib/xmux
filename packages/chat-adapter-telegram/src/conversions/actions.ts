@@ -13,6 +13,7 @@ import {
   TelegramUpdateActionError,
 } from "../errors";
 import type { TelegramAdapterOptions } from "../types";
+import { parseTelegramMessageId } from "../utils";
 import { encodeTelegramFormattedText } from "./formatting";
 
 const telegramActionPayloadLimit = 64;
@@ -230,11 +231,6 @@ function encodeTelegramActionUpdateRequest<TError extends Error>(args: {
 
 function normalizeActionTextInput(message: ChatTextInput) {
   return typeof message === "string" ? { text: message } : message;
-}
-
-function parseTelegramMessageId(messageId: string): number | undefined {
-  const parsed = Number(messageId);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 }
 
 function isActionCallbackData(value: unknown): value is TelegramActionCallbackData {

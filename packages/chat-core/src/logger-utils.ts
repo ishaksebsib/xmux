@@ -8,6 +8,7 @@ import {
   type ChatLogMetadata,
   type ChatLogScope,
 } from "./logger";
+import { isRecord } from "./type-utils";
 
 /** Creates a safe logger scope. Logger failures are swallowed so logging never breaks chat flows. */
 export function createChatLogScope<TEventName extends string = ChatLogEventName>(
@@ -199,8 +200,4 @@ function readStringProperty(value: object, key: string): string | undefined {
   if (!Object.hasOwn(value, key)) return undefined;
   const property = (value as Record<string, unknown>)[key];
   return typeof property === "string" && property.length > 0 ? property : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

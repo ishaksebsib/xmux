@@ -1,4 +1,5 @@
 import type { SlackActionEvent, SlackCommandEvent } from "../client";
+import { recordAt, stringAt } from "../utils";
 
 const defaultInteractionTtlMs = 29 * 60 * 1_000;
 
@@ -113,23 +114,4 @@ export function createSlackActionInteractionId(event: SlackActionEvent): string 
   const messageTs = stringAt(recordAt(event.body, "message"), "ts") ?? "unknown-message";
   const actionTs = stringAt(event.action, "action_ts") ?? String(Date.now());
   return `slack-action:${channelId}:${messageTs}:${actionTs}`;
-}
-
-function recordAt(value: unknown, key: string): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-
-  const child = (value as Record<string, unknown>)[key];
-  return typeof child === "object" && child !== null
-    ? (child as Record<string, unknown>)
-    : undefined;
-}
-
-function stringAt(value: unknown, key: string): string | undefined {
-  return typeof value === "object" &&
-    value !== null &&
-    typeof (value as Record<string, unknown>)[key] === "string"
-    ? ((value as Record<string, unknown>)[key] as string)
-    : undefined;
 }

@@ -11,6 +11,7 @@ import type {
 import type { SlackCommandEvent } from "../client";
 import { createSlackConversationId } from "../conversation";
 import type { SlackAdapterData, SlackConversationScope } from "../types";
+import { isRecord, nonEmpty } from "../utils";
 
 export function createSlackCommandEvent<
   TCommands extends ChatCommandRegistry,
@@ -164,13 +165,4 @@ function readSlackCommandThreadTs(payload: SlackCommandEvent["payload"]): string
 
   const threadTs = payload["thread_ts"];
   return typeof threadTs === "string" ? threadTs : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function nonEmpty(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }

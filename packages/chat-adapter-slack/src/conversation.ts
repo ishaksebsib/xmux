@@ -1,4 +1,5 @@
 import type { SlackConversationScope } from "./types";
+import { nonEmpty } from "./utils";
 
 export interface SlackConversationTarget {
   readonly channelId: string;
@@ -68,9 +69,4 @@ export function resolveSlackThreadConversationTs(args: {
 
   const messageTs = nonEmpty(args.messageTs);
   return messageTs !== undefined && threadTs === messageTs ? undefined : threadTs;
-}
-
-function nonEmpty(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed;
 }

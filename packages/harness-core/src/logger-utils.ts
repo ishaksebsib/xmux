@@ -10,6 +10,7 @@ import {
   type HarnessLogOperation,
   type HarnessLogScope,
 } from "./logger";
+import { isRecord } from "./utils";
 
 /** Creates a safe logger scope. Logger failures are swallowed so logging never breaks harness flows. */
 export function createHarnessLogScope<TEventName extends string = HarnessLogEventName>(
@@ -250,8 +251,4 @@ function readStringProperty(value: object, key: string): string | undefined {
   if (!Object.hasOwn(value, key)) return undefined;
   const property = (value as Record<string, unknown>)[key];
   return typeof property === "string" && property.length > 0 ? property : undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

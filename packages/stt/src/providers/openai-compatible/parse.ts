@@ -6,6 +6,7 @@ import type {
   SpeechToTextTranscript,
   SpeechToTextWord,
 } from "../../types";
+import { isRecord } from "../../utils";
 
 export async function parseTranscriptionResponse(input: {
   readonly response: Response;
@@ -43,10 +44,6 @@ export async function parseTranscriptionResponse(input: {
       format: input.format,
     });
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function getString(value: unknown): string | undefined {
