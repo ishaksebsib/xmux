@@ -15,6 +15,8 @@ export const cliProgram = Command.run(rootCommand, {
 });
 
 export const runCli = (): void => {
+  // NodeRuntime is the CLI process signal bridge: SIGINT/SIGTERM interrupt the
+  // main Effect fiber, allowing server scopes/finalizers to close cleanly.
   cliProgram.pipe(
     Effect.provide(cliRuntimeLayer),
     Effect.scoped,

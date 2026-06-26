@@ -65,6 +65,15 @@ export class CliControlRequestError extends Schema.TaggedErrorClass<CliControlRe
   },
 ) {}
 
+export class CliServerRunFailed extends Schema.TaggedErrorClass<CliServerRunFailed>()(
+  "CliServerRunFailed",
+  {
+    message: Schema.String,
+    reason: OptionalSafeText,
+    cause: OptionalCause,
+  },
+) {}
+
 export const CliError = Schema.Union([
   CliDiscoveryError,
   CliServerNotRunning,
@@ -73,5 +82,6 @@ export const CliError = Schema.Union([
   CliSpawnError,
   CliInvalidInput,
   CliControlRequestError,
+  CliServerRunFailed,
 ]);
 export type CliError = typeof CliError.Type;
