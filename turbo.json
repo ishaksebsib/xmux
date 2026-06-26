@@ -17,6 +17,10 @@
     "lint": {
       "dependsOn": ["^lint"]
     },
+    "lint:effect": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$"]
+    },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"]
     },
