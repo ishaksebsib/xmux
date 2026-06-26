@@ -48,8 +48,8 @@
     "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/platform-node": "beta",
-    "@effect/sql-libsql": "beta",
+    "@effect/platform-node": "catalog:",
+    "@effect/sql-libsql": "catalog:",
     "@xmux/chat-adapter-discord": "workspace:*",
     "@xmux/chat-adapter-slack": "workspace:*",
     "@xmux/chat-adapter-telegram": "workspace:*",
@@ -58,17 +58,17 @@
     "@xmux/harness-opencode": "workspace:*",
     "@xmux/harness-pi": "workspace:*",
     "@xmux/orchestrator": "workspace:*",
-    "effect": "beta",
+    "effect": "catalog:",
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@effect/language-service": "^0.86.2",
-    "@effect/vitest": "beta",
-    "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260328.1",
+    "@effect/vitest": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "@xmux/ts-config": "workspace:*",
-    "tsdown": "^0.21.7",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

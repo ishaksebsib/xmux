@@ -45,14 +45,14 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "better-result": "^2.9.1"
+    "better-result": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
-    "@typescript/native-preview": "7.0.0-dev.20260328.1",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
     "@xmux/ts-config": "workspace:*",
-    "tsdown": "^0.21.7",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.2"
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

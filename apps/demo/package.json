@@ -19,11 +19,11 @@
     "@xmux/harness-opencode": "workspace:^",
     "@xmux/harness-pi": "workspace:^",
     "@xmux/orchestrator": "workspace:^",
-    "better-result": "^2.9.1",
+    "better-result": "catalog:",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "@types/node": "^25.5.0",
+    "@types/node": "catalog:",
     "@xmux/ts-config": "workspace:^",
     "tsx": "^4.21.0"
   }

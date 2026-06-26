@@ -2,3 +2,22 @@ packages:
   - "apps/*"
   - "packages/*"
   - "!packages/_template"
+
+allowBuilds:
+  "@google/genai": true
+  esbuild: false
+  msgpackr-extract: false
+  protobufjs: false
+
+catalog:
+  effect: 4.0.0-beta.88
+  "@effect/platform-node": 4.0.0-beta.88
+  "@effect/sql-libsql": 4.0.0-beta.88
+  "@effect/vitest": 4.0.0-beta.88
+  "@types/node": ^25.5.0
+  "@typescript/native-preview": 7.0.0-dev.20260328.1
+  better-result: ^2.9.1
+  tsdown: ^0.21.7
+  ts-log: ^3.0.2
+  typescript: ^6.0.2
+  vitest: ^4.1.2
