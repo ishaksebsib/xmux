@@ -39,8 +39,3 @@ export const renderCliCause = (cause: Cause.Cause<unknown>, debug: boolean): str
   if (debug) return Cause.pretty(cause);
   return formatUnknownError(Cause.squash(cause));
 };
-
-export const renderCliFailure = (cause: Cause.Cause<unknown>): void => {
-  console.error(renderCliCause(cause, shouldRenderDebugErrors(process.argv)));
-  process.exitCode = 1;
-};

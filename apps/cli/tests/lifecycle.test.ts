@@ -29,6 +29,8 @@ import {
 import { parsePollIntervalMs, parseTimeoutMs } from "../src/domain/input";
 import { renderCliCause } from "../src/output/errors";
 import { renderRestart, renderStart, renderStop } from "../src/output/lifecycle";
+import { nodeControlClientLayer } from "../src/platform/node/control-client";
+import { nodeControlDiscoveryLayer } from "../src/platform/node/control-discovery";
 import {
   ProcessSpawner,
   type CliSpawnSpec,
@@ -125,7 +127,7 @@ describe.sequential("stop command", () => {
       Effect.gen(function* () {
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer, timingLayer({})),
+            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
           ),
         );
         const output = renderStop(report);
@@ -144,7 +146,7 @@ describe.sequential("stop command", () => {
         yield* writeText(paths.manifestPath, "not json");
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer, timingLayer({})),
+            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
           ),
         );
 
@@ -161,7 +163,7 @@ describe.sequential("stop command", () => {
         yield* writeServerManifest(paths, { sessionId: "stale-stop" });
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer, timingLayer({})),
+            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
           ),
         );
 
@@ -178,7 +180,7 @@ describe.sequential("stop command", () => {
         yield* writeServerManifest(paths, { scopeId: "wrong-scope" });
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer, timingLayer({})),
+            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
           ),
         );
 
@@ -200,7 +202,7 @@ describe.sequential("stop command", () => {
 
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer, timingLayer({})),
+            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
           ),
         );
 

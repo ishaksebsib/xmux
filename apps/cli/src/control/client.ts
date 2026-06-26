@@ -1,110 +1,66 @@
-import { createXmuxClient, type XmuxClient } from "@xmux/server/platform/node";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect } from "effect";
 import type { CliRunningServer } from "../domain/discovery";
 import { CliControlRequestError, CliServerUnreachable } from "../domain/errors";
-import type { CliControlOperation, CliTailCount } from "../domain/input";
+import type { CliTailCount } from "../domain/input";
 
-export type CliHealthResponse = Effect.Success<ReturnType<XmuxClient["system"]["health"]>>;
-export type CliStatusResponse = Effect.Success<ReturnType<XmuxClient["status"]["status"]>>;
-export type CliLogsResponse = Effect.Success<ReturnType<XmuxClient["logs"]["tail"]>>;
-export type CliShutdownResponse = Effect.Success<ReturnType<XmuxClient["lifecycle"]["shutdown"]>>;
+export type CliJsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | ReadonlyArray<CliJsonValue>
+  | { readonly [key: string]: CliJsonValue | undefined };
 
-const unavailableCodes = new Set([
-  "ECONNREFUSED",
-  "ECONNRESET",
-  "EHOSTUNREACH",
-  "ENOENT",
-  "ENOTFOUND",
-  "ETIMEDOUT",
-  "UND_ERR_CONNECT_TIMEOUT",
-  "UND_ERR_SOCKET",
-]);
+export type CliServerState =
+  | "starting"
+  | "ready"
+  | "degraded"
+  | "reloading"
+  | "stopping"
+  | "failed";
 
-const objectValue = (value: unknown, key: string): unknown => {
-  if (typeof value !== "object" || value === null) return undefined;
-  return Object.entries(value).find(([entryKey]) => entryKey === key)?.[1];
-};
+export interface CliHealthResponse {
+  readonly alive: boolean;
+  readonly ready: boolean;
+  readonly state: CliServerState;
+}
 
-const hasUnavailableTransportCause = (cause: unknown): boolean => {
-  if (typeof cause === "object" && cause !== null) {
-    const tag = objectValue(cause, "_tag");
-    if (tag === "TransportError") return true;
+export interface CliStatusResponse {
+  readonly version: number;
+  readonly protocolVersion: number;
+  readonly pid: number;
+  readonly startedAt: string;
+  readonly uptimeMs: number;
+  readonly state: CliServerState;
+  readonly configPath: string;
+  readonly stateDir: string;
+  readonly scopeId: string;
+  readonly endpoint: {
+    readonly kind: "unix-socket";
+    readonly path: string;
+  };
+}
 
-    const reason = objectValue(cause, "reason");
-    if (
-      typeof reason === "object" &&
-      reason !== null &&
-      objectValue(reason, "_tag") === "TransportError"
-    ) {
-      return true;
-    }
+export type CliLogLevel = "trace" | "debug" | "info" | "warn" | "error";
 
-    const code = objectValue(cause, "code");
-    if (typeof code === "string" && unavailableCodes.has(code)) return true;
+export interface CliLogEntry {
+  readonly timestamp: string;
+  readonly level: CliLogLevel;
+  readonly message: CliJsonValue;
+  readonly annotations?: Readonly<Record<string, CliJsonValue>>;
+  readonly spans?: Readonly<Record<string, number>>;
+  readonly cause?: string;
+}
 
-    const nestedCause = objectValue(cause, "cause");
-    if (nestedCause !== undefined && hasUnavailableTransportCause(nestedCause)) return true;
+export interface CliLogsResponse {
+  readonly version: number;
+  readonly entries: ReadonlyArray<CliLogEntry>;
+}
 
-    if (reason !== undefined && hasUnavailableTransportCause(reason)) return true;
-  }
-
-  if (cause instanceof Error) {
-    return /ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENOENT|ENOTFOUND|ETIMEDOUT|socket|timeout/i.test(
-      cause.message,
-    );
-  }
-
-  return false;
-};
-
-const mapClientCreateError =
-  (
-    server: CliRunningServer,
-    operation: CliControlOperation,
-  ): ((cause: unknown) => CliServerUnreachable) =>
-  (cause) =>
-    new CliServerUnreachable({
-      message: "xmux server is unreachable.",
-      socketPath: server.socketPath,
-      operation,
-      cause,
-    });
-
-const mapControlRequestError =
-  (
-    server: CliRunningServer,
-    operation: CliControlOperation,
-  ): ((cause: unknown) => CliServerUnreachable | CliControlRequestError) =>
-  (cause) =>
-    hasUnavailableTransportCause(cause)
-      ? new CliServerUnreachable({
-          message: "xmux server is unreachable.",
-          socketPath: server.socketPath,
-          operation,
-          cause,
-        })
-      : new CliControlRequestError({
-          message: `xmux ${operation} request failed.`,
-          operation,
-          socketPath: server.socketPath,
-          cause,
-        });
-
-const withXmuxClient = <A>(input: {
-  readonly server: CliRunningServer;
-  readonly operation: CliControlOperation;
-  readonly request: (client: XmuxClient) => Effect.Effect<A, unknown>;
-}): Effect.Effect<A, CliServerUnreachable | CliControlRequestError> =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const client = yield* createXmuxClient({ socketPath: input.server.socketPath }).pipe(
-        Effect.mapError(mapClientCreateError(input.server, input.operation)),
-      );
-      return yield* input
-        .request(client)
-        .pipe(Effect.mapError(mapControlRequestError(input.server, input.operation)));
-    }),
-  );
+export interface CliShutdownResponse {
+  readonly accepted: boolean;
+  readonly alreadyStopping: boolean;
+}
 
 export interface ControlClientService {
   readonly health: (
@@ -124,41 +80,4 @@ export interface ControlClientService {
 
 export class ControlClient extends Context.Service<ControlClient, ControlClientService>()(
   "@xmux/cli/ControlClient",
-) {
-  static readonly layer = Layer.succeed(ControlClient, {
-    health: Effect.fn("cli.client.health")(function* (server: CliRunningServer) {
-      return yield* withXmuxClient({
-        server,
-        operation: "health",
-        request: (client) => client.system.health(),
-      });
-    }),
-
-    status: Effect.fn("cli.client.status")(function* (server: CliRunningServer) {
-      return yield* withXmuxClient({
-        server,
-        operation: "status",
-        request: (client) => client.status.status(),
-      });
-    }),
-
-    logs: Effect.fn("cli.client.logs")(function* (
-      server: CliRunningServer,
-      tail: CliTailCount | undefined,
-    ) {
-      return yield* withXmuxClient({
-        server,
-        operation: "logs",
-        request: (client) => client.logs.tail({ query: { tail } }),
-      });
-    }),
-
-    shutdown: Effect.fn("cli.client.shutdown")(function* (server: CliRunningServer) {
-      return yield* withXmuxClient({
-        server,
-        operation: "shutdown",
-        request: (client) => client.lifecycle.shutdown(),
-      });
-    }),
-  });
-}
+) {}

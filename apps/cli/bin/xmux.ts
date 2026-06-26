@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-import { runCli } from "../src/index";
+import { runCliNode } from "../src/platform/node/runtime";
 
-runCli();
+runCliNode();

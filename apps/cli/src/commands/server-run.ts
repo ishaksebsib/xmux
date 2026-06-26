@@ -1,8 +1,8 @@
-import { runXmuxServer } from "@xmux/server/platform/node";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
-import { CliInvalidInput, CliServerRunFailed, safeErrorReason } from "../domain/errors";
-import { parseConfigPathOption, type CliConfigPath } from "../domain/input";
+import { CliInvalidInput } from "../domain/errors";
+import { parseConfigPathOption } from "../domain/input";
+import { ServerRunner } from "../process/server-runner";
 import { mapConfigPathError } from "./input";
 import { configPathFlag } from "./options";
 
@@ -14,24 +14,6 @@ interface ServerRunInput {
   readonly foreground: boolean;
   readonly configPath: Option.Option<string>;
 }
-
-const toServerOptions = (configPath: CliConfigPath | undefined) =>
-  configPath === undefined ? {} : { configPath };
-
-const safeErrorMessage = (cause: unknown): string => {
-  if (typeof cause === "object" && cause !== null && "message" in cause) {
-    const message = cause.message;
-    if (typeof message === "string" && message.trim().length > 0) return message.trim();
-  }
-  return "xmux server failed.";
-};
-
-const mapServerRunError = (cause: unknown): CliServerRunFailed =>
-  new CliServerRunFailed({
-    message: safeErrorMessage(cause),
-    reason: safeErrorReason(cause),
-    cause,
-  });
 
 export const runServerRunCommand = Effect.fn("cli.serverRun")(function* (input: ServerRunInput) {
   if (!input.foreground) {
@@ -45,10 +27,8 @@ export const runServerRunCommand = Effect.fn("cli.serverRun")(function* (input: 
     Effect.mapError(mapConfigPathError),
   );
 
-  yield* runXmuxServer(toServerOptions(configPath)).pipe(
-    Effect.mapError(mapServerRunError),
-    Effect.asVoid,
-  );
+  const serverRunner = yield* ServerRunner;
+  yield* serverRunner.runForeground({ configPath });
 });
 
 export const serverRunCommand = Command.make(

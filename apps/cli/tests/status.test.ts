@@ -4,6 +4,8 @@ import { Cause, Effect, Exit, Layer, Option, Scope } from "effect";
 import { getStatusReport } from "../src/commands/status";
 import { ControlClient, type ControlClientService } from "../src/control/client";
 import { ControlDiscovery, type ControlDiscoveryService } from "../src/control/discovery";
+import { nodeControlClientLayer } from "../src/platform/node/control-client";
+import { nodeControlDiscoveryLayer } from "../src/platform/node/control-discovery";
 import { CliInvalidInput } from "../src/domain/errors";
 import { renderCliCause } from "../src/output/errors";
 import { renderStatus, renderStatusJson } from "../src/output/status";
@@ -18,7 +20,7 @@ import {
 
 const posixIt = process.platform === "win32" ? it.live.skip : it.live;
 
-const statusLayer = Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer);
+const statusLayer = Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer);
 
 const withStatusSandbox = <A, E, R>(
   run: (input: { readonly root: string; readonly configPath: string }) => Effect.Effect<A, E, R>,

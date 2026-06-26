@@ -1,16 +1,20 @@
 import { Effect } from "effect";
-import { ControlClient, type ControlClientService } from "../control/client";
+import {
+  ControlClient,
+  type CliHealthResponse,
+  type ControlClientService,
+} from "../control/client";
 import { ControlDiscovery, type ControlDiscoveryService } from "../control/discovery";
 import type { CliRunningServer } from "../domain/discovery";
 import type { CliWaitOperation } from "../domain/errors";
 import type { CliServerTarget } from "../domain/input";
 import { LifecycleTiming, waitForReachable } from "./wait";
 
+const startingHealth: CliHealthResponse = { alive: false, ready: false, state: "starting" };
+
 export const serverHealthReady = (client: ControlClientService, server: CliRunningServer) =>
   client.health(server).pipe(
-    Effect.catchTag("CliControlRequestError", () =>
-      Effect.succeed({ alive: false, ready: false, state: "starting" as const }),
-    ),
+    Effect.catchTag("CliControlRequestError", () => Effect.succeed(startingHealth)),
     Effect.map((health) => health.alive && health.ready),
   );
 

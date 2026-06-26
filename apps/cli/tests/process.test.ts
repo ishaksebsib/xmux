@@ -2,7 +2,8 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { CliServerUnreachable } from "../src/domain/errors";
 import { parseConfigPathOption, parsePollIntervalMs, parseTimeoutMs } from "../src/domain/input";
-import { buildServerRunArgs, buildServerRunSpawnSpec, spawnDetached } from "../src/process/spawn";
+import { spawnDetached } from "../src/platform/node/process-spawner";
+import { buildServerRunArgs, buildServerRunSpawnSpec } from "../src/process/spawn";
 import { waitForReachable, waitForUnreachable } from "../src/process/wait";
 
 describe("process planning", () => {
@@ -13,7 +14,7 @@ describe("process planning", () => {
   it.effect("builds built executable spawn specs", () =>
     Effect.gen(function* () {
       const spec = yield* buildServerRunSpawnSpec({
-        process: {
+        currentProcess: {
           executablePath: "/usr/bin/xmux",
           entrypointPath: undefined,
           env: { PATH: "/bin" },
@@ -34,7 +35,7 @@ describe("process planning", () => {
   it.effect("builds node script .mjs spawn specs", () =>
     Effect.gen(function* () {
       const spec = yield* buildServerRunSpawnSpec({
-        process: {
+        currentProcess: {
           executablePath: "/usr/bin/node",
           entrypointPath: "/repo/apps/cli/dist/bin/xmux.mjs",
           env: { PATH: "/bin" },
@@ -56,7 +57,7 @@ describe("process planning", () => {
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         buildServerRunSpawnSpec({
-          process: {
+          currentProcess: {
             executablePath: "/usr/bin/node",
             entrypointPath: "/repo/apps/cli/bin/xmux.ts",
             env: { PATH: "/bin" },
@@ -74,7 +75,7 @@ describe("process planning", () => {
     Effect.gen(function* () {
       const configPath = yield* parseConfigPathOption(Option.some("/tmp/xmux.jsonc"));
       const spec = yield* buildServerRunSpawnSpec({
-        process: {
+        currentProcess: {
           executablePath: "/usr/bin/xmux",
           entrypointPath: undefined,
           env: {},

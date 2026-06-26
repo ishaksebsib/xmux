@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { ControlClient } from "../src/control/client";
 import { parseTailCount } from "../src/domain/input";
+import { nodeControlClientLayer } from "../src/platform/node/control-client";
 import { runningServer } from "./support/client";
 
 describe("ControlClient", () => {
@@ -18,7 +19,7 @@ describe("ControlClient", () => {
         expect(error.operation).toBe("status");
         expect(error.socketPath).toBe(missingSocket);
       }
-    }).pipe(Effect.provide(ControlClient.layer)),
+    }).pipe(Effect.provide(nodeControlClientLayer)),
   );
 
   it.effect("does not reach the logs API when tail parsing fails", () =>
@@ -29,7 +30,7 @@ describe("ControlClient", () => {
         reachedClientApi = true;
         const client = yield* ControlClient;
         return yield* client.logs(runningServer("/tmp/unreachable.sock"), tail);
-      }).pipe(Effect.provide(ControlClient.layer));
+      }).pipe(Effect.provide(nodeControlClientLayer));
 
       yield* Effect.flip(program);
       expect(reachedClientApi).toBe(false);

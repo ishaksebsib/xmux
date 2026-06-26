@@ -11,6 +11,8 @@ import {
 } from "../src/control/client";
 import { ControlDiscovery, type ControlDiscoveryService } from "../src/control/discovery";
 import { CliRunningServer } from "../src/domain/discovery";
+import { nodeControlClientLayer } from "../src/platform/node/control-client";
+import { nodeControlDiscoveryLayer } from "../src/platform/node/control-discovery";
 import { CliInvalidInput } from "../src/domain/errors";
 import { renderCliCause } from "../src/output/errors";
 import { renderLogs, renderLogsJson } from "../src/output/logs";
@@ -26,7 +28,7 @@ import {
 
 const posixIt = process.platform === "win32" ? it.live.skip : it.live;
 
-const logsLayer = Layer.mergeAll(ControlDiscovery.layer, ControlClient.layer);
+const logsLayer = Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer);
 
 const withLogsSandbox = <A, E, R>(
   run: (input: { readonly root: string; readonly configPath: string }) => Effect.Effect<A, E, R>,
@@ -215,7 +217,10 @@ describe.sequential("logs command", () => {
         discover: () => Effect.succeed(server),
         requireRunning: () => Effect.succeed(server),
       };
-      const layer = Layer.mergeAll(Layer.succeed(ControlDiscovery, discovery), ControlClient.layer);
+      const layer = Layer.mergeAll(
+        Layer.succeed(ControlDiscovery, discovery),
+        nodeControlClientLayer,
+      );
 
       const exit = yield* Effect.exit(
         getLogsReport({

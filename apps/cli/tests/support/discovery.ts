@@ -5,6 +5,7 @@ import { Effect, Option, Scope } from "effect";
 import { ControlDiscovery } from "../../src/control/discovery";
 import type { CliResolvedServerPaths } from "../../src/domain/discovery";
 import type { JsonValue } from "../../src/output/format";
+import { nodeControlDiscoveryLayer } from "../../src/platform/node/control-discovery";
 import { parseServerTarget } from "../../src/domain/input";
 import { writeText } from "./sandbox";
 
@@ -13,28 +14,28 @@ export const resolvePaths = (configPath: string): Effect.Effect<CliResolvedServe
     const target = yield* parseServerTarget(Option.some(configPath));
     const discovery = yield* ControlDiscovery;
     return yield* discovery.resolvePaths(target);
-  }).pipe(Effect.provide(ControlDiscovery.layer));
+  }).pipe(Effect.provide(nodeControlDiscoveryLayer));
 
 export const discoverServer = (configPath: string) =>
   Effect.gen(function* () {
     const target = yield* parseServerTarget(Option.some(configPath));
     const discovery = yield* ControlDiscovery;
     return yield* discovery.discover(target);
-  }).pipe(Effect.provide(ControlDiscovery.layer));
+  }).pipe(Effect.provide(nodeControlDiscoveryLayer));
 
 export const requireRunningFailure = (configPath: string) =>
   Effect.gen(function* () {
     const target = yield* parseServerTarget(Option.some(configPath));
     const discovery = yield* ControlDiscovery;
     return yield* Effect.flip(discovery.requireRunning(target));
-  }).pipe(Effect.provide(ControlDiscovery.layer));
+  }).pipe(Effect.provide(nodeControlDiscoveryLayer));
 
 export const readManifest = (configPath: string) =>
   Effect.gen(function* () {
     const target = yield* parseServerTarget(Option.some(configPath));
     const discovery = yield* ControlDiscovery;
     return yield* discovery.readManifest(target);
-  }).pipe(Effect.provide(ControlDiscovery.layer));
+  }).pipe(Effect.provide(nodeControlDiscoveryLayer));
 
 export const writeServerManifest = (
   paths: CliResolvedServerPaths,
