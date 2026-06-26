@@ -31,7 +31,7 @@ const releaseDispatcher = (
   if (Exit.hasInterrupts(exit)) return destroyDispatcher(dispatcher);
 
   return Effect.timeoutOption(
-    Effect.promise(() => dispatcher.close()),
+    Effect.tryPromise(() => dispatcher.close()),
     Duration.millis(CLIENT_GRACEFUL_CLOSE_TIMEOUT_MS),
   ).pipe(
     Effect.flatMap((closed) =>

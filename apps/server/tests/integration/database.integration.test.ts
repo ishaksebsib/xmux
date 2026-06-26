@@ -509,7 +509,7 @@ describeIntegration("server database integration", () => {
               id INTEGER NOT NULL
             )
           `.withoutTransform;
-          yield* Effect.fail("boom");
+          return yield* Effect.fail("boom");
         }),
       });
 
