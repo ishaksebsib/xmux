@@ -49,6 +49,24 @@ export type CliStartReport =
       readonly previous: CliInactiveLifecycleState;
     };
 
+export type CliShutdownState = {
+  readonly accepted: boolean;
+  readonly alreadyStopping: boolean;
+};
+
+export type CliRestartReport =
+  | {
+      readonly _tag: "Restarted";
+      readonly previous: CliRunningServer;
+      readonly server: CliRunningServer;
+      readonly shutdown: CliShutdownState;
+    }
+  | {
+      readonly _tag: "Started";
+      readonly server: CliRunningServer;
+      readonly previous: CliInactiveLifecycleState;
+    };
+
 export const inactiveLifecycleState = (
   discovery: Exclude<CliServerDiscovery, CliRunningServer>,
 ): CliInactiveLifecycleState => {
@@ -106,7 +124,7 @@ export const stopReportFromInactiveDiscovery = (
 
 export const stoppedReport = (
   server: CliRunningServer,
-  shutdown: { readonly accepted: boolean; readonly alreadyStopping: boolean },
+  shutdown: CliShutdownState,
 ): CliStopReport => ({
   _tag: "Stopped",
   server,
@@ -122,6 +140,26 @@ export const startedReport = (
   server: CliRunningServer,
   previous: CliInactiveLifecycleState,
 ): CliStartReport => ({
+  _tag: "Started",
+  server,
+  previous,
+});
+
+export const restartedReport = (
+  previous: CliRunningServer,
+  server: CliRunningServer,
+  shutdown: CliShutdownState,
+): CliRestartReport => ({
+  _tag: "Restarted",
+  previous,
+  server,
+  shutdown,
+});
+
+export const restartStartedReport = (
+  server: CliRunningServer,
+  previous: CliInactiveLifecycleState,
+): CliRestartReport => ({
   _tag: "Started",
   server,
   previous,
