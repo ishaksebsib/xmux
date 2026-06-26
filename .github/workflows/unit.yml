@@ -1,4 +1,4 @@
-name: CI
+name: Unit
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: unit-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -23,10 +23,18 @@ defaults:
     shell: bash
 
 jobs:
-  ci:
-    name: CI (linux)
-    runs-on: ubuntu-24.04
+  unit:
+    name: Unit (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            runner: ubuntu-24.04
+          - name: macos
+            runner: macos-14
 
     steps:
       - name: Checkout
@@ -48,22 +56,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-unit-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-
+            turbo-${{ runner.os }}-unit-${{ hashFiles('pnpm-lock.yaml', 'turbo.json', '**/package.json') }}-
             turbo-${{ runner.os }}-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check formatting
-        run: pnpm fmt:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm turbo run typecheck --output-logs=errors-only --log-order=grouped
-
-      - name: Build
-        run: pnpm turbo run build --output-logs=errors-only --log-order=grouped
+      - name: Unit tests
+        run: pnpm turbo run test --output-logs=errors-only --log-order=grouped
