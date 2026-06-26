@@ -90,24 +90,25 @@ const mapControlRequestError =
           cause,
         });
 
-export class ControlClient extends Context.Service<
-  ControlClient,
-  {
-    readonly health: (
-      server: CliRunningServer,
-    ) => Effect.Effect<CliHealthResponse, CliServerUnreachable | CliControlRequestError>;
-    readonly status: (
-      server: CliRunningServer,
-    ) => Effect.Effect<CliStatusResponse, CliServerUnreachable | CliControlRequestError>;
-    readonly logs: (
-      server: CliRunningServer,
-      tail: CliTailCount | undefined,
-    ) => Effect.Effect<CliLogsResponse, CliServerUnreachable | CliControlRequestError>;
-    readonly shutdown: (
-      server: CliRunningServer,
-    ) => Effect.Effect<CliShutdownResponse, CliServerUnreachable | CliControlRequestError>;
-  }
->()("@xmux/cli/ControlClient") {
+export interface ControlClientService {
+  readonly health: (
+    server: CliRunningServer,
+  ) => Effect.Effect<CliHealthResponse, CliServerUnreachable | CliControlRequestError>;
+  readonly status: (
+    server: CliRunningServer,
+  ) => Effect.Effect<CliStatusResponse, CliServerUnreachable | CliControlRequestError>;
+  readonly logs: (
+    server: CliRunningServer,
+    tail: CliTailCount | undefined,
+  ) => Effect.Effect<CliLogsResponse, CliServerUnreachable | CliControlRequestError>;
+  readonly shutdown: (
+    server: CliRunningServer,
+  ) => Effect.Effect<CliShutdownResponse, CliServerUnreachable | CliControlRequestError>;
+}
+
+export class ControlClient extends Context.Service<ControlClient, ControlClientService>()(
+  "@xmux/cli/ControlClient",
+) {
   static readonly layer = Layer.succeed(ControlClient, {
     health: Effect.fn("cli.client.health")(function* (server: CliRunningServer) {
       return yield* Effect.scoped(

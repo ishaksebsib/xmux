@@ -92,7 +92,7 @@ const inactiveReasonFromDiscovery = (
   }
 };
 
-interface ControlDiscoveryService {
+export interface ControlDiscoveryService {
   readonly resolvePaths: (
     target: CliServerTarget,
   ) => Effect.Effect<CliResolvedServerPaths, CliDiscoveryError>;

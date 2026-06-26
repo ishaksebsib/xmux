@@ -1,4 +1,4 @@
-import { createServer, type Server } from "node:http";
+import { createServer, type RequestListener, type Server } from "node:http";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Effect, Option, Scope } from "effect";
@@ -65,19 +65,13 @@ const closeServer = (server: Server, socketPath: string): Effect.Effect<void> =>
     Effect.ignore,
   );
 
-export const bindHealthServer = (socketPath: string): Effect.Effect<Server, Error, Scope.Scope> =>
+const bindUnixHttpServer = (
+  socketPath: string,
+  handler: RequestListener,
+): Effect.Effect<Server, Error, Scope.Scope> =>
   Effect.acquireRelease(
     Effect.callback<Server, Error>((resume) => {
-      const server = createServer((request, response) => {
-        if (request.url !== "/healthz") {
-          response.statusCode = 404;
-          response.end();
-          return;
-        }
-
-        response.setHeader("content-type", "application/json");
-        response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
-      });
+      const server = createServer(handler);
 
       const onError = (cause: Error): void => {
         server.off("listening", onListening);
@@ -102,3 +96,48 @@ export const bindHealthServer = (socketPath: string): Effect.Effect<Server, Erro
     }),
     (server) => closeServer(server, socketPath),
   );
+
+export const bindHealthServer = (socketPath: string): Effect.Effect<Server, Error, Scope.Scope> =>
+  bindUnixHttpServer(socketPath, (request, response) => {
+    if (request.url !== "/healthz") {
+      response.statusCode = 404;
+      response.end();
+      return;
+    }
+
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
+  });
+
+export const bindStatusServer = (
+  paths: CliResolvedServerPaths,
+): Effect.Effect<Server, Error, Scope.Scope> =>
+  bindUnixHttpServer(paths.socketPath, (request, response) => {
+    if (request.url === "/healthz") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
+      return;
+    }
+
+    if (request.url === "/v1/status") {
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          version: 1,
+          protocolVersion: 1,
+          pid: process.pid,
+          startedAt: "2026-06-16T00:00:00.000Z",
+          uptimeMs: 151_000,
+          state: "ready",
+          configPath: paths.configPath,
+          stateDir: paths.stateDir,
+          scopeId: paths.scopeId,
+          endpoint: { kind: "unix-socket", path: paths.socketPath },
+        }),
+      );
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end();
+  });
