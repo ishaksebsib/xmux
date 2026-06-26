@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { Cause } from "effect";
 import { CliSpawnError } from "../src/domain/errors";
 import { renderCliCause, shouldRenderDebugErrors } from "../src/output/errors";

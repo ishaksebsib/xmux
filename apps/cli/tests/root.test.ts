@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
 import { rootCommand } from "../src/commands/root";
 
 const childNames = (command: typeof rootCommand): ReadonlyArray<string> =>
