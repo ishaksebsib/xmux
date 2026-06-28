@@ -25,6 +25,7 @@ import {
   CliInvalidInput,
   CliServerUnreachable,
   CliSpawnError,
+  CliSpawnedServerExited,
 } from "../src/domain/errors";
 import { parsePollIntervalMs, parseTimeoutMs } from "../src/domain/input";
 import { renderCliCause } from "../src/output/errors";
@@ -33,6 +34,8 @@ import { nodeControlClientLayer } from "../src/platform/node/control-client";
 import { nodeControlDiscoveryLayer } from "../src/platform/node/control-discovery";
 import {
   ProcessSpawner,
+  type CliSpawnExit,
+  type CliSpawnedProcess,
   type CliSpawnSpec,
   type ProcessSpawnerService,
 } from "../src/process/spawn";
@@ -101,12 +104,17 @@ const makeClient = (input: {
   shutdown: input.shutdown ?? (() => Effect.succeed(acceptedShutdown)),
 });
 
+const spawnedProcess = (exit: Effect.Effect<CliSpawnExit> = Effect.never): CliSpawnedProcess => ({
+  pid: 12345,
+  exit,
+});
+
 const makeSpawner = (input: {
   readonly build?: () => Effect.Effect<CliSpawnSpec, CliSpawnError>;
-  readonly spawn?: (spec: CliSpawnSpec) => Effect.Effect<void, CliSpawnError>;
+  readonly spawn?: (spec: CliSpawnSpec) => Effect.Effect<CliSpawnedProcess, CliSpawnError>;
 }): ProcessSpawnerService => ({
   buildServerRunSpawnSpec: () => input.build?.() ?? Effect.succeed(spawnSpec),
-  spawnDetached: (spec) => input.spawn?.(spec) ?? Effect.void,
+  spawnDetached: (spec) => input.spawn?.(spec) ?? Effect.succeed(spawnedProcess()),
 });
 
 const withLifecycleSandbox = <A, E, R>(
@@ -302,6 +310,7 @@ describe("start command", () => {
                 spawn: () =>
                   Effect.sync(() => {
                     spawned = true;
+                    return spawnedProcess();
                   }),
               }),
             ),
@@ -344,6 +353,7 @@ describe("start command", () => {
                 spawn: (spec) =>
                   Effect.sync(() => {
                     spawnedSpec = spec;
+                    return spawnedProcess();
                   }),
               }),
             ),
@@ -386,6 +396,7 @@ describe("start command", () => {
                 spawn: () =>
                   Effect.sync(() => {
                     spawned = true;
+                    return spawnedProcess();
                   }),
               }),
             ),
@@ -427,6 +438,7 @@ describe("start command", () => {
                     spawn: () =>
                       Effect.sync(() => {
                         spawned = true;
+                        return spawnedProcess();
                       }),
                   }),
                 ),
@@ -492,6 +504,49 @@ describe("start command", () => {
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(CliSpawnError);
+      }
+    }),
+  );
+
+  it.effect("reports early spawned server exit before readiness timeout", () =>
+    Effect.gen(function* () {
+      const server = runningServer("/tmp/xmux-start-early-exit.sock");
+      const discovery: ControlDiscoveryService = {
+        resolvePaths: () => Effect.succeed(server.paths),
+        readManifest: () => Effect.die("readManifest should not be called"),
+        discover: () => Effect.succeed(stopped(server.paths)),
+        requireRunning: () => Effect.succeed(server),
+      };
+
+      const exit = yield* Effect.exit(
+        getStartReport({ configPath: Option.some(server.paths.configPath) }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              discoveryLayer(discovery),
+              clientLayer(makeClient({})),
+              spawnerLayer(
+                makeSpawner({
+                  spawn: () =>
+                    Effect.succeed(
+                      spawnedProcess(Effect.succeed({ exitCode: 1, signalCode: null })),
+                    ),
+                }),
+              ),
+              timingLayer({ startTimeoutMs: 1_000 }),
+            ),
+          ),
+        ),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.squash(exit.cause);
+        expect(failure).toBeInstanceOf(CliSpawnedServerExited);
+        expect(failure).toHaveProperty("operation", "start");
+        expect(failure).toHaveProperty("exitCode", 1);
+        expect(renderCliCause(exit.cause, false)).toContain("exited before it became ready");
+        expect(renderCliCause(exit.cause, false)).toContain("xmux server run --foreground");
+        expect(renderCliCause(exit.cause, false)).toContain(server.paths.logDir);
       }
     }),
   );
@@ -674,6 +729,7 @@ describe("restart command", () => {
                 spawn: () =>
                   Effect.sync(() => {
                     events.push("spawn");
+                    return spawnedProcess();
                   }),
               }),
             ),
@@ -730,6 +786,7 @@ describe("restart command", () => {
                   spawn: () =>
                     Effect.sync(() => {
                       spawned = true;
+                      return spawnedProcess();
                     }),
                 }),
               ),
@@ -766,6 +823,7 @@ describe("restart command", () => {
                   spawn: () =>
                     Effect.sync(() => {
                       spawned = true;
+                      return spawnedProcess();
                     }),
                 }),
               ),
@@ -816,6 +874,7 @@ describe("restart command", () => {
                   spawn: () =>
                     Effect.sync(() => {
                       spawned = true;
+                      return spawnedProcess();
                     }),
                 }),
               ),
@@ -872,6 +931,7 @@ describe("restart command", () => {
                     spawn: () =>
                       Effect.sync(() => {
                         spawned = true;
+                        return spawnedProcess();
                       }),
                   }),
                 ),
@@ -938,6 +998,48 @@ describe("restart command", () => {
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toBeInstanceOf(CliSpawnError);
+      }
+    }),
+  );
+
+  it.effect("reports early replacement server exit before restart readiness timeout", () =>
+    Effect.gen(function* () {
+      const server = runningServer("/tmp/xmux-restart-early-exit.sock");
+      const discovery: ControlDiscoveryService = {
+        resolvePaths: () => Effect.succeed(server.paths),
+        readManifest: () => Effect.die("readManifest should not be called"),
+        discover: () => Effect.succeed(stopped(server.paths)),
+        requireRunning: () => Effect.succeed(server),
+      };
+
+      const exit = yield* Effect.exit(
+        getRestartReport({ configPath: Option.some(server.paths.configPath) }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              discoveryLayer(discovery),
+              clientLayer(makeClient({})),
+              spawnerLayer(
+                makeSpawner({
+                  spawn: () =>
+                    Effect.succeed(
+                      spawnedProcess(Effect.succeed({ exitCode: null, signalCode: "SIGTERM" })),
+                    ),
+                }),
+              ),
+              timingLayer({ startTimeoutMs: 1_000 }),
+            ),
+          ),
+        ),
+      );
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failure = Cause.squash(exit.cause);
+        expect(failure).toBeInstanceOf(CliSpawnedServerExited);
+        expect(failure).toHaveProperty("operation", "restart");
+        expect(failure).toHaveProperty("signalCode", "SIGTERM");
+        expect(renderCliCause(exit.cause, false)).toContain("signal SIGTERM");
+        expect(renderCliCause(exit.cause, false)).toContain("xmux server run --foreground");
       }
     }),
   );
@@ -1010,6 +1112,7 @@ describe("lifecycle input parsing", () => {
                   spawn: () =>
                     Effect.sync(() => {
                       spawnCalled = true;
+                      return spawnedProcess();
                     }),
                 }),
               ),
@@ -1104,6 +1207,7 @@ describe("lifecycle input parsing", () => {
                   spawn: () =>
                     Effect.sync(() => {
                       spawnCalled = true;
+                      return spawnedProcess();
                     }),
                 }),
               ),

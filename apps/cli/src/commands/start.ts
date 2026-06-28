@@ -10,7 +10,7 @@ import {
   type CliStartReport,
 } from "../domain/lifecycle";
 import { foregroundRetryCommand, renderStart } from "../output/lifecycle";
-import { waitForDiscoveredReadyServer, waitForKnownReadyServer } from "../process/readiness";
+import { waitForKnownReadyServer, waitForSpawnedReadyServer } from "../process/readiness";
 import { ProcessSpawner } from "../process/spawn";
 import { mapConfigPathError } from "./input";
 import { configPathFlag } from "./options";
@@ -51,12 +51,15 @@ export const getStartReport = Effect.fn("cli.start.report")(function* (input: St
 
     const previous = inactiveLifecycleState(initial);
     const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
-    yield* spawner.spawnDetached(spec);
-    const server = yield* waitForDiscoveredReadyServer({
+    const spawned = yield* spawner.spawnDetached(spec);
+    const server = yield* waitForSpawnedReadyServer({
       target,
       socketPath: previous.paths.socketPath,
+      logDir: previous.paths.logDir,
       operation: "start",
       timeoutMessage: spawnedReadinessTimeoutMessage(retryCommand),
+      retryCommand,
+      spawned,
     });
 
     return startedReport(server, previous);

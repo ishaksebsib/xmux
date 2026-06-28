@@ -39,14 +39,14 @@ export const readManifest = (configPath: string) =>
 
 export const writeServerManifest = (
   paths: CliResolvedServerPaths,
-  options: { readonly scopeId?: string; readonly sessionId?: string } = {},
+  options: { readonly pid?: number; readonly scopeId?: string; readonly sessionId?: string } = {},
 ): Effect.Effect<void> =>
   writeText(
     paths.manifestPath,
     JSON.stringify({
       version: 1,
       protocolVersion: 1,
-      pid: process.pid,
+      pid: options.pid ?? process.pid,
       sessionId: options.sessionId ?? "test-session",
       startedAt: "2026-06-16T00:00:00.000Z",
       configPath: paths.configPath,

@@ -10,6 +10,16 @@ export interface CliSpawnSpec {
   readonly stdio: "ignore";
 }
 
+export interface CliSpawnExit {
+  readonly exitCode: number | null;
+  readonly signalCode: string | null;
+}
+
+export interface CliSpawnedProcess {
+  readonly pid: number | undefined;
+  readonly exit: Effect.Effect<CliSpawnExit>;
+}
+
 export interface CurrentCliProcess {
   readonly executablePath: string;
   readonly entrypointPath: string | undefined;
@@ -78,7 +88,8 @@ export const buildServerRunSpawnSpec = Effect.fn("cli.spawn.buildServerRunSpawnS
         });
       case "UnsupportedSource":
         return yield* new CliSpawnError({
-          message: "Cannot auto-start xmux server from a TypeScript CLI entrypoint.",
+          message:
+            "Cannot auto-start xmux server from a TypeScript CLI entrypoint. Build the CLI before using detached start/restart, or debug with `xmux server run --foreground`.",
           command: input.currentProcess.executablePath,
         });
     }
@@ -89,7 +100,7 @@ export interface ProcessSpawnerService {
   readonly buildServerRunSpawnSpec: (input: {
     readonly configPath: CliConfigPath | undefined;
   }) => Effect.Effect<CliSpawnSpec, CliSpawnError>;
-  readonly spawnDetached: (spec: CliSpawnSpec) => Effect.Effect<void, CliSpawnError>;
+  readonly spawnDetached: (spec: CliSpawnSpec) => Effect.Effect<CliSpawnedProcess, CliSpawnError>;
 }
 
 export class ProcessSpawner extends Context.Service<ProcessSpawner, ProcessSpawnerService>()(

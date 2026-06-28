@@ -12,7 +12,7 @@ import {
   type CliRestartReport,
 } from "../domain/lifecycle";
 import { foregroundRetryCommand, renderRestart } from "../output/lifecycle";
-import { waitForDiscoveredReadyServer } from "../process/readiness";
+import { waitForSpawnedReadyServer } from "../process/readiness";
 import { ProcessSpawner } from "../process/spawn";
 import { LifecycleTiming, waitForUnreachable } from "../process/wait";
 import { mapConfigPathError } from "./input";
@@ -63,24 +63,30 @@ export const getRestartReport = Effect.fn("cli.restart.report")(function* (input
       const shutdown = yield* client.shutdown(initial);
       yield* waitForStoppedServer({ server: initial });
       const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
-      yield* spawner.spawnDetached(spec);
-      const server = yield* waitForDiscoveredReadyServer({
+      const spawned = yield* spawner.spawnDetached(spec);
+      const server = yield* waitForSpawnedReadyServer({
         target,
         socketPath: initial.socketPath,
+        logDir: initial.paths.logDir,
         operation: "restart",
         timeoutMessage: restartedReadinessTimeoutMessage(retryCommand),
+        retryCommand,
+        spawned,
       });
       return restartedReport(initial, server, shutdown);
     }
 
     const previous = inactiveLifecycleState(initial);
     const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
-    yield* spawner.spawnDetached(spec);
-    const server = yield* waitForDiscoveredReadyServer({
+    const spawned = yield* spawner.spawnDetached(spec);
+    const server = yield* waitForSpawnedReadyServer({
       target,
       socketPath: previous.paths.socketPath,
+      logDir: previous.paths.logDir,
       operation: "restart",
       timeoutMessage: restartedReadinessTimeoutMessage(retryCommand),
+      retryCommand,
+      spawned,
     });
 
     return restartStartedReport(server, previous);

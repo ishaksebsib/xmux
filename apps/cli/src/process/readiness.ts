@@ -6,8 +6,9 @@ import {
 } from "../control/client";
 import { ControlDiscovery, type ControlDiscoveryService } from "../control/discovery";
 import type { CliRunningServer } from "../domain/discovery";
-import type { CliWaitOperation } from "../domain/errors";
+import { CliSpawnedServerExited, type CliWaitOperation } from "../domain/errors";
 import type { CliServerTarget } from "../domain/input";
+import type { CliSpawnedProcess } from "./spawn";
 import { LifecycleTiming, waitForReachable } from "./wait";
 
 const startingHealth: CliHealthResponse = { alive: false, ready: false, state: "starting" };
@@ -70,5 +71,60 @@ export const waitForDiscoveredReadyServer = Effect.fn("cli.readiness.waitForDisc
     });
 
     return yield* discovery.requireRunning(input.target);
+  },
+);
+
+const spawnedExitMessage = (input: {
+  readonly exitCode: number | null;
+  readonly signalCode: string | null;
+  readonly retryCommand: string;
+  readonly logDir: string;
+}): string => {
+  const exitReason =
+    input.exitCode === null
+      ? `signal ${input.signalCode ?? "unknown"}`
+      : `exit code ${input.exitCode}`;
+  return `Spawned xmux server exited before it became ready (${exitReason}). Retry in the foreground: ${input.retryCommand}. Logs: ${input.logDir}`;
+};
+
+export const waitForSpawnedReadyServer = Effect.fn("cli.readiness.waitForSpawnedReadyServer")(
+  function* (input: {
+    readonly target: CliServerTarget;
+    readonly socketPath: string;
+    readonly logDir: string;
+    readonly operation: Extract<CliWaitOperation, "start" | "restart">;
+    readonly timeoutMessage: string;
+    readonly retryCommand: string;
+    readonly spawned: CliSpawnedProcess;
+  }) {
+    return yield* Effect.raceFirst(
+      waitForDiscoveredReadyServer({
+        target: input.target,
+        socketPath: input.socketPath,
+        operation: input.operation,
+        timeoutMessage: input.timeoutMessage,
+      }),
+      input.spawned.exit.pipe(
+        Effect.flatMap((exit) => {
+          const exitCode = exit.exitCode === null ? {} : { exitCode: exit.exitCode };
+          const signalCode = exit.signalCode === null ? {} : { signalCode: exit.signalCode };
+          return Effect.fail(
+            new CliSpawnedServerExited({
+              message: spawnedExitMessage({
+                exitCode: exit.exitCode,
+                signalCode: exit.signalCode,
+                retryCommand: input.retryCommand,
+                logDir: input.logDir,
+              }),
+              operation: input.operation,
+              retryCommand: input.retryCommand,
+              logDir: input.logDir,
+              ...exitCode,
+              ...signalCode,
+            }),
+          );
+        }),
+      ),
+    );
   },
 );

@@ -60,6 +60,18 @@ export class CliSpawnError extends Schema.TaggedErrorClass<CliSpawnError>()("Cli
   cause: OptionalCause,
 }) {}
 
+export class CliSpawnedServerExited extends Schema.TaggedErrorClass<CliSpawnedServerExited>()(
+  "CliSpawnedServerExited",
+  {
+    message: Schema.String,
+    operation: Schema.Literals(["start", "restart"]),
+    exitCode: Schema.optionalKey(Schema.Number),
+    signalCode: OptionalSafeText,
+    retryCommand: Schema.String,
+    logDir: OptionalSafeText,
+  },
+) {}
+
 export class CliLifecycleBlocked extends Schema.TaggedErrorClass<CliLifecycleBlocked>()(
   "CliLifecycleBlocked",
   {
@@ -103,6 +115,7 @@ export const CliError = Schema.Union([
   CliServerUnreachable,
   CliWaitTimeout,
   CliSpawnError,
+  CliSpawnedServerExited,
   CliLifecycleBlocked,
   CliInvalidInput,
   CliControlRequestError,

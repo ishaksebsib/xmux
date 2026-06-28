@@ -1,10 +1,15 @@
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option } from "effect";
 import { CliServerUnreachable } from "../src/domain/errors";
 import { parseConfigPathOption, parsePollIntervalMs, parseTimeoutMs } from "../src/domain/input";
-import { spawnDetached } from "../src/platform/node/process-spawner";
+import { resolveCliEntrypointPath, spawnDetached } from "../src/platform/node/process-spawner";
 import { buildServerRunArgs, buildServerRunSpawnSpec } from "../src/process/spawn";
 import { waitForReachable, waitForUnreachable } from "../src/process/wait";
+
+const posixIt = process.platform === "win32" ? it.live.skip : it.live;
 
 describe("process planning", () => {
   it("builds foreground server arguments", () => {
@@ -53,6 +58,43 @@ describe("process planning", () => {
     }),
   );
 
+  posixIt("resolves extensionless installed bin symlinks before spawn planning", () =>
+    Effect.gen(function* () {
+      const root = yield* Effect.acquireRelease(
+        Effect.promise(() => mkdtemp(join(tmpdir(), "xmux-cli-bin-"))),
+        (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
+      );
+      const target = join(root, "xmux.mjs");
+      const link = join(root, "xmux");
+      yield* Effect.promise(() => writeFile(target, "#!/usr/bin/env node\n"));
+      yield* Effect.promise(() => symlink(target, link));
+
+      const resolved = resolveCliEntrypointPath(link);
+      const spec = yield* buildServerRunSpawnSpec({
+        currentProcess: {
+          executablePath: "/usr/bin/node",
+          entrypointPath: resolved,
+          env: { PATH: "/bin" },
+        },
+        configPath: undefined,
+      });
+
+      expect(resolved).toBe(target);
+      expect(spec).toEqual({
+        command: "/usr/bin/node",
+        args: [target, "server", "run", "--foreground"],
+        env: { PATH: "/bin" },
+        detached: true,
+        stdio: "ignore",
+      });
+    }),
+  );
+
+  it("falls back to the original entrypoint path when realpath fails", () => {
+    const missing = join(tmpdir(), `xmux-missing-${process.pid}-${Date.now()}`);
+    expect(resolveCliEntrypointPath(missing)).toBe(missing);
+  });
+
   it.effect("rejects TypeScript entrypoints", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
@@ -67,7 +109,9 @@ describe("process planning", () => {
       );
 
       expect(error._tag).toBe("CliSpawnError");
-      expect(error.message).toBe("Cannot auto-start xmux server from a TypeScript CLI entrypoint.");
+      expect(error.message).toContain("TypeScript CLI entrypoint");
+      expect(error.message).toContain("Build the CLI");
+      expect(error.message).toContain("xmux server run --foreground");
     }),
   );
 

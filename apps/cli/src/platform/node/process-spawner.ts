@@ -1,25 +1,68 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { Effect, Layer } from "effect";
 import { CliSpawnError } from "../../domain/errors";
 import type { CliConfigPath } from "../../domain/input";
 import {
   buildServerRunSpawnSpec,
   ProcessSpawner,
+  type CliSpawnExit,
+  type CliSpawnedProcess,
   type CliSpawnSpec,
   type CurrentCliProcess,
   type ProcessSpawnerService,
 } from "../../process/spawn";
 
+export const resolveCliEntrypointPath = (
+  entrypointPath: string | undefined,
+): string | undefined => {
+  if (entrypointPath === undefined) return undefined;
+
+  try {
+    return realpathSync.native(entrypointPath);
+  } catch {
+    return entrypointPath;
+  }
+};
+
 export const currentCliProcess = (): CurrentCliProcess => ({
   executablePath: process.execPath,
-  entrypointPath: process.argv[1],
+  entrypointPath: resolveCliEntrypointPath(process.argv[1]),
   env: process.env,
 });
 
-export const spawnDetached = (spec: CliSpawnSpec): Effect.Effect<void, CliSpawnError> =>
+const childExitState = (child: ChildProcess): CliSpawnExit | undefined => {
+  if (child.exitCode === null && child.signalCode === null) return undefined;
+  return {
+    exitCode: child.exitCode,
+    signalCode: child.signalCode,
+  };
+};
+
+const waitForChildExit = (child: ChildProcess): Effect.Effect<CliSpawnExit> =>
+  Effect.callback<CliSpawnExit>((resume) => {
+    const exited = childExitState(child);
+    if (exited !== undefined) {
+      resume(Effect.succeed(exited));
+      return Effect.void;
+    }
+
+    const onExit = (exitCode: number | null, signalCode: NodeJS.Signals | null): void => {
+      resume(Effect.succeed({ exitCode, signalCode }));
+    };
+
+    child.once("exit", onExit);
+    return Effect.sync(() => {
+      child.off("exit", onExit);
+    });
+  });
+
+export const spawnDetached = (
+  spec: CliSpawnSpec,
+): Effect.Effect<CliSpawnedProcess, CliSpawnError> =>
   Effect.tryPromise({
     try: () =>
-      new Promise<void>((resolve, reject) => {
+      new Promise<CliSpawnedProcess>((resolve, reject) => {
         const child = spawn(spec.command, [...spec.args], {
           detached: spec.detached,
           stdio: spec.stdio,
@@ -29,7 +72,10 @@ export const spawnDetached = (spec: CliSpawnSpec): Effect.Effect<void, CliSpawnE
         const onSpawn = (): void => {
           child.off("error", onError);
           child.unref();
-          resolve();
+          resolve({
+            pid: child.pid,
+            exit: waitForChildExit(child),
+          });
         };
         const onError = (cause: Error): void => {
           child.off("spawn", onSpawn);

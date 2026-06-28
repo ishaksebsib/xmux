@@ -35,8 +35,8 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "pnpm -s build && RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
+    "test": "pnpm -s --filter @xmux/cli... build && vitest run --exclude '**/*.integration.test.ts'",
+    "test:integration": "pnpm -s --filter @xmux/cli... build && RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
     "typecheck": "tsgo --noEmit",
     "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
   },
