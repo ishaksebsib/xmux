@@ -19,6 +19,10 @@ import {
   inactiveServerStateFromDiscovery,
 } from "../../domain/discovery";
 import { CliDiscoveryError, CliServerNotRunning, safeErrorReason } from "../../domain/errors";
+import {
+  isLocalControlSupportedPlatform,
+  unsupportedLocalControlPlatformError,
+} from "../../process/platform-support";
 import type { CliServerTarget } from "../../domain/input";
 
 interface CliRunOptions {
@@ -68,8 +72,17 @@ const toCliManifest = (manifest: ServerManifest): CliServerManifest =>
     ownerExecutablePath: manifest.owner.executablePath,
   });
 
+const failIfLocalControlUnsupported = Effect.sync(() => process.platform).pipe(
+  Effect.flatMap((platform) =>
+    isLocalControlSupportedPlatform(platform)
+      ? Effect.void
+      : Effect.fail(unsupportedLocalControlPlatformError(platform)),
+  ),
+);
+
 const makeControlDiscovery = (): ControlDiscoveryService => {
   const resolvePaths = Effect.fn("cli.discovery.resolvePaths")(function* (target: CliServerTarget) {
+    yield* failIfLocalControlUnsupported;
     const paths = yield* resolveXmuxServerPaths(toRunOptions(target)).pipe(
       Effect.mapError(mapDiscoveryError("Failed to resolve xmux server paths.")),
     );
@@ -77,6 +90,7 @@ const makeControlDiscovery = (): ControlDiscoveryService => {
   });
 
   const readManifest = Effect.fn("cli.discovery.readManifest")(function* (target: CliServerTarget) {
+    yield* failIfLocalControlUnsupported;
     const discovery = yield* readXmuxServerManifest(toRunOptions(target)).pipe(
       Effect.mapError(mapDiscoveryError("Failed to read xmux server manifest.")),
     );
@@ -101,6 +115,7 @@ const makeControlDiscovery = (): ControlDiscoveryService => {
   });
 
   const discover = Effect.fn("cli.discovery.discover")(function* (target: CliServerTarget) {
+    yield* failIfLocalControlUnsupported;
     const discovery = yield* findXmuxServer(toRunOptions(target)).pipe(
       Effect.mapError(mapDiscoveryError("Failed to discover xmux server.")),
     );

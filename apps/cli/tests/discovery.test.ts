@@ -37,7 +37,9 @@ describe.sequential("control discovery", () => {
         expect(manifest._tag).toBe("NoManifest");
         expect(discovery._tag).toBe("Stopped");
         expect(notRunning._tag).toBe("CliServerNotRunning");
-        expect(notRunning.reason).toBe("no-manifest");
+        if (notRunning._tag === "CliServerNotRunning") {
+          expect(notRunning.reason).toBe("no-manifest");
+        }
       }),
     ),
   );
@@ -54,7 +56,9 @@ describe.sequential("control discovery", () => {
 
         expect(manifest._tag).toBe("InvalidManifest");
         expect(discovery._tag).toBe("InvalidManifest");
-        expect(notRunning.reason).toBe("invalid-manifest");
+        if (notRunning._tag === "CliServerNotRunning") {
+          expect(notRunning.reason).toBe("invalid-manifest");
+        }
       }),
     ),
   );
@@ -71,7 +75,9 @@ describe.sequential("control discovery", () => {
         const manifestAfter = yield* readManifest(configPath);
 
         expect(discovery._tag).toBe("StaleManifestCleaned");
-        expect(notRunning.reason).toBe("stale-manifest-removed");
+        if (notRunning._tag === "CliServerNotRunning") {
+          expect(notRunning.reason).toBe("stale-manifest-removed");
+        }
         expect(manifestAfter._tag).toBe("NoManifest");
       }),
     ),
@@ -87,7 +93,9 @@ describe.sequential("control discovery", () => {
         const notRunning = yield* requireRunningFailure(configPath);
 
         expect(discovery._tag).toBe("WrongScope");
-        expect(notRunning.reason).toBe("wrong-scope");
+        if (notRunning._tag === "CliServerNotRunning") {
+          expect(notRunning.reason).toBe("wrong-scope");
+        }
       }),
     ),
   );

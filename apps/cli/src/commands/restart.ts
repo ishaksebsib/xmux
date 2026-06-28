@@ -14,6 +14,7 @@ import {
 import { foregroundRetryCommand, renderRestart } from "../output/lifecycle";
 import { waitForSpawnedReadyServer } from "../process/readiness";
 import { ProcessSpawner } from "../process/spawn";
+import { StartLock } from "../process/start-lock";
 import { LifecycleTiming, waitForUnreachable } from "../process/wait";
 import { mapConfigPathError } from "./input";
 import { configPathFlag } from "./options";
@@ -59,37 +60,50 @@ export const getRestartReport = Effect.fn("cli.restart.report")(function* (input
       return yield* lifecycleBlockedError({ operation: "restart", discovery: initial });
     }
 
-    if (initial._tag === "Running") {
-      const shutdown = yield* client.shutdown(initial);
-      yield* waitForStoppedServer({ server: initial });
-      const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
-      const spawned = yield* spawner.spawnDetached(spec);
-      const server = yield* waitForSpawnedReadyServer({
-        target,
-        socketPath: initial.socketPath,
-        logDir: initial.paths.logDir,
-        operation: "restart",
-        timeoutMessage: restartedReadinessTimeoutMessage(retryCommand),
-        retryCommand,
-        spawned,
-      });
-      return restartedReport(initial, server, shutdown);
-    }
+    const startLock = yield* StartLock;
 
-    const previous = inactiveLifecycleState(initial);
-    const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
-    const spawned = yield* spawner.spawnDetached(spec);
-    const server = yield* waitForSpawnedReadyServer({
-      target,
-      socketPath: previous.paths.socketPath,
-      logDir: previous.paths.logDir,
-      operation: "restart",
-      timeoutMessage: restartedReadinessTimeoutMessage(retryCommand),
-      retryCommand,
-      spawned,
-    });
+    return yield* startLock.withLock(
+      initial.paths,
+      Effect.gen(function* () {
+        const lockedDiscovery = yield* discovery.discover(target);
 
-    return restartStartedReport(server, previous);
+        if (lockedDiscovery._tag === "InvalidManifest" || lockedDiscovery._tag === "WrongScope") {
+          return yield* lifecycleBlockedError({ operation: "restart", discovery: lockedDiscovery });
+        }
+
+        if (lockedDiscovery._tag === "Running") {
+          const shutdown = yield* client.shutdown(lockedDiscovery);
+          yield* waitForStoppedServer({ server: lockedDiscovery });
+          const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
+          const spawned = yield* spawner.spawnDetached(spec);
+          const server = yield* waitForSpawnedReadyServer({
+            target,
+            socketPath: lockedDiscovery.socketPath,
+            logDir: lockedDiscovery.paths.logDir,
+            operation: "restart",
+            timeoutMessage: restartedReadinessTimeoutMessage(retryCommand),
+            retryCommand,
+            spawned,
+          });
+          return restartedReport(lockedDiscovery, server, shutdown);
+        }
+
+        const previous = inactiveLifecycleState(lockedDiscovery);
+        const spec = yield* spawner.buildServerRunSpawnSpec({ configPath: target.configPath });
+        const spawned = yield* spawner.spawnDetached(spec);
+        const server = yield* waitForSpawnedReadyServer({
+          target,
+          socketPath: previous.paths.socketPath,
+          logDir: previous.paths.logDir,
+          operation: "restart",
+          timeoutMessage: restartedReadinessTimeoutMessage(retryCommand),
+          retryCommand,
+          spawned,
+        });
+
+        return restartStartedReport(server, previous);
+      }),
+    );
   });
 
   return yield* report.pipe(Effect.provideService(References.MinimumLogLevel, "None"));

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schema, Scope } from "effect";
 import { getStatusReport } from "../src/commands/status";
 import { ControlClient, type ControlClientService } from "../src/control/client";
 import { ControlDiscovery, type ControlDiscoveryService } from "../src/control/discovery";
@@ -37,8 +37,28 @@ const withStatusSandbox = <A, E, R>(
 const reportForConfig = (configPath: string, json = false) =>
   getStatusReport({ configPath: Option.some(configPath), json }).pipe(Effect.provide(statusLayer));
 
+const StatusJsonContract = Schema.Struct({
+  status: Schema.String,
+  _tag: Schema.String,
+  paths: Schema.Struct({
+    configPath: Schema.String,
+    stateDir: Schema.String,
+    runtimeDir: Schema.String,
+    logDir: Schema.String,
+    manifestPath: Schema.String,
+    startupLockPath: Schema.String,
+    socketPath: Schema.String,
+    scopeId: Schema.String,
+  }),
+  reason: Schema.optionalKey(Schema.String),
+  discovery: Schema.optionalKey(Schema.Unknown),
+  server: Schema.optionalKey(Schema.Unknown),
+});
+
+const decodeStatusJsonOutput = Schema.decodeUnknownSync(StatusJsonContract);
+
 const expectValidJson = (output: string): void => {
-  expect(() => JSON.parse(output)).not.toThrow();
+  expect(() => decodeStatusJsonOutput(JSON.parse(output))).not.toThrow();
 };
 
 describe.sequential("status command", () => {

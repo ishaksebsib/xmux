@@ -1,6 +1,10 @@
 import { runXmuxServer } from "@xmux/server/platform/node";
 import { Effect, Layer } from "effect";
 import { CliServerRunFailed, safeErrorReason } from "../../domain/errors";
+import {
+  isLocalControlSupportedPlatform,
+  unsupportedLocalControlPlatformError,
+} from "../../process/platform-support";
 import type { CliConfigPath } from "../../domain/input";
 import { ServerRunner } from "../../process/server-runner";
 
@@ -22,10 +26,19 @@ const mapServerRunError = (cause: unknown): CliServerRunFailed =>
     cause,
   });
 
+const failIfLocalControlUnsupported = Effect.sync(() => process.platform).pipe(
+  Effect.flatMap((platform) =>
+    isLocalControlSupportedPlatform(platform)
+      ? Effect.void
+      : Effect.fail(unsupportedLocalControlPlatformError(platform)),
+  ),
+);
+
 export const nodeServerRunnerLayer = Layer.succeed(ServerRunner, {
   runForeground: Effect.fn("cli.serverRunner.runForeground")(function* (input: {
     readonly configPath: CliConfigPath | undefined;
   }) {
+    yield* failIfLocalControlUnsupported;
     yield* runXmuxServer(toServerOptions(input.configPath)).pipe(
       Effect.mapError(mapServerRunError),
       Effect.asVoid,

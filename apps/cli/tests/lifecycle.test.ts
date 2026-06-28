@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Scope, Semaphore } from "effect";
 import { getRestartReport } from "../src/commands/restart";
 import { getStartReport } from "../src/commands/start";
 import { getStopReport } from "../src/commands/stop";
@@ -39,6 +39,7 @@ import {
   type CliSpawnSpec,
   type ProcessSpawnerService,
 } from "../src/process/spawn";
+import { StartLock, type StartLockService } from "../src/process/start-lock";
 import { LifecycleTiming } from "../src/process/wait";
 import { runningServer } from "./support/client";
 import { bindShutdownServer, resolvePaths, writeServerManifest } from "./support/discovery";
@@ -93,6 +94,21 @@ const discoveryLayer = (service: ControlDiscoveryService) =>
 const clientLayer = (service: ControlClientService) => Layer.succeed(ControlClient, service);
 
 const spawnerLayer = (service: ProcessSpawnerService) => Layer.succeed(ProcessSpawner, service);
+
+const noOpStartLock: StartLockService = {
+  acquire: (paths) =>
+    Effect.succeed({
+      path: `${paths.startupLockPath}.cli-start`,
+      pid: process.pid,
+      nonce: "test-lock",
+      scopeId: paths.scopeId,
+    }),
+  release: () => Effect.void,
+  withLock: (_paths, use) => use,
+};
+
+const startLockLayer = (service: StartLockService = noOpStartLock) =>
+  Layer.succeed(StartLock, service);
 
 const makeClient = (input: {
   readonly health?: (server: CliRunningServer) => Effect.Effect<CliHealthResponse, never>;
@@ -271,6 +287,7 @@ describe.sequential("stop command", () => {
               discoveryLayer(discovery),
               clientLayer(makeClient({})),
               timingLayer({ stopTimeoutMs: 1 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -315,6 +332,7 @@ describe("start command", () => {
               }),
             ),
             timingLayer({}),
+            startLockLayer(),
           ),
         ),
       );
@@ -325,52 +343,62 @@ describe("start command", () => {
     }),
   );
 
-  it.effect("spawns the foreground server command from stopped state and waits for readiness", () =>
+  it.effect("serializes concurrent starts so only one foreground server is spawned", () =>
     Effect.gen(function* () {
-      const server = runningServer("/tmp/xmux-start-stopped.sock");
-      let discoverCount = 0;
-      let spawnedSpec: CliSpawnSpec | undefined;
+      const server = runningServer("/tmp/xmux-start-concurrent.sock");
+      let running = false;
+      let spawnCount = 0;
       const discovery: ControlDiscoveryService = {
         resolvePaths: () => Effect.succeed(server.paths),
         readManifest: () => Effect.die("readManifest should not be called"),
-        discover: () =>
-          Effect.sync(() => {
-            discoverCount += 1;
-            return discoverCount === 1 ? stopped(server.paths) : server;
-          }),
+        discover: () => Effect.sync(() => (running ? server : stopped(server.paths))),
         requireRunning: () => Effect.succeed(server),
       };
+      const serialStartLockLayer = Layer.effect(
+        StartLock,
+        Effect.gen(function* () {
+          const semaphore = yield* Semaphore.make(1);
+          const withLock: StartLockService["withLock"] = (_paths, use) =>
+            Semaphore.withPermit(semaphore, use);
+          return { ...noOpStartLock, withLock };
+        }),
+      );
 
-      const report = yield* getStartReport({
-        configPath: Option.some(server.paths.configPath),
-      }).pipe(
+      const reports = yield* Effect.all(
+        [
+          getStartReport({ configPath: Option.some(server.paths.configPath) }),
+          getStartReport({ configPath: Option.some(server.paths.configPath) }),
+        ],
+        { concurrency: "unbounded" },
+      ).pipe(
         Effect.provide(
           Layer.mergeAll(
             discoveryLayer(discovery),
             clientLayer(makeClient({})),
             spawnerLayer(
               makeSpawner({
-                spawn: (spec) =>
+                spawn: () =>
                   Effect.sync(() => {
-                    spawnedSpec = spec;
+                    spawnCount += 1;
+                    running = true;
                     return spawnedProcess();
                   }),
               }),
             ),
             timingLayer({}),
+            serialStartLockLayer,
           ),
         ),
       );
 
-      expect(report._tag).toBe("Started");
-      expect(spawnedSpec?.args).toEqual(["server", "run", "--foreground"]);
-      expect(renderStart(report)).toContain("previous state: no-manifest");
+      expect(spawnCount).toBe(1);
+      expect(reports.map((report) => report._tag).sort()).toEqual(["AlreadyRunning", "Started"]);
     }),
   );
 
-  it.effect("proceeds explicitly after stale-cleaned discovery", () =>
+  it.effect("does not spawn when a server becomes active after acquiring the start lock", () =>
     Effect.gen(function* () {
-      const server = runningServer("/tmp/xmux-start-stale.sock");
+      const server = runningServer("/tmp/xmux-start-active-after-lock.sock");
       let discoverCount = 0;
       let spawned = false;
       const discovery: ControlDiscoveryService = {
@@ -379,7 +407,7 @@ describe("start command", () => {
         discover: () =>
           Effect.sync(() => {
             discoverCount += 1;
-            return discoverCount === 1 ? staleCleaned(server.paths) : server;
+            return discoverCount === 1 ? stopped(server.paths) : server;
           }),
         requireRunning: () => Effect.succeed(server),
       };
@@ -401,6 +429,94 @@ describe("start command", () => {
               }),
             ),
             timingLayer({}),
+            startLockLayer(),
+          ),
+        ),
+      );
+
+      expect(report._tag).toBe("AlreadyRunning");
+      expect(spawned).toBe(false);
+    }),
+  );
+
+  it.effect("spawns the foreground server command from stopped state and waits for readiness", () =>
+    Effect.gen(function* () {
+      const server = runningServer("/tmp/xmux-start-stopped.sock");
+      let discoverCount = 0;
+      let spawnedSpec: CliSpawnSpec | undefined;
+      const discovery: ControlDiscoveryService = {
+        resolvePaths: () => Effect.succeed(server.paths),
+        readManifest: () => Effect.die("readManifest should not be called"),
+        discover: () =>
+          Effect.sync(() => {
+            discoverCount += 1;
+            return discoverCount <= 2 ? stopped(server.paths) : server;
+          }),
+        requireRunning: () => Effect.succeed(server),
+      };
+
+      const report = yield* getStartReport({
+        configPath: Option.some(server.paths.configPath),
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            discoveryLayer(discovery),
+            clientLayer(makeClient({})),
+            spawnerLayer(
+              makeSpawner({
+                spawn: (spec) =>
+                  Effect.sync(() => {
+                    spawnedSpec = spec;
+                    return spawnedProcess();
+                  }),
+              }),
+            ),
+            timingLayer({}),
+            startLockLayer(),
+          ),
+        ),
+      );
+
+      expect(report._tag).toBe("Started");
+      expect(spawnedSpec?.args).toEqual(["server", "run", "--foreground"]);
+      expect(renderStart(report)).toContain("previous state: no-manifest");
+    }),
+  );
+
+  it.effect("proceeds explicitly after stale-cleaned discovery", () =>
+    Effect.gen(function* () {
+      const server = runningServer("/tmp/xmux-start-stale.sock");
+      let discoverCount = 0;
+      let spawned = false;
+      const discovery: ControlDiscoveryService = {
+        resolvePaths: () => Effect.succeed(server.paths),
+        readManifest: () => Effect.die("readManifest should not be called"),
+        discover: () =>
+          Effect.sync(() => {
+            discoverCount += 1;
+            return discoverCount <= 2 ? staleCleaned(server.paths) : server;
+          }),
+        requireRunning: () => Effect.succeed(server),
+      };
+
+      const report = yield* getStartReport({
+        configPath: Option.some(server.paths.configPath),
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            discoveryLayer(discovery),
+            clientLayer(makeClient({})),
+            spawnerLayer(
+              makeSpawner({
+                spawn: () =>
+                  Effect.sync(() => {
+                    spawned = true;
+                    return spawnedProcess();
+                  }),
+              }),
+            ),
+            timingLayer({}),
+            startLockLayer(),
           ),
         ),
       );
@@ -443,6 +559,7 @@ describe("start command", () => {
                   }),
                 ),
                 timingLayer({}),
+                startLockLayer(),
               ),
             ),
           ),
@@ -496,6 +613,7 @@ describe("start command", () => {
                 }),
               ),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),
@@ -533,6 +651,7 @@ describe("start command", () => {
                 }),
               ),
               timingLayer({ startTimeoutMs: 1_000 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -569,6 +688,7 @@ describe("start command", () => {
               clientLayer(makeClient({})),
               spawnerLayer(makeSpawner({})),
               timingLayer({ startTimeoutMs: 1 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -606,6 +726,7 @@ describe("start command", () => {
               ),
               spawnerLayer(makeSpawner({})),
               timingLayer({ startTimeoutMs: 1 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -637,7 +758,7 @@ describe("start command", () => {
             return discoverCount;
           }).pipe(
             Effect.flatMap((count) =>
-              count === 1 ? Effect.succeed(stopped(server.paths)) : Effect.fail(discoveryError),
+              count <= 2 ? Effect.succeed(stopped(server.paths)) : Effect.fail(discoveryError),
             ),
           ),
         requireRunning: () => Effect.succeed(server),
@@ -651,6 +772,7 @@ describe("start command", () => {
               clientLayer(makeClient({})),
               spawnerLayer(makeSpawner({})),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),
@@ -678,7 +800,7 @@ describe("restart command", () => {
           Effect.sync(() => {
             discoverCount += 1;
             events.push(`discover-${discoverCount}`);
-            return discoverCount === 1 ? oldServer : newServer;
+            return discoverCount <= 2 ? oldServer : newServer;
           }),
         requireRunning: () =>
           Effect.sync(() => {
@@ -734,6 +856,7 @@ describe("restart command", () => {
               }),
             ),
             timingLayer({}),
+            startLockLayer(),
           ),
         ),
       );
@@ -741,11 +864,12 @@ describe("restart command", () => {
       expect(report._tag).toBe("Restarted");
       expect(events).toEqual([
         "discover-1",
+        "discover-2",
         "shutdown",
         "health-old",
         "build",
         "spawn",
-        "discover-2",
+        "discover-3",
         "health-new",
         "require-running",
       ]);
@@ -791,6 +915,7 @@ describe("restart command", () => {
                 }),
               ),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),
@@ -828,6 +953,7 @@ describe("restart command", () => {
                 }),
               ),
               timingLayer({ stopTimeoutMs: 1 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -859,7 +985,7 @@ describe("restart command", () => {
           discover: () =>
             Effect.sync(() => {
               discoverCount += 1;
-              return discoverCount === 1 ? initial : server;
+              return discoverCount <= 2 ? initial : server;
             }),
           requireRunning: () => Effect.succeed(server),
         };
@@ -879,6 +1005,7 @@ describe("restart command", () => {
                 }),
               ),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
           Effect.map((report) => ({ report, spawned })),
@@ -936,6 +1063,7 @@ describe("restart command", () => {
                   }),
                 ),
                 timingLayer({}),
+                startLockLayer(),
               ),
             ),
           ),
@@ -990,6 +1118,7 @@ describe("restart command", () => {
                 }),
               ),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),
@@ -1027,6 +1156,7 @@ describe("restart command", () => {
                 }),
               ),
               timingLayer({ startTimeoutMs: 1_000 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -1062,6 +1192,7 @@ describe("restart command", () => {
               clientLayer(makeClient({})),
               spawnerLayer(makeSpawner({})),
               timingLayer({ startTimeoutMs: 1 }),
+              startLockLayer(),
             ),
           ),
         ),
@@ -1117,6 +1248,7 @@ describe("lifecycle input parsing", () => {
                 }),
               ),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),
@@ -1160,6 +1292,7 @@ describe("lifecycle input parsing", () => {
                 shutdown: () => clientFailure,
               }),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),
@@ -1212,6 +1345,7 @@ describe("lifecycle input parsing", () => {
                 }),
               ),
               timingLayer({}),
+              startLockLayer(),
             ),
           ),
         ),

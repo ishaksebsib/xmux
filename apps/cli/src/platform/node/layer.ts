@@ -3,15 +3,22 @@ import { Layer } from "effect";
 import { LifecycleTiming } from "../../process/wait";
 import { nodeControlClientLayer } from "./control-client";
 import { nodeControlDiscoveryLayer } from "./control-discovery";
+import { nodePlatformSupportLayer } from "./platform-support";
 import { nodeProcessSpawnerLayer } from "./process-spawner";
 import { nodeServerRunnerLayer } from "./server-runner";
+import { nodeStartLockLayer } from "./start-lock";
+
+const lifecycleTimingLayer = LifecycleTiming.layer;
+const startLockLayer = nodeStartLockLayer.pipe(Layer.provide(lifecycleTimingLayer));
 
 export const cliNodeServicesLayer = Layer.mergeAll(
   nodeControlDiscoveryLayer,
   nodeControlClientLayer,
   nodeProcessSpawnerLayer,
   nodeServerRunnerLayer,
-  LifecycleTiming.layer,
+  nodePlatformSupportLayer,
+  lifecycleTimingLayer,
+  startLockLayer,
 );
 
 export const cliNodeRuntimeLayer = Layer.mergeAll(NodeServices.layer, cliNodeServicesLayer);

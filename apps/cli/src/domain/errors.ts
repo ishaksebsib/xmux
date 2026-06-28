@@ -72,6 +72,33 @@ export class CliSpawnedServerExited extends Schema.TaggedErrorClass<CliSpawnedSe
   },
 ) {}
 
+export const CliStartLockErrorReason = Schema.Literals([
+  "busy",
+  "invalid-lock",
+  "read-failed",
+  "write-failed",
+  "remove-failed",
+]);
+export type CliStartLockErrorReason = typeof CliStartLockErrorReason.Type;
+
+export class CliStartLockError extends Schema.TaggedErrorClass<CliStartLockError>()(
+  "CliStartLockError",
+  {
+    message: Schema.String,
+    lockPath: Schema.String,
+    reason: CliStartLockErrorReason,
+    cause: OptionalCause,
+  },
+) {}
+
+export class CliUnsupportedPlatform extends Schema.TaggedErrorClass<CliUnsupportedPlatform>()(
+  "CliUnsupportedPlatform",
+  {
+    message: Schema.String,
+    platform: Schema.String,
+  },
+) {}
+
 export class CliLifecycleBlocked extends Schema.TaggedErrorClass<CliLifecycleBlocked>()(
   "CliLifecycleBlocked",
   {
@@ -116,6 +143,8 @@ export const CliError = Schema.Union([
   CliWaitTimeout,
   CliSpawnError,
   CliSpawnedServerExited,
+  CliStartLockError,
+  CliUnsupportedPlatform,
   CliLifecycleBlocked,
   CliInvalidInput,
   CliControlRequestError,

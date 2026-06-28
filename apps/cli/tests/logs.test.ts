@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Schema, Scope } from "effect";
 import { TestConsole } from "effect/testing";
 import { getLogsReport, runLogsCommand } from "../src/commands/logs";
 import {
@@ -51,8 +51,34 @@ const reportForConfig = (
     Effect.provide(logsLayer),
   );
 
+const LogsJsonContract = Schema.TaggedStruct("Logs", {
+  kind: Schema.Literal("logs"),
+  version: Schema.Number,
+  server: Schema.Struct({
+    scopeId: Schema.String,
+    configPath: Schema.String,
+    socketPath: Schema.String,
+    manifestPath: Schema.String,
+    pid: Schema.Number,
+    pidAlive: Schema.Boolean,
+    sessionId: Schema.String,
+  }),
+  entries: Schema.Array(
+    Schema.Struct({
+      timestamp: Schema.String,
+      level: Schema.String,
+      message: Schema.String,
+      annotations: Schema.optionalKey(Schema.Unknown),
+      spans: Schema.optionalKey(Schema.Unknown),
+      cause: Schema.optionalKey(Schema.Unknown),
+    }),
+  ),
+});
+
+const decodeLogsJsonOutput = Schema.decodeUnknownSync(LogsJsonContract);
+
 const expectValidJson = (output: string): void => {
-  expect(() => JSON.parse(output)).not.toThrow();
+  expect(() => decodeLogsJsonOutput(JSON.parse(output))).not.toThrow();
 };
 
 describe.sequential("logs command", () => {

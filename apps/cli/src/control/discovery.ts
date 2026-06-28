@@ -5,22 +5,25 @@ import {
   type CliServerDiscovery,
   type CliServerManifestDiscovery,
 } from "../domain/discovery";
-import { CliDiscoveryError, CliServerNotRunning } from "../domain/errors";
+import { CliDiscoveryError, CliServerNotRunning, CliUnsupportedPlatform } from "../domain/errors";
 import type { CliServerTarget } from "../domain/input";
 
 export interface ControlDiscoveryService {
   readonly resolvePaths: (
     target: CliServerTarget,
-  ) => Effect.Effect<CliResolvedServerPaths, CliDiscoveryError>;
+  ) => Effect.Effect<CliResolvedServerPaths, CliDiscoveryError | CliUnsupportedPlatform>;
   readonly readManifest: (
     target: CliServerTarget,
-  ) => Effect.Effect<CliServerManifestDiscovery, CliDiscoveryError>;
+  ) => Effect.Effect<CliServerManifestDiscovery, CliDiscoveryError | CliUnsupportedPlatform>;
   readonly discover: (
     target: CliServerTarget,
-  ) => Effect.Effect<CliServerDiscovery, CliDiscoveryError>;
+  ) => Effect.Effect<CliServerDiscovery, CliDiscoveryError | CliUnsupportedPlatform>;
   readonly requireRunning: (
     target: CliServerTarget,
-  ) => Effect.Effect<CliRunningServer, CliDiscoveryError | CliServerNotRunning>;
+  ) => Effect.Effect<
+    CliRunningServer,
+    CliDiscoveryError | CliServerNotRunning | CliUnsupportedPlatform
+  >;
 }
 
 export class ControlDiscovery extends Context.Service<ControlDiscovery, ControlDiscoveryService>()(
