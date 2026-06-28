@@ -1,49 +1,53 @@
 {
   "name": "@xmux/server",
   "version": "0.0.0",
-  "private": true,
-  "homepage": "https://github.com/ishaksebsib/xmux",
+  "description": "Local xmux server for coordinating coding-agent harnesses and chat adapters.",
+  "keywords": [
+    "coding-agent",
+    "control-plane",
+    "xmux"
+  ],
+  "homepage": "https://github.com/ishaksebsib/xmux#readme",
+  "bugs": {
+    "url": "https://github.com/ishaksebsib/xmux/issues"
+  },
   "license": "MIT",
   "author": "Ishak Sebsib",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ishaksebsib/xmux.git"
+    "url": "git+https://github.com/ishaksebsib/xmux.git",
+    "directory": "apps/server"
   },
   "files": [
     "dist"
   ],
   "type": "module",
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.cts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
       }
     },
     "./platform/node": {
       "import": {
         "types": "./dist/platform/node.d.mts",
         "default": "./dist/platform/node.mjs"
-      },
-      "require": {
-        "types": "./dist/platform/node.d.cts",
-        "default": "./dist/platform/node.cjs"
       }
     },
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
     "test": "vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "pnpm -s build && RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
+    "test:integration": "RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
     "typecheck": "tsgo --noEmit",
     "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
   },
@@ -70,5 +74,8 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

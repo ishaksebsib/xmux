@@ -14,7 +14,7 @@
     "fmt:check": "oxfmt --check",
     "changeset": "changeset",
     "changeset:version": "changeset version && pnpm install --lockfile-only",
-    "changeset:publish": "changeset publish",
+    "changeset:publish": "node scripts/guarded-changeset-publish.mjs",
     "release:pack-smoke": "node scripts/smoke-packed.mjs",
     "release:smoke": "pnpm build && pnpm release:pack-smoke",
     "release:check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test && pnpm release:smoke"

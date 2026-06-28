@@ -4,8 +4,11 @@
   "commit": false,
   "fixed": [
     [
+      "@xmux/cli",
+      "@xmux/server",
       "@xmux/chat-core",
       "@xmux/chat-adapter-discord",
+      "@xmux/chat-adapter-slack",
       "@xmux/chat-adapter-telegram",
       "@xmux/harness-core",
       "@xmux/harness-opencode",
@@ -21,5 +24,5 @@
   "___experimentalUnsafeOptions_WILL_CHANGE_IN_PATCH": {
     "onlyUpdatePeerDependentsWhenOutOfRange": true
   },
-  "ignore": ["@xmux/demo", "@xmux/server", "@xmux/ts-config"]
+  "ignore": ["@xmux/demo", "@xmux/ts-config"]
 }

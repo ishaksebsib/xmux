@@ -1,7 +1,8 @@
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
 import * as LibsqlMigrator from "@effect/sql-libsql/LibsqlMigrator";
 import { assert, it } from "@effect/vitest";
 import { Effect, Fiber, Layer, Ref } from "effect";

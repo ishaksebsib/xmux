@@ -1,4 +1,5 @@
-import { NodeHttpClient, Undici } from "@effect/platform-node";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
+import * as Undici from "@effect/platform-node/Undici";
 import { Duration, Effect, Exit, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/unstable/httpapi";
 import { serverApi } from "../../../api/api";

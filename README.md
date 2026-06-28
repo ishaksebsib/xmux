@@ -4,13 +4,27 @@ Local control plane for coding-agent harnesses like Codex, Claude Code, OpenCode
 
 ## Status
 
-This is the initial public release of `xmux`.
+`xmux` is under active development. The CLI is published as `@xmux/cli` and exposes the `xmux` command.
 
-The full implementation is still in progress. This package currently exists to establish the project on npm and reserve the package name.
+## Installation
+
+Requires Node.js `>=22.19.0` and pnpm.
+
+Install the CLI globally:
+
+```sh
+pnpm i -g @xmux/cli
+```
+
+Verify the install:
+
+```sh
+xmux --version
+```
 
 ## What xmux is
 
-`xmux` is intended to run on the user's machine and act as a bridge between:
+`xmux` runs on your machine and acts as a bridge between:
 
 - local agent harnesses
 - remote chat platforms
@@ -26,10 +40,6 @@ The goal is to let users create sessions, continue sessions, receive output, and
 - Telegram
 - Discord
 - Slack
-
-## Current release
-
-This version is a minimal placeholder release.
 
 ## License
 

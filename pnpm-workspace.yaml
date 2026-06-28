@@ -3,11 +3,19 @@ packages:
   - "packages/*"
   - "!packages/_template"
 
+autoInstallPeers: false
+
 allowBuilds:
   "@google/genai": true
   esbuild: false
   msgpackr-extract: false
   protobufjs: false
+
+packageExtensions:
+  "@effect/platform-node@*":
+    peerDependenciesMeta:
+      ioredis:
+        optional: true
 
 catalog:
   effect: 4.0.0-beta.88

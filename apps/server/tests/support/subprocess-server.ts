@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { NodePath } from "@effect/platform-node";
+import * as NodePath from "@effect/platform-node/NodePath";
 import { Duration, Effect, Layer, Option, Schema, Scope } from "effect";
 import { ServerBootConfig } from "../../src/config/boot";
 import { resolvedPathFromString } from "../../src/contracts/primitives";

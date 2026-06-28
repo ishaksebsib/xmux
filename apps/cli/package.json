@@ -1,13 +1,23 @@
 {
   "name": "@xmux/cli",
   "version": "0.0.0",
-  "private": true,
-  "homepage": "https://github.com/ishaksebsib/xmux",
+  "description": "Control your coding agents from anywhere, Discord, Slack, Telegram.",
+  "keywords": [
+    "agent",
+    "ai",
+    "orchestrator",
+    "xmux"
+  ],
+  "homepage": "https://github.com/ishaksebsib/xmux#readme",
+  "bugs": {
+    "url": "https://github.com/ishaksebsib/xmux/issues"
+  },
   "license": "MIT",
   "author": "Ishak Sebsib",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ishaksebsib/xmux.git"
+    "url": "git+https://github.com/ishaksebsib/xmux.git",
+    "directory": "apps/cli"
   },
   "bin": {
     "xmux": "./dist/bin/xmux.mjs"
@@ -16,27 +26,26 @@
     "dist"
   ],
   "type": "module",
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.cts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "pnpm -s --filter @xmux/cli... build && vitest run --exclude '**/*.integration.test.ts'",
-    "test:integration": "pnpm -s --filter @xmux/cli... build && RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
+    "test": "pnpm -w -s turbo run build --filter=@xmux/cli... --output-logs=errors-only --log-order=grouped && vitest run --exclude '**/*.integration.test.ts' --testTimeout 30000",
+    "test:integration": "RUN_INTEGRATION=true vitest run tests/integration --no-file-parallelism --testTimeout 30000",
     "typecheck": "tsgo --noEmit",
     "lint:effect": "effect-language-service diagnostics --project tsconfig.json"
   },
@@ -54,5 +63,8 @@
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

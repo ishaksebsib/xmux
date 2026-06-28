@@ -1,4 +1,5 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, Layer, Redacted, Schema } from "effect";
 import { dirname, resolve } from "node:path";

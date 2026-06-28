@@ -1,4 +1,5 @@
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
+import * as NodePath from "@effect/platform-node/NodePath";
 import { assert, describe, layer } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Path } from "effect";
 import { ServerBootConfig } from "../src/config/boot";

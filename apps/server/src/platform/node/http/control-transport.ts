@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { NodeHttpServer } from "@effect/platform-node";
+import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { Effect, FileSystem, Layer } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { ServerConfig } from "../../../config/service";

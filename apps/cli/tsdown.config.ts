@@ -2,7 +2,7 @@ import { defineConfig } from "tsdown";
 
 export default defineConfig({
   entry: ["./src/index.ts", { "bin/xmux": "./bin/xmux.ts" }],
-  format: ["esm", "cjs"],
+  format: ["esm"],
   dts: {
     tsgo: true,
   },

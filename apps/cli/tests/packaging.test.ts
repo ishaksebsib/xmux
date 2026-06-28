@@ -77,9 +77,9 @@ describe("package metadata and dist artifacts", () => {
     Effect.gen(function* () {
       expect(packageJson.bin).toEqual({ xmux: "./dist/bin/xmux.mjs" });
       expect(packageJson.files).toEqual(["dist"]);
-      expect(packageJson.main).toBe("./dist/index.cjs");
+      expect(packageJson.main).toBe("./dist/index.mjs");
       expect(packageJson.module).toBe("./dist/index.mjs");
-      expect(packageJson.types).toBe("./dist/index.d.cts");
+      expect(packageJson.types).toBe("./dist/index.d.mts");
 
       const targets = [
         packageJson.main,
@@ -90,9 +90,7 @@ describe("package metadata and dist artifacts", () => {
       ].filter((target) => target.startsWith("./dist/"));
 
       expect(targets).toContain("./dist/index.mjs");
-      expect(targets).toContain("./dist/index.cjs");
       expect(targets).toContain("./dist/index.d.mts");
-      expect(targets).toContain("./dist/index.d.cts");
       expect(targets).toContain("./dist/bin/xmux.mjs");
 
       for (const target of targets) {
@@ -103,14 +101,12 @@ describe("package metadata and dist artifacts", () => {
 
   it.effect("builds executable bin artifacts with node shebangs", () =>
     Effect.gen(function* () {
-      for (const target of ["./dist/bin/xmux.mjs", "./dist/bin/xmux.cjs"]) {
-        const file = distPath(target);
-        const content = yield* Effect.promise(() => readFile(file, "utf8"));
-        const info = yield* Effect.promise(() => stat(file));
+      const file = distPath("./dist/bin/xmux.mjs");
+      const content = yield* Effect.promise(() => readFile(file, "utf8"));
+      const info = yield* Effect.promise(() => stat(file));
 
-        expect(content.startsWith("#!/usr/bin/env node\n"), file).toBe(true);
-        expect(info.mode & 0o111, file).not.toBe(0);
-      }
+      expect(content.startsWith("#!/usr/bin/env node\n"), file).toBe(true);
+      expect(info.mode & 0o111, file).not.toBe(0);
     }),
   );
 
