@@ -1,32 +1,42 @@
 {
   "name": "@xmux/harness-pi",
   "version": "0.0.0",
-  "homepage": "https://github.com/ishaksebsib/xmux",
+  "description": "PI coding-agent harness adapter for @xmux/harness-core.",
+  "keywords": [
+    "coding-agent",
+    "harness",
+    "pi",
+    "xmux"
+  ],
+  "homepage": "https://github.com/ishaksebsib/xmux#readme",
+  "bugs": {
+    "url": "https://github.com/ishaksebsib/xmux/issues"
+  },
   "license": "MIT",
   "author": "Ishak Sebsib",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ishaksebsib/xmux.git"
+    "url": "git+https://github.com/ishaksebsib/xmux.git",
+    "directory": "packages/harness-pi"
   },
   "files": [
     "dist"
   ],
   "type": "module",
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
-  "types": "./dist/index.d.cts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "import": {
         "types": "./dist/index.d.mts",
         "default": "./dist/index.mjs"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
       }
     },
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsdown",

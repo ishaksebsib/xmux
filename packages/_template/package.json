@@ -1,6 +1,7 @@
 {
   "name": "@xmux/name",
   "version": "0.0.0",
+  "private": true,
   "homepage": "https://github.com/ishaksebsib/xmux",
   "license": "MIT",
   "author": "Ishak Sebsib",

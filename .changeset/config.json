@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config/schema.json",
+  "changelog": ["@changesets/changelog-github", { "repo": "ishaksebsib/xmux" }],
+  "commit": false,
+  "fixed": [
+    [
+      "@xmux/chat-core",
+      "@xmux/chat-adapter-discord",
+      "@xmux/chat-adapter-telegram",
+      "@xmux/harness-core",
+      "@xmux/harness-opencode",
+      "@xmux/harness-pi",
+      "@xmux/orchestrator",
+      "@xmux/stt"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "___experimentalUnsafeOptions_WILL_CHANGE_IN_PATCH": {
+    "onlyUpdatePeerDependentsWhenOutOfRange": true
+  },
+  "ignore": ["@xmux/demo", "@xmux/server", "@xmux/ts-config"]
+}
