@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -70,6 +71,7 @@ describe("process planning", () => {
       yield* Effect.promise(() => symlink(target, link));
 
       const resolved = resolveCliEntrypointPath(link);
+      const canonicalTarget = realpathSync.native(target);
       const spec = yield* buildServerRunSpawnSpec({
         currentProcess: {
           executablePath: "/usr/bin/node",
@@ -79,10 +81,10 @@ describe("process planning", () => {
         configPath: undefined,
       });
 
-      expect(resolved).toBe(target);
+      expect(resolved).toBe(canonicalTarget);
       expect(spec).toEqual({
         command: "/usr/bin/node",
-        args: [target, "server", "run", "--foreground"],
+        args: [canonicalTarget, "server", "run", "--foreground"],
         env: { PATH: "/bin" },
         detached: true,
         stdio: "ignore",
