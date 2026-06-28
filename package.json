@@ -11,9 +11,17 @@
     "lint:effect": "turbo run lint:effect",
     "lint:fix": "oxlint --fix",
     "fmt": "oxfmt",
-    "fmt:check": "oxfmt --check"
+    "fmt:check": "oxfmt --check",
+    "changeset": "changeset",
+    "changeset:version": "changeset version && pnpm install --lockfile-only",
+    "changeset:publish": "changeset publish",
+    "release:pack-smoke": "node scripts/smoke-packed.mjs",
+    "release:smoke": "pnpm build && pnpm release:pack-smoke",
+    "release:check": "pnpm fmt:check && pnpm lint && pnpm typecheck && pnpm test && pnpm release:smoke"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "^0.7.0",
+    "@changesets/cli": "^2.31.0",
     "oxfmt": "^0.47.0",
     "oxlint": "^1.62.0",
     "turbo": "^2.9.7",
