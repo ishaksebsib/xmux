@@ -1,5 +1,6 @@
 import type { Result } from "better-result";
 import type { HarnessLogger } from "./logger";
+import type { HarnessRuntimeStatusSnapshot } from "./status";
 import type {
   AbortError,
   CreateSessionError,
@@ -472,6 +473,7 @@ export interface HarnessAdapterDefinition<
  */
 export interface Harness<TAdapters extends HarnessAdapterDefinitions<TAdapters>> {
   readonly harnessIds: readonly Extract<keyof TAdapters, string>[];
+  status(): HarnessRuntimeStatusSnapshot<Extract<keyof TAdapters, string>>;
   createSession<TInput extends CreateSessionInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<CreatedSessionFromInput<TAdapters, TInput>, CreateSessionError>>;

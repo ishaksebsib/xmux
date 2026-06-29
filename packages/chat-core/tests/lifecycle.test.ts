@@ -16,6 +16,107 @@ import {
 } from "./fixtures/test-adapter";
 
 describe("chat lifecycle", () => {
+  test("reports configured adapter status before start", () => {
+    const handles = createHandles();
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", handles }),
+        beta: createRuntimeAdapter({ id: "beta", handles }),
+      },
+      commands,
+    });
+
+    expect(chat.status()).toEqual({
+      lifecycle: "created",
+      adapters: [
+        { id: "alpha", state: "configured" },
+        { id: "beta", state: "configured" },
+      ],
+    });
+    expect(handles.opens).toEqual([]);
+  });
+
+  test("reports active adapter status after start", async () => {
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha" }),
+        beta: createRuntimeAdapter({ id: "beta" }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+
+    expect(chat.status()).toEqual({
+      lifecycle: "started",
+      adapters: [
+        { id: "alpha", state: "active" },
+        { id: "beta", state: "active" },
+      ],
+    });
+  });
+
+  test("reports stopped adapter status after close", async () => {
+    const chat = createChat({
+      adapters: { alpha: createRuntimeAdapter({ id: "alpha" }) },
+      commands,
+    });
+
+    expect((await chat.start()).isOk()).toBe(true);
+    expect((await chat.close()).isOk()).toBe(true);
+
+    expect(chat.status()).toEqual({
+      lifecycle: "closed",
+      adapters: [{ id: "alpha", state: "stopped" }],
+    });
+  });
+
+  test("reports failing adapter open status with a safe reason", async () => {
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({
+          id: "alpha",
+          throwOnOpen: new Error("secret-token-should-not-leak"),
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isErr()).toBe(true);
+
+    expect(chat.status()).toEqual({
+      lifecycle: "created",
+      adapters: [{ id: "alpha", state: "failed", reason: "ChatAdapterOpenError" }],
+    });
+    expect(JSON.stringify(chat.status())).not.toContain("secret-token-should-not-leak");
+  });
+
+  test("reports failing adapter start status with a safe reason after startup cleanup", async () => {
+    const handles = createHandles();
+    const chat = createChat({
+      adapters: {
+        alpha: createRuntimeAdapter({ id: "alpha", handles }),
+        beta: createRuntimeAdapter({
+          id: "beta",
+          handles,
+          throwOnStart: new Error("start-secret-should-not-leak"),
+        }),
+      },
+      commands,
+    });
+
+    expect((await chat.start()).isErr()).toBe(true);
+
+    expect(chat.status()).toEqual({
+      lifecycle: "created",
+      adapters: [
+        { id: "alpha", state: "stopped" },
+        { id: "beta", state: "failed", reason: "ChatAdapterStartError" },
+      ],
+    });
+    expect(JSON.stringify(chat.status())).not.toContain("start-secret-should-not-leak");
+  });
+
   test("opens and starts each adapter with commands and emits ready", async () => {
     const handles = createHandles();
     const ready: string[] = [];

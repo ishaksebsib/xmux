@@ -20,6 +20,109 @@ import {
 } from "./test-utils";
 
 describe("createHarness", () => {
+  test("reports configured lazy adapter status without opening adapters", () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async () =>
+            Result.ok({ sessionId: "unused", adapterData: { sessionFile: "unused" } }),
+        }),
+      },
+    });
+
+    expect(harness.status()).toEqual({
+      adapters: [{ id: "pi", state: "configured_lazy" }],
+    });
+    expect(handles.opens).toEqual([]);
+  });
+
+  test("reports opened adapter status after first operation", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          createSession: async (input) =>
+            Result.ok({
+              sessionId: "pi-session-1",
+              adapterData: { sessionFile: `${input.cwd}/session.jsonl` },
+            }),
+        }),
+      },
+    });
+
+    expect(
+      (
+        await harness.createSession({
+          harnessId: "pi",
+          cwd: process.cwd(),
+          adapterOptions: { sessionMode: "memory" },
+        })
+      ).isOk(),
+    ).toBe(true);
+
+    expect(harness.status()).toEqual({
+      adapters: [{ id: "pi", state: "opened" }],
+    });
+    expect(handles.opens).toEqual(["pi"]);
+  });
+
+  test("reports closed adapter status after close", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", Record<never, never>, Record<never, never>>({
+          id: "pi",
+          handles,
+          createSession: async () => Result.ok({ sessionId: "pi-session-1", adapterData: {} }),
+        }),
+      },
+    });
+
+    expect((await harness.createSession({ harnessId: "pi", cwd: process.cwd() })).isOk()).toBe(
+      true,
+    );
+    expect((await harness.close()).isOk()).toBe(true);
+
+    expect(harness.status()).toEqual({
+      adapters: [{ id: "pi", state: "closed" }],
+    });
+  });
+
+  test("reports failed adapter open status with a safe reason", async () => {
+    const handles = { opens: [], closes: [] };
+    const harness = createHarness({
+      adapters: {
+        pi: createTestAdapter<"pi", PiAdapterInput, PiAdapterSession>({
+          id: "pi",
+          handles,
+          openThrow: new Error("secret-token-should-not-leak"),
+          createSession: async () =>
+            Result.ok({ sessionId: "unused", adapterData: { sessionFile: "unused" } }),
+        }),
+      },
+    });
+
+    expect(
+      (
+        await harness.createSession({
+          harnessId: "pi",
+          cwd: process.cwd(),
+          adapterOptions: { sessionMode: "memory" },
+        })
+      ).isErr(),
+    ).toBe(true);
+
+    expect(harness.status()).toEqual({
+      adapters: [{ id: "pi", state: "failed", reason: "HarnessAdapterOpenError" }],
+    });
+    expect(JSON.stringify(harness.status())).not.toContain("secret-token-should-not-leak");
+  });
+
   test("creates a session with the selected adapter", async () => {
     const handles = { opens: [], closes: [] };
     const harness = createHarness({

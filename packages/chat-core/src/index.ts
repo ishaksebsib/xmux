@@ -156,6 +156,11 @@ export type {
 } from "./registry/actions";
 export type { Chat, CreateChatOptions } from "./runtime/create-chat";
 export type {
+  ChatAdapterRuntimeState,
+  ChatAdapterStatusSnapshot,
+  ChatRuntimeStatusSnapshot,
+} from "./status";
+export type {
   ChatLogErrorMetadata,
   ChatLogEventName,
   ChatLogLevel,

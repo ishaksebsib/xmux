@@ -77,6 +77,11 @@ export type {
   WorkingDirectoryPath,
 } from "./contracts";
 export type {
+  HarnessAdapterRuntimeState,
+  HarnessAdapterStatusSnapshot,
+  HarnessRuntimeStatusSnapshot,
+} from "./status";
+export type {
   HarnessLogger,
   HarnessLogErrorMetadata,
   HarnessLogEventName,

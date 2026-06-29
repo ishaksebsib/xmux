@@ -42,6 +42,11 @@ import { handleRespondInteraction } from "./handlers/interaction/respond";
 import { handlePrompt } from "./handlers/session/prompt";
 import { handleResumeSession } from "./handlers/session/resume";
 import { openHarnessAdapter } from "./handlers/utils";
+import {
+  safeStatusReason,
+  type HarnessAdapterRuntimeState,
+  type HarnessRuntimeStatusSnapshot,
+} from "./status";
 
 export function defineHarnessAdapter<
   THarnessId extends string,
@@ -75,6 +80,13 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
     string,
     OpenedHarnessAdapter<string, HarnessAdapterObject, HarnessAdapterObject, HarnessAdapterObject>
   >();
+  const adapterStatuses = new Map<
+    string,
+    { readonly state: HarnessAdapterRuntimeState; readonly reason?: string }
+  >();
+  for (const harnessId of harnessIds) {
+    setAdapterStatus(harnessId, "configured_lazy");
+  }
   const openingRuntimes = new Map<
     string,
     Promise<
@@ -89,6 +101,25 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       >
     >
   >();
+
+  function setAdapterStatus(
+    harnessId: string,
+    state: HarnessAdapterRuntimeState,
+    reason?: string,
+  ): void {
+    adapterStatuses.set(harnessId, reason === undefined ? { state } : { state, reason });
+  }
+
+  function status(): HarnessRuntimeStatusSnapshot<Extract<keyof TAdapters, string>> {
+    return {
+      adapters: harnessIds.map((harnessId) => {
+        const adapterStatus = adapterStatuses.get(harnessId) ?? { state: "configured_lazy" };
+        return adapterStatus.reason === undefined
+          ? { id: harnessId, state: adapterStatus.state }
+          : { id: harnessId, state: adapterStatus.state, reason: adapterStatus.reason };
+      }),
+    };
+  }
 
   async function getRuntime<THarnessId extends keyof TAdapters>(
     harnessId: THarnessId,
@@ -148,36 +179,32 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
       AdapterModelFor<TAdapters, THarnessId>
     >;
 
-    const openingRuntime = Result.gen(async function* () {
-      const runtime = yield* Result.await(
-        openHarnessAdapter({
-          adapter: selectedAdapter,
-          harnessId: key,
-          signal,
-          logger,
-          adapterLogger: options.logger,
-        }),
-      );
+    setAdapterStatus(key, "opening");
+    const openingRuntime = (async () => {
+      const opened = await openHarnessAdapter({
+        adapter: selectedAdapter,
+        harnessId: key,
+        signal,
+        logger,
+        adapterLogger: options.logger,
+      });
 
-      openedRuntimes.set(
-        key,
-        runtime as OpenedHarnessAdapter<
-          string,
-          HarnessAdapterObject,
-          HarnessAdapterObject,
-          HarnessAdapterObject
-        >,
-      );
+      if (opened.isErr()) {
+        setAdapterStatus(key, "failed", safeStatusReason(opened.error));
+        return Result.err(opened.error);
+      }
 
-      return Result.ok(
-        runtime as OpenedHarnessAdapter<
-          string,
-          HarnessAdapterObject,
-          HarnessAdapterObject,
-          HarnessAdapterObject
-        >,
-      );
-    });
+      const runtime = opened.value as OpenedHarnessAdapter<
+        string,
+        HarnessAdapterObject,
+        HarnessAdapterObject,
+        HarnessAdapterObject
+      >;
+      openedRuntimes.set(key, runtime);
+      setAdapterStatus(key, "opened");
+
+      return Result.ok(runtime);
+    })();
 
     openingRuntimes.set(key, openingRuntime);
     const runtime = await openingRuntime;
@@ -197,6 +224,7 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
 
   return {
     harnessIds,
+    status,
 
     async createSession<TInput extends CreateSessionInput<TAdapters>>(input: TInput) {
       return handleCreateSession({ input, getRuntime, now, logger });
@@ -261,6 +289,7 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
         [...openedRuntimes.entries()].map(async ([harnessId, runtime]) => {
           const adapterStartedAt = startHarnessLogTimer();
           const adapterMetadata = { harnessId, operation: "closeAdapter" } as const;
+          setAdapterStatus(harnessId, "closing");
           logger.debug(harnessLogEvents.adapterCloseBegin, adapterMetadata);
 
           const result = await Result.tryPromise({
@@ -270,6 +299,12 @@ export function createHarness<const TAdapters extends HarnessAdapterDefinitions<
             },
             catch: (cause) => ({ harnessId, cause }),
           });
+
+          if (result.isErr()) {
+            setAdapterStatus(harnessId, "failed", safeStatusReason(result.error.cause));
+          } else {
+            setAdapterStatus(harnessId, "closed");
+          }
 
           logHarnessResult({
             logger,
