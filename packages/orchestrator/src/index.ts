@@ -85,6 +85,7 @@ export {
   StoreOperationError,
 } from "./errors";
 export { createHandlerContext } from "./ctx";
+export type { MenuRegistry } from "./features/menu";
 export {
   createNodeFileSystemHost,
   FileSystemAccessError,

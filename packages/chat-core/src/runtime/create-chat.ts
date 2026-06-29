@@ -29,6 +29,7 @@ import {
   UnknownChatAdapterError,
   type ChatCloseFailure,
   type ChatLifecycleError,
+  type ChatInjectCommandFailure,
   type ChatInjectMessageFailure,
   type ChatReplyFailure,
   type ChatSendActionFailure,
@@ -53,6 +54,7 @@ import { createEventBus } from "../events/bus";
 import { chatLogEvents, type ChatLogger } from "../logger";
 import { createChatLogScope, logChatResult, startChatLogTimer } from "../logger-utils";
 import type {
+  ChatInjectCommandInput,
   ChatInjectMessageInput,
   ChatReplyInput,
   ChatSendActionInput,
@@ -126,6 +128,9 @@ export interface Chat<
   injectMessage<TInput extends ChatInjectMessageInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<void, ChatInjectMessageFailure>>;
+  injectCommand<TInput extends ChatInjectCommandInput<TAdapters, TCommands>>(
+    input: TInput,
+  ): Promise<Result<void, ChatInjectCommandFailure>>;
   reply<TInput extends ChatReplyInput<TAdapters>>(
     input: TInput,
   ): Promise<Result<ChatSentMessageFromInput<TAdapters, TInput>, ChatReplyFailure>>;
@@ -428,6 +433,56 @@ export function createChat<
     return result;
   }
 
+  async function injectCommand<TInput extends ChatInjectCommandInput<TAdapters, TCommands>>(
+    input: TInput,
+  ): Promise<Result<void, ChatInjectCommandFailure>> {
+    const startedAt = startChatLogTimer();
+    const metadata = {
+      chatId: String(input.chatId),
+      operation: "injectCommand",
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      commandName: input.command.name,
+    } as const;
+
+    logger?.debug(chatLogEvents.operationBegin, metadata);
+
+    const result = Result.andThen(
+      await getStartedRuntime({ chatId: input.chatId, operation: "injectCommand" }),
+      () => {
+        emit({
+          type: "command",
+          chatId: input.chatId,
+          conversation: { chatId: input.chatId, conversationId: input.conversationId },
+          actor: input.actor,
+          ...(input.messageId === undefined
+            ? {}
+            : {
+                message: {
+                  chatId: input.chatId,
+                  conversationId: input.conversationId,
+                  messageId: input.messageId,
+                },
+              }),
+          command: input.command,
+        } as AdapterEvent);
+
+        return Result.ok();
+      },
+    );
+
+    logChatResult({
+      logger,
+      result,
+      startedAt,
+      metadata,
+      successEvent: chatLogEvents.operationSuccess,
+      failureEvent: chatLogEvents.operationFailure,
+    });
+
+    return result;
+  }
+
   async function startOneAdapter(
     chatId: TChatId,
   ): Promise<Result<TChatId, ChatAdapterOpenError | ChatAdapterStartError>> {
@@ -656,6 +711,7 @@ export function createChat<
     sendAction,
     updateAction,
     injectMessage,
+    injectCommand,
     reply,
     streamMessage,
     streamReply,

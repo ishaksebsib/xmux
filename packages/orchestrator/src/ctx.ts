@@ -10,6 +10,7 @@ import type { PromptEventBus } from "./features/prompt/events";
 import type { PromptRunRegistry } from "./features/prompt/run-registry";
 import type { PromptQueueRegistry } from "./features/queue/registry";
 import type { SttRunRegistry } from "./features/stt/run-registry";
+import type { MenuRegistry } from "./features/menu/registry";
 
 /**
  * Long-lived application context.
@@ -95,6 +96,7 @@ export interface Services {
   readonly promptRuns: PromptRunRegistry;
   readonly promptQueue: PromptQueueRegistry;
   readonly sttRuns: SttRunRegistry;
+  readonly menu: MenuRegistry;
 }
 
 /** User identity associated with a handler invocation. */

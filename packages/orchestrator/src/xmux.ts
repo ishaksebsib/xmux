@@ -13,6 +13,7 @@ import { parseXmuxConfig, type Config } from "./config";
 import { createNodeFileSystemHost, type FileSystemHost } from "./filesystem";
 import type { Context } from "./ctx";
 import { createPromptEventBus } from "./features/prompt/events";
+import { createMenuRegistry } from "./features/menu/registry";
 import { createPromptRunRegistry } from "./features/prompt/run-registry";
 import { createPromptQueueRegistry } from "./features/queue/registry";
 import { createSttRunRegistry } from "./features/stt/run-registry";
@@ -117,6 +118,7 @@ export function createXmuxResult<
         offerTtlMs: config.queue.offerTtlMs,
       }),
       sttRuns: createSttRunRegistry(),
+      menu: createMenuRegistry(),
     }),
   });
   const routeUnsubscribers = registerRoutes(ctx, options.middleware ?? []);

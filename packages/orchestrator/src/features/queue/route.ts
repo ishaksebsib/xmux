@@ -6,6 +6,7 @@ import type { XmuxMiddleware } from "../../middleware";
 import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
 import { handleQueueAction, handleQueueCommand, type HandleQueueActionInput } from "./handler";
+import { registerQueueMenu } from "./menu";
 import { formatQueueCommandUsage } from "./response";
 import {
   drainQueuedPromptAfterPromptSettled,
@@ -22,6 +23,7 @@ export function registerQueueRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
+  const unsubscribeMenu = registerQueueMenu(ctx);
   const unsubscribeCommand = ctx.chat.on("command", "queue", (raw) => {
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
@@ -65,6 +67,7 @@ export function registerQueueRoute<
   });
 
   return () => {
+    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeAction();
     unsubscribeBusy();

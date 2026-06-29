@@ -12,6 +12,7 @@ import {
   type HandleResumeHarnessActionInput,
   type HandleResumeSessionActionInput,
 } from "./handler";
+import { registerResumeMenu } from "./menu";
 import { formatResumeCommandUsage } from "./response";
 
 export function registerResumeRoute<
@@ -21,6 +22,7 @@ export function registerResumeRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
+  const unsubscribeMenu = registerResumeMenu(ctx);
   const unsubscribeCommand = ctx.chat.on("command", "resume", (raw) => {
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
@@ -58,6 +60,7 @@ export function registerResumeRoute<
   });
 
   return () => {
+    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeHarnessAction();
     unsubscribeSessionAction();

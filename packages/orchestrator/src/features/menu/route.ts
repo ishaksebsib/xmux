@@ -1,54 +1,45 @@
 import type { ChatAdapterDefinitions, Unsubscribe } from "@xmux/chat-core";
 import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
+import { menuActionId } from "../../actions";
 import type { Context } from "../../ctx";
 import type { XmuxMiddleware } from "../../middleware";
 import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
-import {
-  handleThinkingAction,
-  handleThinkingCommand,
-  type HandleThinkingActionInput,
-} from "./handler";
-import { registerThinkingMenu } from "./menu";
-import { formatThinkingCommandUsage } from "./response";
+import { handleMenuAction, handleMenuCommand, type HandleMenuActionInput } from "./handler";
+import { formatMenuCommandUsage } from "./response";
 
-export function registerThinkingRoute<
+export function registerMenuRoute<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 >(
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
-  const unsubscribeMenu = registerThinkingMenu(ctx);
-  const unsubscribeCommand = ctx.chat.on("command", "thinking", (raw) => {
-    const event = raw as CommandEvent<
-      Extract<keyof TChats, string>,
-      "thinking",
-      { readonly level?: string }
-    >;
+  const unsubscribeCommand = ctx.chat.on("command", "menu", (raw) => {
+    const event = raw as CommandEvent<Extract<keyof TChats, string>, "menu">;
     return dispatch(ctx, middleware, {
       event,
       actor: event.actor,
-      handler: (handlerCtx) => handleThinkingCommand({ ctx: handlerCtx, event }),
+      handler: (handlerCtx) => handleMenuCommand({ ctx: handlerCtx, event }),
     });
   });
 
-  const unsubscribeAction = ctx.chat.on("action", "thinking", (raw) => {
-    const event = raw as HandleThinkingActionInput<TAdapters, TChats>["event"];
+  const unsubscribeAction = ctx.chat.on("action", menuActionId, (raw) => {
+    const event = raw as HandleMenuActionInput<TAdapters, TChats>["event"];
     return dispatch(ctx, middleware, {
       event,
       actor: event.actor,
-      handler: (handlerCtx) => handleThinkingAction({ ctx: handlerCtx, event }),
+      routeName: "menu",
+      handler: (handlerCtx) => handleMenuAction({ ctx: handlerCtx, event }),
     });
   });
 
   const unsubscribeInvalid = registerInvalidCommandRoute(ctx, middleware, {
-    commands: ["thinking"],
-    usage: () => formatThinkingCommandUsage(),
+    commands: ["menu"],
+    usage: () => formatMenuCommandUsage(),
   });
 
   return () => {
-    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeAction();
     unsubscribeInvalid();

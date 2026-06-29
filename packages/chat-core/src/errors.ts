@@ -12,6 +12,7 @@ export type ChatLifecycleOperation =
   | "sendAction"
   | "updateAction"
   | "injectMessage"
+  | "injectCommand"
   | "respondToAction"
   | "reply"
   | "streamMessage"
@@ -211,6 +212,9 @@ export type ChatUpdateActionFailure =
 
 /** Errors returned by `chat.injectMessage()`. */
 export type ChatInjectMessageFailure = UnknownChatAdapterError | ChatLifecycleError;
+
+/** Errors returned by `chat.injectCommand()`. */
+export type ChatInjectCommandFailure = UnknownChatAdapterError | ChatLifecycleError;
 
 /** Errors returned by action event ack/reply/update helpers. */
 export type ChatActionResponseFailure =

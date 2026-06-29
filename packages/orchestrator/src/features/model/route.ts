@@ -5,6 +5,7 @@ import type { XmuxMiddleware } from "../../middleware";
 import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
 import { handleModelAction, handleModelCommand, type HandleModelActionInput } from "./handler";
+import { registerModelMenu } from "./menu";
 import { formatModelCommandUsage } from "./response";
 
 export function registerModelRoute<
@@ -14,6 +15,7 @@ export function registerModelRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
+  const unsubscribeMenu = registerModelMenu(ctx);
   const unsubscribeCommand = ctx.chat.on("command", "model", (raw) => {
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
@@ -42,6 +44,7 @@ export function registerModelRoute<
   });
 
   return () => {
+    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeAction();
     unsubscribeInvalid();
