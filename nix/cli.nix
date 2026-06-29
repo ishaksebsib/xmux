@@ -28,6 +28,12 @@ let
     ../pnpm-workspace.yaml
     ../turbo.json
   ];
+
+  supportedPlatforms = [
+    "x86_64-linux"
+    "aarch64-linux"
+    "aarch64-darwin"
+  ];
 in
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "xmux";
@@ -84,6 +90,6 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     homepage = packageJson.homepage;
     license = lib.licenses.mit;
     mainProgram = "xmux";
-    platforms = nodejs.meta.platforms;
+    platforms = supportedPlatforms;
   };
 })

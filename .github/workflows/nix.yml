@@ -39,7 +39,7 @@ jobs:
           nix flake metadata
           nix flake show --all-systems
 
-          systems="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
+          systems="x86_64-linux aarch64-linux aarch64-darwin"
           packages="cli xmux default cli-deps-updater"
 
           for system in $systems; do
@@ -71,8 +71,6 @@ jobs:
             runner: ubuntu-24.04
           - system: aarch64-linux
             runner: ubuntu-24.04-arm
-          - system: x86_64-darwin
-            runner: macos-13
           - system: aarch64-darwin
             runner: macos-14
 
@@ -93,7 +91,7 @@ jobs:
           trap 'rm -f "$build_log"' EXIT
 
           set +e
-          nix build ".#packages.${SYSTEM}.cli" --no-link --print-build-logs 2>&1 | tee "$build_log"
+          nix build ".#packages.${SYSTEM}.cli" --no-link 2>&1 | tee "$build_log"
           status="${PIPESTATUS[0]}"
           set -e
 

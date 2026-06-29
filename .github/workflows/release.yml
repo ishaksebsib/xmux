@@ -46,7 +46,7 @@ jobs:
         uses: nixbuild/nix-quick-install-action@v34
 
       - name: Check Nix CLI package
-        run: nix build .#cli --no-link --print-build-logs
+        run: nix build .#cli --no-link
 
       - name: Check default nix run
         run: nix run . -- --version
