@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { createChat, type ChatAdapterDefinitions } from "@xmux/chat-core";
+import {
+  createChat,
+  type ChatAdapterDefinitions,
+  type ChatRuntimeStatusSnapshot,
+} from "@xmux/chat-core";
 import {
   createHarness,
   type HarnessAdapterDefinitions,
   type HarnessCloseError,
+  type HarnessRuntimeStatusSnapshot,
 } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { actions } from "./actions";
@@ -35,11 +40,23 @@ import type { Store } from "./store";
  * Main instance that manages harnesses and chats together.
  * Provides lifecycle control and chat runtime access.
  */
+export interface XmuxRuntimeStatusSnapshot<
+  THarnessId extends string = string,
+  TChatId extends string = string,
+> {
+  readonly chats: ChatRuntimeStatusSnapshot<TChatId>;
+  readonly harnesses: HarnessRuntimeStatusSnapshot<THarnessId>;
+}
+
 export interface Xmux<
   TAdapters extends HarnessAdapterDefinitions<TAdapters>,
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: Context<TAdapters, TChats>;
+  status(): XmuxRuntimeStatusSnapshot<
+    Extract<keyof TAdapters, string>,
+    Extract<keyof TChats, string>
+  >;
   initialize(): Promise<Result<void, XmuxInitializeError>>;
   shutdown(): Promise<Result<void, XmuxCloseError>>;
 }
@@ -125,6 +142,13 @@ export function createXmuxResult<
 
   return Result.ok({
     ctx,
+
+    status() {
+      return {
+        chats: chat.status(),
+        harnesses: harness.status(),
+      };
+    },
 
     async initialize() {
       const startedAt = startXmuxLogTimer();

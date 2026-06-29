@@ -41,7 +41,7 @@ export type {
   XmuxLogScope,
 } from "./logger";
 export type { XmuxLogContext } from "./logger-utils";
-export type { CreateXmuxOptions, Xmux, XmuxCloseCause } from "./xmux";
+export type { CreateXmuxOptions, Xmux, XmuxCloseCause, XmuxRuntimeStatusSnapshot } from "./xmux";
 export type {
   AbsolutePath,
   Config,
