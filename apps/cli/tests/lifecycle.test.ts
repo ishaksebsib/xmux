@@ -8,8 +8,10 @@ import {
   ControlClient,
   type CliHealthResponse,
   type CliShutdownResponse,
+  type CliStatusResponse,
   type ControlClientService,
 } from "../src/control/client";
+import { ConfigSummary, type ConfigSummaryService } from "../src/control/config-summary";
 import { ControlDiscovery, type ControlDiscoveryService } from "../src/control/discovery";
 import {
   CliInvalidManifest,
@@ -19,6 +21,7 @@ import {
   type CliResolvedServerPaths,
   type CliRunningServer,
 } from "../src/domain/discovery";
+import { CliInactiveConfigSummary } from "../src/domain/status";
 import {
   CliControlRequestError,
   CliDiscoveryError,
@@ -50,6 +53,35 @@ const posixIt = process.platform === "win32" ? it.live.skip : it.live;
 
 const readyHealth: CliHealthResponse = { alive: true, ready: true, state: "ready" };
 const acceptedShutdown: CliShutdownResponse = { accepted: true, alreadyStopping: false };
+
+const testConfigSummary = new CliInactiveConfigSummary({
+  status: "valid",
+  chats: [],
+  harnesses: [],
+});
+
+const testConfigSummaryService: ConfigSummaryService = {
+  load: () => Effect.succeed(testConfigSummary),
+};
+
+const statusResponseForServer = (server: CliRunningServer): CliStatusResponse => ({
+  version: 1,
+  protocolVersion: 1,
+  pid: server.pid,
+  startedAt: "2026-06-16T00:00:00.000Z",
+  uptimeMs: 1_000,
+  state: "ready",
+  configPath: server.paths.configPath,
+  stateDir: server.paths.stateDir,
+  scopeId: server.paths.scopeId,
+  endpoint: { kind: "unix-socket", path: server.socketPath },
+  orchestrator: {
+    state: "running",
+    activation: "enabled",
+    chats: [{ id: "telegram", state: "active" }],
+    harnesses: [{ id: "pi", state: "configured_lazy" }],
+  },
+});
 
 const spawnSpec: CliSpawnSpec = {
   command: "/usr/bin/xmux",
@@ -93,6 +125,9 @@ const discoveryLayer = (service: ControlDiscoveryService) =>
 
 const clientLayer = (service: ControlClientService) => Layer.succeed(ControlClient, service);
 
+const configSummaryLayer = (service: ConfigSummaryService = testConfigSummaryService) =>
+  Layer.succeed(ConfigSummary, service);
+
 const spawnerLayer = (service: ProcessSpawnerService) => Layer.succeed(ProcessSpawner, service);
 
 const noOpStartLock: StartLockService = {
@@ -112,10 +147,11 @@ const startLockLayer = (service: StartLockService = noOpStartLock) =>
 
 const makeClient = (input: {
   readonly health?: (server: CliRunningServer) => Effect.Effect<CliHealthResponse, never>;
+  readonly status?: (server: CliRunningServer) => Effect.Effect<CliStatusResponse, never>;
   readonly shutdown?: (server: CliRunningServer) => Effect.Effect<CliShutdownResponse, never>;
 }): ControlClientService => ({
   health: input.health ?? (() => Effect.succeed(readyHealth)),
-  status: () => Effect.die("status should not be called"),
+  status: input.status ?? ((server) => Effect.succeed(statusResponseForServer(server))),
   logs: () => Effect.die("logs should not be called"),
   shutdown: input.shutdown ?? (() => Effect.succeed(acceptedShutdown)),
 });
@@ -151,7 +187,12 @@ describe.sequential("stop command", () => {
       Effect.gen(function* () {
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
+            Layer.mergeAll(
+              nodeControlDiscoveryLayer,
+              nodeControlClientLayer,
+              timingLayer({}),
+              configSummaryLayer(),
+            ),
           ),
         );
         const output = renderStop(report);
@@ -159,6 +200,9 @@ describe.sequential("stop command", () => {
         expect(report._tag).toBe("AlreadyStopped");
         expect(output).toContain("xmux server: already stopped");
         expect(output).toContain("reason: no-manifest");
+        expect(output).toContain("orchestrator: unavailable (server not running)");
+        expect(output).toContain("config status: valid");
+        expect(output).not.toContain(configPath);
       }),
     ),
   );
@@ -170,7 +214,12 @@ describe.sequential("stop command", () => {
         yield* writeText(paths.manifestPath, "not json");
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
+            Layer.mergeAll(
+              nodeControlDiscoveryLayer,
+              nodeControlClientLayer,
+              timingLayer({}),
+              configSummaryLayer(),
+            ),
           ),
         );
 
@@ -187,7 +236,12 @@ describe.sequential("stop command", () => {
         yield* writeServerManifest(paths, { sessionId: "stale-stop" });
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
+            Layer.mergeAll(
+              nodeControlDiscoveryLayer,
+              nodeControlClientLayer,
+              timingLayer({}),
+              configSummaryLayer(),
+            ),
           ),
         );
 
@@ -204,7 +258,12 @@ describe.sequential("stop command", () => {
         yield* writeServerManifest(paths, { scopeId: "wrong-scope" });
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
+            Layer.mergeAll(
+              nodeControlDiscoveryLayer,
+              nodeControlClientLayer,
+              timingLayer({}),
+              configSummaryLayer(),
+            ),
           ),
         );
 
@@ -226,13 +285,23 @@ describe.sequential("stop command", () => {
 
         const report = yield* getStopReport({ configPath: Option.some(configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer, timingLayer({})),
+            Layer.mergeAll(
+              nodeControlDiscoveryLayer,
+              nodeControlClientLayer,
+              timingLayer({}),
+              configSummaryLayer(),
+            ),
           ),
         );
 
         expect(report._tag).toBe("Stopped");
         expect(shutdownCalled).toBe(true);
-        expect(renderStop(report)).toContain("xmux server: stopped");
+        const output = renderStop(report);
+        expect(output).toContain("xmux server: stopped");
+        expect(output).toContain("orchestrator before stop: running");
+        expect(output).toContain("telegram: active");
+        expect(output).not.toContain(paths.configPath);
+        expect(output).not.toContain(paths.socketPath);
       }),
     ),
   );
@@ -261,7 +330,12 @@ describe.sequential("stop command", () => {
       const exit = yield* Effect.exit(
         getStopReport({ configPath: Option.some(server.paths.configPath) }).pipe(
           Effect.provide(
-            Layer.mergeAll(discoveryLayer(discovery), clientLayer(client), timingLayer({})),
+            Layer.mergeAll(
+              discoveryLayer(discovery),
+              clientLayer(client),
+              timingLayer({}),
+              configSummaryLayer(),
+            ),
           ),
         ),
       );
@@ -287,6 +361,7 @@ describe.sequential("stop command", () => {
               discoveryLayer(discovery),
               clientLayer(makeClient({})),
               timingLayer({ stopTimeoutMs: 1 }),
+              configSummaryLayer(),
               startLockLayer(),
             ),
           ),
@@ -339,7 +414,12 @@ describe("start command", () => {
 
       expect(report._tag).toBe("AlreadyRunning");
       expect(spawned).toBe(false);
-      expect(renderStart(report)).toContain("xmux server: already running");
+      const output = renderStart(report);
+      expect(output).toContain("xmux server: already running");
+      expect(output).toContain("orchestrator: running");
+      expect(output).toContain("telegram: active");
+      expect(output).not.toContain(server.paths.configPath);
+      expect(output).not.toContain(server.socketPath);
     }),
   );
 
@@ -512,7 +592,11 @@ describe("start command", () => {
 
       expect(report._tag).toBe("Started");
       expect(spawnedSpec?.args).toEqual(["server", "run", "--foreground"]);
-      expect(renderStart(report)).toContain("previous state: no-manifest");
+      const output = renderStart(report);
+      expect(output).toContain("previous state: no-manifest");
+      expect(output).toContain("orchestrator: running");
+      expect(output).not.toContain(server.paths.configPath);
+      expect(output).not.toContain(server.socketPath);
     }),
   );
 
@@ -906,7 +990,12 @@ describe("restart command", () => {
         "health-new",
         "require-running",
       ]);
-      expect(renderRestart(report)).toContain("xmux server: restarted");
+      const output = renderRestart(report);
+      expect(output).toContain("xmux server: restarted");
+      expect(output).toContain("orchestrator: running");
+      expect(output).toContain("telegram: active");
+      expect(output).not.toContain(newServer.paths.configPath);
+      expect(output).not.toContain(newServer.socketPath);
     }),
   );
 
@@ -1325,6 +1414,7 @@ describe("lifecycle input parsing", () => {
                 shutdown: () => clientFailure,
               }),
               timingLayer({}),
+              configSummaryLayer(),
               startLockLayer(),
             ),
           ),

@@ -1,6 +1,7 @@
 import { Console, Effect, Option, References } from "effect";
 import { Command } from "effect/unstable/cli";
 import { ControlDiscovery } from "../control/discovery";
+import { runningOrchestratorStatus } from "../control/orchestrator-status";
 import { parseServerTarget } from "../domain/input";
 import {
   alreadyRunningReport,
@@ -43,7 +44,8 @@ export const getStartReport = Effect.fn("cli.start.report")(function* (input: St
         operation: "start",
         timeoutMessage: existingReadinessTimeoutMessage,
       });
-      return alreadyRunningReport(initial);
+      const orchestrator = yield* runningOrchestratorStatus(initial);
+      return alreadyRunningReport(initial, orchestrator);
     }
 
     if (initial._tag === "InvalidManifest" || initial._tag === "WrongScope") {
@@ -64,7 +66,8 @@ export const getStartReport = Effect.fn("cli.start.report")(function* (input: St
             operation: "start",
             timeoutMessage: existingReadinessTimeoutMessage,
           });
-          return alreadyRunningReport(lockedDiscovery);
+          const orchestrator = yield* runningOrchestratorStatus(lockedDiscovery);
+          return alreadyRunningReport(lockedDiscovery, orchestrator);
         }
 
         if (lockedDiscovery._tag === "InvalidManifest" || lockedDiscovery._tag === "WrongScope") {
@@ -84,7 +87,8 @@ export const getStartReport = Effect.fn("cli.start.report")(function* (input: St
           spawned,
         });
 
-        return startedReport(server, lockedPrevious);
+        const orchestrator = yield* runningOrchestratorStatus(server);
+        return startedReport(server, orchestrator, lockedPrevious);
       }),
     );
   });

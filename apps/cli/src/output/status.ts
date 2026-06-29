@@ -5,7 +5,9 @@ import type {
   CliChatAdapterStatus,
   CliHarnessAdapterStatus,
   CliInactiveChatAdapterStatus,
+  CliInactiveConfigSummary,
   CliInactiveHarnessAdapterStatus,
+  CliOrchestratorStatus,
   CliStatusReport,
 } from "../domain/status";
 
@@ -78,23 +80,25 @@ const formatInactiveAdapterLine = (adapter: InactiveAdapterStatus): string =>
 const sectionLines = (title: string, lines: readonly string[]): readonly string[] =>
   lines.length === 0 ? [title, "  (none)"] : [title, ...lines];
 
-const runningOrchestratorLines = (
-  report: Extract<CliStatusReport, { readonly _tag: "Running" }>,
+export const runningOrchestratorLines = (
+  orchestrator: CliOrchestratorStatus,
+  label = "orchestrator",
 ) => [
   "",
-  `orchestrator: ${report.server.orchestrator.state}`,
-  ...sectionLines("chats:", report.server.orchestrator.chats.map(formatAdapterLine)),
-  ...sectionLines("harnesses:", report.server.orchestrator.harnesses.map(formatAdapterLine)),
+  `${label}: ${orchestrator.state}`,
+  ...sectionLines("chats:", orchestrator.chats.map(formatAdapterLine)),
+  ...sectionLines("harnesses:", orchestrator.harnesses.map(formatAdapterLine)),
 ];
 
-const inactiveOrchestratorLines = (
-  report: Exclude<CliStatusReport, { readonly _tag: "Running" }>,
+export const inactiveOrchestratorLines = (
+  configSummary: CliInactiveConfigSummary,
+  label = "orchestrator",
 ) => [
   "",
-  "orchestrator: unavailable (server not running)",
-  `config status: ${report.configSummary.status}`,
-  ...sectionLines("chats:", report.configSummary.chats.map(formatInactiveAdapterLine)),
-  ...sectionLines("harnesses:", report.configSummary.harnesses.map(formatInactiveAdapterLine)),
+  `${label}: unavailable (server not running)`,
+  `config status: ${configSummary.status}`,
+  ...sectionLines("chats:", configSummary.chats.map(formatInactiveAdapterLine)),
+  ...sectionLines("harnesses:", configSummary.harnesses.map(formatInactiveAdapterLine)),
 ];
 
 export const statusReportJson = (report: CliStatusReport): JsonValue => {
@@ -164,7 +168,7 @@ export const renderStatusHuman = (report: CliStatusReport): string => {
           ["session", report.sessionId],
           ["uptime", formatUptime(report.server.uptimeMs)],
         ]).trimEnd(),
-        ...runningOrchestratorLines(report),
+        ...runningOrchestratorLines(report.server.orchestrator),
       ]
         .join("\n")
         .trimEnd();
@@ -177,7 +181,7 @@ export const renderStatusHuman = (report: CliStatusReport): string => {
           ["xmux server", statusLabel(report)],
           ["reason", report.reason],
         ]).trimEnd(),
-        ...inactiveOrchestratorLines(report),
+        ...inactiveOrchestratorLines(report.configSummary),
       ]
         .join("\n")
         .trimEnd();

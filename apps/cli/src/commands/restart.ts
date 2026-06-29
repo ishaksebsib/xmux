@@ -2,6 +2,7 @@ import { Console, Effect, Option, References } from "effect";
 import { Command } from "effect/unstable/cli";
 import { ControlClient } from "../control/client";
 import { ControlDiscovery } from "../control/discovery";
+import { runningOrchestratorStatus } from "../control/orchestrator-status";
 import type { CliRunningServer } from "../domain/discovery";
 import { parseServerTarget } from "../domain/input";
 import {
@@ -85,7 +86,8 @@ export const getRestartReport = Effect.fn("cli.restart.report")(function* (input
             retryCommand,
             spawned,
           });
-          return restartedReport(lockedDiscovery, server, shutdown);
+          const orchestrator = yield* runningOrchestratorStatus(server);
+          return restartedReport(lockedDiscovery, server, orchestrator, shutdown);
         }
 
         const previous = inactiveLifecycleState(lockedDiscovery);
@@ -101,7 +103,8 @@ export const getRestartReport = Effect.fn("cli.restart.report")(function* (input
           spawned,
         });
 
-        return restartStartedReport(server, previous);
+        const orchestrator = yield* runningOrchestratorStatus(server);
+        return restartStartedReport(server, orchestrator, previous);
       }),
     );
   });

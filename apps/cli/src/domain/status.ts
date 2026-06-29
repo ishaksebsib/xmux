@@ -7,6 +7,11 @@ import {
   safeStatusReasonFromString,
 } from "@xmux/server/status";
 import { Schema } from "effect";
+import type {
+  CliChatAdapterStatus as CliChatAdapterStatusResponse,
+  CliHarnessAdapterStatus as CliHarnessAdapterStatusResponse,
+  CliStatusResponse,
+} from "../control/client";
 import { CliResolvedServerPaths, CliRunningServer, type CliServerDiscovery } from "./discovery";
 
 export class CliServerStatusEndpoint extends Schema.Class<CliServerStatusEndpoint>(
@@ -125,6 +130,77 @@ export class CliInactiveStatusReport extends Schema.Class<CliInactiveStatusRepor
 
 export const CliStatusReport = Schema.Union([CliRunningStatusReport, CliInactiveStatusReport]);
 export type CliStatusReport = typeof CliStatusReport.Type;
+
+const chatAdapterStatusFromResponse = (
+  adapter: CliChatAdapterStatusResponse,
+): CliChatAdapterStatus =>
+  new CliChatAdapterStatus(
+    adapter.reason === undefined
+      ? { id: adapter.id, state: adapter.state }
+      : {
+          id: adapter.id,
+          state: adapter.state,
+          reason: cliSafeStatusReasonFromString(adapter.reason),
+        },
+  );
+
+const harnessAdapterStatusFromResponse = (
+  adapter: CliHarnessAdapterStatusResponse,
+): CliHarnessAdapterStatus =>
+  new CliHarnessAdapterStatus(
+    adapter.reason === undefined
+      ? { id: adapter.id, state: adapter.state }
+      : {
+          id: adapter.id,
+          state: adapter.state,
+          reason: cliSafeStatusReasonFromString(adapter.reason),
+        },
+  );
+
+const unknownOrchestratorStatus = new CliOrchestratorStatus({
+  state: "not_started",
+  activation: "unknown",
+  chats: [],
+  harnesses: [],
+});
+
+export const serverStatusPayloadFromResponse = (
+  status: CliStatusResponse,
+): CliServerStatusPayload =>
+  new CliServerStatusPayload({
+    version: status.version,
+    protocolVersion: status.protocolVersion,
+    pid: status.pid,
+    startedAt: status.startedAt,
+    uptimeMs: status.uptimeMs,
+    state: status.state,
+    configPath: status.configPath,
+    stateDir: status.stateDir,
+    scopeId: status.scopeId,
+    endpoint: new CliServerStatusEndpoint({
+      kind: status.endpoint.kind,
+      path: status.endpoint.path,
+    }),
+    orchestrator:
+      status.orchestrator === undefined
+        ? unknownOrchestratorStatus
+        : new CliOrchestratorStatus(
+            status.orchestrator.reason === undefined
+              ? {
+                  state: status.orchestrator.state,
+                  activation: status.orchestrator.activation,
+                  chats: status.orchestrator.chats.map(chatAdapterStatusFromResponse),
+                  harnesses: status.orchestrator.harnesses.map(harnessAdapterStatusFromResponse),
+                }
+              : {
+                  state: status.orchestrator.state,
+                  activation: status.orchestrator.activation,
+                  chats: status.orchestrator.chats.map(chatAdapterStatusFromResponse),
+                  harnesses: status.orchestrator.harnesses.map(harnessAdapterStatusFromResponse),
+                  reason: cliSafeStatusReasonFromString(status.orchestrator.reason),
+                },
+          ),
+  });
 
 export const statusReportFromInactiveDiscovery = (input: {
   readonly discovery: Exclude<CliServerDiscovery, CliRunningServer>;

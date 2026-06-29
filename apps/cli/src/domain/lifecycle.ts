@@ -8,6 +8,7 @@ import {
   type CliWrongScopeServer,
 } from "./discovery";
 import { CliLifecycleBlocked, type CliWaitOperation } from "./errors";
+import type { CliInactiveConfigSummary, CliOrchestratorStatus } from "./status";
 
 export type CliInactiveLifecycleReason = CliInactiveServerReason;
 export type CliInactiveLifecycleState = CliInactiveServerState;
@@ -16,22 +17,27 @@ export type CliStopReport =
   | {
       readonly _tag: "AlreadyStopped";
       readonly inactive: CliInactiveLifecycleState;
+      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "InvalidManifest";
       readonly inactive: CliInactiveLifecycleState;
+      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "WrongScope";
       readonly inactive: CliInactiveLifecycleState;
+      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "StaleManifestCleaned";
       readonly inactive: CliInactiveLifecycleState;
+      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "Stopped";
       readonly server: CliRunningServer;
+      readonly orchestrator: CliOrchestratorStatus;
       readonly shutdown: {
         readonly accepted: boolean;
         readonly alreadyStopping: boolean;
@@ -42,10 +48,12 @@ export type CliStartReport =
   | {
       readonly _tag: "AlreadyRunning";
       readonly server: CliRunningServer;
+      readonly orchestrator: CliOrchestratorStatus;
     }
   | {
       readonly _tag: "Started";
       readonly server: CliRunningServer;
+      readonly orchestrator: CliOrchestratorStatus;
       readonly previous: CliInactiveLifecycleState;
     };
 
@@ -59,11 +67,13 @@ export type CliRestartReport =
       readonly _tag: "Restarted";
       readonly previous: CliRunningServer;
       readonly server: CliRunningServer;
+      readonly orchestrator: CliOrchestratorStatus;
       readonly shutdown: CliShutdownState;
     }
   | {
       readonly _tag: "Started";
       readonly server: CliRunningServer;
+      readonly orchestrator: CliOrchestratorStatus;
       readonly previous: CliInactiveLifecycleState;
     };
 
@@ -73,27 +83,32 @@ export const inactiveLifecycleState = (
 
 export const stopReportFromInactiveDiscovery = (
   discovery: Exclude<CliServerDiscovery, CliRunningServer>,
+  configSummary: CliInactiveConfigSummary,
 ): CliStopReport => {
   switch (discovery._tag) {
     case "Stopped":
       return {
         _tag: "AlreadyStopped",
         inactive: inactiveServerStateFromDiscovery(discovery),
+        configSummary,
       };
     case "InvalidManifest":
       return {
         _tag: "InvalidManifest",
         inactive: inactiveServerStateFromDiscovery(discovery),
+        configSummary,
       };
     case "WrongScope":
       return {
         _tag: "WrongScope",
         inactive: inactiveServerStateFromDiscovery(discovery),
+        configSummary,
       };
     case "StaleManifestCleaned":
       return {
         _tag: "StaleManifestCleaned",
         inactive: inactiveServerStateFromDiscovery(discovery),
+        configSummary,
       };
   }
 };
@@ -120,43 +135,55 @@ export const lifecycleBlockedError = (input: {
 
 export const stoppedReport = (
   server: CliRunningServer,
+  orchestrator: CliOrchestratorStatus,
   shutdown: CliShutdownState,
 ): CliStopReport => ({
   _tag: "Stopped",
   server,
+  orchestrator,
   shutdown,
 });
 
-export const alreadyRunningReport = (server: CliRunningServer): CliStartReport => ({
+export const alreadyRunningReport = (
+  server: CliRunningServer,
+  orchestrator: CliOrchestratorStatus,
+): CliStartReport => ({
   _tag: "AlreadyRunning",
   server,
+  orchestrator,
 });
 
 export const startedReport = (
   server: CliRunningServer,
+  orchestrator: CliOrchestratorStatus,
   previous: CliInactiveLifecycleState,
 ): CliStartReport => ({
   _tag: "Started",
   server,
+  orchestrator,
   previous,
 });
 
 export const restartedReport = (
   previous: CliRunningServer,
   server: CliRunningServer,
+  orchestrator: CliOrchestratorStatus,
   shutdown: CliShutdownState,
 ): CliRestartReport => ({
   _tag: "Restarted",
   previous,
   server,
+  orchestrator,
   shutdown,
 });
 
 export const restartStartedReport = (
   server: CliRunningServer,
+  orchestrator: CliOrchestratorStatus,
   previous: CliInactiveLifecycleState,
 ): CliRestartReport => ({
   _tag: "Started",
   server,
+  orchestrator,
   previous,
 });

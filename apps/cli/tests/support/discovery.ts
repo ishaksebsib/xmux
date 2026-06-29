@@ -127,6 +127,31 @@ export const bindShutdownServer = (
           return;
         }
 
+        if (request.url === "/v1/status") {
+          response.setHeader("content-type", "application/json");
+          response.end(
+            JSON.stringify({
+              version: 1,
+              protocolVersion: 1,
+              pid: process.pid,
+              startedAt: "2026-06-16T00:00:00.000Z",
+              uptimeMs: 151_000,
+              state: "ready",
+              configPath: paths.configPath,
+              stateDir: paths.stateDir,
+              scopeId: paths.scopeId,
+              endpoint: { kind: "unix-socket", path: paths.socketPath },
+              orchestrator: {
+                state: "running",
+                activation: "enabled",
+                chats: [{ id: "telegram", state: "active" }],
+                harnesses: [{ id: "pi", state: "configured_lazy" }],
+              },
+            }),
+          );
+          return;
+        }
+
         if (request.url === "/v1/shutdown" && request.method === "POST") {
           onShutdown?.();
           response.statusCode = 202;

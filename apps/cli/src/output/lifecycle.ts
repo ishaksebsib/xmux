@@ -8,6 +8,7 @@ import type {
 import type { CliConfigPath } from "../domain/input";
 import type { CliRunningServer } from "../domain/discovery";
 import { formatKeyValueLines } from "./format";
+import { inactiveOrchestratorLines, runningOrchestratorLines } from "./status";
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", `'"'"'`)}'`;
 
@@ -17,22 +18,12 @@ export const foregroundRetryCommand = (configPath: CliConfigPath | undefined): s
     : `xmux server run --foreground --config ${shellQuote(configPath)}`;
 
 const renderInactiveRows = (inactive: CliInactiveLifecycleState) =>
-  formatKeyValueLines([
-    ["reason", inactive.manifestReason ?? inactive.reason],
-    ["config", inactive.paths.configPath],
-    ["state dir", inactive.paths.stateDir],
-    ["socket", inactive.paths.socketPath],
-    ["manifest", inactive.paths.manifestPath],
-  ]).trimEnd();
+  formatKeyValueLines([["reason", inactive.manifestReason ?? inactive.reason]]).trimEnd();
 
 const renderServerRows = (server: CliRunningServer) =>
   formatKeyValueLines([
     ["pid", server.pid],
     ["session", server.sessionId],
-    ["config", server.paths.configPath],
-    ["state dir", server.paths.stateDir],
-    ["socket", server.socketPath],
-    ["manifest", server.manifestPath],
   ]).trimEnd();
 
 const shutdownState = (shutdown: CliShutdownState): string => {
@@ -62,40 +53,76 @@ export const renderStop = (report: CliStopReport): string => {
     case "InvalidManifest":
     case "WrongScope":
     case "StaleManifestCleaned":
-      return `${formatKeyValueLines([["xmux server", inactiveStatusLabel(report)]]).trimEnd()}\n${renderInactiveRows(report.inactive)}`;
+      return [
+        formatKeyValueLines([["xmux server", inactiveStatusLabel(report)]]).trimEnd(),
+        renderInactiveRows(report.inactive),
+        ...inactiveOrchestratorLines(report.configSummary),
+      ]
+        .join("\n")
+        .trimEnd();
     case "Stopped":
-      return `${formatKeyValueLines([
-        ["xmux server", "stopped"],
-        ["shutdown", shutdownState(report.shutdown)],
-      ]).trimEnd()}\n${renderServerRows(report.server)}`;
+      return [
+        formatKeyValueLines([
+          ["xmux server", "stopped"],
+          ["shutdown", shutdownState(report.shutdown)],
+        ]).trimEnd(),
+        renderServerRows(report.server),
+        ...runningOrchestratorLines(report.orchestrator, "orchestrator before stop"),
+      ]
+        .join("\n")
+        .trimEnd();
   }
 };
 
 export const renderStart = (report: CliStartReport): string => {
   switch (report._tag) {
     case "AlreadyRunning":
-      return `${formatKeyValueLines([["xmux server", "already running"]]).trimEnd()}\n${renderServerRows(report.server)}`;
+      return [
+        formatKeyValueLines([["xmux server", "already running"]]).trimEnd(),
+        renderServerRows(report.server),
+        ...runningOrchestratorLines(report.orchestrator),
+      ]
+        .join("\n")
+        .trimEnd();
     case "Started":
-      return `${formatKeyValueLines([
-        ["xmux server", "started"],
-        ["previous state", report.previous.reason],
-      ]).trimEnd()}\n${renderServerRows(report.server)}`;
+      return [
+        formatKeyValueLines([
+          ["xmux server", "started"],
+          ["previous state", report.previous.reason],
+        ]).trimEnd(),
+        renderServerRows(report.server),
+        ...runningOrchestratorLines(report.orchestrator),
+      ]
+        .join("\n")
+        .trimEnd();
   }
 };
 
 export const renderRestart = (report: CliRestartReport): string => {
   switch (report._tag) {
     case "Restarted":
-      return `${formatKeyValueLines([
-        ["xmux server", "restarted"],
-        ["shutdown", shutdownState(report.shutdown)],
-        ["previous session", report.previous.sessionId],
-      ]).trimEnd()}\n${renderServerRows(report.server)}`;
+      return [
+        formatKeyValueLines([
+          ["xmux server", "restarted"],
+          ["shutdown", shutdownState(report.shutdown)],
+          ["previous session", report.previous.sessionId],
+        ]).trimEnd(),
+        renderServerRows(report.server),
+        ...runningOrchestratorLines(report.orchestrator),
+      ]
+        .join("\n")
+        .trimEnd();
     case "Started":
-      return `${formatKeyValueLines([
-        ["xmux server", "started"],
-        ["restart mode", "started from inactive state"],
-        ["previous state", report.previous.reason],
-      ]).trimEnd()}\n${renderServerRows(report.server)}`;
+      return [
+        formatKeyValueLines([
+          ["xmux server", "started"],
+          ["restart mode", "started from inactive state"],
+          ["previous state", report.previous.reason],
+        ]).trimEnd(),
+        renderServerRows(report.server),
+        ...runningOrchestratorLines(report.orchestrator),
+      ]
+        .join("\n")
+        .trimEnd();
   }
 };
