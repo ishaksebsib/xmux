@@ -1,62 +1,12 @@
 import type { EffectiveServerConfig } from "../config/effective";
+import {
+  configuredEffectiveChatIds,
+  configuredEffectiveHarnessIds,
+  type ServerChatId,
+  type ServerHarnessId,
+} from "./adapter-registry";
 
-interface ActivationRegistryEntry<TId extends string> {
-  readonly id: TId;
-  readonly isConfigured: (config: EffectiveServerConfig) => boolean;
-}
-
-type CheckedActivationRegistry<TRegistry extends Record<string, ActivationRegistryEntry<string>>> =
-  {
-    readonly [TKey in keyof TRegistry]: ActivationRegistryEntry<Extract<TKey, string>>;
-  };
-
-const defineActivationRegistry = <
-  const TRegistry extends Record<string, ActivationRegistryEntry<string>>,
->(
-  registry: TRegistry & CheckedActivationRegistry<TRegistry>,
-): Readonly<TRegistry> => Object.freeze(registry);
-
-const chatActivationRegistry = defineActivationRegistry({
-  telegram: {
-    id: "telegram",
-    isConfigured: (config) => config.chats.telegram !== undefined,
-  },
-  discord: {
-    id: "discord",
-    isConfigured: (config) => config.chats.discord !== undefined,
-  },
-  slack: {
-    id: "slack",
-    isConfigured: (config) => config.chats.slack !== undefined,
-  },
-});
-
-const harnessActivationRegistry = defineActivationRegistry({
-  opencode: {
-    id: "opencode",
-    isConfigured: (config) => config.harnesses.opencode !== undefined,
-  },
-  pi: {
-    id: "pi",
-    isConfigured: (config) => config.harnesses.pi !== undefined,
-  },
-});
-
-export type ServerChatId = keyof typeof chatActivationRegistry;
-export type ServerHarnessId = keyof typeof harnessActivationRegistry;
-
-const configuredIds = <TId extends string>(
-  registry: Readonly<Record<string, ActivationRegistryEntry<TId>>>,
-  config: EffectiveServerConfig,
-): ReadonlyArray<TId> => {
-  const ids: TId[] = [];
-
-  for (const entry of Object.values(registry)) {
-    if (entry.isConfigured(config)) ids.push(entry.id);
-  }
-
-  return Object.freeze(ids);
-};
+export type { ServerChatId, ServerHarnessId } from "./adapter-registry";
 
 export type OrchestratorActivation =
   | {
@@ -80,11 +30,11 @@ export type OrchestratorActivation =
     };
 
 export const configuredChatIds = (config: EffectiveServerConfig): ReadonlyArray<ServerChatId> =>
-  configuredIds(chatActivationRegistry, config);
+  configuredEffectiveChatIds(config);
 
 export const configuredHarnessIds = (
   config: EffectiveServerConfig,
-): ReadonlyArray<ServerHarnessId> => configuredIds(harnessActivationRegistry, config);
+): ReadonlyArray<ServerHarnessId> => configuredEffectiveHarnessIds(config);
 
 export const decideOrchestratorActivation = (
   config: EffectiveServerConfig,

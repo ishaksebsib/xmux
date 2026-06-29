@@ -2,17 +2,21 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Layer, Option, Schema, Scope } from "effect";
 import { getStatusReport } from "../src/commands/status";
+import { ConfigSummary, type ConfigSummaryService } from "../src/control/config-summary";
 import { ControlClient, type ControlClientService } from "../src/control/client";
 import { ControlDiscovery, type ControlDiscoveryService } from "../src/control/discovery";
+import { nodeConfigSummaryLayer } from "../src/platform/node/config-summary";
 import { nodeControlClientLayer } from "../src/platform/node/control-client";
 import { nodeControlDiscoveryLayer } from "../src/platform/node/control-discovery";
 import { CliInvalidInput } from "../src/domain/errors";
+import { CliOrchestratorStatus } from "../src/domain/status";
 import { renderCliCause } from "../src/output/errors";
 import { renderStatus, renderStatusJson } from "../src/output/status";
 import { cliRuntimeEnvForRoot, withEnvVars } from "./support/env";
 import { makeCliSandbox, writeText } from "./support/sandbox";
 import {
   bindHealthServer,
+  bindLegacyStatusServer,
   bindStatusServer,
   resolvePaths,
   writeServerManifest,
@@ -20,7 +24,33 @@ import {
 
 const posixIt = process.platform === "win32" ? it.live.skip : it.live;
 
-const statusLayer = Layer.mergeAll(nodeControlDiscoveryLayer, nodeControlClientLayer);
+const statusLayer = Layer.mergeAll(
+  nodeControlDiscoveryLayer,
+  nodeControlClientLayer,
+  nodeConfigSummaryLayer,
+);
+
+const validStatusConfig = `{
+  "chats": {
+    "telegram": {
+      "token": { "value": "secret-token-should-not-leak" },
+      "access": { "type": "anyone" }
+    }
+  },
+  "harnesses": { "pi": {} }
+}`;
+
+const invalidStatusConfig = `{ "server": { "logs": { "level": "verbose" } } }`;
+
+const envSecretStatusConfig = `{
+  "chats": {
+    "telegram": {
+      "token": { "env": "XMUX_TEST_MISSING_TOKEN" },
+      "access": { "type": "anyone" }
+    }
+  },
+  "harnesses": { "pi": {} }
+}`;
 
 const withStatusSandbox = <A, E, R>(
   run: (input: { readonly root: string; readonly configPath: string }) => Effect.Effect<A, E, R>,
@@ -56,15 +86,34 @@ const StatusJsonContract = Schema.Struct({
 });
 
 const decodeStatusJsonOutput = Schema.decodeUnknownSync(StatusJsonContract);
+const decodeCliOrchestratorStatus = Schema.decodeUnknownSync(CliOrchestratorStatus);
 
 const expectValidJson = (output: string): void => {
   expect(() => decodeStatusJsonOutput(JSON.parse(output))).not.toThrow();
 };
 
 describe.sequential("status command", () => {
+  it("rejects unsafe raw failure reasons in the CLI status domain", () => {
+    expect(() =>
+      decodeCliOrchestratorStatus({
+        state: "degraded",
+        activation: "enabled",
+        chats: [
+          {
+            id: "telegram",
+            state: "failed",
+            reason: "request failed with token secret-token-should-not-leak",
+          },
+        ],
+        harnesses: [{ id: "pi", state: "configured_lazy" }],
+      }),
+    ).toThrow();
+  });
+
   posixIt("renders stopped/no manifest status successfully", () =>
     withStatusSandbox(({ configPath }) =>
       Effect.gen(function* () {
+        yield* writeText(configPath, validStatusConfig);
         const report = yield* reportForConfig(configPath);
         const human = renderStatus(report, "human");
         const json = renderStatusJson(report);
@@ -72,8 +121,58 @@ describe.sequential("status command", () => {
         expect(report._tag).toBe("Stopped");
         expect(human).toContain("xmux server: stopped");
         expect(human).toContain("reason: no-manifest");
+        expect(human).toContain("orchestrator: unavailable (server not running)");
+        expect(human).toContain("telegram: configured, runtime unavailable");
+        expect(human).toContain("pi: configured_lazy, runtime unavailable");
+        expect(human).not.toContain("secret-token-should-not-leak");
         expect(json).toContain('"status": "stopped"');
+        expect(json).toContain('"runtime": "unavailable"');
+        expect(json).not.toContain("secret-token-should-not-leak");
         expectValidJson(json);
+      }),
+    ),
+  );
+
+  posixIt("renders stopped/no manifest status with invalid config summary", () =>
+    withStatusSandbox(({ configPath }) =>
+      Effect.gen(function* () {
+        yield* writeText(configPath, invalidStatusConfig);
+        const report = yield* reportForConfig(configPath);
+        const human = renderStatus(report, "human");
+
+        expect(report._tag).toBe("Stopped");
+        expect(human).toContain("config status: invalid");
+        expect(human).not.toContain("secret-token-should-not-leak");
+      }),
+    ),
+  );
+
+  posixIt("treats missing inactive config as valid empty defaults", () =>
+    withStatusSandbox(({ configPath }) =>
+      Effect.gen(function* () {
+        const report = yield* reportForConfig(configPath);
+        const human = renderStatus(report, "human");
+
+        expect(report._tag).toBe("Stopped");
+        expect(human).toContain("config status: valid");
+        expect(human).toContain("chats:\n  (none)");
+        expect(human).toContain("harnesses:\n  (none)");
+      }),
+    ),
+  );
+
+  posixIt("reports configured adapters even when inactive env secrets are missing", () =>
+    withStatusSandbox(({ configPath }) =>
+      Effect.gen(function* () {
+        yield* writeText(configPath, envSecretStatusConfig);
+        const report = yield* reportForConfig(configPath);
+        const human = renderStatus(report, "human");
+
+        expect(report._tag).toBe("Stopped");
+        expect(human).toContain("config status: valid");
+        expect(human).toContain("telegram: configured, runtime unavailable");
+        expect(human).toContain("pi: configured_lazy, runtime unavailable");
+        expect(human).not.toContain("XMUX_TEST_MISSING_TOKEN");
       }),
     ),
   );
@@ -142,8 +241,58 @@ describe.sequential("status command", () => {
         expect(report._tag).toBe("Running");
         expect(human).toContain("xmux server: ready");
         expect(human).toContain("session: active-status");
+        expect(human).toContain("orchestrator: running");
+        expect(human).toContain("telegram: active");
+        expect(human).toContain("pi: configured_lazy");
         expect(json).toContain('"status": "running"');
         expect(json).toContain('"state": "ready"');
+        expect(json).toContain('"orchestrator"');
+        expect(json).toContain('"harnesses"');
+        expectValidJson(json);
+      }),
+    ),
+  );
+
+  posixIt("defaults missing legacy orchestrator status to unknown", () =>
+    withStatusSandbox(({ configPath }) =>
+      Effect.gen(function* () {
+        const paths = yield* resolvePaths(configPath);
+        yield* bindLegacyStatusServer(paths);
+        yield* writeServerManifest(paths, { sessionId: "legacy-status" });
+
+        const report = yield* reportForConfig(configPath, true);
+        const human = renderStatus(report, "human");
+        const json = renderStatus(report, "json");
+
+        expect(report._tag).toBe("Running");
+        expect(human).toContain("orchestrator: not_started");
+        expect(json).toContain('"activation": "unknown"');
+        expectValidJson(json);
+      }),
+    ),
+  );
+
+  posixIt("renders failed adapter reason without raw secret messages", () =>
+    withStatusSandbox(({ configPath }) =>
+      Effect.gen(function* () {
+        const paths = yield* resolvePaths(configPath);
+        yield* bindStatusServer(paths, {
+          state: "degraded",
+          activation: "enabled",
+          chats: [{ id: "telegram", state: "failed", reason: "TelegramAuthError" }],
+          harnesses: [{ id: "pi", state: "configured_lazy" }],
+          reason: "OrchestratorStartupError",
+        });
+        yield* writeServerManifest(paths, { sessionId: "degraded-status" });
+
+        const report = yield* reportForConfig(configPath, true);
+        const human = renderStatus(report, "human");
+        const json = renderStatus(report, "json");
+
+        expect(human).toContain("orchestrator: degraded");
+        expect(human).toContain("telegram: failed (TelegramAuthError)");
+        expect(human).not.toContain("secret-token-should-not-leak");
+        expect(json).toContain('"reason": "TelegramAuthError"');
         expectValidJson(json);
       }),
     ),
@@ -189,9 +338,13 @@ describe.sequential("status command", () => {
         logs: () => clientFailure,
         shutdown: () => clientFailure,
       };
+      const configSummary: ConfigSummaryService = {
+        load: () => Effect.die("config summary should not be called"),
+      };
       const layer = Layer.mergeAll(
         Layer.succeed(ControlDiscovery, discovery),
         Layer.succeed(ControlClient, client),
+        Layer.succeed(ConfigSummary, configSummary),
       );
 
       const exit = yield* Effect.exit(

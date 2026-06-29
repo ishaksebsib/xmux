@@ -2,6 +2,7 @@ import { Clock, Effect } from "effect";
 import { HttpApiBuilder } from "effect/unstable/httpapi";
 import { ServerControlEndpoint } from "../../../contracts/control";
 import { API_VERSION } from "../../../contracts/constants";
+import { OrchestratorStatusRegistry } from "../../../orchestrator/status-registry";
 import { RuntimePaths } from "../../../server-control/paths";
 import { ServerIdentity } from "../../../server-runtime/identity";
 import { StatusRegistry } from "../../../server-runtime/state";
@@ -12,8 +13,10 @@ export const status = Effect.fn("api.status.get")(function* () {
   const paths = yield* RuntimePaths;
   const identity = yield* ServerIdentity;
   const registry = yield* StatusRegistry;
+  const orchestratorRegistry = yield* OrchestratorStatusRegistry;
 
   const state = yield* registry.getState();
+  const orchestrator = yield* orchestratorRegistry.get();
   const nowMs = yield* Clock.currentTimeMillis;
   const uptimeMs = Math.max(0, nowMs - identity.startedAt.getTime());
 
@@ -31,6 +34,7 @@ export const status = Effect.fn("api.status.get")(function* () {
       kind: "unix-socket",
       path: paths.controlEndpoint.path,
     }),
+    orchestrator,
   });
 });
 

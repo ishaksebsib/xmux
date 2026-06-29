@@ -343,6 +343,39 @@ describe("start command", () => {
     }),
   );
 
+  it.effect("does not time out when an already running server is degraded but control-ready", () =>
+    Effect.gen(function* () {
+      const server = runningServer("/tmp/xmux-start-degraded.sock");
+      const discovery: ControlDiscoveryService = {
+        resolvePaths: () => Effect.succeed(server.paths),
+        readManifest: () => Effect.die("readManifest should not be called"),
+        discover: () => Effect.succeed(server),
+        requireRunning: () => Effect.succeed(server),
+      };
+
+      const report = yield* getStartReport({
+        configPath: Option.some(server.paths.configPath),
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            discoveryLayer(discovery),
+            clientLayer(
+              makeClient({
+                health: () => Effect.succeed({ alive: true, ready: true, state: "degraded" }),
+              }),
+            ),
+            spawnerLayer(makeSpawner({})),
+            timingLayer({ startTimeoutMs: 1 }),
+            startLockLayer(),
+          ),
+        ),
+      );
+
+      expect(report._tag).toBe("AlreadyRunning");
+      expect(renderStart(report)).toContain("xmux server: already running");
+    }),
+  );
+
   it.effect("serializes concurrent starts so only one foreground server is spawned", () =>
     Effect.gen(function* () {
       const server = runningServer("/tmp/xmux-start-concurrent.sock");

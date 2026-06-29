@@ -5,6 +5,7 @@ import type {
   XmuxCloseError,
   XmuxInitializeError,
   XmuxLogger,
+  XmuxRuntimeStatusSnapshot,
 } from "@xmux/orchestrator";
 import { Context, Effect } from "effect";
 import type { EffectiveServerConfig } from "../config/effective";
@@ -12,6 +13,7 @@ import type { OrchestratorConfigurationError } from "./errors";
 import type { ServerXmuxMiddleware } from "./middleware";
 
 export interface OrchestratorRuntime {
+  status(): XmuxRuntimeStatusSnapshot;
   initialize(): Promise<Result<void, XmuxInitializeError>>;
   shutdown(): Promise<Result<void, XmuxCloseError>>;
 }

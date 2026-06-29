@@ -5,6 +5,7 @@ import type { ServerError } from "./errors";
 import { withFileLogger } from "./logging/file-logger";
 import { LogReader } from "./logging/log-reader";
 import { startOrchestrator } from "./orchestrator/runtime";
+import { OrchestratorStatusRegistry } from "./orchestrator/status-registry";
 import { assertNoActiveServer } from "./server-control/active-server";
 import { acquireManifestOwnership } from "./server-control/manifest";
 import { ensureRuntimeDirectories } from "./server-control/paths";
@@ -26,6 +27,7 @@ export const serverRuntimeLayer = Layer.mergeAll(
   ServerIdentity.layer,
   ShutdownCoordinator.layer,
   StatusRegistry.layer,
+  OrchestratorStatusRegistry.layer,
 );
 
 /** Main server workflow owns startup ordering while services come from context. */
@@ -34,6 +36,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
   const identity = yield* ServerIdentity;
   const config = yield* ServerConfig;
   const status = yield* StatusRegistry;
+  const orchestratorStatus = yield* OrchestratorStatusRegistry;
   const shutdown = yield* ShutdownCoordinator;
   const transport = yield* ControlTransport;
 
@@ -69,7 +72,12 @@ export const serverMain = Effect.fn("server.main")(function* () {
         }),
       );
 
-      yield* status.markReady();
+      const currentOrchestratorStatus = yield* orchestratorStatus.get();
+      if (currentOrchestratorStatus.state === "degraded") {
+        yield* status.markDegraded();
+      } else {
+        yield* status.markReady();
+      }
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
           yield* status.beginShutdown();

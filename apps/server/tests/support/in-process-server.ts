@@ -17,6 +17,7 @@ import {
 } from "../../src/platform/node";
 import type { ServerRuntimePaths } from "../../src/server-control/paths";
 import { RuntimePaths } from "../../src/server-control/paths";
+import { OrchestratorStatusRegistry } from "../../src/orchestrator/status-registry";
 import { ServerIdentity } from "../../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../../src/server-runtime/state";
@@ -58,7 +59,12 @@ export const makeInProcessServerLayer = (input: {
   );
   const withConfig = Layer.provideMerge(ServerConfig.layer, base);
   const withLogReader = Layer.provideMerge(LogReader.layer, withConfig);
-  const core = Layer.mergeAll(withLogReader, StatusRegistry.layer, ShutdownCoordinator.layer);
+  const core = Layer.mergeAll(
+    withLogReader,
+    StatusRegistry.layer,
+    OrchestratorStatusRegistry.layer,
+    ShutdownCoordinator.layer,
+  );
   return Layer.provideMerge(nodeUnixSocketControlTransportLayer, core);
 };
 

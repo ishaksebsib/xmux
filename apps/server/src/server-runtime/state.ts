@@ -23,7 +23,7 @@ export class StatusTransitionError extends Schema.TaggedErrorClass<StatusTransit
 const canTransition = (from: ServerStatusState, to: ServerStatusState): boolean => {
   switch (from) {
     case "starting":
-      return to === "ready" || to === "failed" || to === "stopping";
+      return to === "ready" || to === "degraded" || to === "failed" || to === "stopping";
     case "ready":
       return to === "degraded" || to === "reloading" || to === "stopping" || to === "failed";
     case "degraded":

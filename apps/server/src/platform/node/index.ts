@@ -7,3 +7,4 @@ export * from "./http/probe";
 export * from "./http/client";
 export * from "./discovery";
 export * from "./orchestrator/factory";
+export * from "./config-summary";

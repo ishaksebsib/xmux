@@ -1,19 +1,88 @@
-import { Schema } from "effect";
 import {
-  CliInvalidManifest,
-  CliResolvedServerPaths,
-  CliRunningServer,
-  CliStaleManifestCleanedServer,
-  CliStoppedServer,
-  CliWrongScopeServer,
-  type CliServerDiscovery,
-} from "./discovery";
+  SafeStatusReason as ServerSafeStatusReason,
+  ServerChatAdapterRuntimeState,
+  ServerHarnessAdapterRuntimeState,
+  ServerOrchestratorActivationState,
+  ServerOrchestratorState,
+  safeStatusReasonFromString,
+} from "@xmux/server/status";
+import { Schema } from "effect";
+import { CliResolvedServerPaths, CliRunningServer, type CliServerDiscovery } from "./discovery";
 
 export class CliServerStatusEndpoint extends Schema.Class<CliServerStatusEndpoint>(
   "CliServerStatusEndpoint",
 )({
   kind: Schema.Literal("unix-socket"),
   path: Schema.String,
+}) {}
+
+export const CliOrchestratorState = ServerOrchestratorState;
+export type CliOrchestratorState = typeof CliOrchestratorState.Type;
+
+export const CliOrchestratorActivation = ServerOrchestratorActivationState;
+export type CliOrchestratorActivation = typeof CliOrchestratorActivation.Type;
+
+export const CliSafeStatusReason = ServerSafeStatusReason;
+export const cliSafeStatusReasonFromString = safeStatusReasonFromString;
+export type CliSafeStatusReason = typeof CliSafeStatusReason.Type;
+
+export const CliChatAdapterRuntimeState = ServerChatAdapterRuntimeState;
+export type CliChatAdapterRuntimeState = typeof CliChatAdapterRuntimeState.Type;
+
+export const CliHarnessAdapterRuntimeState = ServerHarnessAdapterRuntimeState;
+export type CliHarnessAdapterRuntimeState = typeof CliHarnessAdapterRuntimeState.Type;
+
+export class CliChatAdapterStatus extends Schema.Class<CliChatAdapterStatus>(
+  "CliChatAdapterStatus",
+)({
+  id: Schema.String,
+  state: CliChatAdapterRuntimeState,
+  reason: Schema.optionalKey(CliSafeStatusReason),
+}) {}
+
+export class CliHarnessAdapterStatus extends Schema.Class<CliHarnessAdapterStatus>(
+  "CliHarnessAdapterStatus",
+)({
+  id: Schema.String,
+  state: CliHarnessAdapterRuntimeState,
+  reason: Schema.optionalKey(CliSafeStatusReason),
+}) {}
+
+export class CliOrchestratorStatus extends Schema.Class<CliOrchestratorStatus>(
+  "CliOrchestratorStatus",
+)({
+  state: CliOrchestratorState,
+  activation: CliOrchestratorActivation,
+  chats: Schema.Array(CliChatAdapterStatus),
+  harnesses: Schema.Array(CliHarnessAdapterStatus),
+  reason: Schema.optionalKey(CliSafeStatusReason),
+}) {}
+
+export class CliInactiveChatAdapterStatus extends Schema.Class<CliInactiveChatAdapterStatus>(
+  "CliInactiveChatAdapterStatus",
+)({
+  id: Schema.String,
+  state: Schema.Literal("configured"),
+  runtime: Schema.Literal("unavailable"),
+}) {}
+
+export class CliInactiveHarnessAdapterStatus extends Schema.Class<CliInactiveHarnessAdapterStatus>(
+  "CliInactiveHarnessAdapterStatus",
+)({
+  id: Schema.String,
+  state: Schema.Literal("configured_lazy"),
+  runtime: Schema.Literal("unavailable"),
+}) {}
+
+export const CliInactiveConfigStatus = Schema.Literals(["valid", "invalid"]);
+export type CliInactiveConfigStatus = typeof CliInactiveConfigStatus.Type;
+
+export class CliInactiveConfigSummary extends Schema.Class<CliInactiveConfigSummary>(
+  "CliInactiveConfigSummary",
+)({
+  status: CliInactiveConfigStatus,
+  chats: Schema.Array(CliInactiveChatAdapterStatus),
+  harnesses: Schema.Array(CliInactiveHarnessAdapterStatus),
 }) {}
 
 export class CliServerStatusPayload extends Schema.Class<CliServerStatusPayload>(
@@ -29,6 +98,7 @@ export class CliServerStatusPayload extends Schema.Class<CliServerStatusPayload>
   stateDir: Schema.String,
   scopeId: Schema.String,
   endpoint: CliServerStatusEndpoint,
+  orchestrator: CliOrchestratorStatus,
 }) {}
 
 export class CliRunningStatusReport extends Schema.Class<CliRunningStatusReport>(
@@ -44,18 +114,38 @@ export class CliRunningStatusReport extends Schema.Class<CliRunningStatusReport>
   server: CliServerStatusPayload,
 }) {}
 
-export const CliStatusReport = Schema.Union([
-  CliRunningStatusReport,
-  CliStoppedServer,
-  CliInvalidManifest,
-  CliWrongScopeServer,
-  CliStaleManifestCleanedServer,
-]);
+export class CliInactiveStatusReport extends Schema.Class<CliInactiveStatusReport>(
+  "CliInactiveStatusReport",
+)({
+  _tag: Schema.Literals(["Stopped", "InvalidManifest", "WrongScope", "StaleManifestCleaned"]),
+  paths: CliResolvedServerPaths,
+  reason: Schema.String,
+  configSummary: CliInactiveConfigSummary,
+}) {}
+
+export const CliStatusReport = Schema.Union([CliRunningStatusReport, CliInactiveStatusReport]);
 export type CliStatusReport = typeof CliStatusReport.Type;
 
-export const statusReportFromInactiveDiscovery = (
-  discovery: Exclude<CliServerDiscovery, CliRunningServer>,
-): Exclude<CliStatusReport, CliRunningStatusReport> => discovery;
+export const statusReportFromInactiveDiscovery = (input: {
+  readonly discovery: Exclude<CliServerDiscovery, CliRunningServer>;
+  readonly configSummary: CliInactiveConfigSummary;
+}): CliInactiveStatusReport => {
+  const inactive =
+    input.discovery._tag === "Stopped"
+      ? { reason: "no-manifest" }
+      : input.discovery._tag === "InvalidManifest"
+        ? { reason: input.discovery.reason ?? "invalid-manifest" }
+        : input.discovery._tag === "WrongScope"
+          ? { reason: "wrong-scope" }
+          : { reason: "stale-manifest-removed" };
+
+  return new CliInactiveStatusReport({
+    _tag: input.discovery._tag,
+    paths: input.discovery.paths,
+    reason: inactive.reason,
+    configSummary: input.configSummary,
+  });
+};
 
 export const runningStatusReport = (
   discovery: CliRunningServer,

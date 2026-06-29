@@ -1,7 +1,16 @@
 import type { JsonValue } from "./format";
 import { formatJson, formatKeyValueLines } from "./format";
-import { inactiveServerStateFromDiscovery, type CliResolvedServerPaths } from "../domain/discovery";
-import type { CliStatusReport } from "../domain/status";
+import type { CliResolvedServerPaths } from "../domain/discovery";
+import type {
+  CliChatAdapterStatus,
+  CliHarnessAdapterStatus,
+  CliInactiveChatAdapterStatus,
+  CliInactiveHarnessAdapterStatus,
+  CliStatusReport,
+} from "../domain/status";
+
+type RunningAdapterStatus = CliChatAdapterStatus | CliHarnessAdapterStatus;
+type InactiveAdapterStatus = CliInactiveChatAdapterStatus | CliInactiveHarnessAdapterStatus;
 
 const statusLabel = (report: CliStatusReport): string => {
   switch (report._tag) {
@@ -16,11 +25,6 @@ const statusLabel = (report: CliStatusReport): string => {
     case "StaleManifestCleaned":
       return "stale-manifest-cleaned";
   }
-};
-
-const inactiveReason = (report: Exclude<CliStatusReport, { readonly _tag: "Running" }>): string => {
-  const inactive = inactiveServerStateFromDiscovery(report);
-  return inactive.manifestReason ?? inactive.reason;
 };
 
 const formatUptime = (uptimeMs: number): string => {
@@ -53,6 +57,46 @@ const pathJson = (paths: CliResolvedServerPaths): JsonValue => ({
   scopeId: paths.scopeId,
 });
 
+const adapterJson = (adapter: RunningAdapterStatus): JsonValue => ({
+  id: adapter.id,
+  state: adapter.state,
+  ...(adapter.reason === undefined ? {} : { reason: adapter.reason }),
+});
+
+const inactiveAdapterJson = (adapter: InactiveAdapterStatus): JsonValue => ({
+  id: adapter.id,
+  state: adapter.state,
+  runtime: adapter.runtime,
+});
+
+const formatAdapterLine = (adapter: RunningAdapterStatus): string =>
+  `  ${adapter.id}: ${adapter.state}${adapter.reason === undefined ? "" : ` (${adapter.reason})`}`;
+
+const formatInactiveAdapterLine = (adapter: InactiveAdapterStatus): string =>
+  `  ${adapter.id}: ${adapter.state}, runtime unavailable`;
+
+const sectionLines = (title: string, lines: readonly string[]): readonly string[] =>
+  lines.length === 0 ? [title, "  (none)"] : [title, ...lines];
+
+const runningOrchestratorLines = (
+  report: Extract<CliStatusReport, { readonly _tag: "Running" }>,
+) => [
+  "",
+  `orchestrator: ${report.server.orchestrator.state}`,
+  ...sectionLines("chats:", report.server.orchestrator.chats.map(formatAdapterLine)),
+  ...sectionLines("harnesses:", report.server.orchestrator.harnesses.map(formatAdapterLine)),
+];
+
+const inactiveOrchestratorLines = (
+  report: Exclude<CliStatusReport, { readonly _tag: "Running" }>,
+) => [
+  "",
+  "orchestrator: unavailable (server not running)",
+  `config status: ${report.configSummary.status}`,
+  ...sectionLines("chats:", report.configSummary.chats.map(formatInactiveAdapterLine)),
+  ...sectionLines("harnesses:", report.configSummary.harnesses.map(formatInactiveAdapterLine)),
+];
+
 export const statusReportJson = (report: CliStatusReport): JsonValue => {
   switch (report._tag) {
     case "Running":
@@ -81,6 +125,15 @@ export const statusReportJson = (report: CliStatusReport): JsonValue => {
             kind: report.server.endpoint.kind,
             path: report.server.endpoint.path,
           },
+          orchestrator: {
+            state: report.server.orchestrator.state,
+            activation: report.server.orchestrator.activation,
+            chats: report.server.orchestrator.chats.map(adapterJson),
+            harnesses: report.server.orchestrator.harnesses.map(adapterJson),
+            ...(report.server.orchestrator.reason === undefined
+              ? {}
+              : { reason: report.server.orchestrator.reason }),
+          },
         },
       };
     case "Stopped":
@@ -90,8 +143,13 @@ export const statusReportJson = (report: CliStatusReport): JsonValue => {
       return {
         status: statusLabel(report),
         _tag: report._tag,
-        reason: inactiveReason(report),
+        reason: report.reason,
         paths: pathJson(report.paths),
+        configSummary: {
+          status: report.configSummary.status,
+          chats: report.configSummary.chats.map(inactiveAdapterJson),
+          harnesses: report.configSummary.harnesses.map(inactiveAdapterJson),
+        },
       };
   }
 };
@@ -99,28 +157,38 @@ export const statusReportJson = (report: CliStatusReport): JsonValue => {
 export const renderStatusHuman = (report: CliStatusReport): string => {
   switch (report._tag) {
     case "Running":
-      return formatKeyValueLines([
-        ["xmux server", report.server.state],
-        ["pid", report.server.pid],
-        ["session", report.sessionId],
-        ["config", report.server.configPath],
-        ["state dir", report.server.stateDir],
-        ["socket", report.server.endpoint.path],
-        ["manifest", report.manifestPath],
-        ["uptime", formatUptime(report.server.uptimeMs)],
-      ]).trimEnd();
+      return [
+        formatKeyValueLines([
+          ["xmux server", report.server.state],
+          ["pid", report.server.pid],
+          ["session", report.sessionId],
+          ["config", report.server.configPath],
+          ["state dir", report.server.stateDir],
+          ["socket", report.server.endpoint.path],
+          ["manifest", report.manifestPath],
+          ["uptime", formatUptime(report.server.uptimeMs)],
+        ]).trimEnd(),
+        ...runningOrchestratorLines(report),
+      ]
+        .join("\n")
+        .trimEnd();
     case "Stopped":
     case "InvalidManifest":
     case "WrongScope":
     case "StaleManifestCleaned":
-      return formatKeyValueLines([
-        ["xmux server", statusLabel(report)],
-        ["reason", inactiveReason(report)],
-        ["config", report.paths.configPath],
-        ["state dir", report.paths.stateDir],
-        ["socket", report.paths.socketPath],
-        ["manifest", report.paths.manifestPath],
-      ]).trimEnd();
+      return [
+        formatKeyValueLines([
+          ["xmux server", statusLabel(report)],
+          ["reason", report.reason],
+          ["config", report.paths.configPath],
+          ["state dir", report.paths.stateDir],
+          ["socket", report.paths.socketPath],
+          ["manifest", report.paths.manifestPath],
+        ]).trimEnd(),
+        ...inactiveOrchestratorLines(report),
+      ]
+        .join("\n")
+        .trimEnd();
   }
 };
 

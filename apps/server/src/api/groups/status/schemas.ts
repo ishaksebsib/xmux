@@ -8,6 +8,7 @@ import {
   ScopeId,
   StateDir,
 } from "../../../contracts/primitives";
+import { ServerOrchestratorStatusSnapshot } from "../../../orchestrator/status-model";
 import { ServerStatusState } from "../../../server-runtime/state";
 
 /** Status is the schema-backed local control payload for CLI discovery. */
@@ -22,4 +23,5 @@ export class StatusResponse extends Schema.Class<StatusResponse>("StatusResponse
   stateDir: StateDir,
   scopeId: ScopeId,
   endpoint: ServerControlEndpoint,
+  orchestrator: Schema.optionalKey(ServerOrchestratorStatusSnapshot),
 }) {}

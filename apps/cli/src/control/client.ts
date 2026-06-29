@@ -19,6 +19,55 @@ export type CliServerState =
   | "stopping"
   | "failed";
 
+export type CliOrchestratorState =
+  | "not_started"
+  | "disabled"
+  | "starting"
+  | "running"
+  | "degraded"
+  | "failed"
+  | "stopping"
+  | "stopped";
+
+export type CliOrchestratorActivation = "disabled" | "enabled" | "invalid" | "unknown";
+
+export type CliChatAdapterRuntimeState =
+  | "configured"
+  | "opening"
+  | "starting"
+  | "active"
+  | "failed"
+  | "closing"
+  | "stopped";
+
+export type CliHarnessAdapterRuntimeState =
+  | "configured_lazy"
+  | "opening"
+  | "opened"
+  | "failed"
+  | "closing"
+  | "closed";
+
+export interface CliChatAdapterStatus {
+  readonly id: string;
+  readonly state: CliChatAdapterRuntimeState;
+  readonly reason?: string;
+}
+
+export interface CliHarnessAdapterStatus {
+  readonly id: string;
+  readonly state: CliHarnessAdapterRuntimeState;
+  readonly reason?: string;
+}
+
+export interface CliOrchestratorStatus {
+  readonly state: CliOrchestratorState;
+  readonly activation: CliOrchestratorActivation;
+  readonly chats: readonly CliChatAdapterStatus[];
+  readonly harnesses: readonly CliHarnessAdapterStatus[];
+  readonly reason?: string;
+}
+
 export interface CliHealthResponse {
   readonly alive: boolean;
   readonly ready: boolean;
@@ -39,6 +88,7 @@ export interface CliStatusResponse {
     readonly kind: "unix-socket";
     readonly path: string;
   };
+  readonly orchestrator?: CliOrchestratorStatus;
 }
 
 export type CliLogLevel = "trace" | "debug" | "info" | "warn" | "error";

@@ -14,6 +14,8 @@ import { decideOrchestratorActivation } from "./activation";
 import { mapEffectiveConfigToXmuxConfig } from "./config-map";
 import { OrchestratorFactory, type OrchestratorRuntime } from "./factory";
 import { makeOrchestratorLogger } from "./logger";
+import { OrchestratorStatusRegistry, safeOrchestratorStatusReason } from "./status-registry";
+import { safeStatusReasonFromString } from "./status-model";
 import { makeServerOrchestratorMiddleware } from "./middleware";
 import {
   OrchestratorConfigurationError,
@@ -100,9 +102,11 @@ const shutdownOrchestratorRuntime = (runtime: OrchestratorRuntime): Effect.Effec
 export const startOrchestrator = Effect.fn("server.orchestrator.start")(function* (
   config: EffectiveServerConfig,
 ) {
+  const registry = yield* OrchestratorStatusRegistry;
   const activation = decideOrchestratorActivation(config);
 
   if (activation._tag === "Disabled") {
+    yield* registry.markDisabled(activation);
     if (activation.harnesses.length > 0) {
       yield* Effect.logWarning("orchestrator disabled because no chats are configured", {
         harnesses: activation.harnesses,
@@ -114,6 +118,7 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
   }
 
   if (activation._tag === "Invalid") {
+    yield* registry.markFailed(activation, safeStatusReasonFromString(activation.reason));
     return yield* OrchestratorConfigurationError.make({
       path: "harnesses",
       reason: activation.reason,
@@ -121,27 +126,62 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
     });
   }
 
+  yield* registry.markStarting(activation);
+
   const factory = yield* OrchestratorFactory;
   const store = yield* OrchestratorStore;
   const xmuxConfig = mapEffectiveConfigToXmuxConfig(config);
   const logger = yield* makeOrchestratorLogger();
   const middleware = makeServerOrchestratorMiddleware(config);
 
-  yield* Effect.acquireRelease(
+  const runtime = yield* factory
+    .create({
+      effectiveConfig: config,
+      config: xmuxConfig,
+      store,
+      logger,
+      middleware,
+    })
+    .pipe(
+      Effect.tapError((error) =>
+        registry.markFailed(activation, safeOrchestratorStatusReason(error)),
+      ),
+    );
+
+  const initialized = yield* initializeOrchestratorRuntime(runtime).pipe(
+    Effect.as("running" as const),
+    Effect.catch((error) =>
+      Effect.gen(function* () {
+        const reason = safeOrchestratorStatusReason(error);
+        const snapshot = runtime.status();
+
+        if (!snapshot.chats.adapters.some((adapter) => adapter.state === "failed")) {
+          yield* registry.markFailed(activation, reason);
+          yield* shutdownOrchestratorRuntime(runtime);
+          return yield* Effect.fail(error);
+        }
+
+        yield* registry.markDegraded(activation, snapshot, reason);
+        yield* shutdownOrchestratorRuntime(runtime);
+        yield* Effect.logWarning("orchestrator started in degraded mode", {
+          chats: activation.chats,
+          harnesses: activation.harnesses,
+          reason,
+        });
+        return "degraded" as const;
+      }),
+    ),
+  );
+
+  if (initialized === "degraded") return activation;
+
+  yield* registry.markRunning(activation, runtime.status());
+  yield* Effect.acquireRelease(Effect.succeed(runtime), (acquired) =>
     Effect.gen(function* () {
-      const runtime = yield* factory.create({
-        effectiveConfig: config,
-        config: xmuxConfig,
-        store,
-        logger,
-        middleware,
-      });
-      yield* initializeOrchestratorRuntime(runtime).pipe(
-        Effect.tapError(() => shutdownOrchestratorRuntime(runtime)),
-      );
-      return runtime;
+      yield* registry.markStopping();
+      yield* shutdownOrchestratorRuntime(acquired);
+      yield* registry.markStopped();
     }),
-    shutdownOrchestratorRuntime,
   );
   yield* Effect.logInfo("orchestrator started", {
     chats: activation.chats,

@@ -5,6 +5,7 @@ import { HttpRouter, HttpServer } from "effect/unstable/http";
 import { ServerConfig } from "../../../config/service";
 import { ControlServerError } from "../../../errors";
 import { LogReader } from "../../../logging/log-reader";
+import { OrchestratorStatusRegistry } from "../../../orchestrator/status-registry";
 import { ServerIdentity } from "../../../server-runtime/identity";
 import { ShutdownCoordinator } from "../../../server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../../../server-runtime/state";
@@ -67,6 +68,7 @@ export const nodeUnixSocketControlTransportLayer = Layer.effect(ControlTransport
     const identity = yield* ServerIdentity;
     const shutdown = yield* ShutdownCoordinator;
     const status = yield* StatusRegistry;
+    const orchestratorStatus = yield* OrchestratorStatusRegistry;
 
     const socketPath = paths.controlEndpoint.path;
     const apiDependencies = Layer.mergeAll(
@@ -76,6 +78,7 @@ export const nodeUnixSocketControlTransportLayer = Layer.effect(ControlTransport
       Layer.succeed(ServerIdentity)(identity),
       Layer.succeed(ShutdownCoordinator)(shutdown),
       Layer.succeed(StatusRegistry)(status),
+      Layer.succeed(OrchestratorStatusRegistry)(orchestratorStatus),
     );
     const httpServer = makeUnixSocketHttpServerLayer(socketPath);
     const servingLayer = HttpRouter.serve(appLayer, {

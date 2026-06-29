@@ -4,11 +4,15 @@ import { join } from "node:path";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import * as NodePath from "@effect/platform-node/NodePath";
 import { assert, describe, it } from "@effect/vitest";
+import { Result, XmuxInitializeError } from "@xmux/orchestrator";
 import { Duration, Effect, Fiber, Layer } from "effect";
 import { StatusResponse } from "../src/api/groups/status/schemas";
 import { shutdown as shutdownRoute } from "../src/api/groups/lifecycle/handlers";
 import { status as statusRoute } from "../src/api/groups/status/handlers";
-import { testOrchestratorFactoryLayer } from "./support/orchestrator";
+import {
+  makeTestOrchestratorFactoryLayer,
+  testOrchestratorFactoryLayer,
+} from "./support/orchestrator";
 import { makeSecretResolverLayer } from "./support/secrets";
 import { ServerConfig } from "../src/config/service";
 import { LogReader } from "../src/logging/log-reader";
@@ -28,6 +32,9 @@ import {
 } from "../src/contracts/primitives";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
 import { RuntimePaths } from "../src/server-control/paths";
+import { OrchestratorFactory } from "../src/orchestrator/factory";
+import { safeStatusReasonFromString } from "../src/orchestrator/status-model";
+import { OrchestratorStatusRegistry } from "../src/orchestrator/status-registry";
 import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../src/server-runtime/state";
@@ -81,6 +88,23 @@ const waitForMissingPath = (path: string): Effect.Effect<void> =>
     assert.fail(`Timed out waiting for path removal: ${path}`);
   });
 
+const waitForStatusState = (socketPath: string, state: string) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const status = yield* getStatus(socketPath);
+      if (status.state === state) return status;
+      yield* Effect.sleep(Duration.millis(10));
+    }
+    assert.fail(`Timed out waiting for status state: ${state}`);
+  });
+
+const requireOrchestrator = (status: StatusResponse) => {
+  if (status.orchestrator === undefined) {
+    assert.fail("Expected orchestrator status to be present");
+  }
+  return status.orchestrator;
+};
+
 const makePaths = (
   root: string,
   overrides: {
@@ -106,13 +130,16 @@ const makePaths = (
   scopeId: scopeIdFromString("testscope"),
 });
 
-const makeServerTestLayer = (paths: ServerRuntimePaths) => {
+const makeServerTestLayer = (
+  paths: ServerRuntimePaths,
+  factoryLayer: Layer.Layer<OrchestratorFactory> = testOrchestratorFactoryLayer,
+) => {
   const base = Layer.mergeAll(
     nodeHostRuntimeLayer,
     NodeFileSystem.layer,
     NodePath.layer,
     secretLayer,
-    testOrchestratorFactoryLayer,
+    factoryLayer,
     nodeServerProbeLayer,
     Layer.succeed(RuntimePaths)(paths),
     Layer.succeed(ServerIdentity)({
@@ -127,6 +154,7 @@ const makeServerTestLayer = (paths: ServerRuntimePaths) => {
   const withRuntime = Layer.mergeAll(
     withLogReader,
     StatusRegistry.layer,
+    OrchestratorStatusRegistry.layer,
     ShutdownCoordinator.layer,
   );
 
@@ -152,6 +180,7 @@ describe("control handlers", () => {
       const paths = makePaths(root);
       const handlerLayer = Layer.mergeAll(
         StatusRegistry.layer,
+        OrchestratorStatusRegistry.layer,
         ShutdownCoordinator.layer,
         Layer.succeed(RuntimePaths)(paths),
         Layer.succeed(ServerIdentity)({
@@ -172,8 +201,13 @@ describe("control handlers", () => {
           assert.fail("Expected direct status response value");
           return;
         }
+        const orchestrator = requireOrchestrator(statusBody);
         assert.strictEqual(statusBody.state, "ready");
         assert.strictEqual(statusBody.endpoint.path, paths.controlEndpoint.path);
+        assert.strictEqual(orchestrator.state, "not_started");
+        assert.strictEqual(orchestrator.activation, "unknown");
+        assert.deepStrictEqual([...orchestrator.chats], []);
+        assert.deepStrictEqual([...orchestrator.harnesses], []);
 
         const firstShutdownBody = yield* Effect.scoped(shutdownRoute());
         assert.isTrue(firstShutdownBody.accepted);
@@ -228,8 +262,18 @@ describe("control server", () => {
 
       const status = yield* getStatus(socketPath);
       assert.strictEqual(status.state, "ready");
+      const orchestrator = requireOrchestrator(status);
       assert.strictEqual(status.endpoint.path, socketPath);
       assert.strictEqual(status.configPath, configPath);
+      assert.strictEqual(orchestrator.state, "running");
+      assert.deepStrictEqual(
+        orchestrator.chats.map((adapter) => ({ id: adapter.id, state: adapter.state })),
+        [{ id: "telegram", state: "active" }],
+      );
+      assert.deepStrictEqual(
+        orchestrator.harnesses.map((adapter) => ({ id: adapter.id, state: adapter.state })),
+        [{ id: "opencode", state: "configured_lazy" }],
+      );
 
       const missingResponse = yield* requestRawUnixHttp({
         socketPath,
@@ -300,6 +344,81 @@ describe("control server", () => {
       assert.isFalse(yield* exists(manifestPath));
       assert.isFalse(yield* exists(socketPath));
       assert.isFalse(yield* exists(startupLockPath));
+    }),
+  );
+
+  it.live("serves degraded status when orchestrator initialization fails", () =>
+    Effect.gen(function* () {
+      const root = yield* makeTempRoot;
+      const configPath = join(root, "config.jsonc");
+      const socketPath = join(root, "runtime", "degraded.sock");
+      const manifestPath = join(root, "degraded.json");
+      const paths = makePaths(root, { configPath, manifestPath, socketPath });
+      yield* Effect.promise(() =>
+        writeFile(
+          configPath,
+          `{
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
+  "chats": {
+    "telegram": {
+      "token": { "value": "inline-telegram-token" },
+      "access": { "type": "anyone" }
+    }
+  },
+  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+}`,
+        ),
+      );
+      const factoryLayer = makeTestOrchestratorFactoryLayer({
+        status: () => ({
+          chats: {
+            lifecycle: "created",
+            adapters: [{ id: "telegram", state: "failed", reason: "ChatAdapterOpenError" }],
+          },
+          harnesses: { adapters: [{ id: "opencode", state: "configured_lazy" }] },
+        }),
+        initialize: () =>
+          Promise.resolve(
+            Result.err<void, XmuxInitializeError>(
+              new XmuxInitializeError({ cause: new Error("secret-token-should-not-leak") }),
+            ),
+          ),
+      });
+      const fiber = yield* Effect.forkScoped(
+        Effect.scoped(serverMain()).pipe(Effect.provide(makeServerTestLayer(paths, factoryLayer))),
+      );
+
+      yield* waitForPath(socketPath);
+      yield* waitForPath(manifestPath);
+
+      const status = yield* waitForStatusState(socketPath, "degraded");
+      const orchestrator = requireOrchestrator(status);
+      assert.strictEqual(status.state, "degraded");
+      assert.strictEqual(orchestrator.state, "degraded");
+      assert.deepStrictEqual(
+        orchestrator.chats.map((adapter) => ({
+          id: adapter.id,
+          state: adapter.state,
+          reason: adapter.reason,
+        })),
+        [
+          {
+            id: "telegram",
+            state: "failed",
+            reason: safeStatusReasonFromString("ChatAdapterOpenError"),
+          },
+        ],
+      );
+      assert.notInclude(JSON.stringify(status), "secret-token-should-not-leak");
+
+      const health = yield* getHealth(socketPath);
+      assert.isTrue(health.alive);
+      assert.isTrue(health.ready);
+      assert.strictEqual(health.state, "degraded");
+
+      const shutdown = yield* requestShutdown(socketPath);
+      assert.isTrue(shutdown.accepted);
+      yield* Fiber.join(fiber);
     }),
   );
 });

@@ -4,7 +4,7 @@ import { StatusRegistry } from "../../../server-runtime/state";
 import { serverApi } from "../../api";
 import { HealthResponse } from "./schemas";
 
-const isReady = (state: string): boolean => state === "ready";
+const isReady = (state: string): boolean => state === "ready" || state === "degraded";
 
 export const health = Effect.fn("api.system.health")(function* () {
   const status = yield* StatusRegistry;

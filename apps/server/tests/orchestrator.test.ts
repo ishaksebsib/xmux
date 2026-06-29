@@ -24,16 +24,19 @@ import {
 } from "../src/contracts/primitives";
 import { ServerConfig } from "../src/config/service";
 import { makeDatabaseSqlLayer } from "../src/db/layer";
-import { makeSqliteOrchestratorStore } from "../src/db/orchestrator-store";
+import { OrchestratorStore, makeSqliteOrchestratorStore } from "../src/db/orchestrator-store";
 import { LogReader } from "../src/logging/log-reader";
 import { decideOrchestratorActivation } from "../src/orchestrator/activation";
 import { mapEffectiveConfigToXmuxConfig } from "../src/orchestrator/config-map";
+import { safeStatusReasonFromString } from "../src/orchestrator/status-model";
 import { OrchestratorConfigurationError } from "../src/orchestrator/errors";
 import { OrchestratorFactory, type OrchestratorRuntime } from "../src/orchestrator/factory";
 import { makeServerOrchestratorMiddleware } from "../src/orchestrator/middleware";
+import { OrchestratorStatusRegistry } from "../src/orchestrator/status-registry";
 import { nodeOrchestratorFactoryLayer, nodeHostRuntimeLayer } from "../src/platform/node";
 import type { ServerRuntimePaths } from "../src/server-control/paths";
 import { RuntimePaths } from "../src/server-control/paths";
+import { startOrchestrator } from "../src/orchestrator/runtime";
 import { ControlTransport, ServerProbe } from "../src/server-control/ports";
 import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
@@ -68,10 +71,17 @@ const exists = (path: string): Effect.Effect<boolean> =>
 
 const okRuntime = (
   input: {
+    readonly status?: OrchestratorRuntime["status"];
     readonly initialize?: OrchestratorRuntime["initialize"];
     readonly shutdown?: OrchestratorRuntime["shutdown"];
   } = {},
 ): OrchestratorRuntime => ({
+  status:
+    input.status ??
+    (() => ({
+      chats: { lifecycle: "started", adapters: [{ id: "telegram", state: "active" }] },
+      harnesses: { adapters: [{ id: "opencode", state: "configured_lazy" }] },
+    })),
   initialize:
     input.initialize ?? (() => Promise.resolve(Result.ok<void, XmuxInitializeError>(undefined))),
   shutdown: input.shutdown ?? (() => Promise.resolve(Result.ok<void, XmuxCloseError>(undefined))),
@@ -114,6 +124,7 @@ const makeServerLayer = (input: {
   return Layer.mergeAll(
     withLogReader,
     StatusRegistry.layer,
+    OrchestratorStatusRegistry.layer,
     ShutdownCoordinator.layer,
     Layer.succeed(ControlTransport)(input.transport),
   );
@@ -247,7 +258,10 @@ describe("orchestrator server lifecycle", () => {
   it.effect("does not construct the orchestrator when activation is disabled", () =>
     Effect.gen(function* () {
       const sandbox = yield* makeSandbox;
-      yield* sandbox.writeConfig(`{ "xmux": { "workspace": { "defaultDir": "./workspace" } } }`);
+      yield* sandbox.writeConfig(`{
+  "xmux": { "workspace": { "defaultDir": "./workspace" } },
+  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+}`);
       const createCalls = yield* Ref.make(0);
       const factoryLayer = makeTestOrchestratorFactoryLayer({
         create: () => Ref.update(createCalls, (value) => value + 1).pipe(Effect.as(okRuntime())),
@@ -317,33 +331,110 @@ describe("orchestrator server lifecycle", () => {
     }),
   );
 
-  it.effect("startup failure cleans up transport and manifest before readiness", () =>
+  it.effect("captures degraded status when orchestrator initialization fails", () =>
     Effect.gen(function* () {
       const sandbox = yield* makeSandbox;
       yield* sandbox.writeConfig(validTelegramConfig("inline-token"));
-      const bindCalled = yield* Ref.make(false);
       const factoryLayer = makeTestOrchestratorFactoryLayer({
+        status: () => ({
+          chats: {
+            lifecycle: "created",
+            adapters: [{ id: "telegram", state: "failed", reason: "ChatAdapterOpenError" }],
+          },
+          harnesses: { adapters: [{ id: "opencode", state: "configured_lazy" }] },
+        }),
         initialize: () =>
           Promise.resolve(
-            Result.err<void, XmuxInitializeError>(new XmuxInitializeError({ cause: "boom" })),
+            Result.err<void, XmuxInitializeError>(
+              new XmuxInitializeError({ cause: new Error("secret-token-should-not-leak") }),
+            ),
           ),
       });
-      const layer = makeServerLayer({
-        paths: sandbox.paths,
-        transport: { bind: () => Ref.set(bindCalled, true) },
-        factoryLayer,
+      const layer = Layer.mergeAll(
+        makeServerLayer({
+          paths: sandbox.paths,
+          transport: { bind: () => Effect.void },
+          factoryLayer,
+        }),
+        Layer.succeed(OrchestratorStore)(createInMemoryStore()),
+      );
+
+      const degraded = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const config = yield* ServerConfig;
+          const effective = yield* config.loadCurrent(sandbox.paths.configPath);
+          yield* startOrchestrator(effective);
+          const orchestratorStatus = yield* OrchestratorStatusRegistry;
+          return yield* orchestratorStatus.get();
+        }).pipe(Effect.provide(layer)),
+      );
+
+      assert.strictEqual(degraded.state, "degraded");
+      assert.deepStrictEqual(
+        degraded.chats.map((adapter) => ({
+          id: adapter.id,
+          state: adapter.state,
+          reason: adapter.reason,
+        })),
+        [
+          {
+            id: "telegram",
+            state: "failed",
+            reason: safeStatusReasonFromString("ChatAdapterOpenError"),
+          },
+        ],
+      );
+      assert.notInclude(JSON.stringify(degraded), "secret-token-should-not-leak");
+    }),
+  );
+
+  it.effect("keeps non-adapter initialization failures fatal", () =>
+    Effect.gen(function* () {
+      const sandbox = yield* makeSandbox;
+      yield* sandbox.writeConfig(validTelegramConfig("inline-token"));
+      const shutdownCalls = yield* Ref.make(0);
+      const factoryLayer = makeTestOrchestratorFactoryLayer({
+        status: () => ({
+          chats: { lifecycle: "created", adapters: [{ id: "telegram", state: "configured" }] },
+          harnesses: { adapters: [{ id: "opencode", state: "configured_lazy" }] },
+        }),
+        initialize: () =>
+          Promise.resolve(
+            Result.err<void, XmuxInitializeError>(
+              new XmuxInitializeError({ cause: new Error("secret-token-should-not-leak") }),
+            ),
+          ),
+        shutdown: () =>
+          Ref.update(shutdownCalls, (count) => count + 1).pipe(
+            Effect.as(Result.ok<void, XmuxCloseError>(undefined)),
+            Effect.runPromise,
+          ),
       });
+      const layer = Layer.mergeAll(
+        makeServerLayer({
+          paths: sandbox.paths,
+          transport: { bind: () => Effect.void },
+          factoryLayer,
+        }),
+        Layer.succeed(OrchestratorStore)(createInMemoryStore()),
+      );
 
-      yield* Effect.gen(function* () {
-        const error = yield* Effect.scoped(serverMain()).pipe(Effect.flip);
-        const status = yield* StatusRegistry;
+      const failed = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const config = yield* ServerConfig;
+          const effective = yield* config.loadCurrent(sandbox.paths.configPath);
+          const error = yield* startOrchestrator(effective).pipe(Effect.flip);
+          const orchestratorStatus = yield* OrchestratorStatusRegistry;
+          const snapshot = yield* orchestratorStatus.get();
+          assert.strictEqual(error._tag, "OrchestratorStartupError");
+          return snapshot;
+        }).pipe(Effect.provide(layer)),
+      );
 
-        assert.strictEqual(error._tag, "OrchestratorStartupError");
-        assert.isTrue(yield* Ref.get(bindCalled));
-        assert.isFalse(yield* exists(sandbox.paths.manifestPath));
-        assert.isFalse(yield* exists(sandbox.paths.controlEndpoint.path));
-        assert.strictEqual(yield* status.getState(), "starting");
-      }).pipe(Effect.provide(layer));
+      assert.strictEqual(failed.state, "failed");
+      assert.strictEqual(failed.reason, "OrchestratorStartupError");
+      assert.strictEqual(yield* Ref.get(shutdownCalls), 1);
+      assert.notInclude(JSON.stringify(failed), "secret-token-should-not-leak");
     }),
   );
 
@@ -359,9 +450,16 @@ describe("orchestrator server lifecycle", () => {
         transport: { bind: () => Ref.set(bindCalled, true) },
       });
 
-      const error = yield* Effect.scoped(serverMain()).pipe(Effect.provide(layer), Effect.flip);
+      const failed = yield* Effect.gen(function* () {
+        const error = yield* Effect.scoped(serverMain()).pipe(Effect.flip);
+        const registry = yield* OrchestratorStatusRegistry;
+        const snapshot = yield* registry.get();
+        assert.strictEqual(error._tag, "OrchestratorConfigurationError");
+        return snapshot;
+      }).pipe(Effect.provide(layer));
 
-      assert.strictEqual(error._tag, "OrchestratorConfigurationError");
+      assert.strictEqual(failed.state, "failed");
+      assert.strictEqual(failed.reason, "ChatsWithoutHarnesses");
       assert.isTrue(yield* Ref.get(bindCalled));
       assert.isFalse(yield* exists(sandbox.paths.manifestPath));
       assert.isFalse(yield* exists(sandbox.paths.controlEndpoint.path));

@@ -1,4 +1,9 @@
-import { Result, type XmuxCloseError, type XmuxInitializeError } from "@xmux/orchestrator";
+import {
+  Result,
+  type XmuxCloseError,
+  type XmuxInitializeError,
+  type XmuxRuntimeStatusSnapshot,
+} from "@xmux/orchestrator";
 import { Effect, Layer } from "effect";
 import {
   OrchestratorFactory,
@@ -13,11 +18,17 @@ const okInitialize = (): Promise<Result<void, XmuxInitializeError>> =>
 const okShutdown = (): Promise<Result<void, XmuxCloseError>> =>
   Promise.resolve(Result.ok<void, XmuxCloseError>(undefined));
 
+const okStatus = (): XmuxRuntimeStatusSnapshot => ({
+  chats: { lifecycle: "started", adapters: [{ id: "telegram", state: "active" }] },
+  harnesses: { adapters: [{ id: "opencode", state: "configured_lazy" }] },
+});
+
 export const makeTestOrchestratorFactoryLayer = (
   input: {
     readonly create?: (
       options: CreateOrchestratorRuntimeInput,
     ) => Effect.Effect<OrchestratorRuntime, OrchestratorConfigurationError>;
+    readonly status?: OrchestratorRuntime["status"];
     readonly initialize?: OrchestratorRuntime["initialize"];
     readonly shutdown?: OrchestratorRuntime["shutdown"];
   } = {},
@@ -27,6 +38,7 @@ export const makeTestOrchestratorFactoryLayer = (
       input.create ??
       (() =>
         Effect.succeed({
+          status: input.status ?? okStatus,
           initialize: input.initialize ?? okInitialize,
           shutdown: input.shutdown ?? okShutdown,
         })),

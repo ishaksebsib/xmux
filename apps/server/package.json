@@ -38,6 +38,12 @@
         "default": "./dist/platform/node.mjs"
       }
     },
+    "./status": {
+      "import": {
+        "types": "./dist/status.d.mts",
+        "default": "./dist/status.mjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

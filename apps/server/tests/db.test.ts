@@ -35,6 +35,7 @@ import { LogReader } from "../src/logging/log-reader";
 import { nodeHostRuntimeLayer } from "../src/platform/node";
 import { RuntimePaths, type ServerRuntimePaths } from "../src/server-control/paths";
 import { ControlTransport, ServerProbe } from "../src/server-control/ports";
+import { OrchestratorStatusRegistry } from "../src/orchestrator/status-registry";
 import { ServerIdentity } from "../src/server-runtime/identity";
 import { ShutdownCoordinator } from "../src/server-runtime/shutdown-coordinator";
 import { StatusRegistry } from "../src/server-runtime/state";
@@ -214,6 +215,7 @@ const makeServerLayer = (paths: ServerRuntimePaths, transport: TestControlTransp
   return Layer.mergeAll(
     withLogReader,
     StatusRegistry.layer,
+    OrchestratorStatusRegistry.layer,
     ShutdownCoordinator.layer,
     Layer.succeed(ControlTransport)(transport),
   );

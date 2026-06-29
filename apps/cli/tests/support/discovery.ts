@@ -167,6 +167,46 @@ export const bindShutdownServer = (
 
 export const bindStatusServer = (
   paths: CliResolvedServerPaths,
+  orchestrator: JsonValue = {
+    state: "running",
+    activation: "enabled",
+    chats: [{ id: "telegram", state: "active" }],
+    harnesses: [{ id: "pi", state: "configured_lazy" }],
+  },
+): Effect.Effect<Server, Error, Scope.Scope> =>
+  bindUnixHttpServer(paths.socketPath, (request, response) => {
+    if (request.url === "/healthz") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ alive: true, ready: true, state: "ready" }));
+      return;
+    }
+
+    if (request.url === "/v1/status") {
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          version: 1,
+          protocolVersion: 1,
+          pid: process.pid,
+          startedAt: "2026-06-16T00:00:00.000Z",
+          uptimeMs: 151_000,
+          state: "ready",
+          configPath: paths.configPath,
+          stateDir: paths.stateDir,
+          scopeId: paths.scopeId,
+          endpoint: { kind: "unix-socket", path: paths.socketPath },
+          orchestrator,
+        }),
+      );
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end();
+  });
+
+export const bindLegacyStatusServer = (
+  paths: CliResolvedServerPaths,
 ): Effect.Effect<Server, Error, Scope.Scope> =>
   bindUnixHttpServer(paths.socketPath, (request, response) => {
     if (request.url === "/healthz") {
