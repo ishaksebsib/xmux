@@ -121,6 +121,7 @@ describe.sequential("status command", () => {
         expect(report._tag).toBe("Stopped");
         expect(human).toContain("xmux server: stopped");
         expect(human).toContain("reason: no-manifest");
+        expect(human).not.toContain(configPath);
         expect(human).toContain("orchestrator: unavailable (server not running)");
         expect(human).toContain("telegram: configured, runtime unavailable");
         expect(human).toContain("pi: configured_lazy, runtime unavailable");
@@ -241,6 +242,9 @@ describe.sequential("status command", () => {
         expect(report._tag).toBe("Running");
         expect(human).toContain("xmux server: ready");
         expect(human).toContain("session: active-status");
+        expect(human).not.toContain(paths.configPath);
+        expect(human).not.toContain(paths.socketPath);
+        expect(human).not.toContain(paths.manifestPath);
         expect(human).toContain("orchestrator: running");
         expect(human).toContain("telegram: active");
         expect(human).toContain("pi: configured_lazy");

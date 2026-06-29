@@ -162,10 +162,6 @@ export const renderStatusHuman = (report: CliStatusReport): string => {
           ["xmux server", report.server.state],
           ["pid", report.server.pid],
           ["session", report.sessionId],
-          ["config", report.server.configPath],
-          ["state dir", report.server.stateDir],
-          ["socket", report.server.endpoint.path],
-          ["manifest", report.manifestPath],
           ["uptime", formatUptime(report.server.uptimeMs)],
         ]).trimEnd(),
         ...runningOrchestratorLines(report),
@@ -180,10 +176,6 @@ export const renderStatusHuman = (report: CliStatusReport): string => {
         formatKeyValueLines([
           ["xmux server", statusLabel(report)],
           ["reason", report.reason],
-          ["config", report.paths.configPath],
-          ["state dir", report.paths.stateDir],
-          ["socket", report.paths.socketPath],
-          ["manifest", report.paths.manifestPath],
         ]).trimEnd(),
         ...inactiveOrchestratorLines(report),
       ]
