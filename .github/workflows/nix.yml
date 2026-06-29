@@ -1,0 +1,127 @@
+name: Nix
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nix-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  eval:
+    name: Evaluate flake outputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Evaluate all supported systems
+        run: |
+          set -euo pipefail
+
+          nix --version
+          nix flake metadata
+          nix flake show --all-systems
+
+          systems="x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin"
+          packages="cli xmux default cli-deps-updater"
+
+          for system in $systems; do
+            echo "=== packages.${system} ==="
+            for package in $packages; do
+              nix eval ".#packages.${system}.${package}.drvPath" --raw >/dev/null
+              echo "  ${package}: ok"
+            done
+
+            echo "=== apps.${system} ==="
+            nix eval ".#apps.${system}.default.program" --raw >/dev/null
+            nix eval ".#apps.${system}.cli.program" --raw >/dev/null
+            nix eval ".#apps.${system}.xmux.program" --raw >/dev/null
+
+            echo "=== devShells.${system} ==="
+            nix eval ".#devShells.${system}.default.drvPath" --raw >/dev/null
+          done
+
+  build:
+    name: Build CLI (${{ matrix.system }})
+    needs: eval
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: x86_64-darwin
+            runner: macos-13
+          - system: aarch64-darwin
+            runner: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Build package
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          set -euo pipefail
+
+          build_log="$(mktemp)"
+          trap 'rm -f "$build_log"' EXIT
+
+          set +e
+          nix build ".#packages.${SYSTEM}.cli" --no-link --print-build-logs 2>&1 | tee "$build_log"
+          status="${PIPESTATUS[0]}"
+          set -e
+
+          if [ "$status" -ne 0 ]; then
+            got_hash="$(grep -oE 'got:[[:space:]]+sha256-[A-Za-z0-9+/=]+' "$build_log" | awk '{ print $2 }' | tail -n1 || true)"
+            if [ -n "$got_hash" ]; then
+              echo "::error title=Stale Nix pnpm dependency hash::Update nix/hashes.json: .pnpmDeps.${SYSTEM} = ${got_hash}"
+              echo "### Stale Nix pnpm dependency hash" >> "$GITHUB_STEP_SUMMARY"
+              echo "Update \`nix/hashes.json\`:" >> "$GITHUB_STEP_SUMMARY"
+              echo "\`\`\`json" >> "$GITHUB_STEP_SUMMARY"
+              echo "\"${SYSTEM}\": \"${got_hash}\"" >> "$GITHUB_STEP_SUMMARY"
+              echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit "$status"
+          fi
+
+  smoke-default-app:
+    name: Smoke test default nix run
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: nix run . defaults to CLI
+        run: nix run . -- --version

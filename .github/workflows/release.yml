@@ -42,6 +42,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Setup Nix
+        uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Check Nix CLI package
+        run: nix build .#cli --no-link --print-build-logs
+
+      - name: Check default nix run
+        run: nix run . -- --version
+
       - name: Run release checks
         run: pnpm release:check
 
