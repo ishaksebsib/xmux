@@ -87,6 +87,7 @@ describe("ServerFileConfig schema", () => {
           },
         },
         stt: {
+          enabled: true,
           provider: "openai-compatible",
           apiKey: { env: "OPENAI_API_KEY" },
           model: "gpt-4o-mini-transcribe",
@@ -95,30 +96,50 @@ describe("ServerFileConfig schema", () => {
         },
         chats: {
           telegram: {
+            enabled: true,
             token: { env: "TELEGRAM_BOT_TOKEN" },
             access: { type: "allow-list", users: ["123456789"] },
           },
           discord: {
+            enabled: true,
             token: { value: "discord-inline" },
             applicationId: "app-id",
             guildId: "guild-id",
             access: { type: "anyone" },
           },
           slack: {
+            enabled: true,
             botToken: { value: "xoxb-token" },
             appToken: { value: "xapp-token" },
             access: { type: "allow-list", users: ["U123456789"] },
           },
         },
         harnesses: {
-          opencode: { runtime: { type: "embedded" } },
-          pi: { agentDir: "./pi-agent" },
+          opencode: { enabled: true, runtime: { type: "embedded" } },
+          pi: { enabled: true, agentDir: "./pi-agent" },
         },
       });
 
+      const telegram = full.chats?.telegram;
+      const discord = full.chats?.discord;
+
       assert.strictEqual(full.xmux?.workspace?.defaultDir, "~/dev");
-      assert.instanceOf(full.chats?.telegram?.token, EnvSecretRef);
-      assert.instanceOf(full.chats?.discord?.token, InlineSecretRef);
+      assert.isDefined(telegram);
+      assert.isDefined(discord);
+      if (telegram === undefined || discord === undefined) return;
+      assert.isTrue(telegram.enabled);
+      assert.isTrue(discord.enabled);
+      if (!telegram.enabled || !discord.enabled) return;
+      assert.instanceOf(telegram.token, EnvSecretRef);
+      assert.instanceOf(discord.token, InlineSecretRef);
+    }),
+  );
+
+  it.effect("rejects adapter and feature sections without explicit enabled flags", () =>
+    Effect.sync(() => {
+      assert.throws(() => decodeFileConfig({ stt: { model: "gpt-4o-mini-transcribe" } }));
+      assert.throws(() => decodeFileConfig({ chats: { telegram: { token: { value: "token" } } } }));
+      assert.throws(() => decodeFileConfig({ harnesses: { pi: {} } }));
     }),
   );
 
@@ -267,10 +288,12 @@ describe("config loading and validation", () => {
             `{
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "TELEGRAM_BOT_TOKEN" },
       "access": { "type": "allow-list", "users": ["123456789"] }
     },
     "discord": {
+      "enabled": true,
       "token": { "value": "discord-inline" },
       "applicationId": "app-id",
       "guildId": "guild-id",
@@ -286,6 +309,9 @@ describe("config loading and validation", () => {
           assert.isDefined(telegram);
           assert.isDefined(discord);
           if (telegram === undefined || discord === undefined) return;
+          assert.isTrue(telegram.enabled);
+          assert.isTrue(discord.enabled);
+          if (!telegram.enabled || !discord.enabled) return;
 
           assert.strictEqual(Redacted.value(telegram.token.value), "telegram-secret");
           assert.strictEqual(Redacted.value(discord.token.value), "discord-inline");
@@ -297,6 +323,9 @@ describe("config loading and validation", () => {
           assert.isDefined(redactedTelegram);
           assert.isDefined(redactedDiscord);
           if (redactedTelegram === undefined || redactedDiscord === undefined) return;
+          assert.isTrue(redactedTelegram.enabled);
+          assert.isTrue(redactedDiscord.enabled);
+          if (!redactedTelegram.enabled || !redactedDiscord.enabled) return;
 
           assert.isTrue(redactedTelegram.token.redacted);
           assert.strictEqual(
@@ -318,7 +347,7 @@ describe("config loading and validation", () => {
             configPath,
             `{
   "chats": {
-    "telegram": { "token": { "env": "TELEGRAM_BOT_TOKEN" } }
+    "telegram": { "enabled": true, "token": { "env": "TELEGRAM_BOT_TOKEN" } }
   }
 }`,
           );
@@ -327,7 +356,7 @@ describe("config loading and validation", () => {
             Effect.catchTag("ConfigValidationError", (error) => Effect.succeed(error)),
           );
           assert.instanceOf(result, ConfigValidationError);
-          assert.include(result.message, "chats.telegram.access");
+          assert.include(result.message, `["chats"]["telegram"]["access"]`);
         }),
       ),
     );
@@ -341,6 +370,7 @@ describe("config loading and validation", () => {
             `{
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "MISSING_TOKEN" },
       "access": { "type": "anyone" }
     }
@@ -356,6 +386,38 @@ describe("config loading and validation", () => {
           assert.notInclude(result.message, "telegram-secret");
         }),
       ),
+    );
+
+    it.effect(
+      "parses disabled integrations without resolving secrets or requiring runtime fields",
+      () =>
+        withTempConfigPath("disabled.jsonc", (configPath) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            yield* fs.writeFileString(
+              configPath,
+              `{
+  "stt": { "enabled": false, "apiKey": { "env": "MISSING_TOKEN" } },
+  "chats": {
+    "telegram": { "enabled": false, "token": { "env": "MISSING_TOKEN" } }
+  },
+  "harnesses": {
+    "pi": { "enabled": false }
+  }
+}`,
+            );
+
+            const effective = yield* loadEffectiveServerConfig(configPath);
+            assert.strictEqual(effective.stt?.enabled, false);
+            assert.strictEqual(effective.chats.telegram?.enabled, false);
+            assert.strictEqual(effective.harnesses.pi?.enabled, false);
+
+            const redacted = decodeRedactedConfig(redactServerConfig(effective));
+            assert.strictEqual(redacted.stt?.enabled, false);
+            assert.strictEqual(redacted.chats.telegram?.enabled, false);
+            assert.strictEqual(redacted.harnesses.pi?.enabled, false);
+          }),
+        ),
     );
 
     it.effect("returns schema-valid validation responses", () =>

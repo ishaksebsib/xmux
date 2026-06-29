@@ -5,17 +5,20 @@
   },
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "TELEGRAM_BOT_TOKEN" },
       "access": { "type": "anyone" },
     },
   },
   "harnesses": {
     "opencode": {
+      "enabled": true,
       "runtime": { "type": "embedded", "port": 34567 },
       "defaultModel": { "modelId": "qwen3-coder" },
       "defaultThinking": "high",
     },
     "pi": {
+      "enabled": true,
       "agentDir": "~/xmux/pi-agent",
       "defaultModel": { "modelId": "claude-opus-4" },
     },

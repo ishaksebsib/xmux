@@ -37,6 +37,8 @@ describeIntegration("control API integration", () => {
         if (telegramConfig === undefined) {
           assert.fail("Expected Telegram config to be present");
         }
+        assert.isTrue(telegramConfig.enabled);
+        if (!telegramConfig.enabled) return;
         assert.strictEqual(telegramConfig.token.source, "value");
         const valid = yield* validateConfig(socketPath);
         assert.isTrue(valid.valid);

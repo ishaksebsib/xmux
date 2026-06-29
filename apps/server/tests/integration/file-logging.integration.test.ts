@@ -73,6 +73,7 @@ const rotatingLogConfig = (token: string): string => `{
     }
   },
   "stt": {
+    "enabled": true,
     "apiKey": { "value": "${token}" },
     "model": "gpt-4o-mini-transcribe"
   }

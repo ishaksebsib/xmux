@@ -238,11 +238,12 @@ describe("control server", () => {
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "value": "inline-telegram-token" },
       "access": { "type": "anyone" }
     }
   },
-  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+  "harnesses": { "opencode": { "enabled": true, "runtime": { "type": "embedded" } } }
 }`,
         ),
       );
@@ -295,6 +296,8 @@ describe("control server", () => {
       if (telegramConfig === undefined) {
         assert.fail("Expected Telegram config to be present");
       }
+      assert.isTrue(telegramConfig.enabled);
+      if (!telegramConfig.enabled) return;
       assert.strictEqual(telegramConfig.token.source, "value");
 
       const configResponse = yield* requestRawUnixHttp({
@@ -361,11 +364,12 @@ describe("control server", () => {
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "value": "inline-telegram-token" },
       "access": { "type": "anyone" }
     }
   },
-  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+  "harnesses": { "opencode": { "enabled": true, "runtime": { "type": "embedded" } } }
 }`,
         ),
       );

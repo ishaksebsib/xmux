@@ -2,11 +2,11 @@ import { Effect, Path } from "effect";
 import {
   type ChatAttachmentKindConfig,
   ConfigValidationIssue,
+  DisabledIntegrationConfig,
   type DiscordFileConfig,
   type OpenCodeFileConfig,
   OpenCodeEmbeddedRuntimeConfig,
   type PiFileConfig,
-  type SecretRef,
   type ServerFileServerConfig,
   ServerFileConfig,
   ServerLogRotationConfig,
@@ -36,20 +36,20 @@ import {
   resolvedPathFromString,
   type ResolvedPath,
 } from "../contracts/primitives";
-import { ConfigValidationError, type ConfigError } from "../errors";
+import type { ConfigError } from "../errors";
 import { DEFAULT_MAX_LOG_FILE_BYTES, DEFAULT_MAX_LOG_FILES } from "../logging/file-logger";
 import { HostRuntime } from "../platform/host";
 import { expandHome } from "../platform/path";
 import {
   EffectiveChatsConfig,
-  EffectiveDiscordConfig,
   EffectiveHarnessesConfig,
-  EffectiveOpenCodeConfig,
-  EffectivePiConfig,
   EffectiveServerConfig,
-  EffectiveSlackConfig,
-  EffectiveSttConfig,
-  EffectiveTelegramConfig,
+  EnabledEffectiveDiscordConfig,
+  EnabledEffectiveOpenCodeConfig,
+  EnabledEffectivePiConfig,
+  EnabledEffectiveSlackConfig,
+  EnabledEffectiveSttConfig,
+  EnabledEffectiveTelegramConfig,
 } from "./effective";
 import { loadServerConfigFile } from "./load-jsonc";
 import { redactServerConfig } from "./redact";
@@ -86,25 +86,6 @@ const resolveConfigRelativePath = (
     : pathService.resolve(pathService.dirname(configPath), expanded);
   return resolvedPathFromString(resolved);
 };
-
-const validationError = (input: {
-  readonly configPath: ConfigPath;
-  readonly message: string;
-}): ConfigValidationError =>
-  ConfigValidationError.make({ path: input.configPath, message: input.message });
-
-const requireConfigField = <A>(input: {
-  readonly value: A | undefined;
-  readonly configPath: ConfigPath;
-  readonly message: string;
-}): Effect.Effect<A, ConfigValidationError> =>
-  Effect.gen(function* () {
-    const value = input.value;
-    if (value === undefined) {
-      return yield* validationError({ configPath: input.configPath, message: input.message });
-    }
-    return value;
-  });
 
 const normalizeServerSettings = (
   settings: ServerFileServerConfig | undefined,
@@ -190,42 +171,19 @@ const normalizeXmux = (input: {
   });
 };
 
-const requireAccessMessage = (path: string): string =>
-  `${path} is missing. Set it to { "type": "allow-list", "users": [...] } or { "type": "anyone" }.`;
-
-const requireResolvedSecret = Effect.fn("server.normalize.requireResolvedSecret")(
-  function* (input: {
-    readonly ref: SecretRef | undefined;
-    readonly configPath: ConfigPath;
-    readonly message: string;
-  }) {
-    const ref = yield* requireConfigField({
-      value: input.ref,
-      configPath: input.configPath,
-      message: input.message,
-    });
-    return yield* resolveSecretRef({ configPath: input.configPath, ref });
-  },
-);
-
 const normalizeTelegram = Effect.fn("server.normalizeTelegramConfig")(function* (input: {
   readonly configPath: ConfigPath;
   readonly config: TelegramFileConfig | undefined;
 }) {
   if (input.config === undefined) return undefined;
+  if (!input.config.enabled) return DisabledIntegrationConfig.make({ enabled: false });
 
-  const token = yield* requireResolvedSecret({
-    ref: input.config.token,
-    configPath: input.configPath,
-    message: "Telegram chat is configured but chats.telegram.token is missing.",
+  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.token });
+  return EnabledEffectiveTelegramConfig.make({
+    enabled: true,
+    token,
+    access: input.config.access,
   });
-  const access = yield* requireConfigField({
-    value: input.config.access,
-    configPath: input.configPath,
-    message: requireAccessMessage("chats.telegram.access"),
-  });
-
-  return EffectiveTelegramConfig.make({ token, access });
 });
 
 const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (input: {
@@ -233,29 +191,16 @@ const normalizeDiscord = Effect.fn("server.normalizeDiscordConfig")(function* (i
   readonly config: DiscordFileConfig | undefined;
 }) {
   if (input.config === undefined) return undefined;
+  if (!input.config.enabled) return DisabledIntegrationConfig.make({ enabled: false });
 
-  const token = yield* requireResolvedSecret({
-    ref: input.config.token,
-    configPath: input.configPath,
-    message: "Discord chat is configured but chats.discord.token is missing.",
+  const token = yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.token });
+  return EnabledEffectiveDiscordConfig.make({
+    enabled: true,
+    token,
+    applicationId: input.config.applicationId,
+    guildId: input.config.guildId,
+    access: input.config.access,
   });
-  const applicationId = yield* requireConfigField({
-    value: input.config.applicationId,
-    configPath: input.configPath,
-    message: "Discord chat is configured but chats.discord.applicationId is missing.",
-  });
-  const guildId = yield* requireConfigField({
-    value: input.config.guildId,
-    configPath: input.configPath,
-    message: "Discord chat is configured but chats.discord.guildId is missing.",
-  });
-  const access = yield* requireConfigField({
-    value: input.config.access,
-    configPath: input.configPath,
-    message: requireAccessMessage("chats.discord.access"),
-  });
-
-  return EffectiveDiscordConfig.make({ token, applicationId, guildId, access });
 });
 
 const normalizeSlack = Effect.fn("server.normalizeSlackConfig")(function* (input: {
@@ -263,24 +208,22 @@ const normalizeSlack = Effect.fn("server.normalizeSlackConfig")(function* (input
   readonly config: SlackFileConfig | undefined;
 }) {
   if (input.config === undefined) return undefined;
+  if (!input.config.enabled) return DisabledIntegrationConfig.make({ enabled: false });
 
-  const botToken = yield* requireResolvedSecret({
+  const botToken = yield* resolveSecretRef({
+    configPath: input.configPath,
     ref: input.config.botToken,
-    configPath: input.configPath,
-    message: "Slack chat is configured but chats.slack.botToken is missing.",
   });
-  const appToken = yield* requireResolvedSecret({
+  const appToken = yield* resolveSecretRef({
+    configPath: input.configPath,
     ref: input.config.appToken,
-    configPath: input.configPath,
-    message: "Slack chat is configured but chats.slack.appToken is missing.",
   });
-  const access = yield* requireConfigField({
-    value: input.config.access,
-    configPath: input.configPath,
-    message: requireAccessMessage("chats.slack.access"),
+  return EnabledEffectiveSlackConfig.make({
+    enabled: true,
+    botToken,
+    appToken,
+    access: input.config.access,
   });
-
-  return EffectiveSlackConfig.make({ botToken, appToken, access });
 });
 
 const normalizeStt = Effect.fn("server.normalizeSttConfig")(function* (input: {
@@ -288,23 +231,20 @@ const normalizeStt = Effect.fn("server.normalizeSttConfig")(function* (input: {
   readonly config: SttFileConfig | undefined;
 }) {
   if (input.config === undefined) return undefined;
+  if (!input.config.enabled) return DisabledIntegrationConfig.make({ enabled: false });
 
-  const model = yield* requireConfigField({
-    value: input.config.model,
-    configPath: input.configPath,
-    message: "STT is configured but stt.model is missing.",
-  });
   const apiKey =
     input.config.apiKey === undefined
       ? undefined
       : yield* resolveSecretRef({ configPath: input.configPath, ref: input.config.apiKey });
 
-  return EffectiveSttConfig.make({
+  return EnabledEffectiveSttConfig.make({
+    enabled: true,
     provider: input.config.provider ?? "openai-compatible",
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(input.config.baseUrl === undefined ? {} : { baseUrl: input.config.baseUrl }),
     ...(input.config.endpointPath === undefined ? {} : { endpointPath: input.config.endpointPath }),
-    model,
+    model: input.config.model,
     ...(input.config.language === undefined ? {} : { language: input.config.language }),
     maxBytes: input.config.maxBytes ?? DEFAULT_STT_MAX_BYTES,
     ...(input.config.timeoutMs === undefined ? {} : { timeoutMs: input.config.timeoutMs }),
@@ -313,11 +253,13 @@ const normalizeStt = Effect.fn("server.normalizeSttConfig")(function* (input: {
 
 const normalizeOpenCode = (
   config: OpenCodeFileConfig | undefined,
-): EffectiveOpenCodeConfig | undefined => {
+): EnabledEffectiveOpenCodeConfig | DisabledIntegrationConfig | undefined => {
   if (config === undefined) return undefined;
+  if (!config.enabled) return DisabledIntegrationConfig.make({ enabled: false });
 
   const runtime = config.runtime ?? OpenCodeEmbeddedRuntimeConfig.make({ type: "embedded" });
-  return EffectiveOpenCodeConfig.make({
+  return EnabledEffectiveOpenCodeConfig.make({
+    enabled: true,
     runtime,
     ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
     ...(config.defaultThinking === undefined ? {} : { defaultThinking: config.defaultThinking }),
@@ -329,8 +271,9 @@ const normalizePi = (input: {
   readonly homeDir: string;
   readonly configPath: ConfigPath;
   readonly config: PiFileConfig | undefined;
-}): EffectivePiConfig | undefined => {
+}): EnabledEffectivePiConfig | DisabledIntegrationConfig | undefined => {
   if (input.config === undefined) return undefined;
+  if (!input.config.enabled) return DisabledIntegrationConfig.make({ enabled: false });
 
   const agentDir =
     input.config.agentDir === undefined
@@ -351,7 +294,8 @@ const normalizePi = (input: {
           input.config.sessionDir,
         );
 
-  return EffectivePiConfig.make({
+  return EnabledEffectivePiConfig.make({
+    enabled: true,
     ...(agentDir === undefined ? {} : { agentDir }),
     ...(sessionDir === undefined ? {} : { sessionDir }),
     ...(input.config.defaultModel === undefined ? {} : { defaultModel: input.config.defaultModel }),

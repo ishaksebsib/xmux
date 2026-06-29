@@ -243,16 +243,28 @@ export class ServerSettingsConfig extends Schema.Class<ServerSettingsConfig>(
 export const SttProvider = Schema.Literal("openai-compatible");
 export type SttProvider = typeof SttProvider.Type;
 
-export class SttFileConfig extends Schema.Class<SttFileConfig>("SttFileConfig")({
+export class DisabledIntegrationConfig extends Schema.Class<DisabledIntegrationConfig>(
+  "DisabledIntegrationConfig",
+)({
+  enabled: Schema.Literal(false),
+}) {}
+
+export class EnabledSttFileConfig extends Schema.Class<EnabledSttFileConfig>(
+  "EnabledSttFileConfig",
+)({
+  enabled: Schema.Literal(true),
   provider: Schema.optionalKey(SttProvider),
   apiKey: Schema.optionalKey(SecretRef),
   baseUrl: Schema.optionalKey(BaseUrl),
   endpointPath: Schema.optionalKey(NonEmptyString),
-  model: Schema.optionalKey(NonEmptyString),
+  model: NonEmptyString,
   language: Schema.optionalKey(NonEmptyString),
   maxBytes: Schema.optionalKey(PositiveInteger),
   timeoutMs: Schema.optionalKey(PositiveInteger),
 }) {}
+
+export const SttFileConfig = Schema.Union([DisabledIntegrationConfig, EnabledSttFileConfig]);
+export type SttFileConfig = typeof SttFileConfig.Type;
 
 export class HarnessModelRefConfig extends Schema.Class<HarnessModelRefConfig>(
   "HarnessModelRefConfig",
@@ -262,26 +274,50 @@ export class HarnessModelRefConfig extends Schema.Class<HarnessModelRefConfig>(
   variant: Schema.optionalKey(ModelVariant),
 }) {}
 
-/** Telegram config exists only when the Telegram chat adapter should start. */
-export class TelegramFileConfig extends Schema.Class<TelegramFileConfig>("TelegramFileConfig")({
-  token: Schema.optionalKey(SecretRef),
-  access: Schema.optionalKey(ChatAccessConfig),
+/** Telegram chat adapter config; enabled decides whether it starts. */
+export class EnabledTelegramFileConfig extends Schema.Class<EnabledTelegramFileConfig>(
+  "EnabledTelegramFileConfig",
+)({
+  enabled: Schema.Literal(true),
+  token: SecretRef,
+  access: ChatAccessConfig,
 }) {}
 
-/** Discord config exists only when the Discord chat adapter should start. */
-export class DiscordFileConfig extends Schema.Class<DiscordFileConfig>("DiscordFileConfig")({
-  token: Schema.optionalKey(SecretRef),
-  applicationId: Schema.optionalKey(DiscordApplicationId),
-  guildId: Schema.optionalKey(DiscordGuildId),
-  access: Schema.optionalKey(ChatAccessConfig),
+export const TelegramFileConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  EnabledTelegramFileConfig,
+]);
+export type TelegramFileConfig = typeof TelegramFileConfig.Type;
+
+/** Discord chat adapter config; enabled decides whether it starts. */
+export class EnabledDiscordFileConfig extends Schema.Class<EnabledDiscordFileConfig>(
+  "EnabledDiscordFileConfig",
+)({
+  enabled: Schema.Literal(true),
+  token: SecretRef,
+  applicationId: DiscordApplicationId,
+  guildId: DiscordGuildId,
+  access: ChatAccessConfig,
 }) {}
 
-/** Slack config exists only when the Slack chat adapter should start. */
-export class SlackFileConfig extends Schema.Class<SlackFileConfig>("SlackFileConfig")({
-  botToken: Schema.optionalKey(SecretRef),
-  appToken: Schema.optionalKey(SecretRef),
-  access: Schema.optionalKey(ChatAccessConfig),
+export const DiscordFileConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  EnabledDiscordFileConfig,
+]);
+export type DiscordFileConfig = typeof DiscordFileConfig.Type;
+
+/** Slack chat adapter config; enabled decides whether it starts. */
+export class EnabledSlackFileConfig extends Schema.Class<EnabledSlackFileConfig>(
+  "EnabledSlackFileConfig",
+)({
+  enabled: Schema.Literal(true),
+  botToken: SecretRef,
+  appToken: SecretRef,
+  access: ChatAccessConfig,
 }) {}
+
+export const SlackFileConfig = Schema.Union([DisabledIntegrationConfig, EnabledSlackFileConfig]);
+export type SlackFileConfig = typeof SlackFileConfig.Type;
 
 export class ChatsFileConfig extends Schema.Class<ChatsFileConfig>("ChatsFileConfig")({
   telegram: Schema.optionalKey(TelegramFileConfig),
@@ -309,18 +345,31 @@ export const OpenCodeRuntimeConfig = Schema.Union([
 ]);
 export type OpenCodeRuntimeConfig = typeof OpenCodeRuntimeConfig.Type;
 
-export class OpenCodeFileConfig extends Schema.Class<OpenCodeFileConfig>("OpenCodeFileConfig")({
+export class EnabledOpenCodeFileConfig extends Schema.Class<EnabledOpenCodeFileConfig>(
+  "EnabledOpenCodeFileConfig",
+)({
+  enabled: Schema.Literal(true),
   runtime: Schema.optionalKey(OpenCodeRuntimeConfig),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
 
-export class PiFileConfig extends Schema.Class<PiFileConfig>("PiFileConfig")({
+export const OpenCodeFileConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  EnabledOpenCodeFileConfig,
+]);
+export type OpenCodeFileConfig = typeof OpenCodeFileConfig.Type;
+
+export class EnabledPiFileConfig extends Schema.Class<EnabledPiFileConfig>("EnabledPiFileConfig")({
+  enabled: Schema.Literal(true),
   agentDir: Schema.optionalKey(NonEmptyString),
   sessionDir: Schema.optionalKey(NonEmptyString),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
+
+export const PiFileConfig = Schema.Union([DisabledIntegrationConfig, EnabledPiFileConfig]);
+export type PiFileConfig = typeof PiFileConfig.Type;
 
 export class HarnessesFileConfig extends Schema.Class<HarnessesFileConfig>("HarnessesFileConfig")({
   opencode: Schema.optionalKey(OpenCodeFileConfig),
@@ -355,7 +404,10 @@ export class RedactedInlineSecretRef extends Schema.Class<RedactedInlineSecretRe
 export const RedactedSecretRef = Schema.Union([RedactedEnvSecretRef, RedactedInlineSecretRef]);
 export type RedactedSecretRef = typeof RedactedSecretRef.Type;
 
-export class RedactedSttConfig extends Schema.Class<RedactedSttConfig>("RedactedSttConfig")({
+export class RedactedEnabledSttConfig extends Schema.Class<RedactedEnabledSttConfig>(
+  "RedactedEnabledSttConfig",
+)({
+  enabled: Schema.Literal(true),
   provider: SttProvider,
   apiKey: Schema.optionalKey(RedactedSecretRef),
   baseUrl: Schema.optionalKey(BaseUrl),
@@ -366,27 +418,56 @@ export class RedactedSttConfig extends Schema.Class<RedactedSttConfig>("Redacted
   timeoutMs: Schema.optionalKey(PositiveInteger),
 }) {}
 
-export class RedactedTelegramConfig extends Schema.Class<RedactedTelegramConfig>(
-  "RedactedTelegramConfig",
+export const RedactedSttConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  RedactedEnabledSttConfig,
+]);
+export type RedactedSttConfig = typeof RedactedSttConfig.Type;
+
+export class RedactedEnabledTelegramConfig extends Schema.Class<RedactedEnabledTelegramConfig>(
+  "RedactedEnabledTelegramConfig",
 )({
+  enabled: Schema.Literal(true),
   token: RedactedSecretRef,
   access: ChatAccessConfig,
 }) {}
 
-export class RedactedDiscordConfig extends Schema.Class<RedactedDiscordConfig>(
-  "RedactedDiscordConfig",
+export const RedactedTelegramConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  RedactedEnabledTelegramConfig,
+]);
+export type RedactedTelegramConfig = typeof RedactedTelegramConfig.Type;
+
+export class RedactedEnabledDiscordConfig extends Schema.Class<RedactedEnabledDiscordConfig>(
+  "RedactedEnabledDiscordConfig",
 )({
+  enabled: Schema.Literal(true),
   token: RedactedSecretRef,
   applicationId: DiscordApplicationId,
   guildId: DiscordGuildId,
   access: ChatAccessConfig,
 }) {}
 
-export class RedactedSlackConfig extends Schema.Class<RedactedSlackConfig>("RedactedSlackConfig")({
+export const RedactedDiscordConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  RedactedEnabledDiscordConfig,
+]);
+export type RedactedDiscordConfig = typeof RedactedDiscordConfig.Type;
+
+export class RedactedEnabledSlackConfig extends Schema.Class<RedactedEnabledSlackConfig>(
+  "RedactedEnabledSlackConfig",
+)({
+  enabled: Schema.Literal(true),
   botToken: RedactedSecretRef,
   appToken: RedactedSecretRef,
   access: ChatAccessConfig,
 }) {}
+
+export const RedactedSlackConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  RedactedEnabledSlackConfig,
+]);
+export type RedactedSlackConfig = typeof RedactedSlackConfig.Type;
 
 export class RedactedChatsConfig extends Schema.Class<RedactedChatsConfig>("RedactedChatsConfig")({
   telegram: Schema.optionalKey(RedactedTelegramConfig),
@@ -394,20 +475,33 @@ export class RedactedChatsConfig extends Schema.Class<RedactedChatsConfig>("Reda
   slack: Schema.optionalKey(RedactedSlackConfig),
 }) {}
 
-export class RedactedOpenCodeConfig extends Schema.Class<RedactedOpenCodeConfig>(
-  "RedactedOpenCodeConfig",
+export class RedactedEnabledOpenCodeConfig extends Schema.Class<RedactedEnabledOpenCodeConfig>(
+  "RedactedEnabledOpenCodeConfig",
 )({
+  enabled: Schema.Literal(true),
   runtime: OpenCodeRuntimeConfig,
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
 
-export class RedactedPiConfig extends Schema.Class<RedactedPiConfig>("RedactedPiConfig")({
+export const RedactedOpenCodeConfig = Schema.Union([
+  DisabledIntegrationConfig,
+  RedactedEnabledOpenCodeConfig,
+]);
+export type RedactedOpenCodeConfig = typeof RedactedOpenCodeConfig.Type;
+
+export class RedactedEnabledPiConfig extends Schema.Class<RedactedEnabledPiConfig>(
+  "RedactedEnabledPiConfig",
+)({
+  enabled: Schema.Literal(true),
   agentDir: Schema.optionalKey(ResolvedPath),
   sessionDir: Schema.optionalKey(ResolvedPath),
   defaultModel: Schema.optionalKey(HarnessModelRefConfig),
   defaultThinking: Schema.optionalKey(HarnessThinkingLevel),
 }) {}
+
+export const RedactedPiConfig = Schema.Union([DisabledIntegrationConfig, RedactedEnabledPiConfig]);
+export type RedactedPiConfig = typeof RedactedPiConfig.Type;
 
 export class RedactedHarnessesConfig extends Schema.Class<RedactedHarnessesConfig>(
   "RedactedHarnessesConfig",

@@ -2,17 +2,21 @@ import type { Config, SttConfig } from "@xmux/orchestrator";
 import { Redacted } from "effect";
 import type { EffectiveServerConfig, EffectiveSttConfig } from "../config/effective";
 
-const mapSttConfig = (stt: EffectiveSttConfig): SttConfig => ({
-  enabled: true,
-  provider: stt.provider,
-  ...(stt.apiKey === undefined ? {} : { apiKey: Redacted.value(stt.apiKey.value) }),
-  ...(stt.baseUrl === undefined ? {} : { baseUrl: stt.baseUrl }),
-  ...(stt.endpointPath === undefined ? {} : { endpointPath: stt.endpointPath }),
-  model: stt.model,
-  ...(stt.language === undefined ? {} : { language: stt.language }),
-  maxBytes: stt.maxBytes,
-  ...(stt.timeoutMs === undefined ? {} : { timeoutMs: stt.timeoutMs }),
-});
+const mapSttConfig = (stt: EffectiveSttConfig): SttConfig => {
+  if (!stt.enabled) return { enabled: false };
+
+  return {
+    enabled: true,
+    provider: stt.provider,
+    ...(stt.apiKey === undefined ? {} : { apiKey: Redacted.value(stt.apiKey.value) }),
+    ...(stt.baseUrl === undefined ? {} : { baseUrl: stt.baseUrl }),
+    ...(stt.endpointPath === undefined ? {} : { endpointPath: stt.endpointPath }),
+    model: stt.model,
+    ...(stt.language === undefined ? {} : { language: stt.language }),
+    maxBytes: stt.maxBytes,
+    ...(stt.timeoutMs === undefined ? {} : { timeoutMs: stt.timeoutMs }),
+  };
+};
 
 export const mapEffectiveConfigToXmuxConfig = (config: EffectiveServerConfig): Config => ({
   defaultWorkingDirectory: config.xmux.workspace.defaultDir,

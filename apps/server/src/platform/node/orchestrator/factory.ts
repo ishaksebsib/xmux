@@ -64,24 +64,25 @@ const defineHarnessAdapterRegistry = <
 const chatAdapterRegistry = defineChatAdapterRegistry({
   telegram: {
     build: (config) =>
-      config.telegram === undefined ? undefined : makeTelegramAdapter(config.telegram),
+      config.telegram?.enabled === true ? makeTelegramAdapter(config.telegram) : undefined,
   },
   discord: {
     build: (config) =>
-      config.discord === undefined ? undefined : makeDiscordAdapter(config.discord),
+      config.discord?.enabled === true ? makeDiscordAdapter(config.discord) : undefined,
   },
   slack: {
-    build: (config) => (config.slack === undefined ? undefined : makeSlackAdapter(config.slack)),
+    build: (config) =>
+      config.slack?.enabled === true ? makeSlackAdapter(config.slack) : undefined,
   },
 });
 
 const harnessAdapterRegistry = defineHarnessAdapterRegistry({
   opencode: {
     build: (config) =>
-      config.opencode === undefined ? undefined : makeOpenCodeAdapter(config.opencode),
+      config.opencode?.enabled === true ? makeOpenCodeAdapter(config.opencode) : undefined,
   },
   pi: {
-    build: (config) => (config.pi === undefined ? undefined : makePiAdapter(config.pi)),
+    build: (config) => (config.pi?.enabled === true ? makePiAdapter(config.pi) : undefined),
   },
 });
 

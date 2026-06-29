@@ -18,16 +18,18 @@ export const validTelegramConfig = (token: string): string => `{
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "value": "${token}" },
       "access": { "type": "anyone" }
     }
   },
-  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+  "harnesses": { "opencode": { "enabled": true, "runtime": { "type": "embedded" } } }
 }`;
 
 export const sttInlineSecretConfig = (token: string): string => `{
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
   "stt": {
+    "enabled": true,
     "apiKey": { "value": "${token}" },
     "model": "gpt-4o-mini-transcribe"
   }
@@ -36,6 +38,7 @@ export const sttInlineSecretConfig = (token: string): string => `{
 export const sttEnvSecretConfig = (envName: string): string => `{
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
   "stt": {
+    "enabled": true,
     "apiKey": { "env": "${envName}" },
     "model": "gpt-4o-mini-transcribe"
   }
@@ -44,6 +47,7 @@ export const sttEnvSecretConfig = (envName: string): string => `{
 export const missingEnvSecretConfig = (envName: string): string => `{
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "${envName}" },
       "access": { "type": "anyone" }
     }

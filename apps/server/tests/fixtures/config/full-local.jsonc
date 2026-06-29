@@ -29,6 +29,7 @@
     },
   },
   "stt": {
+    "enabled": true,
     "provider": "openai-compatible",
     "apiKey": { "env": "OPENAI_API_KEY" },
     "baseUrl": "https://api.openai.example/v1",
@@ -40,16 +41,19 @@
   },
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "TELEGRAM_BOT_TOKEN" },
       "access": { "type": "allow-list", "users": ["123456789"] },
     },
     "discord": {
+      "enabled": true,
       "token": { "value": "discord-inline-secret" },
       "applicationId": "discord-app-id",
       "guildId": "discord-guild-id",
       "access": { "type": "allow-list", "users": ["discord-user"] },
     },
     "slack": {
+      "enabled": true,
       "botToken": { "env": "SLACK_BOT_TOKEN" },
       "appToken": { "env": "SLACK_APP_TOKEN" },
       "access": { "type": "anyone" },
@@ -57,6 +61,7 @@
   },
   "harnesses": {
     "opencode": {
+      "enabled": true,
       "runtime": { "type": "external", "baseUrl": "http://127.0.0.1:4096" },
       "defaultModel": {
         "providerId": "anthropic",
@@ -66,6 +71,7 @@
       "defaultThinking": "medium",
     },
     "pi": {
+      "enabled": true,
       "agentDir": "./.pi-agent",
       "sessionDir": "./.pi-sessions",
       "defaultModel": { "providerId": "openai", "modelId": "gpt-5-mini" },

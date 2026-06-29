@@ -22,11 +22,11 @@ import {
 import { createPiAdapter, type PiAdapter, type PiAdapterConfig } from "@xmux/harness-pi";
 import { Redacted } from "effect";
 import type {
-  EffectiveDiscordConfig,
-  EffectiveOpenCodeConfig,
-  EffectivePiConfig,
-  EffectiveSlackConfig,
-  EffectiveTelegramConfig,
+  EnabledEffectiveDiscordConfig,
+  EnabledEffectiveOpenCodeConfig,
+  EnabledEffectivePiConfig,
+  EnabledEffectiveSlackConfig,
+  EnabledEffectiveTelegramConfig,
   ResolvedSecretType,
 } from "../../../config/effective";
 
@@ -50,13 +50,15 @@ export type ServerPiAdapter = PiAdapter;
 
 const secretValue = (secret: ResolvedSecretType): string => Redacted.value(secret.value);
 
-export const makeTelegramAdapter = (config: EffectiveTelegramConfig): ServerTelegramAdapter =>
+export const makeTelegramAdapter = (
+  config: EnabledEffectiveTelegramConfig,
+): ServerTelegramAdapter =>
   createTelegramAdapter({
     token: secretValue(config.token),
     mode: { type: "polling", dropPendingUpdates: true },
   });
 
-export const makeDiscordAdapter = (config: EffectiveDiscordConfig): ServerDiscordAdapter =>
+export const makeDiscordAdapter = (config: EnabledEffectiveDiscordConfig): ServerDiscordAdapter =>
   createDiscordAdapter({
     token: secretValue(config.token),
     applicationId: config.applicationId,
@@ -67,7 +69,7 @@ export const makeDiscordAdapter = (config: EffectiveDiscordConfig): ServerDiscor
     },
   });
 
-export const makeSlackAdapter = (config: EffectiveSlackConfig): ServerSlackAdapter =>
+export const makeSlackAdapter = (config: EnabledEffectiveSlackConfig): ServerSlackAdapter =>
   createSlackAdapter({
     botToken: secretValue(config.botToken),
     mode: { type: "socket", appToken: secretValue(config.appToken) },
@@ -75,7 +77,7 @@ export const makeSlackAdapter = (config: EffectiveSlackConfig): ServerSlackAdapt
     conversationScope: "thread",
   });
 
-const mapOpenCodeConfig = (config: EffectiveOpenCodeConfig): OpenCodeAdapterConfig => {
+const mapOpenCodeConfig = (config: EnabledEffectiveOpenCodeConfig): OpenCodeAdapterConfig => {
   const shared = {
     ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
     ...(config.defaultThinking === undefined ? {} : { defaultThinking: config.defaultThinking }),
@@ -96,15 +98,16 @@ const mapOpenCodeConfig = (config: EffectiveOpenCodeConfig): OpenCodeAdapterConf
   };
 };
 
-const mapPiConfig = (config: EffectivePiConfig): PiAdapterConfig => ({
+const mapPiConfig = (config: EnabledEffectivePiConfig): PiAdapterConfig => ({
   ...(config.agentDir === undefined ? {} : { agentDir: config.agentDir }),
   ...(config.sessionDir === undefined ? {} : { sessionDir: config.sessionDir }),
   ...(config.defaultModel === undefined ? {} : { defaultModel: config.defaultModel }),
   ...(config.defaultThinking === undefined ? {} : { defaultThinking: config.defaultThinking }),
 });
 
-export const makeOpenCodeAdapter = (config: EffectiveOpenCodeConfig): ServerOpenCodeAdapter =>
-  createOpenCodeAdapter(mapOpenCodeConfig(config));
+export const makeOpenCodeAdapter = (
+  config: EnabledEffectiveOpenCodeConfig,
+): ServerOpenCodeAdapter => createOpenCodeAdapter(mapOpenCodeConfig(config));
 
-export const makePiAdapter = (config: EffectivePiConfig): ServerPiAdapter =>
+export const makePiAdapter = (config: EnabledEffectivePiConfig): ServerPiAdapter =>
   createPiAdapter(mapPiConfig(config));

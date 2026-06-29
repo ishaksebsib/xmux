@@ -29,7 +29,7 @@ const chats = (
   access:
     | { readonly type: "anyone" }
     | { readonly type: "allow-list"; readonly users: readonly [string, ...string[]] },
-): ChatAccessPolicies => ({ telegram: { access } });
+): ChatAccessPolicies => ({ telegram: { enabled: true, access } });
 
 const accessContext = (
   input: {

@@ -22,31 +22,31 @@ const defineAdapterConfigRegistry = <
 export const chatAdapterConfigRegistry = defineAdapterConfigRegistry({
   telegram: {
     id: "telegram",
-    isEffectiveConfigured: (config) => config.chats.telegram !== undefined,
-    isFileConfigured: (config) => config.chats?.telegram !== undefined,
+    isEffectiveConfigured: (config) => config.chats.telegram?.enabled === true,
+    isFileConfigured: (config) => config.chats?.telegram?.enabled === true,
   },
   discord: {
     id: "discord",
-    isEffectiveConfigured: (config) => config.chats.discord !== undefined,
-    isFileConfigured: (config) => config.chats?.discord !== undefined,
+    isEffectiveConfigured: (config) => config.chats.discord?.enabled === true,
+    isFileConfigured: (config) => config.chats?.discord?.enabled === true,
   },
   slack: {
     id: "slack",
-    isEffectiveConfigured: (config) => config.chats.slack !== undefined,
-    isFileConfigured: (config) => config.chats?.slack !== undefined,
+    isEffectiveConfigured: (config) => config.chats.slack?.enabled === true,
+    isFileConfigured: (config) => config.chats?.slack?.enabled === true,
   },
 });
 
 export const harnessAdapterConfigRegistry = defineAdapterConfigRegistry({
   opencode: {
     id: "opencode",
-    isEffectiveConfigured: (config) => config.harnesses.opencode !== undefined,
-    isFileConfigured: (config) => config.harnesses?.opencode !== undefined,
+    isEffectiveConfigured: (config) => config.harnesses.opencode?.enabled === true,
+    isFileConfigured: (config) => config.harnesses?.opencode?.enabled === true,
   },
   pi: {
     id: "pi",
-    isEffectiveConfigured: (config) => config.harnesses.pi !== undefined,
-    isFileConfigured: (config) => config.harnesses?.pi !== undefined,
+    isEffectiveConfigured: (config) => config.harnesses.pi?.enabled === true,
+    isFileConfigured: (config) => config.harnesses?.pi?.enabled === true,
   },
 });
 

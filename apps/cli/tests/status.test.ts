@@ -33,11 +33,12 @@ const statusLayer = Layer.mergeAll(
 const validStatusConfig = `{
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "value": "secret-token-should-not-leak" },
       "access": { "type": "anyone" }
     }
   },
-  "harnesses": { "pi": {} }
+  "harnesses": { "pi": { "enabled": true } }
 }`;
 
 const invalidStatusConfig = `{ "server": { "logs": { "level": "verbose" } } }`;
@@ -45,11 +46,12 @@ const invalidStatusConfig = `{ "server": { "logs": { "level": "verbose" } } }`;
 const envSecretStatusConfig = `{
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "XMUX_TEST_MISSING_TOKEN" },
       "access": { "type": "anyone" }
     }
   },
-  "harnesses": { "pi": {} }
+  "harnesses": { "pi": { "enabled": true } }
 }`;
 
 const withStatusSandbox = <A, E, R>(

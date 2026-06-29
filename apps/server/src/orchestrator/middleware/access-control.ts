@@ -10,9 +10,9 @@ import type { ServerXmuxMiddleware } from "./types";
 const ACCESS_DENIED_REPLY = "Sorry, you are not allowed to use this bot.";
 
 export interface ChatAccessPolicies {
-  readonly telegram?: { readonly access: ChatAccessConfig };
-  readonly discord?: { readonly access: ChatAccessConfig };
-  readonly slack?: { readonly access: ChatAccessConfig };
+  readonly telegram?: { readonly enabled: boolean; readonly access?: ChatAccessConfig };
+  readonly discord?: { readonly enabled: boolean; readonly access?: ChatAccessConfig };
+  readonly slack?: { readonly enabled: boolean; readonly access?: ChatAccessConfig };
 }
 
 export interface AccessControlEvent {
@@ -38,11 +38,11 @@ export const accessForChat = (
 ): ChatAccessConfig | undefined => {
   switch (chatId) {
     case "telegram":
-      return chats.telegram?.access;
+      return chats.telegram?.enabled === true ? chats.telegram.access : undefined;
     case "discord":
-      return chats.discord?.access;
+      return chats.discord?.enabled === true ? chats.discord.access : undefined;
     case "slack":
-      return chats.slack?.access;
+      return chats.slack?.enabled === true ? chats.slack.access : undefined;
     default:
       return undefined;
   }

@@ -79,6 +79,22 @@ describe("config fixture integration", () => {
         ) {
           return;
         }
+        assert.isTrue(config.stt.enabled);
+        assert.isTrue(config.chats.telegram.enabled);
+        assert.isTrue(config.chats.discord.enabled);
+        assert.isTrue(config.chats.slack.enabled);
+        assert.isTrue(config.harnesses.opencode.enabled);
+        assert.isTrue(config.harnesses.pi.enabled);
+        if (
+          !config.stt.enabled ||
+          !config.chats.telegram.enabled ||
+          !config.chats.discord.enabled ||
+          !config.chats.slack.enabled ||
+          !config.harnesses.opencode.enabled ||
+          !config.harnesses.pi.enabled
+        ) {
+          return;
+        }
 
         assert.isDefined(config.stt.apiKey);
         if (config.stt.apiKey === undefined) return;
@@ -116,6 +132,8 @@ describe("config fixture integration", () => {
 
         assert.isDefined(config.chats.telegram);
         if (config.chats.telegram === undefined) return;
+        assert.isTrue(config.chats.telegram.enabled);
+        if (!config.chats.telegram.enabled) return;
 
         assert.strictEqual(
           Redacted.value(config.chats.telegram.token.value),
@@ -123,7 +141,10 @@ describe("config fixture integration", () => {
         );
 
         const redacted = decodeRedactedConfig(redactServerConfig(config));
-        assert.strictEqual(redacted.chats.telegram?.token.source, "value");
+        const redactedTelegram = redacted.chats.telegram;
+        assert.isDefined(redactedTelegram);
+        if (redactedTelegram === undefined || !redactedTelegram.enabled) return;
+        assert.strictEqual(redactedTelegram.token.source, "value");
         assert.notInclude(JSON.stringify(redacted), "telegram-inline-secret");
       }),
     );
@@ -137,6 +158,9 @@ describe("config fixture integration", () => {
         assert.isDefined(config.harnesses.opencode);
         assert.isDefined(config.harnesses.pi);
         if (config.harnesses.opencode === undefined || config.harnesses.pi === undefined) return;
+        assert.isTrue(config.harnesses.opencode.enabled);
+        assert.isTrue(config.harnesses.pi.enabled);
+        if (!config.harnesses.opencode.enabled || !config.harnesses.pi.enabled) return;
 
         assert.strictEqual(config.xmux.attachments.enabled, false);
         assert.strictEqual(config.harnesses.opencode.runtime.type, "embedded");
@@ -157,7 +181,7 @@ describe("config fixture integration", () => {
         assert.isFalse(decoded.valid);
         if (decoded.valid) return;
         assert.strictEqual(decoded.issues[0]?.code, "ConfigValidationError");
-        assert.include(decoded.issues[0]?.message ?? "", "chats.telegram.access");
+        assert.include(decoded.issues[0]?.message ?? "", `["chats"]["telegram"]["access"]`);
       }),
     );
 

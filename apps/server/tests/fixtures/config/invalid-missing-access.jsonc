@@ -1,6 +1,7 @@
 {
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "env": "TELEGRAM_BOT_TOKEN" },
     },
   },

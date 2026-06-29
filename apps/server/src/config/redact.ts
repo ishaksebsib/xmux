@@ -1,16 +1,17 @@
 import {
+  DisabledIntegrationConfig,
   RedactedChatsConfig,
-  RedactedDiscordConfig,
-  RedactedHarnessesConfig,
-  RedactedOpenCodeConfig,
-  RedactedPiConfig,
+  RedactedEnabledDiscordConfig,
+  RedactedEnabledOpenCodeConfig,
+  RedactedEnabledPiConfig,
+  RedactedEnabledSlackConfig,
+  RedactedEnabledSttConfig,
+  RedactedEnabledTelegramConfig,
   RedactedEnvSecretRef,
+  RedactedHarnessesConfig,
   RedactedInlineSecretRef,
   RedactedSecretRef,
   RedactedServerConfig,
-  RedactedSlackConfig,
-  RedactedSttConfig,
-  RedactedTelegramConfig,
 } from "../contracts/config";
 import type {
   EffectiveDiscordConfig,
@@ -38,8 +39,11 @@ const redactSecret = (secret: ResolvedSecret): RedactedSecretRef => {
   });
 };
 
-const redactStt = (stt: EffectiveSttConfig): RedactedSttConfig =>
-  RedactedSttConfig.make({
+const redactStt = (stt: EffectiveSttConfig) => {
+  if (!stt.enabled) return DisabledIntegrationConfig.make({ enabled: false });
+
+  return RedactedEnabledSttConfig.make({
+    enabled: true,
     provider: stt.provider,
     ...(stt.apiKey === undefined ? {} : { apiKey: redactSecret(stt.apiKey) }),
     ...(stt.baseUrl === undefined ? {} : { baseUrl: stt.baseUrl }),
@@ -49,44 +53,65 @@ const redactStt = (stt: EffectiveSttConfig): RedactedSttConfig =>
     maxBytes: stt.maxBytes,
     ...(stt.timeoutMs === undefined ? {} : { timeoutMs: stt.timeoutMs }),
   });
+};
 
-const redactTelegram = (telegram: EffectiveTelegramConfig): RedactedTelegramConfig =>
-  RedactedTelegramConfig.make({
+const redactTelegram = (telegram: EffectiveTelegramConfig) => {
+  if (!telegram.enabled) return DisabledIntegrationConfig.make({ enabled: false });
+
+  return RedactedEnabledTelegramConfig.make({
+    enabled: true,
     token: redactSecret(telegram.token),
     access: telegram.access,
   });
+};
 
-const redactDiscord = (discord: EffectiveDiscordConfig): RedactedDiscordConfig =>
-  RedactedDiscordConfig.make({
+const redactDiscord = (discord: EffectiveDiscordConfig) => {
+  if (!discord.enabled) return DisabledIntegrationConfig.make({ enabled: false });
+
+  return RedactedEnabledDiscordConfig.make({
+    enabled: true,
     token: redactSecret(discord.token),
     applicationId: discord.applicationId,
     guildId: discord.guildId,
     access: discord.access,
   });
+};
 
-const redactSlack = (slack: EffectiveSlackConfig): RedactedSlackConfig =>
-  RedactedSlackConfig.make({
+const redactSlack = (slack: EffectiveSlackConfig) => {
+  if (!slack.enabled) return DisabledIntegrationConfig.make({ enabled: false });
+
+  return RedactedEnabledSlackConfig.make({
+    enabled: true,
     botToken: redactSecret(slack.botToken),
     appToken: redactSecret(slack.appToken),
     access: slack.access,
   });
+};
 
-const redactOpenCode = (opencode: EffectiveOpenCodeConfig): RedactedOpenCodeConfig =>
-  RedactedOpenCodeConfig.make({
+const redactOpenCode = (opencode: EffectiveOpenCodeConfig) => {
+  if (!opencode.enabled) return DisabledIntegrationConfig.make({ enabled: false });
+
+  return RedactedEnabledOpenCodeConfig.make({
+    enabled: true,
     runtime: opencode.runtime,
     ...(opencode.defaultModel === undefined ? {} : { defaultModel: opencode.defaultModel }),
     ...(opencode.defaultThinking === undefined
       ? {}
       : { defaultThinking: opencode.defaultThinking }),
   });
+};
 
-const redactPi = (pi: EffectivePiConfig): RedactedPiConfig =>
-  RedactedPiConfig.make({
+const redactPi = (pi: EffectivePiConfig) => {
+  if (!pi.enabled) return DisabledIntegrationConfig.make({ enabled: false });
+
+  return RedactedEnabledPiConfig.make({
+    enabled: true,
     ...(pi.agentDir === undefined ? {} : { agentDir: pi.agentDir }),
     ...(pi.sessionDir === undefined ? {} : { sessionDir: pi.sessionDir }),
     ...(pi.defaultModel === undefined ? {} : { defaultModel: pi.defaultModel }),
     ...(pi.defaultThinking === undefined ? {} : { defaultThinking: pi.defaultThinking }),
   });
+};
 
 /** Redact effective runtime config before it crosses the control boundary. */
 export const redactServerConfig = (config: EffectiveServerConfig): RedactedServerConfig =>

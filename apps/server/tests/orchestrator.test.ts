@@ -151,6 +151,7 @@ const fullEnabledConfig = `{
     "attachments": { "enabled": false, "maxBytes": 12345, "kinds": ["image", "document"] }
   },
   "stt": {
+    "enabled": true,
     "apiKey": { "env": "OPENAI_API_KEY" },
     "baseUrl": "https://api.openai.example/v1",
     "endpointPath": "/audio/transcriptions",
@@ -160,16 +161,17 @@ const fullEnabledConfig = `{
     "timeoutMs": 30000
   },
   "chats": {
-    "telegram": { "token": { "env": "TELEGRAM_BOT_TOKEN" }, "access": { "type": "anyone" } },
+    "telegram": { "enabled": true, "token": { "env": "TELEGRAM_BOT_TOKEN" }, "access": { "type": "anyone" } },
     "slack": {
+      "enabled": true,
       "botToken": { "env": "SLACK_BOT_TOKEN" },
       "appToken": { "env": "SLACK_APP_TOKEN" },
       "access": { "type": "anyone" }
     }
   },
   "harnesses": {
-    "opencode": { "runtime": { "type": "embedded" }, "defaultThinking": "high" },
-    "pi": { "agentDir": "./.pi-agent", "defaultModel": { "modelId": "gpt-5-mini" } }
+    "opencode": { "enabled": true, "runtime": { "type": "embedded" }, "defaultThinking": "high" },
+    "pi": { "enabled": true, "agentDir": "./.pi-agent", "defaultModel": { "modelId": "gpt-5-mini" } }
   }
 }`;
 
@@ -182,12 +184,18 @@ describe("orchestrator activation and config", () => {
         );
         const harnessOnly = decideOrchestratorActivation(
           yield* loadConfig(`{
-  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+  "harnesses": { "opencode": { "enabled": true, "runtime": { "type": "embedded" } } }
+}`),
+        );
+        const explicitlyDisabled = decideOrchestratorActivation(
+          yield* loadConfig(`{
+  "chats": { "telegram": { "enabled": false, "token": { "env": "MISSING_TOKEN" } } },
+  "harnesses": { "pi": { "enabled": false } }
 }`),
         );
         const invalid = decideOrchestratorActivation(
           yield* loadConfig(`{
-  "chats": { "telegram": { "token": { "env": "TELEGRAM_BOT_TOKEN" }, "access": { "type": "anyone" } } }
+  "chats": { "telegram": { "enabled": true, "token": { "env": "TELEGRAM_BOT_TOKEN" }, "access": { "type": "anyone" } } }
 }`),
         );
         const enabled = decideOrchestratorActivation(yield* loadConfig(fullEnabledConfig));
@@ -196,6 +204,9 @@ describe("orchestrator activation and config", () => {
         assert.deepStrictEqual(disabled.chats, []);
         assert.strictEqual(harnessOnly._tag, "Disabled");
         assert.deepStrictEqual(harnessOnly.harnesses, ["opencode"]);
+        assert.strictEqual(explicitlyDisabled._tag, "Disabled");
+        assert.deepStrictEqual(explicitlyDisabled.chats, []);
+        assert.deepStrictEqual(explicitlyDisabled.harnesses, []);
         assert.strictEqual(invalid._tag, "Invalid");
         assert.deepStrictEqual(invalid.chats, ["telegram"]);
         assert.strictEqual(enabled._tag, "Enabled");
@@ -260,7 +271,7 @@ describe("orchestrator server lifecycle", () => {
       const sandbox = yield* makeSandbox;
       yield* sandbox.writeConfig(`{
   "xmux": { "workspace": { "defaultDir": "./workspace" } },
-  "harnesses": { "opencode": { "runtime": { "type": "embedded" } } }
+  "harnesses": { "opencode": { "enabled": true, "runtime": { "type": "embedded" } } }
 }`);
       const createCalls = yield* Ref.make(0);
       const factoryLayer = makeTestOrchestratorFactoryLayer({
@@ -486,7 +497,7 @@ describe("orchestrator server lifecycle", () => {
     Effect.gen(function* () {
       const sandbox = yield* makeSandbox;
       yield* sandbox.writeConfig(`{
-  "chats": { "telegram": { "token": { "value": "inline-token" }, "access": { "type": "anyone" } } }
+  "chats": { "telegram": { "enabled": true, "token": { "value": "inline-token" }, "access": { "type": "anyone" } } }
 }`);
       const bindCalled = yield* Ref.make(false);
       const layer = makeServerLayer({

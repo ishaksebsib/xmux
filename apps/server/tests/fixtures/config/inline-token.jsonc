@@ -1,6 +1,7 @@
 {
   "chats": {
     "telegram": {
+      "enabled": true,
       "token": { "value": "telegram-inline-secret" },
       "access": { "type": "anyone" },
     },
