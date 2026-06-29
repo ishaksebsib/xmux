@@ -101,10 +101,14 @@ export interface LifecycleTimingService {
   readonly pollIntervalMs: CliPollIntervalMs;
 }
 
+const DEFAULT_START_TIMEOUT_MS = 60_000;
+const DEFAULT_STOP_TIMEOUT_MS = 5_000;
+const DEFAULT_POLL_INTERVAL_MS = 50;
+
 const makeLifecycleTiming = Effect.gen(function* () {
-  const startTimeoutMs = yield* parseTimeoutMs(15_000).pipe(Effect.orDie);
-  const stopTimeoutMs = yield* parseTimeoutMs(5_000).pipe(Effect.orDie);
-  const pollIntervalMs = yield* parsePollIntervalMs(50).pipe(Effect.orDie);
+  const startTimeoutMs = yield* parseTimeoutMs(DEFAULT_START_TIMEOUT_MS).pipe(Effect.orDie);
+  const stopTimeoutMs = yield* parseTimeoutMs(DEFAULT_STOP_TIMEOUT_MS).pipe(Effect.orDie);
+  const pollIntervalMs = yield* parsePollIntervalMs(DEFAULT_POLL_INTERVAL_MS).pipe(Effect.orDie);
 
   return {
     startTimeoutMs,
