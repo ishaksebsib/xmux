@@ -117,6 +117,8 @@ export type {
   ChatActionButtonInput,
   ChatActionButtonInputFor,
   ChatButtonInput,
+  ChatInjectCommandInput,
+  ChatInjectCommandInputFor,
   ChatInjectMessageInput,
   ChatInjectMessageInputFor,
   ChatReplyInput,
@@ -165,6 +167,7 @@ export type {
 export type {
   ChatActionResponseFailure,
   ChatCloseFailure,
+  ChatInjectCommandFailure,
   ChatInjectMessageFailure,
   ChatLifecycleOperation,
   ChatReplyFailure,

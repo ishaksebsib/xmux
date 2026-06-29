@@ -80,6 +80,7 @@ export type ChatRuntimeOperation =
   | "sendAction"
   | "updateAction"
   | "injectMessage"
+  | "injectCommand"
   | "respondToAction"
   | "reply"
   | "streamMessage"

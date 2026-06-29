@@ -1,4 +1,5 @@
 import type { ChatActionPayloadFor, ChatActionRegistry } from "./registry/actions";
+import type { ChatCommandRegistry, ChatCommandValues } from "./registry/commands";
 import type { ChatAdapterDefinition } from "./adapter/definition";
 import type { ChatAdapterCapabilities } from "./capabilities";
 import type {
@@ -178,6 +179,31 @@ export type ChatInjectMessageInputFor<
 export type ChatInjectMessageInput<TAdapters extends Record<string, AnyChatAdapterDefinition>> = {
   readonly [TChatId in Extract<keyof TAdapters, string>]: ChatInjectMessageInputFor<
     TAdapters,
+    TChatId
+  >;
+}[Extract<keyof TAdapters, string>];
+
+/** Injected inbound command input narrowed to one registered chat adapter. */
+export type ChatInjectCommandInputFor<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TCommands extends ChatCommandRegistry,
+  TChatId extends Extract<keyof TAdapters, string>,
+> = {
+  readonly chatId: Extract<TChatId, string>;
+  readonly conversationId: string;
+  readonly messageId?: string;
+  readonly actor?: ChatActor;
+  readonly command: ChatCommandValues<TCommands>;
+};
+
+/** Injected inbound command input union for all registered chat adapters. */
+export type ChatInjectCommandInput<
+  TAdapters extends Record<string, AnyChatAdapterDefinition>,
+  TCommands extends ChatCommandRegistry,
+> = {
+  readonly [TChatId in Extract<keyof TAdapters, string>]: ChatInjectCommandInputFor<
+    TAdapters,
+    TCommands,
     TChatId
   >;
 }[Extract<keyof TAdapters, string>];

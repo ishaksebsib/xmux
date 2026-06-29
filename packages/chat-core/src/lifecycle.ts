@@ -35,6 +35,7 @@ export function ensureStarted(args: {
     | "sendAction"
     | "updateAction"
     | "injectMessage"
+    | "injectCommand"
     | "respondToAction"
     | "reply"
     | "streamMessage"
