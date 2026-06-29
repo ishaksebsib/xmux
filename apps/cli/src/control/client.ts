@@ -24,7 +24,6 @@ export type CliOrchestratorState =
   | "disabled"
   | "starting"
   | "running"
-  | "degraded"
   | "failed"
   | "stopping"
   | "stopped";

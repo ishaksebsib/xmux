@@ -173,6 +173,7 @@ export const bindStatusServer = (
     chats: [{ id: "telegram", state: "active" }],
     harnesses: [{ id: "pi", state: "configured_lazy" }],
   },
+  state = "ready",
 ): Effect.Effect<Server, Error, Scope.Scope> =>
   bindUnixHttpServer(paths.socketPath, (request, response) => {
     if (request.url === "/healthz") {
@@ -190,7 +191,7 @@ export const bindStatusServer = (
           pid: process.pid,
           startedAt: "2026-06-16T00:00:00.000Z",
           uptimeMs: 151_000,
-          state: "ready",
+          state,
           configPath: paths.configPath,
           stateDir: paths.stateDir,
           scopeId: paths.scopeId,

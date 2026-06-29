@@ -331,6 +331,50 @@ describe("orchestrator server lifecycle", () => {
     }),
   );
 
+  it.effect("serves live runtime status after startup", () =>
+    Effect.gen(function* () {
+      const sandbox = yield* makeSandbox;
+      yield* sandbox.writeConfig(validTelegramConfig("inline-token"));
+      let harnessState: "configured_lazy" | "opened" = "configured_lazy";
+      const factoryLayer = makeTestOrchestratorFactoryLayer({
+        status: () => ({
+          chats: { lifecycle: "started", adapters: [{ id: "telegram", state: "active" }] },
+          harnesses: { adapters: [{ id: "opencode", state: harnessState }] },
+        }),
+      });
+      const layer = Layer.mergeAll(
+        makeServerLayer({
+          paths: sandbox.paths,
+          transport: { bind: () => Effect.void },
+          factoryLayer,
+        }),
+        Layer.succeed(OrchestratorStore)(createInMemoryStore()),
+      );
+
+      const live = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const config = yield* ServerConfig;
+          const effective = yield* config.loadCurrent(sandbox.paths.configPath);
+          yield* startOrchestrator(effective);
+          const orchestratorStatus = yield* OrchestratorStatusRegistry;
+          const before = yield* orchestratorStatus.get();
+          harnessState = "opened";
+          const after = yield* orchestratorStatus.get();
+          return { before, after };
+        }).pipe(Effect.provide(layer)),
+      );
+
+      assert.deepStrictEqual(
+        live.before.harnesses.map((adapter) => ({ id: adapter.id, state: adapter.state })),
+        [{ id: "opencode", state: "configured_lazy" }],
+      );
+      assert.deepStrictEqual(
+        live.after.harnesses.map((adapter) => ({ id: adapter.id, state: adapter.state })),
+        [{ id: "opencode", state: "opened" }],
+      );
+    }),
+  );
+
   it.effect("captures degraded status when orchestrator initialization fails", () =>
     Effect.gen(function* () {
       const sandbox = yield* makeSandbox;
@@ -369,7 +413,7 @@ describe("orchestrator server lifecycle", () => {
         }).pipe(Effect.provide(layer)),
       );
 
-      assert.strictEqual(degraded.state, "degraded");
+      assert.strictEqual(degraded.state, "failed");
       assert.deepStrictEqual(
         degraded.chats.map((adapter) => ({
           id: adapter.id,

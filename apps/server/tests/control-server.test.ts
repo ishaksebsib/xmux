@@ -394,7 +394,7 @@ describe("control server", () => {
       const status = yield* waitForStatusState(socketPath, "degraded");
       const orchestrator = requireOrchestrator(status);
       assert.strictEqual(status.state, "degraded");
-      assert.strictEqual(orchestrator.state, "degraded");
+      assert.strictEqual(orchestrator.state, "failed");
       assert.deepStrictEqual(
         orchestrator.chats.map((adapter) => ({
           id: adapter.id,

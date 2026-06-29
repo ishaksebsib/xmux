@@ -148,7 +148,7 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
       ),
     );
 
-  const initialized = yield* initializeOrchestratorRuntime(runtime).pipe(
+  const startupResult = yield* initializeOrchestratorRuntime(runtime).pipe(
     Effect.as("running" as const),
     Effect.catch((error) =>
       Effect.gen(function* () {
@@ -161,21 +161,24 @@ export const startOrchestrator = Effect.fn("server.orchestrator.start")(function
           return yield* Effect.fail(error);
         }
 
-        yield* registry.markDegraded(activation, snapshot, reason);
+        yield* registry.markRuntimeFailed(activation, snapshot, reason);
         yield* shutdownOrchestratorRuntime(runtime);
-        yield* Effect.logWarning("orchestrator started in degraded mode", {
-          chats: activation.chats,
-          harnesses: activation.harnesses,
-          reason,
-        });
-        return "degraded" as const;
+        yield* Effect.logWarning(
+          "orchestrator startup failed; server remains available for diagnostics",
+          {
+            chats: activation.chats,
+            harnesses: activation.harnesses,
+            reason,
+          },
+        );
+        return "diagnostics_only" as const;
       }),
     ),
   );
 
-  if (initialized === "degraded") return activation;
+  if (startupResult === "diagnostics_only") return activation;
 
-  yield* registry.markRunning(activation, runtime.status());
+  yield* registry.attachRuntime(activation, () => runtime.status());
   yield* Effect.acquireRelease(Effect.succeed(runtime), (acquired) =>
     Effect.gen(function* () {
       yield* registry.markStopping();

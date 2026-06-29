@@ -155,7 +155,9 @@ export type {
   ChatActionValuesFor,
 } from "./registry/actions";
 export type { Chat, CreateChatOptions } from "./runtime/create-chat";
+export { safeStatusReason } from "./status";
 export type {
+  AdapterFailureReason,
   ChatAdapterRuntimeState,
   ChatAdapterStatusSnapshot,
   ChatRuntimeStatusSnapshot,

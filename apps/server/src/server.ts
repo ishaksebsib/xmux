@@ -73,7 +73,7 @@ export const serverMain = Effect.fn("server.main")(function* () {
       );
 
       const currentOrchestratorStatus = yield* orchestratorStatus.get();
-      if (currentOrchestratorStatus.state === "degraded") {
+      if (currentOrchestratorStatus.state === "failed") {
         yield* status.markDegraded();
       } else {
         yield* status.markReady();

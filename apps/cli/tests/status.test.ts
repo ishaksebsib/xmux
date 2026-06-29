@@ -96,7 +96,7 @@ describe.sequential("status command", () => {
   it("rejects unsafe raw failure reasons in the CLI status domain", () => {
     expect(() =>
       decodeCliOrchestratorStatus({
-        state: "degraded",
+        state: "failed",
         activation: "enabled",
         chats: [
           {
@@ -276,23 +276,28 @@ describe.sequential("status command", () => {
     withStatusSandbox(({ configPath }) =>
       Effect.gen(function* () {
         const paths = yield* resolvePaths(configPath);
-        yield* bindStatusServer(paths, {
-          state: "degraded",
-          activation: "enabled",
-          chats: [{ id: "telegram", state: "failed", reason: "TelegramAuthError" }],
-          harnesses: [{ id: "pi", state: "configured_lazy" }],
-          reason: "OrchestratorStartupError",
-        });
+        yield* bindStatusServer(
+          paths,
+          {
+            state: "failed",
+            activation: "enabled",
+            chats: [{ id: "telegram", state: "failed", reason: "authentication_failed" }],
+            harnesses: [{ id: "pi", state: "configured_lazy" }],
+            reason: "OrchestratorStartupError",
+          },
+          "degraded",
+        );
         yield* writeServerManifest(paths, { sessionId: "degraded-status" });
 
         const report = yield* reportForConfig(configPath, true);
         const human = renderStatus(report, "human");
         const json = renderStatus(report, "json");
 
-        expect(human).toContain("orchestrator: degraded");
-        expect(human).toContain("telegram: failed (TelegramAuthError)");
+        expect(human).toContain("xmux server: degraded");
+        expect(human).toContain("orchestrator: failed");
+        expect(human).toContain("telegram: failed (authentication_failed)");
         expect(human).not.toContain("secret-token-should-not-leak");
-        expect(json).toContain('"reason": "TelegramAuthError"');
+        expect(json).toContain('"reason": "authentication_failed"');
         expectValidJson(json);
       }),
     ),

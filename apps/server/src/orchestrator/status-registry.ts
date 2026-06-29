@@ -13,12 +13,25 @@ import {
   sanitizeStatusReason,
 } from "./status-model";
 
+export type RuntimeStatusProvider = () => XmuxRuntimeStatusSnapshot;
+
 const initialSnapshot = ServerOrchestratorStatusSnapshot.make({
   state: "not_started",
   activation: "unknown",
   chats: [],
   harnesses: [],
 });
+
+type StoredStatusState =
+  | {
+      readonly _tag: "Snapshot";
+      readonly snapshot: ServerOrchestratorStatusSnapshot;
+    }
+  | {
+      readonly _tag: "Live";
+      readonly activation: OrchestratorActivation;
+      readonly runtimeStatus: RuntimeStatusProvider;
+    };
 
 export const safeOrchestratorStatusReason = safeStatusReasonFromUnknown;
 
@@ -67,6 +80,28 @@ const configuredFromActivation = (activation: OrchestratorActivation) => ({
   harnesses: configuredHarnesses(activation.harnesses),
 });
 
+const runningSnapshot = (
+  activation: OrchestratorActivation,
+  runtime: XmuxRuntimeStatusSnapshot,
+): ServerOrchestratorStatusSnapshot => {
+  const adapters = snapshotAdapters(runtime);
+  return ServerOrchestratorStatusSnapshot.make({
+    state: "running",
+    activation: activationState(activation),
+    chats: adapters.chats,
+    harnesses: adapters.harnesses,
+  });
+};
+
+const currentSnapshot = (state: StoredStatusState): ServerOrchestratorStatusSnapshot => {
+  switch (state._tag) {
+    case "Snapshot":
+      return state.snapshot;
+    case "Live":
+      return runningSnapshot(state.activation, state.runtimeStatus());
+  }
+};
+
 export class OrchestratorStatusRegistry extends Context.Service<
   OrchestratorStatusRegistry,
   {
@@ -77,7 +112,11 @@ export class OrchestratorStatusRegistry extends Context.Service<
       activation: OrchestratorActivation,
       runtime: XmuxRuntimeStatusSnapshot,
     ) => Effect.Effect<void>;
-    readonly markDegraded: (
+    readonly attachRuntime: (
+      activation: OrchestratorActivation,
+      runtimeStatus: RuntimeStatusProvider,
+    ) => Effect.Effect<void>;
+    readonly markRuntimeFailed: (
       activation: OrchestratorActivation,
       runtime: XmuxRuntimeStatusSnapshot,
       reason: SafeStatusReason,
@@ -93,18 +132,23 @@ export class OrchestratorStatusRegistry extends Context.Service<
   static readonly layer = Layer.effect(
     OrchestratorStatusRegistry,
     Effect.gen(function* () {
-      const state = yield* Ref.make<ServerOrchestratorStatusSnapshot>(initialSnapshot);
+      const state = yield* Ref.make<StoredStatusState>({
+        _tag: "Snapshot",
+        snapshot: initialSnapshot,
+      });
 
       const get = Effect.fn("OrchestratorStatusRegistry.get")(function* () {
-        return yield* Ref.get(state);
+        return currentSnapshot(yield* Ref.get(state));
       });
+
+      const setSnapshot = (snapshot: ServerOrchestratorStatusSnapshot): Effect.Effect<void> =>
+        Ref.set(state, { _tag: "Snapshot", snapshot });
 
       const markDisabled = Effect.fn("OrchestratorStatusRegistry.markDisabled")(function* (
         activation: OrchestratorActivation,
       ) {
         const configured = configuredFromActivation(activation);
-        yield* Ref.set(
-          state,
+        yield* setSnapshot(
           ServerOrchestratorStatusSnapshot.make({
             state: "disabled",
             activation: "disabled",
@@ -118,8 +162,7 @@ export class OrchestratorStatusRegistry extends Context.Service<
         activation: OrchestratorActivation,
       ) {
         const configured = configuredFromActivation(activation);
-        yield* Ref.set(
-          state,
+        yield* setSnapshot(
           ServerOrchestratorStatusSnapshot.make({
             state: "starting",
             activation: activationState(activation),
@@ -133,35 +176,34 @@ export class OrchestratorStatusRegistry extends Context.Service<
         activation: OrchestratorActivation,
         runtime: XmuxRuntimeStatusSnapshot,
       ) {
-        const adapters = snapshotAdapters(runtime);
-        yield* Ref.set(
-          state,
-          ServerOrchestratorStatusSnapshot.make({
-            state: "running",
-            activation: activationState(activation),
-            chats: adapters.chats,
-            harnesses: adapters.harnesses,
-          }),
-        );
+        yield* setSnapshot(runningSnapshot(activation, runtime));
       });
 
-      const markDegraded = Effect.fn("OrchestratorStatusRegistry.markDegraded")(function* (
+      const attachRuntime = Effect.fn("OrchestratorStatusRegistry.attachRuntime")(function* (
         activation: OrchestratorActivation,
-        runtime: XmuxRuntimeStatusSnapshot,
-        reason: SafeStatusReason,
+        runtimeStatus: RuntimeStatusProvider,
       ) {
-        const adapters = snapshotAdapters(runtime);
-        yield* Ref.set(
-          state,
-          ServerOrchestratorStatusSnapshot.make({
-            state: "degraded",
-            activation: activationState(activation),
-            chats: adapters.chats,
-            harnesses: adapters.harnesses,
-            reason,
-          }),
-        );
+        yield* Ref.set(state, { _tag: "Live", activation, runtimeStatus });
       });
+
+      const markRuntimeFailed = Effect.fn("OrchestratorStatusRegistry.markRuntimeFailed")(
+        function* (
+          activation: OrchestratorActivation,
+          runtime: XmuxRuntimeStatusSnapshot,
+          reason: SafeStatusReason,
+        ) {
+          const adapters = snapshotAdapters(runtime);
+          yield* setSnapshot(
+            ServerOrchestratorStatusSnapshot.make({
+              state: "failed",
+              activation: activationState(activation),
+              chats: adapters.chats,
+              harnesses: adapters.harnesses,
+              reason,
+            }),
+          );
+        },
+      );
 
       const markFailed = Effect.fn("OrchestratorStatusRegistry.markFailed")(function* (
         activation: OrchestratorActivation | undefined,
@@ -171,8 +213,7 @@ export class OrchestratorStatusRegistry extends Context.Service<
           activation === undefined
             ? { chats: [], harnesses: [] }
             : configuredFromActivation(activation);
-        yield* Ref.set(
-          state,
+        yield* setSnapshot(
           ServerOrchestratorStatusSnapshot.make({
             state: "failed",
             activation: activation === undefined ? "unknown" : activationState(activation),
@@ -184,19 +225,15 @@ export class OrchestratorStatusRegistry extends Context.Service<
       });
 
       const markStopping = Effect.fn("OrchestratorStatusRegistry.markStopping")(function* () {
-        const current = yield* Ref.get(state);
-        yield* Ref.set(
-          state,
+        const current = currentSnapshot(yield* Ref.get(state));
+        yield* setSnapshot(
           ServerOrchestratorStatusSnapshot.make({ ...current, state: "stopping" }),
         );
       });
 
       const markStopped = Effect.fn("OrchestratorStatusRegistry.markStopped")(function* () {
-        const current = yield* Ref.get(state);
-        yield* Ref.set(
-          state,
-          ServerOrchestratorStatusSnapshot.make({ ...current, state: "stopped" }),
-        );
+        const current = currentSnapshot(yield* Ref.get(state));
+        yield* setSnapshot(ServerOrchestratorStatusSnapshot.make({ ...current, state: "stopped" }));
       });
 
       return {
@@ -204,7 +241,8 @@ export class OrchestratorStatusRegistry extends Context.Service<
         markDisabled,
         markStarting,
         markRunning,
-        markDegraded,
+        attachRuntime,
+        markRuntimeFailed,
         markFailed,
         markStopping,
         markStopped,

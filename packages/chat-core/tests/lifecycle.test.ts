@@ -5,6 +5,7 @@ import {
   ChatCloseError,
   ChatLifecycleError,
   chatLogEvents,
+  safeStatusReason,
   createChat,
   type ChatLogger,
 } from "../src";
@@ -91,6 +92,21 @@ describe("chat lifecycle", () => {
     expect(JSON.stringify(chat.status())).not.toContain("secret-token-should-not-leak");
   });
 
+  test("classifies authentication failures without exposing raw messages", () => {
+    const reason = safeStatusReason({
+      _tag: "ChatAdapterStartError",
+      chatId: "telegram",
+      cause: {
+        _tag: "TelegramStartError",
+        operation: "init",
+        cause: new Error("401 Unauthorized: secret-token-should-not-leak"),
+      },
+    });
+
+    expect(reason).toBe("authentication_failed");
+    expect(reason).not.toContain("secret-token-should-not-leak");
+  });
+
   test("reports failing adapter start status with a safe reason after startup cleanup", async () => {
     const handles = createHandles();
     const chat = createChat({
@@ -111,7 +127,7 @@ describe("chat lifecycle", () => {
       lifecycle: "created",
       adapters: [
         { id: "alpha", state: "stopped" },
-        { id: "beta", state: "failed", reason: "ChatAdapterStartError" },
+        { id: "beta", state: "failed", reason: "startup_failed" },
       ],
     });
     expect(JSON.stringify(chat.status())).not.toContain("start-secret-should-not-leak");

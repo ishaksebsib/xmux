@@ -19,7 +19,7 @@ const validStatusResponse = {
   scopeId: "status-model-test",
   endpoint: { kind: "unix-socket", path: "/tmp/xmux/server.sock" },
   orchestrator: {
-    state: "degraded",
+    state: "failed",
     activation: "enabled",
     chats: [{ id: "telegram", state: "failed", reason: "ChatAdapterOpenError" }],
     harnesses: [{ id: "opencode", state: "configured_lazy" }],

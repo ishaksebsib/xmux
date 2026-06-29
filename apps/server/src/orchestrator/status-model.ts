@@ -51,7 +51,6 @@ export const ServerOrchestratorState = Schema.Literals([
   "disabled",
   "starting",
   "running",
-  "degraded",
   "failed",
   "stopping",
   "stopped",
