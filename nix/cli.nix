@@ -3,7 +3,7 @@
   stdenvNoCC,
   fetchPnpmDeps,
   makeWrapper,
-  nodejs_24,
+  nodejs_22,
   pnpm_11,
   pnpmConfigHook,
   versionCheckHook,
@@ -13,7 +13,7 @@
 let
   packageJson = lib.importJSON ../apps/cli/package.json;
 
-  nodejs = nodejs_24;
+  nodejs = nodejs_22;
   pnpm = pnpm_11.override { nodejs-slim = nodejs; };
 
   workspaceFilter = "@xmux/cli";
@@ -46,8 +46,14 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   pnpmWorkspaces = [ workspaceDependencyFilter ];
 
+  pnpmInstallFlags = [
+    "--force=false"
+    "--child-concurrency=1"
+    "--network-concurrency=4"
+  ];
+
   pnpmDeps = fetchPnpmDeps {
-    inherit (finalAttrs) pname version src pnpmWorkspaces;
+    inherit (finalAttrs) pname version src pnpmWorkspaces pnpmInstallFlags;
     inherit pnpm;
     fetcherVersion = 3;
     hash = pnpmDepsHash;
@@ -72,7 +78,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preInstall
 
     packageOut="$out/lib/node_modules/@xmux/cli"
-    pnpm --filter ${workspaceFilter} deploy --prod --legacy "$packageOut"
+    pnpm --offline --filter ${workspaceFilter} deploy --prod --legacy "$packageOut"
 
     makeWrapper ${lib.getExe nodejs} "$out/bin/xmux" \
       --add-flags "$packageOut/dist/bin/xmux.mjs" \

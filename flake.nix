@@ -70,7 +70,7 @@
       devShells = forEachSupportedSystem ({ pkgs, ... }: {
         default = pkgs.mkShell {
           packages = with pkgs; [
-            nodejs_24
+            nodejs_22
             pnpm_11
 
             just
