@@ -59,6 +59,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     hash = pnpmDepsHash;
   };
 
+  __structuredAttrs = true;
+  strictDeps = true;
+
   nativeBuildInputs = [
     makeWrapper
     nodejs
@@ -78,7 +81,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preInstall
 
     packageOut="$out/lib/node_modules/@xmux/cli"
-    pnpm --offline --filter ${workspaceFilter} deploy --prod --legacy "$packageOut"
+    pnpm --filter ${workspaceFilter} deploy --offline --prod --legacy "$packageOut"
 
     makeWrapper ${lib.getExe nodejs} "$out/bin/xmux" \
       --add-flags "$packageOut/dist/bin/xmux.mjs" \
