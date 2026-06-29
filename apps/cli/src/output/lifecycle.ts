@@ -8,7 +8,7 @@ import type {
 import type { CliConfigPath } from "../domain/input";
 import type { CliRunningServer } from "../domain/discovery";
 import { formatKeyValueLines } from "./format";
-import { inactiveOrchestratorLines, runningOrchestratorLines } from "./status";
+import { runningOrchestratorLines } from "./status";
 
 const shellQuote = (value: string): string => `'${value.replaceAll("'", `'"'"'`)}'`;
 
@@ -56,7 +56,6 @@ export const renderStop = (report: CliStopReport): string => {
       return [
         formatKeyValueLines([["xmux server", inactiveStatusLabel(report)]]).trimEnd(),
         renderInactiveRows(report.inactive),
-        ...inactiveOrchestratorLines(report.configSummary),
       ]
         .join("\n")
         .trimEnd();
@@ -67,7 +66,6 @@ export const renderStop = (report: CliStopReport): string => {
           ["shutdown", shutdownState(report.shutdown)],
         ]).trimEnd(),
         renderServerRows(report.server),
-        ...runningOrchestratorLines(report.orchestrator, "orchestrator before stop"),
       ]
         .join("\n")
         .trimEnd();

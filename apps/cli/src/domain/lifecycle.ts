@@ -8,7 +8,7 @@ import {
   type CliWrongScopeServer,
 } from "./discovery";
 import { CliLifecycleBlocked, type CliWaitOperation } from "./errors";
-import type { CliInactiveConfigSummary, CliOrchestratorStatus } from "./status";
+import type { CliOrchestratorStatus } from "./status";
 
 export type CliInactiveLifecycleReason = CliInactiveServerReason;
 export type CliInactiveLifecycleState = CliInactiveServerState;
@@ -17,27 +17,22 @@ export type CliStopReport =
   | {
       readonly _tag: "AlreadyStopped";
       readonly inactive: CliInactiveLifecycleState;
-      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "InvalidManifest";
       readonly inactive: CliInactiveLifecycleState;
-      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "WrongScope";
       readonly inactive: CliInactiveLifecycleState;
-      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "StaleManifestCleaned";
       readonly inactive: CliInactiveLifecycleState;
-      readonly configSummary: CliInactiveConfigSummary;
     }
   | {
       readonly _tag: "Stopped";
       readonly server: CliRunningServer;
-      readonly orchestrator: CliOrchestratorStatus;
       readonly shutdown: {
         readonly accepted: boolean;
         readonly alreadyStopping: boolean;
@@ -83,32 +78,27 @@ export const inactiveLifecycleState = (
 
 export const stopReportFromInactiveDiscovery = (
   discovery: Exclude<CliServerDiscovery, CliRunningServer>,
-  configSummary: CliInactiveConfigSummary,
 ): CliStopReport => {
   switch (discovery._tag) {
     case "Stopped":
       return {
         _tag: "AlreadyStopped",
         inactive: inactiveServerStateFromDiscovery(discovery),
-        configSummary,
       };
     case "InvalidManifest":
       return {
         _tag: "InvalidManifest",
         inactive: inactiveServerStateFromDiscovery(discovery),
-        configSummary,
       };
     case "WrongScope":
       return {
         _tag: "WrongScope",
         inactive: inactiveServerStateFromDiscovery(discovery),
-        configSummary,
       };
     case "StaleManifestCleaned":
       return {
         _tag: "StaleManifestCleaned",
         inactive: inactiveServerStateFromDiscovery(discovery),
-        configSummary,
       };
   }
 };
@@ -135,12 +125,10 @@ export const lifecycleBlockedError = (input: {
 
 export const stoppedReport = (
   server: CliRunningServer,
-  orchestrator: CliOrchestratorStatus,
   shutdown: CliShutdownState,
 ): CliStopReport => ({
   _tag: "Stopped",
   server,
-  orchestrator,
   shutdown,
 });
 

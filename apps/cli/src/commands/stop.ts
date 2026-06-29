@@ -1,9 +1,7 @@
 import { Console, Effect, Option, References } from "effect";
 import { Command } from "effect/unstable/cli";
 import { ControlClient } from "../control/client";
-import { ConfigSummary } from "../control/config-summary";
 import { ControlDiscovery } from "../control/discovery";
-import { runningOrchestratorStatus } from "../control/orchestrator-status";
 import { mapConfigPathError } from "./input";
 import { parseServerTarget } from "../domain/input";
 import {
@@ -28,15 +26,10 @@ export const getStopReport = Effect.fn("cli.stop.report")(function* (input: Stop
     const discovery = yield* ControlDiscovery;
     const client = yield* ControlClient;
     const timing = yield* LifecycleTiming;
-    const configSummary = yield* ConfigSummary;
     const server = yield* discovery.discover(target);
 
-    if (server._tag !== "Running") {
-      const summary = yield* configSummary.load(server.paths.configPath);
-      return stopReportFromInactiveDiscovery(server, summary);
-    }
+    if (server._tag !== "Running") return stopReportFromInactiveDiscovery(server);
 
-    const orchestrator = yield* runningOrchestratorStatus(server);
     const shutdown = yield* client.shutdown(server);
     yield* waitForUnreachable({
       check: client.health(server).pipe(
@@ -49,7 +42,7 @@ export const getStopReport = Effect.fn("cli.stop.report")(function* (input: Stop
       operation: "stop",
     });
 
-    return stoppedReport(server, orchestrator, shutdown);
+    return stoppedReport(server, shutdown);
   });
 
   return yield* report.pipe(Effect.provideService(References.MinimumLogLevel, "None"));

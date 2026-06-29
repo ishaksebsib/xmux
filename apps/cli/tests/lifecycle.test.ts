@@ -200,8 +200,7 @@ describe.sequential("stop command", () => {
         expect(report._tag).toBe("AlreadyStopped");
         expect(output).toContain("xmux server: already stopped");
         expect(output).toContain("reason: no-manifest");
-        expect(output).toContain("orchestrator: unavailable (server not running)");
-        expect(output).toContain("config status: valid");
+        expect(output).not.toContain("orchestrator:");
         expect(output).not.toContain(configPath);
       }),
     ),
@@ -298,8 +297,8 @@ describe.sequential("stop command", () => {
         expect(shutdownCalled).toBe(true);
         const output = renderStop(report);
         expect(output).toContain("xmux server: stopped");
-        expect(output).toContain("orchestrator before stop: running");
-        expect(output).toContain("telegram: active");
+        expect(output).not.toContain("orchestrator");
+        expect(output).not.toContain("telegram: active");
         expect(output).not.toContain(paths.configPath);
         expect(output).not.toContain(paths.socketPath);
       }),
