@@ -12,6 +12,7 @@ import {
   type HandleDeleteHarnessActionInput,
   type HandleDeleteSessionActionInput,
 } from "./handler";
+import { registerDeleteMenu } from "./menu";
 import { formatDeleteCommandUsage } from "./response";
 
 export function registerDeleteRoute<
@@ -21,6 +22,7 @@ export function registerDeleteRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
+  const unsubscribeMenu = registerDeleteMenu(ctx);
   const unsubscribeCommand = ctx.chat.on("command", "delete", (raw) => {
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
@@ -58,6 +60,7 @@ export function registerDeleteRoute<
   });
 
   return () => {
+    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeHarnessAction();
     unsubscribeSessionAction();

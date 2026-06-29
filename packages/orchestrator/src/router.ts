@@ -8,6 +8,7 @@ import { registerDeleteRoute } from "./features/delete";
 import { registerExitRoute } from "./features/exit";
 import { registerIdRoute } from "./features/id";
 import { registerInteractionRoute } from "./features/interaction";
+import { registerMenuRoute } from "./features/menu";
 import { registerModelRoute } from "./features/model";
 import { registerNewRoute } from "./features/new";
 import { registerPromptRoute } from "./features/prompt";
@@ -27,6 +28,7 @@ export function registerRoutes<
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): readonly Unsubscribe[] {
   return [
+    registerMenuRoute(ctx, middleware),
     registerNewRoute(ctx, middleware),
     registerResumeRoute(ctx, middleware),
     registerDeleteRoute(ctx, middleware),

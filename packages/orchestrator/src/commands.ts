@@ -59,6 +59,9 @@ export const commands = defineChatCommands({
       value: stringOption({ description: "Prompt text for add, or position for remove" }),
     },
   }),
+  menu: defineChatCommand({
+    description: "Show valid actions for the current chat state",
+  }),
   id: defineChatCommand({
     description: "Show your chat user id",
   }),

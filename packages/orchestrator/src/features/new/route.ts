@@ -10,6 +10,7 @@ import {
   handleNewHarnessAction,
   type HandleNewHarnessActionInput,
 } from "./handler";
+import { registerNewMenu } from "./menu";
 import { formatNewCommandUsage } from "./response";
 
 export function registerNewRoute<
@@ -19,6 +20,7 @@ export function registerNewRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
+  const unsubscribeMenu = registerNewMenu(ctx);
   const unsubscribeCommand = ctx.chat.on("command", "new", (raw) => {
     const event = raw as CommandEvent<
       Extract<keyof TChats, string>,
@@ -47,6 +49,7 @@ export function registerNewRoute<
   });
 
   return () => {
+    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeHarnessAction();
     unsubscribeInvalid();

@@ -5,6 +5,7 @@ import type { XmuxMiddleware } from "../../middleware";
 import { dispatch, registerInvalidCommandRoute } from "../routing";
 import type { CommandEvent } from "../utils";
 import { handleExitCommand } from "./handler";
+import { registerExitMenu } from "./menu";
 import { formatExitCommandUsage } from "./response";
 
 export function registerExitRoute<
@@ -14,6 +15,7 @@ export function registerExitRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
+  const unsubscribeMenu = registerExitMenu(ctx);
   const unsubscribeCommand = ctx.chat.on("command", "exit", (raw) => {
     const event = raw as CommandEvent<Extract<keyof TChats, string>, "exit">;
     return dispatch(ctx, middleware, {
@@ -29,6 +31,7 @@ export function registerExitRoute<
   });
 
   return () => {
+    unsubscribeMenu();
     unsubscribeCommand();
     unsubscribeInvalid();
   };

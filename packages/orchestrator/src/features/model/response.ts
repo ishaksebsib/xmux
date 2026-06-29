@@ -31,6 +31,7 @@ import {
   ThinkingModelThinkingUnsupportedError,
 } from "../thinking/errors";
 import { normalizeTextInput, type ActionMessage } from "../utils";
+import type { SessionRecord } from "../../store";
 import type {
   ModelAvailableOutput,
   ModelCommandError,
@@ -277,8 +278,22 @@ function formatModelSessionLines(
   },
   model: HarnessModelRef | undefined,
 ): readonly string[] {
+  return formatModelSessionDetailsLines({
+    session: input.session,
+    model,
+    thinkingSupported: input.thinkingSupported,
+    ...(input.thinkingLevel === undefined ? {} : { thinkingLevel: input.thinkingLevel }),
+  });
+}
+
+export function formatModelSessionDetailsLines(input: {
+  readonly session: SessionRecord;
+  readonly model: HarnessModelRef | undefined;
+  readonly thinkingSupported: boolean;
+  readonly thinkingLevel?: HarnessThinkingLevel;
+}): readonly string[] {
   return [
-    `- Model: ${formatCurrentModel(model)}`,
+    `- Model: ${formatCurrentModel(input.model)}`,
     ...formatThinkingLevelLine(input),
     `- Harness: ${inlineCode(input.session.ref.harnessId)}`,
     `- Session ID: ${inlineCode(input.session.ref.sessionId)}`,
