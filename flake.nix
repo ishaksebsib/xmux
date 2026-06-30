@@ -16,8 +16,10 @@
         "aarch64-darwin"
       ];
 
-      forEachSupportedSystem = buildAttrs:
-        lib.genAttrs supportedSystems (system:
+      forEachSupportedSystem =
+        buildAttrs:
+        lib.genAttrs supportedSystems (
+          system:
           buildAttrs {
             inherit system;
             pkgs = nixpkgs.legacyPackages.${system};
@@ -26,7 +28,8 @@
 
       mkCliPackage = pkgs: pkgs.callPackage ./nix/cli.nix { };
 
-      mkCliDepsUpdaterPackage = pkgs:
+      mkCliDepsUpdaterPackage =
+        pkgs:
         pkgs.callPackage ./nix/cli.nix {
           pnpmDepsHash = pkgs.lib.fakeHash;
         };
@@ -42,7 +45,8 @@
         xmux-cli = final.xmux;
       };
 
-      packages = forEachSupportedSystem ({ pkgs, ... }:
+      packages = forEachSupportedSystem (
+        { pkgs, ... }:
         let
           cliPackage = mkCliPackage pkgs;
         in
@@ -56,7 +60,19 @@
         }
       );
 
-      apps = forEachSupportedSystem ({ system, ... }:
+      checks = forEachSupportedSystem (
+        { pkgs, ... }:
+        let
+          cliPackage = mkCliPackage pkgs;
+        in
+        {
+          cli = cliPackage;
+          default = cliPackage;
+        }
+      );
+
+      apps = forEachSupportedSystem (
+        { system, ... }:
         let
           cliApp = mkCliApp self.packages.${system}.cli;
         in
@@ -67,25 +83,31 @@
         }
       );
 
-      devShells = forEachSupportedSystem ({ pkgs, ... }: {
-        default = pkgs.mkShell {
-          packages = with pkgs; [
-            nodejs_22
-            pnpm_11
+      devShells = forEachSupportedSystem (
+        { pkgs, ... }: {
+          default = pkgs.mkShell {
+            packages = with pkgs; [
+              nodejs_22
+              pnpm_11
 
-            just
-          ];
-        };
-      });
+              just
+            ];
+          };
+        }
+      );
 
-      formatter = forEachSupportedSystem ({ pkgs, ... }:
+      formatter = forEachSupportedSystem (
+        { pkgs, ... }:
         pkgs.treefmt.withConfig {
           runtimeInputs = [ pkgs.nixfmt ];
           settings = {
             on-unmatched = "info";
             formatter.nixfmt = {
               command = "nixfmt";
-              includes = [ "*.nix" ];
+              includes = [
+                "*.nix"
+                "nix/*.nix"
+              ];
             };
           };
         }

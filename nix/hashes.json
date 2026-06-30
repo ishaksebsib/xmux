@@ -1,7 +1,3 @@
 {
-  "pnpmDeps": {
-    "x86_64-linux": "sha256-y/WF4td7kk6CYj0rWECiQtck/5ogvtdW0cXXHTsVvPc=",
-    "aarch64-linux": "sha256-CjVrZc5dKc1XfUffDBegVeyaN+bxQcpkioM6iZIL8vA=",
-    "aarch64-darwin": "sha256-T+xd512sbwxQTvRK7m4s1rexeAVVfMyKSNdLOvRJ45k="
-  }
+  "pnpmDeps": "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 }

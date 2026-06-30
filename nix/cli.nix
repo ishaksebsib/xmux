@@ -7,7 +7,7 @@
   pnpm_11,
   pnpmConfigHook,
   versionCheckHook,
-  pnpmDepsHash ? (lib.importJSON ./hashes.json).pnpmDeps.${stdenvNoCC.hostPlatform.system},
+  pnpmDepsHash ? (lib.importJSON ./hashes.json).pnpmDeps,
 }:
 
 let
@@ -19,15 +19,17 @@ let
   workspaceFilter = "@xmux/cli";
   workspaceDependencyFilter = "${workspaceFilter}...";
 
-  sourceFiles = lib.fileset.unions [
-    ../apps/cli
-    ../apps/server
-    ../packages
-    ../package.json
-    ../pnpm-lock.yaml
-    ../pnpm-workspace.yaml
-    ../turbo.json
-  ];
+  sourceFiles = lib.fileset.intersection (lib.fileset.fromSource (lib.sources.cleanSource ../.)) (
+    lib.fileset.unions [
+      ../apps/cli
+      ../apps/server
+      ../packages
+      ../package.json
+      ../pnpm-lock.yaml
+      ../pnpm-workspace.yaml
+      ../turbo.json
+    ]
+  );
 
   supportedPlatforms = [
     "x86_64-linux"
@@ -47,15 +49,20 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   pnpmWorkspaces = [ workspaceDependencyFilter ];
 
   pnpmInstallFlags = [
-    "--force=false"
     "--child-concurrency=1"
     "--network-concurrency=4"
   ];
 
   pnpmDeps = fetchPnpmDeps {
-    inherit (finalAttrs) pname version src pnpmWorkspaces pnpmInstallFlags;
+    inherit (finalAttrs)
+      pname
+      version
+      src
+      pnpmWorkspaces
+      pnpmInstallFlags
+      ;
     inherit pnpm;
-    fetcherVersion = 3;
+    fetcherVersion = 4;
     hash = pnpmDepsHash;
   };
 

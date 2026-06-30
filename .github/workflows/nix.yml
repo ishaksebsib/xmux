@@ -41,12 +41,19 @@ jobs:
 
           systems="x86_64-linux aarch64-linux aarch64-darwin"
           packages="cli xmux default cli-deps-updater"
+          checks="cli default"
 
           for system in $systems; do
             echo "=== packages.${system} ==="
             for package in $packages; do
               nix eval ".#packages.${system}.${package}.drvPath" --raw >/dev/null
               echo "  ${package}: ok"
+            done
+
+            echo "=== checks.${system} ==="
+            for check in $checks; do
+              nix eval ".#checks.${system}.${check}.drvPath" --raw >/dev/null
+              echo "  ${check}: ok"
             done
 
             echo "=== apps.${system} ==="
@@ -98,11 +105,11 @@ jobs:
           if [ "$status" -ne 0 ]; then
             got_hash="$(grep -oE 'got:[[:space:]]+sha256-[A-Za-z0-9+/=]+' "$build_log" | awk '{ print $2 }' | tail -n1 || true)"
             if [ -n "$got_hash" ]; then
-              echo "::error title=Stale Nix pnpm dependency hash::Update nix/hashes.json: .pnpmDeps.${SYSTEM} = ${got_hash}"
+              echo "::error title=Stale Nix pnpm dependency hash::Update nix/hashes.json: .pnpmDeps = ${got_hash}"
               echo "### Stale Nix pnpm dependency hash" >> "$GITHUB_STEP_SUMMARY"
               echo "Update \`nix/hashes.json\`:" >> "$GITHUB_STEP_SUMMARY"
               echo "\`\`\`json" >> "$GITHUB_STEP_SUMMARY"
-              echo "\"${SYSTEM}\": \"${got_hash}\"" >> "$GITHUB_STEP_SUMMARY"
+              echo "\"pnpmDeps\": \"${got_hash}\"" >> "$GITHUB_STEP_SUMMARY"
               echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
             fi
             exit "$status"
