@@ -10,6 +10,7 @@ export const resumeSessionActionId = "r" as const;
 export const interactionActionId = "i" as const;
 export const queueActionId = "q" as const;
 export const menuActionId = "mn" as const;
+export const sessionStartActionId = "ss" as const;
 export const sttActionId = "stt" as const;
 
 function actionWithoutPayload() {
@@ -81,6 +82,12 @@ export const actions = defineChatActions({
   [menuActionId]: defineChatAction({
     values: {
       x: actionValue<string>(),
+    },
+  }),
+  [sessionStartActionId]: defineChatAction({
+    values: {
+      new: actionWithoutPayload(),
+      resume: actionWithoutPayload(),
     },
   }),
   [sttActionId]: defineChatAction({

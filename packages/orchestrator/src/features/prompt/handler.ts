@@ -1,27 +1,37 @@
 import type {
+  ChatActionEvent,
   ChatActor,
+  ChatAdapterDefinitions,
   ChatAdapterObject,
+  ChatCommandValues,
   ChatConversationRef,
   ChatMessage,
+  ChatSendActionInput,
   ChatTextInput,
   ChatTextStreamChunk,
   ChatTextStreamContent,
 } from "@xmux/chat-core";
-import type { ChatAdapterDefinitions, ChatSendActionInput } from "@xmux/chat-core";
 import { HarnessSessionNotFoundError } from "@xmux/harness-core";
 import type { HarnessAdapterDefinitions, HarnessPromptEvent } from "@xmux/harness-core";
 import { Result } from "better-result";
-import type { Actions } from "../../actions";
+import { sessionStartActionId, type Actions } from "../../actions";
+import type { Commands } from "../../commands";
 import type { NormalizedPromptResponseConfig } from "../../config";
 import type { HandlerContext } from "../../ctx";
 import type { SessionRecord } from "../../store";
 import { xmuxLogEvents } from "../../logger";
 import { serializeXmuxLogError } from "../../logger-utils";
-import { replyToChatEvent, streamReplyToChatEvent, threadFromChatEvent } from "../utils";
+import {
+  replyToChatEvent,
+  streamReplyToChatEvent,
+  threadFromChatEvent,
+  toSendActionInput,
+} from "../utils";
 import { markSessionDeletedUpstream } from "../session";
 import { formatInteractionActionMessage } from "../interaction/response";
+import { NoActiveSessionError } from "../errors";
 import { PromptAlreadyRunningError, PromptResponseError } from "./errors";
-import { formatPromptFailure } from "./response";
+import { formatNoActivePromptActionMessage, formatPromptFailure } from "./response";
 import { promptSessionForThread } from "./service";
 import { createPromptEventRenderer, splitPromptStreamDelta } from "./stream";
 
@@ -30,7 +40,20 @@ export interface HandlePromptMessageInput<
   TChats extends ChatAdapterDefinitions<TChats>,
 > {
   readonly ctx: HandlerContext<TAdapters, TChats>;
-  readonly event: PromptMessageEvent;
+  readonly event: PromptMessageEvent<Extract<keyof TChats, string>>;
+}
+
+export interface HandlePromptSessionStartActionInput<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+> {
+  readonly ctx: HandlerContext<TAdapters, TChats>;
+  readonly event: ChatActionEvent<
+    Actions,
+    typeof sessionStartActionId,
+    Extract<keyof TChats, string>,
+    Result<unknown, unknown>
+  >;
 }
 
 export interface PromptMessageEvent<
@@ -85,6 +108,10 @@ export async function handlePromptMessage<
     if (rejected.isErr())
       logPromptEventDispatchFailure(input.ctx, "prompt.rejected", rejected.error);
 
+    if (NoActiveSessionError.is(prompted.error)) {
+      return sendNoActiveSessionActions(input);
+    }
+
     return replyToChatEvent({
       event: input.event,
       message: formatPromptFailure(prompted.error),
@@ -126,6 +153,58 @@ export async function handlePromptMessage<
   if (settled.isErr()) logPromptEventDispatchFailure(input.ctx, "prompt.settled", settled.error);
 
   return streamed;
+}
+
+export async function handlePromptSessionStartAction<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(
+  input: HandlePromptSessionStartActionInput<TAdapters, TChats>,
+): Promise<Result<void, PromptResponseError>> {
+  const acknowledged = await input.event.ack();
+  if (acknowledged.isErr()) {
+    return Result.err(new PromptResponseError({ cause: acknowledged.error }));
+  }
+
+  const injected = await input.ctx.app.chat.injectCommand({
+    chatId: input.event.chatId,
+    conversationId: input.event.conversation.conversationId,
+    messageId: input.event.message.messageId,
+    actor: input.event.actor,
+    command: sessionStartCommand(input.event.value),
+  });
+
+  return Result.mapError(injected, (cause) => new PromptResponseError({ cause }));
+}
+
+function sessionStartCommand(value: "new" | "resume"): ChatCommandValues<Commands> {
+  switch (value) {
+    case "new":
+      return {
+        name: "new",
+        options: { harnessId: undefined, title: undefined },
+      } satisfies ChatCommandValues<Commands>;
+    case "resume":
+      return {
+        name: "resume",
+        options: { harnessId: undefined, shortId: undefined },
+      } satisfies ChatCommandValues<Commands>;
+  }
+}
+
+async function sendNoActiveSessionActions<
+  TAdapters extends HarnessAdapterDefinitions<TAdapters>,
+  TChats extends ChatAdapterDefinitions<TChats>,
+>(input: HandlePromptMessageInput<TAdapters, TChats>): Promise<Result<void, PromptResponseError>> {
+  const message = formatNoActivePromptActionMessage();
+  const sent = await input.ctx.app.chat.sendAction(
+    toSendActionInput({ ctx: input.ctx, event: input.event }, message),
+  );
+
+  return Result.map(
+    Result.mapError(sent, (cause) => new PromptResponseError({ cause })),
+    () => undefined,
+  );
 }
 
 function logPromptEventDispatchFailure<

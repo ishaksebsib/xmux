@@ -1,10 +1,7 @@
-import type { ChatTextInput } from "@xmux/chat-core";
-import {
-  formatNoActiveSessionMessage,
-  formatSessionDeletedUpstreamMessage,
-  markdown,
-  markdownText,
-} from "../../components";
+import type { ChatButtonInput, ChatTextInput } from "@xmux/chat-core";
+import { formatSessionDeletedUpstreamMessage, markdown, markdownText } from "../../components";
+import { sessionStartActionId, type Actions } from "../../actions";
+import type { ActionMessage } from "../utils";
 import {
   NoActiveSessionError,
   SessionDeletedUpstreamError,
@@ -19,11 +16,24 @@ import {
 } from "./errors";
 import type { PromptSessionForThreadError } from "./service";
 
+export function formatNoActivePromptActionMessage(): ActionMessage {
+  return {
+    text: ["**No active session**", "", "Create or resume a session before sending a prompt."].join(
+      "\n",
+    ),
+    format: "markdown",
+    buttons: [[formatStartNewSessionButton(), formatResumeSessionButton()]],
+  };
+}
+
 export function formatPromptFailure(error: PromptSessionForThreadError): ChatTextInput {
   if (NoActiveSessionError.is(error)) {
-    return formatNoActiveSessionMessage({
-      description: "Create or resume a session before sending a prompt.",
-      nextStep: "continue conversation.",
+    return markdown({
+      text: [
+        "**No active session**",
+        "",
+        "Create or resume a session before sending a prompt.",
+      ].join("\n"),
     });
   }
 
@@ -71,4 +81,24 @@ export function formatPromptFailure(error: PromptSessionForThreadError): ChatTex
   return markdown({
     text: ["**Failed to prompt session**", "", markdownText(error.message)].join("\n"),
   });
+}
+
+function formatStartNewSessionButton(): ChatButtonInput<Actions> {
+  return {
+    id: "no-active-session-new",
+    label: "New session",
+    actionId: sessionStartActionId,
+    value: "new",
+    style: "success",
+  };
+}
+
+function formatResumeSessionButton(): ChatButtonInput<Actions> {
+  return {
+    id: "no-active-session-resume",
+    label: "Resume session",
+    actionId: sessionStartActionId,
+    value: "resume",
+    style: "primary",
+  };
 }

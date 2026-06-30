@@ -4,9 +4,16 @@ import type { HarnessAdapterDefinitions } from "@xmux/harness-core";
 import type { Result } from "better-result";
 import type { Context } from "../../ctx";
 import { runXmuxHandler, type XmuxMiddleware } from "../../middleware";
+import { sessionStartActionId } from "../../actions";
 import { actorFromChatActor } from "../utils";
 import { classifyAudioMessage, handleSttAudioMessage, handleSttUnsupportedMessage } from "../stt";
-import { handlePromptMessage, isUserPromptActor, type PromptMessageEvent } from "./handler";
+import {
+  handlePromptMessage,
+  handlePromptSessionStartAction,
+  isUserPromptActor,
+  type HandlePromptSessionStartActionInput,
+  type PromptMessageEvent,
+} from "./handler";
 
 /** Registers chat routes owned by the prompt feature. */
 export function registerPromptRoute<
@@ -16,7 +23,7 @@ export function registerPromptRoute<
   ctx: Context<TAdapters, TChats>,
   middleware: readonly XmuxMiddleware<TAdapters, TChats>[] = [],
 ): Unsubscribe {
-  return ctx.chat.on("message", async (event) => {
+  const unsubscribeMessage = ctx.chat.on("message", async (event) => {
     const promptEvent = event as PromptMessageEvent<
       Extract<keyof TChats, string>,
       AdapterDataFor<TChats, Extract<keyof TChats, string>>
@@ -61,4 +68,23 @@ export function registerPromptRoute<
       },
     });
   });
+
+  const unsubscribeSessionStartAction = ctx.chat.on("action", async (raw) => {
+    if (raw.actionId !== sessionStartActionId) return;
+
+    const event = raw as HandlePromptSessionStartActionInput<TAdapters, TChats>["event"];
+    await runXmuxHandler({
+      app: ctx,
+      event,
+      middleware,
+      routeName: "prompt.session-start",
+      actor: actorFromChatActor(event.actor),
+      handler: (handlerCtx) => handlePromptSessionStartAction({ ctx: handlerCtx, event }),
+    });
+  });
+
+  return () => {
+    unsubscribeMessage();
+    unsubscribeSessionStartAction();
+  };
 }

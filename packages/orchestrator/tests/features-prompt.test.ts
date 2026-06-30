@@ -63,16 +63,49 @@ describe("prompt messages", () => {
     await xmux.shutdown();
   });
 
-  test("replies when no active session is bound to the thread", async () => {
-    const { emitMessage, replies, xmux } = await initializeFallbackXmux();
+  test("offers new and resume actions when no active session is bound to the thread", async () => {
+    const { actionMessages, emitMessage, replies, xmux } = await initializeFallbackXmux();
 
     emitMessage(messageEvent({ text: "hello" }));
 
+    await eventually(() => actionMessages.length === 1);
+
+    expect(replies).toHaveLength(0);
+    expect(actionMessages[0]?.text).toBe(
+      "**No active session**\n\nCreate or resume a session before sending a prompt.",
+    );
+    expect(actionMessages[0]?.buttons).toEqual([
+      [
+        expect.objectContaining({ actionId: "ss", value: "new", label: "New session" }),
+        expect.objectContaining({ actionId: "ss", value: "resume", label: "Resume session" }),
+      ],
+    ]);
+
+    await xmux.shutdown();
+  });
+
+  test("no active session new button starts the bare new flow", async () => {
+    const { emitAction, replies, xmux } = await initializeFallbackXmux();
+
+    emitAction(sessionStartActionEvent({ value: "new" }));
+
     await eventually(() => replies.length === 1);
 
-    expect(replies[0]).toBe(
-      "**No active session**\n\nCreate or resume a session before sending a prompt.\n\nUse `/new <harnessId>` or `/resume` to continue conversation.",
-    );
+    expect(replies[0]).toContain("**Session created**");
+    expect(replies[0]).toContain("Harness: `pi`");
+
+    await xmux.shutdown();
+  });
+
+  test("no active session resume button starts the bare resume flow", async () => {
+    const { actionMessages, emitAction, xmux } = await initializeFallbackXmux();
+
+    emitAction(sessionStartActionEvent({ value: "resume" }));
+
+    await eventually(() => actionMessages.length === 1);
+
+    expect(actionMessages[0]?.text).toContain("**pi sessions**");
+    expect(actionMessages[0]?.text).toContain("No sessions found.");
 
     await xmux.shutdown();
   });
@@ -583,7 +616,7 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
   const replies: string[] = [];
   const actionMessages: { readonly text: string; readonly buttons: unknown }[] = [];
   const promptInputs: unknown[] = [];
-  let emitMessage: ((event: unknown) => void) | undefined;
+  let emit: ((event: unknown) => void) | undefined;
 
   const xmux = createXmux({
     harnesses: createHarnesses({ input, promptInputs }),
@@ -600,7 +633,7 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
           return Result.ok({
             id: "telegram",
             async start(context) {
-              emitMessage = context.emit as (event: unknown) => void;
+              emit = context.emit as (event: unknown) => void;
               return Result.ok();
             },
             async sendMessage(message) {
@@ -637,13 +670,14 @@ async function initializeFallbackXmux(input: InitializeXmuxInput = {}) {
   });
 
   expect((await xmux.initialize()).isOk()).toBe(true);
-  expect(emitMessage).toBeDefined();
+  expect(emit).toBeDefined();
 
   return {
     replies,
     actionMessages,
     promptInputs,
-    emitMessage: emitMessage as (event: unknown) => void,
+    emitMessage: emit as (event: unknown) => void,
+    emitAction: emit as (event: unknown) => void,
     xmux,
   };
 }
@@ -735,7 +769,7 @@ function createHarnesses(input: {
             return Result.ok({ sessionId: "session-1", adapterData: {} });
           },
           resumeSession: async () => Result.err(new Error("not implemented")),
-          listSessions: async () => Result.err(new Error("not implemented")),
+          listSessions: async () => Result.ok([]),
           getSession: async () => Result.err(new Error("not implemented")),
           async prompt(promptInput) {
             input.promptInputs.push(promptInput);
@@ -816,6 +850,19 @@ function messageEvent(input: {
       adapterData: {},
       attachments: input.attachments ?? [],
     },
+  };
+}
+
+function sessionStartActionEvent(input: { readonly value: "new" | "resume" }) {
+  return {
+    type: "action",
+    chatId: "telegram",
+    conversation: { chatId: "telegram", conversationId: thread.threadId },
+    message: { chatId: "telegram", conversationId: thread.threadId, messageId: "action-1" },
+    interactionId: `session-start-${input.value}`,
+    actor: { kind: "user", actorId: "user-1", displayName: "Ishak", adapterData: {} },
+    actionId: "ss",
+    value: input.value,
   };
 }
 
