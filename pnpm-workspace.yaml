@@ -4,9 +4,6 @@ packages:
   - "!packages/_template"
 
 autoInstallPeers: false
-injectWorkspacePackages: true
-syncInjectedDepsAfterScripts:
-  - build
 
 allowBuilds:
   "@google/genai": true
