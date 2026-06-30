@@ -88,7 +88,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook preInstall
 
     packageOut="$out/lib/node_modules/@xmux/cli"
-    pnpm --filter ${workspaceFilter} deploy --offline --prod --legacy "$packageOut"
+    pnpm --filter ${workspaceFilter} deploy --offline --prod "$packageOut"
 
     makeWrapper ${lib.getExe nodejs} "$out/bin/xmux" \
       --add-flags "$packageOut/dist/bin/xmux.mjs" \
