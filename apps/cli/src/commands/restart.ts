@@ -12,6 +12,7 @@ import {
   restartStartedReport,
   type CliRestartReport,
 } from "../domain/lifecycle";
+import { getCliOutputCapabilities } from "../output/capabilities";
 import { foregroundRetryCommand, renderRestart } from "../output/lifecycle";
 import { waitForSpawnedReadyServer } from "../process/readiness";
 import { ProcessSpawner } from "../process/spawn";
@@ -114,7 +115,8 @@ export const getRestartReport = Effect.fn("cli.restart.report")(function* (input
 
 export const runRestartCommand = Effect.fn("cli.restart")(function* (input: RestartInput) {
   const report: CliRestartReport = yield* getRestartReport(input);
-  yield* Console.log(renderRestart(report));
+  const capabilities = yield* getCliOutputCapabilities;
+  yield* Console.log(renderRestart(report, capabilities));
 });
 
 export const restartCommand = Command.make(

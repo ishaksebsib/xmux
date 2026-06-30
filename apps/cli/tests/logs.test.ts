@@ -177,9 +177,9 @@ describe.sequential("logs command", () => {
         const json = renderLogs(report, "json");
 
         expect(requestedUrl).toBe("/v1/logs?tail=1");
-        expect(human).toContain("xmux logs: 1 entry");
-        expect(human).toContain("2026-06-16T00:00:00.000Z info server ready");
-        expect(human).toContain('annotations={"component":"server"}');
+        expect(human).toMatch(/entries\s+✓ 1 entry/u);
+        expect(human).toContain("2026-06-16T00:00:00.000Z  INFO  server ready");
+        expect(human).toContain('annotations {"component":"server"}');
         expect(json).toContain('"kind": "logs"');
         expect(json).toContain('"message": "server ready"');
         expectValidJson(json);
@@ -198,7 +198,7 @@ describe.sequential("logs command", () => {
         const human = renderLogs(report, "human");
         const json = renderLogsJson(report);
 
-        expect(human).toContain("xmux logs: empty");
+        expect(human).toMatch(/entries\s+○ empty/u);
         expect(json.trimStart().startsWith("{")).toBe(true);
         expect(json).not.toContain("xmux logs");
         expect(json).toContain('"entries": []');

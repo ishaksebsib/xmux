@@ -1,6 +1,11 @@
 import type { CliLogsResponse } from "../control/client";
 import type { CliLogsReport } from "../domain/logs";
-import { formatJson, formatKeyValueLines, type JsonValue } from "./format";
+import type { CliOutputCapabilities } from "./capabilities";
+import { plainCliOutputCapabilities } from "./capabilities";
+import { formatJson, type JsonValue } from "./format";
+import { cell, renderSections, row, statusCell } from "./layout";
+import { logLevelSeverity } from "./presentation";
+import { padRight, styleToken, type UiSeverity } from "./theme";
 
 const MAX_HUMAN_FIELD_CHARS = 2_000;
 
@@ -29,24 +34,50 @@ const nonEmptyRecord = (value: object | undefined): boolean =>
 type LogsReport = CliLogsReport<CliLogsResponse>;
 type LogEntry = CliLogsResponse["entries"][number];
 
-// The server API owns bounds and redaction; the CLI only formats the decoded response.
-const renderLogEntryHuman = (entry: LogEntry): string => {
-  const metadata: string[] = [];
+const logEntryMetadata = (
+  entry: LogEntry,
+): ReadonlyArray<readonly [label: string, value: JsonValue]> => {
+  const metadata: Array<readonly [label: string, value: JsonValue]> = [];
 
   if (entry.annotations !== undefined && nonEmptyRecord(entry.annotations)) {
-    metadata.push(`annotations=${humanJsonValue(entry.annotations)}`);
+    metadata.push(["annotations", entry.annotations]);
   }
 
   if (entry.spans !== undefined && nonEmptyRecord(entry.spans)) {
-    metadata.push(`spans=${humanJsonValue(entry.spans)}`);
+    metadata.push(["spans", entry.spans]);
   }
 
   if (entry.cause !== undefined) {
-    metadata.push(`cause=${humanJsonValue(entry.cause)}`);
+    metadata.push(["cause", entry.cause]);
   }
 
-  const suffix = metadata.length === 0 ? "" : ` ${metadata.join(" ")}`;
-  return `${entry.timestamp} ${entry.level} ${humanJsonValue(entry.message)}${suffix}`;
+  return metadata;
+};
+
+// The server API owns bounds and redaction; the CLI only formats the decoded response.
+const renderLogEntryHuman = (
+  capabilities: CliOutputCapabilities,
+  entry: LogEntry,
+  levelWidth: number,
+): string => {
+  const level = entry.level.toUpperCase();
+  const renderedLevel = styleToken(
+    capabilities,
+    logLevelSeverity(entry.level),
+    padRight(level, levelWidth),
+  );
+  const renderedTimestamp = styleToken(capabilities, "timestamp", entry.timestamp);
+  const renderedMessage = humanJsonValue(entry.message);
+  const header = `${renderedTimestamp}  ${renderedLevel}  ${renderedMessage}`;
+  const metadata = logEntryMetadata(entry);
+
+  if (metadata.length === 0) return header;
+
+  const metadataLines = metadata.map(
+    ([label, value]) =>
+      `  ${styleToken(capabilities, "muted", label)} ${styleToken(capabilities, "muted", humanJsonValue(value))}`,
+  );
+  return [header, ...metadataLines].join("\n");
 };
 
 const logEntryJson = (entry: LogEntry): JsonValue => ({
@@ -74,22 +105,51 @@ export const logsReportJson = (report: LogsReport): JsonValue => ({
   entries: report.response.entries.map(logEntryJson),
 });
 
-export const renderLogsHuman = (report: LogsReport): string => {
+const entriesLabel = (count: number): string => {
+  if (count === 0) return "empty";
+  return `${count} entr${count === 1 ? "y" : "ies"}`;
+};
+
+const entriesSeverity = (count: number): UiSeverity => (count === 0 ? "muted" : "success");
+
+export const renderLogsHuman = (
+  report: LogsReport,
+  capabilities: CliOutputCapabilities = plainCliOutputCapabilities,
+): string => {
   const count = report.response.entries.length;
-  const header = formatKeyValueLines([
-    ["xmux logs", count === 0 ? "empty" : `${count} entr${count === 1 ? "y" : "ies"}`],
-    ["scope", report.server.paths.scopeId],
-    ["config", report.server.paths.configPath],
-    ["socket", report.server.socketPath],
+  const header = renderSections(capabilities, [
+    {
+      title: "LOGS",
+      rows: [
+        row(
+          cell("entries", "label"),
+          statusCell(capabilities, entriesLabel(count), entriesSeverity(count)),
+        ),
+        row(cell("scope", "label"), cell(report.server.paths.scopeId, "code")),
+        row(cell("config", "label"), cell(report.server.paths.configPath, "code")),
+        row(cell("socket", "label"), cell(report.server.socketPath, "code")),
+      ],
+    },
   ]).trimEnd();
 
   if (count === 0) return header;
 
-  return `${header}\n${report.response.entries.map(renderLogEntryHuman).join("\n")}`;
+  const levelWidth = report.response.entries.reduce(
+    (maximum, entry) => Math.max(maximum, entry.level.length),
+    0,
+  );
+  const entries = report.response.entries
+    .map((entry) => renderLogEntryHuman(capabilities, entry, levelWidth))
+    .join("\n");
+
+  return `${header}\n\n${entries}`;
 };
 
 export const renderLogsJson = (report: LogsReport): string =>
   formatJson(logsReportJson(report)).trimEnd();
 
-export const renderLogs = (report: LogsReport, mode: "human" | "json"): string =>
-  mode === "json" ? renderLogsJson(report) : renderLogsHuman(report);
+export const renderLogs = (
+  report: LogsReport,
+  mode: "human" | "json",
+  capabilities: CliOutputCapabilities = plainCliOutputCapabilities,
+): string => (mode === "json" ? renderLogsJson(report) : renderLogsHuman(report, capabilities));

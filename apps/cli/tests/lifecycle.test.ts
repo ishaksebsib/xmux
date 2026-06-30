@@ -198,9 +198,9 @@ describe.sequential("stop command", () => {
         const output = renderStop(report);
 
         expect(report._tag).toBe("AlreadyStopped");
-        expect(output).toContain("xmux server: already stopped");
-        expect(output).toContain("reason: no-manifest");
-        expect(output).not.toContain("orchestrator:");
+        expect(output).toMatch(/server\s+◌ already stopped/u);
+        expect(output).toMatch(/reason\s+no manifest/u);
+        expect(output).not.toContain("orchestrator");
         expect(output).not.toContain(configPath);
       }),
     ),
@@ -223,7 +223,7 @@ describe.sequential("stop command", () => {
         );
 
         expect(report._tag).toBe("InvalidManifest");
-        expect(renderStop(report)).toContain("xmux server: invalid-manifest");
+        expect(renderStop(report)).toMatch(/server\s+✕ invalid manifest/u);
       }),
     ),
   );
@@ -245,7 +245,7 @@ describe.sequential("stop command", () => {
         );
 
         expect(report._tag).toBe("StaleManifestCleaned");
-        expect(renderStop(report)).toContain("xmux server: stale-manifest-cleaned");
+        expect(renderStop(report)).toMatch(/server\s+◌ stale manifest cleaned/u);
       }),
     ),
   );
@@ -267,7 +267,7 @@ describe.sequential("stop command", () => {
         );
 
         expect(report._tag).toBe("WrongScope");
-        expect(renderStop(report)).toContain("xmux server: wrong-scope");
+        expect(renderStop(report)).toMatch(/server\s+✕ wrong scope/u);
       }),
     ),
   );
@@ -296,9 +296,10 @@ describe.sequential("stop command", () => {
         expect(report._tag).toBe("Stopped");
         expect(shutdownCalled).toBe(true);
         const output = renderStop(report);
-        expect(output).toContain("xmux server: stopped");
+        expect(output).toMatch(/server\s+✓ stopped/u);
+        expect(output).toMatch(/shutdown\s+✓ accepted/u);
         expect(output).not.toContain("orchestrator");
-        expect(output).not.toContain("telegram: active");
+        expect(output).not.toContain("telegram");
         expect(output).not.toContain(paths.configPath);
         expect(output).not.toContain(paths.socketPath);
       }),
@@ -414,9 +415,10 @@ describe("start command", () => {
       expect(report._tag).toBe("AlreadyRunning");
       expect(spawned).toBe(false);
       const output = renderStart(report);
-      expect(output).toContain("xmux server: already running");
-      expect(output).toContain("orchestrator: running");
-      expect(output).toContain("telegram: active");
+      expect(output).toMatch(/server\s+✓ already running/u);
+      expect(output).toMatch(/orchestrator\s+✓ running/u);
+      expect(output).not.toContain("activation:");
+      expect(output).toMatch(/telegram\s+✓ configured\s+✓ active/u);
       expect(output).not.toContain(server.paths.configPath);
       expect(output).not.toContain(server.socketPath);
     }),
@@ -451,7 +453,7 @@ describe("start command", () => {
       );
 
       expect(report._tag).toBe("AlreadyRunning");
-      expect(renderStart(report)).toContain("xmux server: already running");
+      expect(renderStart(report)).toMatch(/server\s+✓ already running/u);
     }),
   );
 
@@ -592,8 +594,9 @@ describe("start command", () => {
       expect(report._tag).toBe("Started");
       expect(spawnedSpec?.args).toEqual(["server", "run", "--foreground"]);
       const output = renderStart(report);
-      expect(output).toContain("previous state: no-manifest");
-      expect(output).toContain("orchestrator: running");
+      expect(output).toContain("was stopped");
+      expect(output).toMatch(/orchestrator\s+✓ running/u);
+      expect(output).not.toContain("activation:");
       expect(output).not.toContain(server.paths.configPath);
       expect(output).not.toContain(server.socketPath);
     }),
@@ -639,7 +642,7 @@ describe("start command", () => {
 
       expect(spawned).toBe(true);
       expect(report._tag).toBe("Started");
-      expect(renderStart(report)).toContain("previous state: stale-manifest-removed");
+      expect(renderStart(report)).toContain("was stopped (stale manifest removed)");
     }),
   );
 
@@ -990,9 +993,10 @@ describe("restart command", () => {
         "require-running",
       ]);
       const output = renderRestart(report);
-      expect(output).toContain("xmux server: restarted");
-      expect(output).toContain("orchestrator: running");
-      expect(output).toContain("telegram: active");
+      expect(output).toMatch(/server\s+✓ restarted/u);
+      expect(output).toMatch(/orchestrator\s+✓ running/u);
+      expect(output).not.toContain("activation:");
+      expect(output).toMatch(/telegram\s+✓ configured\s+✓ active/u);
       expect(output).not.toContain(newServer.paths.configPath);
       expect(output).not.toContain(newServer.socketPath);
     }),
@@ -1138,10 +1142,10 @@ describe("restart command", () => {
 
       expect(fromStopped.report._tag).toBe("Started");
       expect(fromStopped.spawned).toBe(true);
-      expect(renderRestart(fromStopped.report)).toContain("previous state: no-manifest");
+      expect(renderRestart(fromStopped.report)).toContain("was stopped");
       expect(fromStale.report._tag).toBe("Started");
       expect(fromStale.spawned).toBe(true);
-      expect(renderRestart(fromStale.report)).toContain("previous state: stale-manifest-removed");
+      expect(renderRestart(fromStale.report)).toContain("was stopped (stale manifest removed)");
     }),
   );
 

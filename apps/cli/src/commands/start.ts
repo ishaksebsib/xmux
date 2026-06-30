@@ -10,6 +10,7 @@ import {
   startedReport,
   type CliStartReport,
 } from "../domain/lifecycle";
+import { getCliOutputCapabilities } from "../output/capabilities";
 import { foregroundRetryCommand, renderStart } from "../output/lifecycle";
 import { waitForKnownReadyServer, waitForSpawnedReadyServer } from "../process/readiness";
 import { ProcessSpawner } from "../process/spawn";
@@ -98,7 +99,8 @@ export const getStartReport = Effect.fn("cli.start.report")(function* (input: St
 
 export const runStartCommand = Effect.fn("cli.start")(function* (input: StartInput) {
   const report: CliStartReport = yield* getStartReport(input);
-  yield* Console.log(renderStart(report));
+  const capabilities = yield* getCliOutputCapabilities;
+  yield* Console.log(renderStart(report, capabilities));
 });
 
 export const startCommand = Command.make(

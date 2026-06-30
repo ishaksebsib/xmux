@@ -1,7 +1,10 @@
 import { Cause } from "effect";
-import { renderCliCause, shouldRenderDebugErrors } from "../../output/errors";
+import { renderCliFailure, shouldRenderDebugErrors } from "../../output/errors";
+import { detectNodeOutputCapabilities } from "./terminal";
 
 export const renderCliFailureNode = (cause: Cause.Cause<unknown>): void => {
-  console.error(renderCliCause(cause, shouldRenderDebugErrors(process.argv)));
+  console.error(
+    renderCliFailure(cause, shouldRenderDebugErrors(process.argv), detectNodeOutputCapabilities()),
+  );
   process.exitCode = 1;
 };

@@ -6,6 +6,7 @@ import { CliInvalidInput } from "../domain/errors";
 import { mapConfigPathError } from "./input";
 import { parseServerTarget, parseTailCount, type CliTailCount } from "../domain/input";
 import { logsReport, type CliLogsReport } from "../domain/logs";
+import { getCliOutputCapabilities } from "../output/capabilities";
 import { renderLogs } from "../output/logs";
 import { configPathFlag, jsonOutputFlag } from "./options";
 
@@ -58,7 +59,8 @@ export const getLogsReport = Effect.fn("cli.logs.report")(function* (input: Logs
 
 export const runLogsCommand = Effect.fn("cli.logs")(function* (input: LogsInput) {
   const report: CliLogsReport<CliLogsResponse> = yield* getLogsReport(input);
-  yield* Console.log(renderLogs(report, input.json ? "json" : "human"));
+  const capabilities = yield* getCliOutputCapabilities;
+  yield* Console.log(renderLogs(report, input.json ? "json" : "human", capabilities));
 });
 
 export const logsCommand = Command.make(

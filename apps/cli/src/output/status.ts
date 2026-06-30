@@ -1,13 +1,26 @@
 import type { JsonValue } from "./format";
-import { formatJson, formatKeyValueLines } from "./format";
+import { formatJson } from "./format";
+import type { CliOutputCapabilities } from "./capabilities";
+import { plainCliOutputCapabilities } from "./capabilities";
+import { cell, renderSections, row, statusCell, type UiSection } from "./layout";
+import {
+  inactiveAdapterSections,
+  inactiveOrchestratorRow,
+  runningAdapterSections,
+  runningOrchestratorRow,
+} from "./orchestrator";
+import {
+  configStatusSeverity,
+  humanizeIdentifier,
+  inactiveServerSeverity,
+  serverStateSeverity,
+} from "./presentation";
 import type { CliResolvedServerPaths } from "../domain/discovery";
 import type {
   CliChatAdapterStatus,
   CliHarnessAdapterStatus,
   CliInactiveChatAdapterStatus,
-  CliInactiveConfigSummary,
   CliInactiveHarnessAdapterStatus,
-  CliOrchestratorStatus,
   CliStatusReport,
 } from "../domain/status";
 
@@ -71,34 +84,58 @@ const inactiveAdapterJson = (adapter: InactiveAdapterStatus): JsonValue => ({
   runtime: adapter.runtime,
 });
 
-const formatAdapterLine = (adapter: RunningAdapterStatus): string =>
-  `  ${adapter.id}: ${adapter.state}${adapter.reason === undefined ? "" : ` (${adapter.reason})`}`;
-
-const formatInactiveAdapterLine = (adapter: InactiveAdapterStatus): string =>
-  `  ${adapter.id}: ${adapter.state}, runtime unavailable`;
-
-const sectionLines = (title: string, lines: readonly string[]): readonly string[] =>
-  lines.length === 0 ? [title, "  (none)"] : [title, ...lines];
-
-export const runningOrchestratorLines = (
-  orchestrator: CliOrchestratorStatus,
-  label = "orchestrator",
-) => [
-  "",
-  `${label}: ${orchestrator.state}`,
-  ...sectionLines("chats:", orchestrator.chats.map(formatAdapterLine)),
-  ...sectionLines("harnesses:", orchestrator.harnesses.map(formatAdapterLine)),
+const runningStatusSections = (
+  report: Extract<CliStatusReport, { readonly _tag: "Running" }>,
+  capabilities: CliOutputCapabilities,
+): ReadonlyArray<UiSection> => [
+  {
+    title: "XMUX",
+    rows: [
+      row(
+        cell("server", "label"),
+        statusCell(
+          capabilities,
+          humanizeIdentifier(report.server.state),
+          serverStateSeverity(report.server.state),
+        ),
+        cell(`pid ${report.server.pid} • uptime ${formatUptime(report.server.uptimeMs)}`, "muted"),
+      ),
+      runningOrchestratorRow(capabilities, report.server.orchestrator),
+      row(cell("config", "label"), statusCell(capabilities, "loaded", "success")),
+      row(cell("session", "label"), cell(report.sessionId, "code")),
+    ],
+  },
+  ...runningAdapterSections(capabilities, report.server.orchestrator),
 ];
 
-export const inactiveOrchestratorLines = (
-  configSummary: CliInactiveConfigSummary,
-  label = "orchestrator",
-) => [
-  "",
-  `${label}: unavailable (server not running)`,
-  `config status: ${configSummary.status}`,
-  ...sectionLines("chats:", configSummary.chats.map(formatInactiveAdapterLine)),
-  ...sectionLines("harnesses:", configSummary.harnesses.map(formatInactiveAdapterLine)),
+const inactiveStatusSections = (
+  report: Exclude<CliStatusReport, { readonly _tag: "Running" }>,
+  capabilities: CliOutputCapabilities,
+): ReadonlyArray<UiSection> => [
+  {
+    title: "XMUX",
+    rows: [
+      row(
+        cell("server", "label"),
+        statusCell(
+          capabilities,
+          humanizeIdentifier(statusLabel(report)),
+          inactiveServerSeverity(statusLabel(report)),
+        ),
+        cell(humanizeIdentifier(report.reason), "muted"),
+      ),
+      inactiveOrchestratorRow(capabilities),
+      row(
+        cell("config", "label"),
+        statusCell(
+          capabilities,
+          humanizeIdentifier(report.configSummary.status),
+          configStatusSeverity(report.configSummary.status),
+        ),
+      ),
+    ],
+  },
+  ...inactiveAdapterSections(capabilities, report.configSummary),
 ];
 
 export const statusReportJson = (report: CliStatusReport): JsonValue => {
@@ -158,38 +195,26 @@ export const statusReportJson = (report: CliStatusReport): JsonValue => {
   }
 };
 
-export const renderStatusHuman = (report: CliStatusReport): string => {
+export const renderStatusHuman = (
+  report: CliStatusReport,
+  capabilities: CliOutputCapabilities = plainCliOutputCapabilities,
+): string => {
   switch (report._tag) {
     case "Running":
-      return [
-        formatKeyValueLines([
-          ["xmux server", report.server.state],
-          ["pid", report.server.pid],
-          ["session", report.sessionId],
-          ["uptime", formatUptime(report.server.uptimeMs)],
-        ]).trimEnd(),
-        ...runningOrchestratorLines(report.server.orchestrator),
-      ]
-        .join("\n")
-        .trimEnd();
+      return renderSections(capabilities, runningStatusSections(report, capabilities)).trimEnd();
     case "Stopped":
     case "InvalidManifest":
     case "WrongScope":
     case "StaleManifestCleaned":
-      return [
-        formatKeyValueLines([
-          ["xmux server", statusLabel(report)],
-          ["reason", report.reason],
-        ]).trimEnd(),
-        ...inactiveOrchestratorLines(report.configSummary),
-      ]
-        .join("\n")
-        .trimEnd();
+      return renderSections(capabilities, inactiveStatusSections(report, capabilities)).trimEnd();
   }
 };
 
 export const renderStatusJson = (report: CliStatusReport): string =>
   formatJson(statusReportJson(report)).trimEnd();
 
-export const renderStatus = (report: CliStatusReport, mode: "human" | "json"): string =>
-  mode === "json" ? renderStatusJson(report) : renderStatusHuman(report);
+export const renderStatus = (
+  report: CliStatusReport,
+  mode: "human" | "json",
+  capabilities: CliOutputCapabilities = plainCliOutputCapabilities,
+): string => (mode === "json" ? renderStatusJson(report) : renderStatusHuman(report, capabilities));

@@ -11,6 +11,7 @@ import {
   statusReportFromInactiveDiscovery,
   type CliStatusReport,
 } from "../domain/status";
+import { getCliOutputCapabilities } from "../output/capabilities";
 import { renderStatus } from "../output/status";
 import { configPathFlag, jsonOutputFlag } from "./options";
 
@@ -46,7 +47,8 @@ export const getStatusReport = Effect.fn("cli.status.report")(function* (input: 
 
 export const runStatusCommand = Effect.fn("cli.status")(function* (input: StatusInput) {
   const report: CliStatusReport = yield* getStatusReport(input);
-  yield* Console.log(renderStatus(report, input.json ? "json" : "human"));
+  const capabilities = yield* getCliOutputCapabilities;
+  yield* Console.log(renderStatus(report, input.json ? "json" : "human", capabilities));
 });
 
 export const statusCommand = Command.make(

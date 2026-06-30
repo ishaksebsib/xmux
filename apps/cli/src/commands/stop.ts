@@ -9,6 +9,7 @@ import {
   stoppedReport,
   type CliStopReport,
 } from "../domain/lifecycle";
+import { getCliOutputCapabilities } from "../output/capabilities";
 import { renderStop } from "../output/lifecycle";
 import { waitForUnreachable, LifecycleTiming } from "../process/wait";
 import { configPathFlag } from "./options";
@@ -50,7 +51,8 @@ export const getStopReport = Effect.fn("cli.stop.report")(function* (input: Stop
 
 export const runStopCommand = Effect.fn("cli.stop")(function* (input: StopInput) {
   const report: CliStopReport = yield* getStopReport(input);
-  yield* Console.log(renderStop(report));
+  const capabilities = yield* getCliOutputCapabilities;
+  yield* Console.log(renderStop(report, capabilities));
 });
 
 export const stopCommand = Command.make(

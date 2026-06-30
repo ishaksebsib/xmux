@@ -49,9 +49,16 @@ instead of adding a convenience file.
 - Internal modules import concrete files, not broad package barrels.
 
 ## Output Rules
-- Human output should be concise, deterministic, and secret-safe.
-- JSON output is command-specific; do not add JSON mode to a lifecycle command
-  unless the product plan says so.
+- Human output should be concise, deterministic, structured, and secret-safe.
+- Keep UI/coloring logic inside `src/output/`; command/domain/control modules must
+  pass typed reports into renderers rather than constructing presentation strings.
+- Prefer semantic severities (`success`, `info`, `warning`, `danger`, `muted`)
+  and shared table/section renderers over ad-hoc spacing or raw ANSI codes.
+- JSON output is command-specific, stable, and never colored; do not add JSON mode
+  to a lifecycle command unless the product plan says so.
+- Color is a Node runtime capability (`TTY`, `NO_COLOR`, `FORCE_COLOR`,
+  `TERM=dumb`) provided through the output style service. Pure renderers must also
+  work with explicit plain capabilities for tests and non-Node hosts.
 - Include safe diagnostic paths/socket/session/PID fields when useful.
 - Do not print raw config contents, bearer tokens, secret values, or unbounded
   causes by default. Debug rendering may show fuller Effect causes.

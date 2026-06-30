@@ -1,4 +1,7 @@
 import { Cause } from "effect";
+import type { CliOutputCapabilities } from "./capabilities";
+import { plainCliOutputCapabilities } from "./capabilities";
+import { statusText, styleToken } from "./theme";
 
 const DEBUG_LOG_LEVELS = new Set(["all", "trace", "debug"]);
 
@@ -38,4 +41,15 @@ export const formatUnknownError = (value: unknown): string => {
 export const renderCliCause = (cause: Cause.Cause<unknown>, debug: boolean): string => {
   if (debug) return Cause.pretty(cause);
   return formatUnknownError(Cause.squash(cause));
+};
+
+export const renderCliFailure = (
+  cause: Cause.Cause<unknown>,
+  debug: boolean,
+  capabilities: CliOutputCapabilities = plainCliOutputCapabilities,
+): string => {
+  if (debug) return renderCliCause(cause, true);
+
+  const label = styleToken(capabilities, "danger", statusText(capabilities, "danger", "error"));
+  return `${label} ${renderCliCause(cause, false)}`;
 };

@@ -121,12 +121,13 @@ describe.sequential("status command", () => {
         const json = renderStatusJson(report);
 
         expect(report._tag).toBe("Stopped");
-        expect(human).toContain("xmux server: stopped");
-        expect(human).toContain("reason: no-manifest");
+        expect(human).toContain("XMUX");
+        expect(human).toMatch(/server\s+◌ stopped\s+no manifest/u);
+        expect(human).toMatch(/orchestrator\s+○ unavailable\s+server not running/u);
         expect(human).not.toContain(configPath);
-        expect(human).toContain("orchestrator: unavailable (server not running)");
-        expect(human).toContain("telegram: configured, runtime unavailable");
-        expect(human).toContain("pi: configured_lazy, runtime unavailable");
+        expect(human).toMatch(/telegram\s+✓ configured\s+○ runtime unavailable/u);
+        expect(human).toMatch(/pi\s+✓ configured\s+○ runtime unavailable/u);
+        expect(human).not.toContain("configured_lazy");
         expect(human).not.toContain("secret-token-should-not-leak");
         expect(json).toContain('"status": "stopped"');
         expect(json).toContain('"runtime": "unavailable"');
@@ -144,7 +145,7 @@ describe.sequential("status command", () => {
         const human = renderStatus(report, "human");
 
         expect(report._tag).toBe("Stopped");
-        expect(human).toContain("config status: invalid");
+        expect(human).toMatch(/config\s+✕ invalid/u);
         expect(human).not.toContain("secret-token-should-not-leak");
       }),
     ),
@@ -157,9 +158,9 @@ describe.sequential("status command", () => {
         const human = renderStatus(report, "human");
 
         expect(report._tag).toBe("Stopped");
-        expect(human).toContain("config status: valid");
-        expect(human).toContain("chats:\n  (none)");
-        expect(human).toContain("harnesses:\n  (none)");
+        expect(human).toMatch(/config\s+✓ valid/u);
+        expect(human).toContain("CHATS\n  (none)");
+        expect(human).toContain("HARNESSES\n  (none)");
       }),
     ),
   );
@@ -172,9 +173,10 @@ describe.sequential("status command", () => {
         const human = renderStatus(report, "human");
 
         expect(report._tag).toBe("Stopped");
-        expect(human).toContain("config status: valid");
-        expect(human).toContain("telegram: configured, runtime unavailable");
-        expect(human).toContain("pi: configured_lazy, runtime unavailable");
+        expect(human).toMatch(/config\s+✓ valid/u);
+        expect(human).toMatch(/telegram\s+✓ configured\s+○ runtime unavailable/u);
+        expect(human).toMatch(/pi\s+✓ configured\s+○ runtime unavailable/u);
+        expect(human).not.toContain("configured_lazy");
         expect(human).not.toContain("XMUX_TEST_MISSING_TOKEN");
       }),
     ),
@@ -191,7 +193,7 @@ describe.sequential("status command", () => {
         const json = renderStatusJson(report);
 
         expect(report._tag).toBe("InvalidManifest");
-        expect(human).toContain("xmux server: invalid-manifest");
+        expect(human).toMatch(/server\s+✕ invalid manifest\s+invalid manifest/u);
         expect(json).toContain('"status": "invalid-manifest"');
         expectValidJson(json);
       }),
@@ -208,8 +210,7 @@ describe.sequential("status command", () => {
         const human = renderStatus(report, "human");
 
         expect(report._tag).toBe("StaleManifestCleaned");
-        expect(human).toContain("xmux server: stale-manifest-cleaned");
-        expect(human).toContain("reason: stale-manifest-removed");
+        expect(human).toMatch(/server\s+◌ stale manifest cleaned\s+stale manifest removed/u);
       }),
     ),
   );
@@ -224,8 +225,7 @@ describe.sequential("status command", () => {
         const human = renderStatus(report, "human");
 
         expect(report._tag).toBe("WrongScope");
-        expect(human).toContain("xmux server: wrong-scope");
-        expect(human).toContain("reason: wrong-scope");
+        expect(human).toMatch(/server\s+✕ wrong scope\s+wrong scope/u);
       }),
     ),
   );
@@ -242,14 +242,15 @@ describe.sequential("status command", () => {
         const json = renderStatus(report, "json");
 
         expect(report._tag).toBe("Running");
-        expect(human).toContain("xmux server: ready");
-        expect(human).toContain("session: active-status");
+        expect(human).toMatch(/server\s+✓ ready\s+pid \d+ • uptime/u);
+        expect(human).toMatch(/session\s+active-status/u);
         expect(human).not.toContain(paths.configPath);
         expect(human).not.toContain(paths.socketPath);
         expect(human).not.toContain(paths.manifestPath);
-        expect(human).toContain("orchestrator: running");
-        expect(human).toContain("telegram: active");
-        expect(human).toContain("pi: configured_lazy");
+        expect(human).toMatch(/orchestrator\s+✓ running/u);
+        expect(human).not.toContain("activation:");
+        expect(human).toMatch(/telegram\s+✓ configured\s+✓ active/u);
+        expect(human).toMatch(/pi\s+✓ configured\s+◌ lazy\/on-demand/u);
         expect(json).toContain('"status": "running"');
         expect(json).toContain('"state": "ready"');
         expect(json).toContain('"orchestrator"');
@@ -271,7 +272,8 @@ describe.sequential("status command", () => {
         const json = renderStatus(report, "json");
 
         expect(report._tag).toBe("Running");
-        expect(human).toContain("orchestrator: not_started");
+        expect(human).toMatch(/orchestrator\s+◌ not started/u);
+        expect(human).not.toContain("activation:");
         expect(json).toContain('"activation": "unknown"');
         expectValidJson(json);
       }),
@@ -299,9 +301,11 @@ describe.sequential("status command", () => {
         const human = renderStatus(report, "human");
         const json = renderStatus(report, "json");
 
-        expect(human).toContain("xmux server: degraded");
-        expect(human).toContain("orchestrator: failed");
-        expect(human).toContain("telegram: failed (authentication_failed)");
+        expect(human).toMatch(/server\s+◌ degraded\s+pid \d+ • uptime/u);
+        expect(human).toMatch(/orchestrator\s+✕ failed\s+reason: OrchestratorStartupError/u);
+        expect(human).toMatch(
+          /telegram\s+✓ configured\s+✕ failed\s+reason: authentication failed/u,
+        );
         expect(human).not.toContain("secret-token-should-not-leak");
         expect(json).toContain('"reason": "authentication_failed"');
         expectValidJson(json);

@@ -8,6 +8,7 @@ import { nodePlatformSupportLayer } from "./platform-support";
 import { nodeProcessSpawnerLayer } from "./process-spawner";
 import { nodeServerRunnerLayer } from "./server-runner";
 import { nodeStartLockLayer } from "./start-lock";
+import { nodeCliOutputStyleLayer } from "./terminal";
 
 const lifecycleTimingLayer = LifecycleTiming.layer;
 const startLockLayer = nodeStartLockLayer.pipe(Layer.provide(lifecycleTimingLayer));
@@ -19,6 +20,7 @@ export const cliNodeServicesLayer = Layer.mergeAll(
   nodeProcessSpawnerLayer,
   nodeServerRunnerLayer,
   nodePlatformSupportLayer,
+  nodeCliOutputStyleLayer,
   lifecycleTimingLayer,
   startLockLayer,
 );
