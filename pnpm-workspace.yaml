@@ -6,7 +6,7 @@ packages:
 autoInstallPeers: false
 injectWorkspacePackages: true
 syncInjectedDepsAfterScripts:
- - build
+  - build
 
 allowBuilds:
   "@google/genai": true
