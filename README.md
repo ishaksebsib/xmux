@@ -1,7 +1,7 @@
 # XMUX
 
-> **Control your coding agents from anywhere:** Discord, Slack, Telegram.
->
+**Control your coding agents from anywhere:** Discord, Slack, Telegram.
+
 > **Privacy-first**: your **agents** and your **chat-bot** run on your own **machine**.
 
 ## Installation
@@ -22,7 +22,7 @@ nix run github:ishaksebsib/xmux
 
 `~/.config/xmux/config.jsonc`
 
-OpenCode with Telegram:
+**OpenCode** with Telegram:
 
 ```jsonc
 {
@@ -40,6 +40,9 @@ OpenCode with Telegram:
   }
 }
 ```
+
+For every supported option, see the [full config reference](apps/server/config.example.jsonc).
+
 ## Run
 
 ```sh
@@ -48,9 +51,9 @@ xmux start
 
 This starts the server. Chat with your AI from your preferred platform.
 
-
 ### Chat adapters
-Add one or more chat adapters under `"chats"`. 
+
+Add one or more chat adapters under `"chats"`.
 
 <details>
 <summary>Telegram</summary>

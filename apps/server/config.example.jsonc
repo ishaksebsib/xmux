@@ -1,0 +1,126 @@
+{
+  "xmux": {
+    "workspace": {
+      // Default workspace directory for new chats/sessions.
+      "defaultDir": "~/dev",
+    },
+    "responses": {
+      "thinking": {
+        "hide": false,
+        "maxChars": 640,
+      },
+      "tools": {
+        "hide": false,
+        "maxInputStringChars": 80,
+        "maxInputObjectEntries": 4,
+        "maxTextOutputChars": 1200,
+        "maxJsonOutputChars": 2400,
+      },
+    },
+    "commands": {
+      "resume": {
+        "maxSessionsPerHarness": 8,
+      },
+      "model": {
+        "maxModelsPerProvider": 20,
+      },
+      "ls": {
+        "showHidden": false,
+        "maxEntries": 250,
+      },
+    },
+    "attachments": {
+      "enabled": true,
+      "maxBytes": 12582912,
+
+      // Supported kinds: image, audio, video, document, archive, other.
+      "kinds": ["image", "audio", "video", "document", "archive", "other"],
+    },
+  },
+
+  "server": {
+    "logs": {
+      // Supported levels: trace, debug, info, warn, error.
+      "level": "info",
+      "rotation": {
+        "maxBytes": 2097152,
+        "maxFiles": 7,
+      },
+    },
+  },
+
+	// For voice Prompting.
+  "stt": {
+    "enabled": true,
+
+    // Currently supported provider: openai-compatible.
+    "provider": "openai-compatible",
+
+    // Secrets can be { "env": "OPENAI_API_KEY" } or { "value": "..." }.
+    // Omit apiKey for local providers that do not require auth.
+    "apiKey": { "env": "OPENAI_API_KEY" },
+
+    // OpenAI default is https://api.openai.com/v1.
+    // For local/OpenAI-compatible STT, use something like http://127.0.0.1:1234/v1.
+    "baseUrl": "https://api.openai.com/v1",
+
+    // Default: /audio/transcriptions.
+    "endpointPath": "/audio/transcriptions",
+    "model": "gpt-4o-mini-transcribe",
+
+    // Optional language hint.
+    "language": "en",
+    "maxBytes": 26214400,
+    "timeoutMs": 30000,
+  },
+
+  "chats": {
+    "telegram": {
+      "enabled": true,
+      "token": { "env": "TELEGRAM_BOT_TOKEN" },
+      // Access can also be { "type": "anyone" }. to allow anyone to use the harness.
+      "access": { "type": "allow-list", "users": ["your-telegram-user-id"] },
+    },
+    "discord": {
+      "enabled": true,
+      "token": { "env": "DISCORD_BOT_TOKEN" },
+      "applicationId": "your-discord-application-id",
+      "guildId": "your-discord-guild-id",
+      // Access can also be { "type": "anyone" }. to allow anyone to use the harness.
+      "access": { "type": "allow-list", "users": ["your-discord-user-id"] },
+    },
+    "slack": {
+      "enabled": true,
+      "botToken": { "env": "SLACK_BOT_TOKEN" },
+      "appToken": { "env": "SLACK_APP_TOKEN" },
+      // Access can also be { "type": "anyone" }. to allow anyone to use the harness.
+      "access": { "type": "allow-list", "users": ["your-slack-user-id"] },
+    },
+  },
+
+  "harnesses": {
+    "opencode": {
+      "enabled": true,
+
+      // Embedded mode starts/manages OpenCode locally.
+      // This is also the default if "runtime" is omitted.
+      "runtime": {
+        "type": "embedded",
+        // Optional. Omit to let XMUX choose a port.
+        "port": 4096,
+      },
+
+      // Or connect to an already-running OpenCode server:
+      // "runtime": { "type": "external", "baseUrl": "http://127.0.0.1:4096" },
+
+      // variant is optional; providerId and modelId is required when defaultModel is set.
+      "defaultModel": {
+        "providerId": "anthropic",
+        "modelId": "claude-sonnet-4",
+        "variant": "default",
+      },
+      // Supported levels: off, minimal, low, medium, high, xhigh, max.
+      "defaultThinking": "medium",
+    },
+  },
+}
