@@ -2,9 +2,33 @@ name: Nix
 
 on:
   pull_request:
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "apps/cli/**"
+      - "apps/server/**"
+      - "packages/**"
+      - ".github/workflows/nix.yml"
   push:
     branches:
       - main
+    paths:
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - "apps/cli/**"
+      - "apps/server/**"
+      - "packages/**"
+      - ".github/workflows/nix.yml"
   workflow_dispatch:
 
 permissions:
@@ -19,8 +43,31 @@ defaults:
     shell: bash
 
 jobs:
+  plan:
+    name: Plan Nix CI scope
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      systems: ${{ steps.scope.outputs.systems }}
+      matrix: ${{ steps.scope.outputs.matrix }}
+
+    steps:
+      - name: Select systems
+        id: scope
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            echo 'systems=x86_64-linux' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"}]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'systems=x86_64-linux aarch64-linux aarch64-darwin' >> "$GITHUB_OUTPUT"
+            echo 'matrix={"include":[{"system":"x86_64-linux","runner":"ubuntu-24.04"},{"system":"aarch64-linux","runner":"ubuntu-24.04-arm"},{"system":"aarch64-darwin","runner":"macos-14"}]}' >> "$GITHUB_OUTPUT"
+          fi
+
   eval:
     name: Evaluate flake outputs
+    needs: plan
     runs-on: ubuntu-24.04
     timeout-minutes: 15
 
@@ -31,15 +78,14 @@ jobs:
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@v34
 
-      - name: Evaluate all supported systems
+      - name: Evaluate flake outputs
         run: |
           set -euo pipefail
 
           nix --version
           nix flake metadata
-          nix flake show --all-systems
 
-          systems="x86_64-linux aarch64-linux aarch64-darwin"
+          systems="${{ needs.plan.outputs.systems }}"
           packages="cli xmux default cli-deps-updater"
           checks="cli default"
 
@@ -67,19 +113,14 @@ jobs:
 
   build:
     name: Build CLI (${{ matrix.system }})
-    needs: eval
+    needs:
+      - plan
+      - eval
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - system: x86_64-linux
-            runner: ubuntu-24.04
-          - system: aarch64-linux
-            runner: ubuntu-24.04-arm
-          - system: aarch64-darwin
-            runner: macos-14
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
 
     steps:
       - name: Checkout
@@ -87,6 +128,9 @@ jobs:
 
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@v34
+
+      - name: Restore/save Nix store cache
+        uses: DeterminateSystems/magic-nix-cache-action@v8
 
       - name: Build package
         env:
@@ -98,7 +142,7 @@ jobs:
           trap 'rm -f "$build_log"' EXIT
 
           set +e
-          nix build ".#packages.${SYSTEM}.cli" --no-link 2>&1 | tee "$build_log"
+          nix build ".#packages.${SYSTEM}.cli" --out-link result 2>&1 | tee "$build_log"
           status="${PIPESTATUS[0]}"
           set -e
 
@@ -115,18 +159,8 @@ jobs:
             exit "$status"
           fi
 
-  smoke-default-app:
-    name: Smoke test default nix run
-    needs: build
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
+          ./result/bin/xmux --version
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Nix
-        uses: nixbuild/nix-quick-install-action@v34
-
-      - name: nix run . defaults to CLI
-        run: nix run . -- --version
+          if [ "$SYSTEM" = "x86_64-linux" ]; then
+            nix run . -- --version
+          fi
