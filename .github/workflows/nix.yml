@@ -129,9 +129,6 @@ jobs:
       - name: Setup Nix
         uses: nixbuild/nix-quick-install-action@v34
 
-      - name: Restore/save Nix store cache
-        uses: DeterminateSystems/magic-nix-cache-action@v8
-
       - name: Build package
         env:
           SYSTEM: ${{ matrix.system }}
