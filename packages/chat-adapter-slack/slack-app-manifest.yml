@@ -1,0 +1,96 @@
+display_information:
+  name: xmux
+  description: Control coding agents from Slack
+  background_color: "#111827"
+features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  bot_user:
+    display_name: xmux
+    always_online: false
+  slash_commands:
+    - command: /new
+      description: Create a new harness session
+      usage_hint: "[harnessId] [title]"
+      should_escape: false
+    - command: /pwd
+      description: Show the current workspace directory for this chat thread
+      should_escape: false
+    - command: /cd
+      description: Change the current workspace directory for this chat thread
+      usage_hint: <path>
+      should_escape: false
+    - command: /ls
+      description: List files in the current workspace directory
+      usage_hint: "[path]"
+      should_escape: false
+    - command: /resume
+      description: List or resume existing harness sessions
+      usage_hint: "[harnessId shortId]"
+      should_escape: false
+    - command: /delete
+      description: Delete the active or selected harness session
+      usage_hint: "[harnessId shortId]"
+      should_escape: false
+    - command: /exit
+      description: Exit the active session without deleting it
+      should_escape: false
+    - command: /cancel
+      description: Cancel the active harness generation for this chat thread
+      should_escape: false
+    - command: /queue
+      description: List or manage prompts waiting for the active session
+      usage_hint: "[list|add|remove] [value]"
+      should_escape: false
+    - command: /menu
+      description: Show valid actions for the current chat state
+      should_escape: false
+    - command: /id
+      description: Show your chat user id
+      should_escape: false
+    - command: /allow
+      description: Allow the current harness permission request
+      usage_hint: "[always]"
+      should_escape: false
+    - command: /reject
+      description: Reject the current harness permission or question request
+      should_escape: false
+    - command: /model
+      description: Show or set the model for the active session
+      usage_hint: "[providerId/modelId]"
+      should_escape: false
+    - command: /thinking
+      description: Show or set the thinking level for the active session
+      usage_hint: "[level|clear]"
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - chat:write
+      - commands
+      - files:read
+      - groups:history
+      - im:history
+      - mpim:history
+      - reactions:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.groups
+      - message.im
+      - message.mpim
+      - reaction_added
+      - reaction_removed
+  interactivity:
+    is_enabled: true
+    request_url: https://example.com/slack/interactivity
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
+  is_mcp_enabled: false

@@ -1,45 +1,109 @@
-# xmux
+# XMUX
 
-Local control plane for coding-agent harnesses like Codex, Claude Code, OpenCode, and PI, accessible from chat platforms such as Telegram, Discord, and Slack.
+#### Control your coding agents from anywhere, Discord, Slack, Telegram.
 
-## Status
-
-`xmux` is under active development. The CLI is published as `@xmux/cli` and exposes the `xmux` command.
+Privacy-first, your Agents, your chat bot, on your own machine.
 
 ## Installation
 
-Requires Node.js `>=22.19.0` and pnpm.
-
-Install the CLI globally:
+### macOS / Linux
 
 ```sh
-pnpm i -g @xmux/cli
+npm i -g @xmux/cli
 ```
-
-Verify the install:
+### Nix
 
 ```sh
-xmux --version
+nix run github:ishaksebsib/xmux
 ```
 
-## What xmux is
+## Configuration
 
-`xmux` runs on your machine and acts as a bridge between:
+OpenCode with Telegram:
 
-- local agent harnesses
-- remote chat platforms
+`~/.config/xmux/config.jsonc`
+```jsonc
+{
+  "harnesses": {
+    "opencode": {
+      "enabled": true
+    }
+  },
+  "chats": {
+    "telegram": {
+      "enabled": true,
+      "token": { "value": "your-bot-token" },
+      "access": { "type": "allow-list", "users": ["your-user-id"] }
+    }
+  }
+}
+```
 
-The goal is to let users create sessions, continue sessions, receive output, and control coding-agent workflows from platforms like Telegram, Discord, and Slack, while the actual agent harness runs locally on the user's computer.
+## Run
 
-## Planned support
+```sh
+xmux start
+```
 
-- Codex
-- Claude Code
-- OpenCode
-- PI
-- Telegram
-- Discord
-- Slack
+This starts the server. Chat with your AI from your preferred platform.
+
+### Chat adapters
+
+Add one or more chat adapters under `"chats"`.
+
+<details>
+<summary>Telegram</summary>
+
+```jsonc
+{
+  "chats": {
+    "telegram": {
+      "enabled": true,
+      "token": { "env": "TELEGRAM_BOT_TOKEN" }, // or { "value": "your-token" }
+      "access": { "type": "allow-list", "users": ["your-telegram-user-id"] }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Discord</summary>
+
+```jsonc
+{
+  "chats": {
+    "discord": {
+      "enabled": true,
+      "token": { "env": "DISCORD_BOT_TOKEN" }, // or { "value": "your-bot-token" }
+      "applicationId": "your-discord-application-id",
+      "guildId": "your-discord-guild-id",
+      "access": { "type": "allow-list", "users": ["your-discord-user-id"] }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary>Slack</summary>
+
+```jsonc
+{
+  "chats": {
+    "slack": {
+      "enabled": true,
+      "botToken": { "env": "SLACK_BOT_TOKEN" }, // or { "value": "your-bot-token" }
+      "appToken": { "env": "SLACK_APP_TOKEN" }, // or { "value": "..." }
+      "access": { "type": "allow-list", "users": ["your-slack-user-id"] }
+    }
+  }
+}
+```
+
+</details>
 
 ## License
 
