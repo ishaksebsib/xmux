@@ -49,7 +49,7 @@
     },
   },
 
-	// For voice Prompting.
+  // For voice Prompting.
   "stt": {
     "enabled": true,
 
