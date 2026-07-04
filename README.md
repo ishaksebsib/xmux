@@ -35,7 +35,7 @@ nix run github:ishaksebsib/xmux
     "telegram": {
       "enabled": true,
       "token": { "value": "your-bot-token" },
-      "access": { "type": "allow-list", "users": ["your-user-id"] }
+      "access": { "type": "allow-list", "users": ["your-user-id"] } // or { "type": "anyone" }
     }
   }
 }
@@ -48,8 +48,7 @@ For every supported option, see the [full config reference](apps/server/config.e
 ```sh
 xmux start
 ```
-
-This starts the server. Chat with your AI from your preferred platform.
+Send `/new` or `/pwd` to your Telegram bot.
 
 ### Chat adapters
 
