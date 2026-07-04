@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+
+.server-demo/
+server-root/
+.turbo/
+node_modules/
+*.log
+*.tgz
