@@ -1,6 +1,6 @@
 {
   "name": "@xmux/store-sqlite",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lifecycle-managed SQLite store for @xmux/orchestrator.",
   "homepage": "https://github.com/ishaksebsib/xmux",
   "license": "MIT",

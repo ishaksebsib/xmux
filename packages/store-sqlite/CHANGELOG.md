@@ -1,4 +1,4 @@
-# @xmux/orchestrator
+# @xmux/store-sqlite
 
 ## 0.2.0
 
@@ -8,20 +8,5 @@
 
 ### Patch Changes
 
-- Updated dependencies []:
-  - @xmux/chat-core@0.2.0
-  - @xmux/harness-core@0.2.0
-  - @xmux/stt@0.2.0
-
-## 0.1.0
-
-### Minor Changes
-
-- Initial public release of XMUX
-
-### Patch Changes
-
-- Updated dependencies []:
-  - @xmux/chat-core@0.1.0
-  - @xmux/harness-core@0.1.0
-  - @xmux/stt@0.1.0
+- Updated dependencies [[`41cd3b4`](https://github.com/ishaksebsib/xmux/commit/41cd3b45a88a7f51c809fdfa6bfeaac005fc4d15)]:
+  - @xmux/orchestrator@0.2.0

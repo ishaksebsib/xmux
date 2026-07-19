@@ -1,6 +1,6 @@
 {
   "name": "@xmux/harness-pi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "PI coding-agent harness adapter for @xmux/harness-core.",
   "keywords": [
     "coding-agent",

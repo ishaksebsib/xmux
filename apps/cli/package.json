@@ -1,6 +1,6 @@
 {
   "name": "@xmux/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Control your coding agents from anywhere, Discord, Slack, Telegram.",
   "keywords": [
     "agent",
