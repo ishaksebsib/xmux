@@ -6,6 +6,8 @@ export {
   XmuxInitializeError,
   XmuxMiddlewareExecutionError,
   XmuxMiddlewareNextAlreadyCalledError,
+  StoreCloseError,
+  StoreInitializationError,
 } from "./errors";
 export { createInMemoryStore } from "./store";
 export { parseConfig, parseXmuxConfig } from "./config";
@@ -80,6 +82,7 @@ export type {
 } from "./store";
 export {
   type StoreError,
+  type StoreLifecycleError,
   StoreConflictError,
   StoreNotFoundError,
   StoreOperationError,

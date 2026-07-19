@@ -68,6 +68,7 @@
     "@xmux/harness-opencode": "workspace:*",
     "@xmux/harness-pi": "workspace:*",
     "@xmux/orchestrator": "workspace:*",
+    "@xmux/store-sqlite": "workspace:*",
     "effect": "catalog:",
     "jsonc-parser": "^3.3.1"
   },

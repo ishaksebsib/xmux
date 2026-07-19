@@ -12,6 +12,14 @@ export function createInMemoryStore(): Store {
   const workspaces = new Map<string, ThreadWorkspace>();
 
   return {
+    async initialize() {
+      return Result.ok();
+    },
+
+    async close() {
+      return Result.ok();
+    },
+
     sessions: {
       async create(record) {
         const key = sessionKey(record.ref);

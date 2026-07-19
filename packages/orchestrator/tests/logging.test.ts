@@ -3,11 +3,13 @@ import { defineHarnessAdapter } from "@xmux/harness-core";
 import { Result } from "better-result";
 import { describe, expect, test, vi } from "vitest";
 import {
+  createInMemoryStore,
   createXmux,
   createXmuxResult,
   runXmuxHandler,
   xmuxLogEvents,
   XmuxMiddlewareExecutionError,
+  StoreCloseError,
   type XmuxLogger,
 } from "../src";
 import { createSessionRecord, createThreadBinding, type Store } from "../src/store";
@@ -66,6 +68,82 @@ describe("orchestrator logging", () => {
     expectLog(logger, "debug", xmuxLogEvents.initializeSuccess, { result: "ok" });
     expectLog(logger, "debug", xmuxLogEvents.shutdownBegin);
     expectLog(logger, "debug", xmuxLogEvents.shutdownSuccess, { result: "ok" });
+  });
+
+  test("closes an initialized store when chat startup fails", async () => {
+    const base = createInMemoryStore();
+    let initializeCalls = 0;
+    let closeCalls = 0;
+    const store: Store = {
+      ...base,
+      async initialize() {
+        initializeCalls += 1;
+        return Result.ok();
+      },
+      async close() {
+        closeCalls += 1;
+        return Result.ok();
+      },
+    };
+    const xmux = createXmux({
+      harnesses: createHarnesses(),
+      chats: createChats({ replies: [], setEmit: () => {}, failStart: true }),
+      store,
+      config: validConfig(),
+    });
+
+    expect((await xmux.initialize()).isErr()).toBe(true);
+    expect(initializeCalls).toBe(1);
+    expect(closeCalls).toBe(1);
+  });
+
+  test("wraps a rejected store initialization exactly once", async () => {
+    const base = createInMemoryStore();
+    const store: Store = {
+      ...base,
+      async initialize() {
+        throw new Error("rejected initialization");
+      },
+    };
+    const xmux = createXmux({
+      harnesses: createHarnesses(),
+      chats: createChats({ replies: [], setEmit: () => {} }),
+      store,
+      config: validConfig(),
+    });
+
+    const initialized = await xmux.initialize();
+    expect(initialized.isErr()).toBe(true);
+    if (initialized.isErr()) {
+      expect(initialized.error.message).toBe("Failed to initialize xmux: rejected initialization");
+    }
+  });
+
+  test("shutdown attempts store cleanup after another component fails", async () => {
+    const base = createInMemoryStore();
+    let closeCalls = 0;
+    const store: Store = {
+      ...base,
+      async close() {
+        closeCalls += 1;
+        return Result.err(
+          new StoreCloseError({ backend: "test", cause: new Error("store close") }),
+        );
+      },
+    };
+    const xmux = createXmux({
+      harnesses: createHarnesses(),
+      chats: createChats({ replies: [], setEmit: () => {}, failClose: true }),
+      store,
+      config: validConfig(),
+    });
+
+    expect((await xmux.initialize()).isOk()).toBe(true);
+    const closed = await xmux.shutdown();
+    expect(closed.isErr()).toBe(true);
+    expect(closeCalls).toBe(1);
+    expect(closed.isErr() && closed.error.cause.chat).toBeDefined();
+    expect(closed.isErr() && closed.error.cause.store).toBeDefined();
   });
 
   test("correlates route, harness, and chat logs with request context", async () => {
@@ -221,6 +299,8 @@ function createHarnesses() {
 function createChats(input: {
   readonly replies: string[];
   readonly setEmit: (emit: (event: unknown) => void) => void;
+  readonly failStart?: boolean;
+  readonly failClose?: boolean;
 }) {
   return {
     telegram: defineChatAdapter<
@@ -236,7 +316,7 @@ function createChats(input: {
           id: "telegram",
           async start(context) {
             input.setEmit(context.emit as (event: unknown) => void);
-            return Result.ok();
+            return input.failStart ? Result.err(new Error("chat start failed")) : Result.ok();
           },
           async sendMessage(message) {
             input.replies.push(message.text);
@@ -253,7 +333,9 @@ function createChats(input: {
             input.replies.push(message.text);
             return Result.ok(sentMessage(message.text));
           },
-          close: async () => {},
+          close: async () => {
+            if (input.failClose) throw new Error("chat close failed");
+          },
         });
       },
     }),
