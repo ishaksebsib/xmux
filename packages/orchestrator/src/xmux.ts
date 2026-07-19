@@ -68,6 +68,7 @@ export interface CreateXmuxOptions<
   readonly harnesses: TAdapters;
   readonly chats: TChats;
   readonly config: Config;
+  /** Store owned and closed by this Xmux runtime for its complete lifetime. */
   readonly store?: Store;
   readonly fs?: FileSystemHost;
   readonly middleware?: readonly XmuxMiddleware<TAdapters, TChats>[];
@@ -77,6 +78,8 @@ export interface CreateXmuxOptions<
 export type XmuxCloseCause = {
   readonly harness?: HarnessCloseError;
   readonly chat?: unknown;
+  readonly store?: unknown;
+  readonly runtime?: unknown;
 };
 
 export function createXmuxResult<
@@ -155,13 +158,42 @@ export function createXmuxResult<
       const metadata = { operation: "initialize" } satisfies XmuxLogMetadata;
       logger.debug(xmuxLogEvents.initializeBegin, metadata);
 
-      const started = await Result.tryPromise({
-        try: () => chat.start(),
-        catch: (cause) => new XmuxInitializeError({ cause }),
-      });
-      const result = Result.andThen(started, (inner) =>
-        Result.mapError(inner, (cause) => new XmuxInitializeError({ cause })),
+      const storeStarted = Result.andThen(
+        await Result.tryPromise({
+          try: () => store.initialize(),
+          catch: (cause) => new XmuxInitializeError({ cause }),
+        }),
+        (inner) => Result.mapError(inner, (cause) => new XmuxInitializeError({ cause })),
       );
+      let result = storeStarted;
+
+      if (result.isOk()) {
+        const chatStarted = Result.andThen(
+          await Result.tryPromise({
+            try: () => chat.start(),
+            catch: (cause) => new XmuxInitializeError({ cause }),
+          }),
+          (inner) => Result.mapError(inner, (cause) => new XmuxInitializeError({ cause })),
+        );
+        result = chatStarted;
+
+        if (result.isErr()) {
+          const storeClosed = Result.flatten(
+            await Result.tryPromise({
+              try: () => store.close(),
+              catch: (cause) => cause,
+            }),
+          );
+          if (storeClosed.isErr()) {
+            result = Result.err(
+              new XmuxInitializeError({
+                cause: result.error.cause,
+                rollbackCause: storeClosed.error,
+              }),
+            );
+          }
+        }
+      }
 
       logXmuxResult({
         logger,
@@ -181,26 +213,54 @@ export function createXmuxResult<
       const metadata = { operation: "shutdown" } satisfies XmuxLogMetadata;
       logger.debug(xmuxLogEvents.shutdownBegin, metadata);
 
-      const closed = await Result.tryPromise({
-        try: async () => {
+      const runtimeClose = Result.try({
+        try: () => {
           shutdownController.abort();
           for (const unsubscribe of routeUnsubscribers) {
             unsubscribe();
           }
-
-          const chatClose = await chat.close();
-          const harnessClose = await harness.close();
-
-          const chatError = chatClose.isErr() ? chatClose.error : undefined;
-          const harnessError = harnessClose.isErr() ? harnessClose.error : undefined;
-
-          return chatError === undefined && harnessError === undefined
-            ? Result.ok()
-            : Result.err(new XmuxCloseError({ chat: chatError, harness: harnessError }));
         },
-        catch: (cause) => new XmuxCloseError({ chat: cause }),
+        catch: (cause) => cause,
       });
-      const result = Result.andThen(closed, (inner) => inner);
+      const chatClose = Result.flatten(
+        await Result.tryPromise({ try: () => chat.close(), catch: (cause) => cause }),
+      );
+      const harnessCloseBoundary = await Result.tryPromise({
+        try: () => harness.close(),
+        catch: (cause) => cause,
+      });
+      const harnessError =
+        harnessCloseBoundary.isOk() && harnessCloseBoundary.value.isErr()
+          ? harnessCloseBoundary.value.error
+          : undefined;
+      const storeClose = Result.flatten(
+        await Result.tryPromise({ try: () => store.close(), catch: (cause) => cause }),
+      );
+
+      const runtimeFailures = [
+        ...(runtimeClose.isErr() ? [runtimeClose.error] : []),
+        ...(harnessCloseBoundary.isErr() ? [harnessCloseBoundary.error] : []),
+      ];
+      const cause: XmuxCloseCause = {
+        ...(runtimeFailures.length === 0
+          ? {}
+          : {
+              runtime:
+                runtimeFailures.length === 1
+                  ? runtimeFailures[0]
+                  : new AggregateError(runtimeFailures, "Xmux runtime cleanup failed"),
+            }),
+        ...(chatClose.isErr() ? { chat: chatClose.error } : {}),
+        ...(harnessError === undefined ? {} : { harness: harnessError }),
+        ...(storeClose.isErr() ? { store: storeClose.error } : {}),
+      };
+      const result =
+        cause.runtime === undefined &&
+        cause.chat === undefined &&
+        cause.harness === undefined &&
+        cause.store === undefined
+          ? Result.ok<void, XmuxCloseError>(undefined)
+          : Result.err<void, XmuxCloseError>(new XmuxCloseError(cause));
 
       logXmuxResult({
         logger,

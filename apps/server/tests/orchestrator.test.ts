@@ -7,10 +7,10 @@ import {
   XmuxInitializeError,
   createInMemoryStore,
   dummyXmuxLogger,
-  type Store,
   type ThreadWorkspace,
-  type XmuxCloseError,
+  XmuxCloseError,
 } from "@xmux/orchestrator";
+import { createSqliteStore } from "@xmux/store-sqlite";
 import { Effect, Fiber, Layer, Ref } from "effect";
 import { makeTestOrchestratorFactoryLayer } from "./support/orchestrator";
 import { makeSecretResolverLayer } from "./support/secrets";
@@ -23,13 +23,11 @@ import {
   sessionIdFromString,
 } from "../src/contracts/primitives";
 import { ServerConfig } from "../src/config/service";
-import { makeDatabaseSqlLayer } from "../src/db/layer";
-import { OrchestratorStore, makeSqliteOrchestratorStore } from "../src/db/orchestrator-store";
+import { OrchestratorStore } from "../src/db/orchestrator-store";
 import { LogReader } from "../src/logging/log-reader";
 import { decideOrchestratorActivation } from "../src/orchestrator/activation";
 import { mapEffectiveConfigToXmuxConfig } from "../src/orchestrator/config-map";
 import { safeStatusReasonFromString } from "../src/orchestrator/status-model";
-import { OrchestratorConfigurationError } from "../src/orchestrator/errors";
 import { OrchestratorFactory, type OrchestratorRuntime } from "../src/orchestrator/factory";
 import { makeServerOrchestratorMiddleware } from "../src/orchestrator/middleware";
 import { OrchestratorStatusRegistry } from "../src/orchestrator/status-registry";
@@ -533,18 +531,26 @@ describe("orchestrator server lifecycle", () => {
       } satisfies ThreadWorkspace;
       const factoryLayer = makeTestOrchestratorFactoryLayer({
         create: (input) =>
-          Effect.gen(function* () {
-            const stored = yield* Effect.promise(() => input.store.workspaces.set(workspace));
-            if (stored.isErr()) {
-              return yield* OrchestratorConfigurationError.make({
-                path: "store",
-                reason: stored.error.message,
-                message: "Factory could not write to orchestrator store.",
-                cause: stored.error,
-              });
-            }
-            return okRuntime();
-          }),
+          Effect.succeed(
+            okRuntime({
+              initialize: async () => {
+                const initialized = await input.store.initialize();
+                if (initialized.isErr()) {
+                  return Result.err(new XmuxInitializeError({ cause: initialized.error }));
+                }
+                const stored = await input.store.workspaces.set(workspace);
+                return stored.isErr()
+                  ? Result.err(new XmuxInitializeError({ cause: stored.error }))
+                  : Result.ok();
+              },
+              shutdown: async () => {
+                const closed = await input.store.close();
+                return closed.isErr()
+                  ? Result.err(new XmuxCloseError({ store: closed.error }))
+                  : Result.ok();
+              },
+            }),
+          ),
       });
       const layer = makeServerLayer({
         paths: sandbox.paths,
@@ -561,14 +567,11 @@ describe("orchestrator server lifecycle", () => {
         }).pipe(Effect.provide(layer)),
       );
 
-      const persisted = yield* Effect.scoped(
-        Effect.gen(function* () {
-          const store: Store = yield* makeSqliteOrchestratorStore;
-          return yield* Effect.promise(() => store.workspaces.get(workspace.thread));
-        }).pipe(Effect.provide(makeDatabaseSqlLayer(sandbox.paths))),
-      );
-
+      const reopened = createSqliteStore({ path: sandbox.paths.dbPath });
+      assert.isTrue((yield* Effect.promise(() => reopened.initialize())).isOk());
+      const persisted = yield* Effect.promise(() => reopened.workspaces.get(workspace.thread));
       assert.deepStrictEqual(persisted.unwrap("expected workspace lookup to succeed"), workspace);
+      assert.isTrue((yield* Effect.promise(() => reopened.close())).isOk());
     }),
   );
 });

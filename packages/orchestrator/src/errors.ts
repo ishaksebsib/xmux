@@ -18,12 +18,17 @@ export class XmuxConfigurationError extends TaggedError("XmuxConfigurationError"
 
 export class XmuxInitializeError extends TaggedError("XmuxInitializeError")<{
   readonly cause: unknown;
+  readonly rollbackCause?: unknown;
   readonly message: string;
 }>() {
-  constructor(args: { cause: unknown }) {
+  constructor(args: { readonly cause: unknown; readonly rollbackCause?: unknown }) {
+    const rollbackDetail =
+      args.rollbackCause === undefined
+        ? ""
+        : `; store rollback failed: ${describeCause(args.rollbackCause)}`;
     super({
       ...args,
-      message: `Failed to initialize xmux: ${describeCause(args.cause)}`,
+      message: `Failed to initialize xmux: ${describeCause(args.cause)}${rollbackDetail}`,
     });
   }
 }
@@ -35,12 +40,20 @@ export class XmuxCloseError extends TaggedError("XmuxCloseError")<{
   constructor(cause: XmuxCloseCause) {
     const parts = [] as string[];
 
-    if (cause.harness) {
-      parts.push(cause.harness.message);
+    if (cause.harness !== undefined) {
+      parts.push(`Failed to shut down harness runtime: ${describeCause(cause.harness)}`);
     }
 
     if (cause.chat !== undefined) {
       parts.push(`Failed to shut down chat runtime: ${describeCause(cause.chat)}`);
+    }
+
+    if (cause.store !== undefined) {
+      parts.push(`Failed to close store: ${describeCause(cause.store)}`);
+    }
+
+    if (cause.runtime !== undefined) {
+      parts.push(`Failed to tear down xmux runtime: ${describeCause(cause.runtime)}`);
     }
 
     super({
@@ -91,6 +104,34 @@ export type XmuxMiddlewareError =
 // Store errors
 // -----------------------------------------------------------------------------
 
+/** Wraps failures while opening or migrating a store backend. */
+export class StoreInitializationError extends TaggedError("StoreInitializationError")<{
+  readonly backend: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly backend: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to initialize ${args.backend} store: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
+/** Wraps failures while releasing a store backend. */
+export class StoreCloseError extends TaggedError("StoreCloseError")<{
+  readonly backend: string;
+  readonly cause: unknown;
+  readonly message: string;
+}>() {
+  constructor(args: { readonly backend: string; readonly cause: unknown }) {
+    super({
+      ...args,
+      message: `Failed to close ${args.backend} store: ${describeCause(args.cause)}`,
+    });
+  }
+}
+
 /** Returned when a create operation would overwrite an existing record. */
 export class StoreConflictError extends TaggedError("StoreConflictError")<{
   readonly resource: string;
@@ -140,4 +181,5 @@ export class StoreOperationError extends TaggedError("StoreOperationError")<{
   }
 }
 
+export type StoreLifecycleError = StoreInitializationError | StoreCloseError;
 export type StoreError = StoreConflictError | StoreNotFoundError | StoreOperationError;

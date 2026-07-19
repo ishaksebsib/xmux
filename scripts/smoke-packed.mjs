@@ -19,6 +19,7 @@ const publicPackageDirs = [
   "packages/harness-opencode",
   "packages/harness-pi",
   "packages/orchestrator",
+  "packages/store-sqlite",
   "packages/stt",
 ];
 

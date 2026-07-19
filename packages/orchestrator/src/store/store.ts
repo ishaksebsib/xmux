@@ -7,7 +7,13 @@ import type {
   ThreadBinding,
   ThreadWorkspace,
 } from "./model";
-import type { StoreConflictError, StoreNotFoundError, StoreOperationError } from "../errors";
+import type {
+  StoreCloseError,
+  StoreConflictError,
+  StoreInitializationError,
+  StoreNotFoundError,
+  StoreOperationError,
+} from "../errors";
 
 export type StoreOperation = "create" | "read" | "update" | "delete";
 
@@ -19,6 +25,13 @@ export type StoreOperation = "create" | "read" | "update" | "delete";
  * implementation.
  */
 export interface Store {
+  /**
+   * Opens backend resources and applies required migrations. Calls are
+   * idempotent. The Xmux runtime invokes this before starting chat adapters.
+   */
+  initialize(): Promise<Result<void, StoreInitializationError>>;
+  /** Releases backend resources. Calls are idempotent. */
+  close(): Promise<Result<void, StoreCloseError>>;
   readonly sessions: SessionStore;
   readonly threadBindings: ThreadBindingStore;
   readonly workspaces: WorkspaceStore;
